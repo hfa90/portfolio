@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hayden Print - CD Logística</title>
+    <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/print-js/1.6.0/print.js"></script>
+    <style>
+        :root {
+            --primary: #0f172a;
+            --accent: #2563eb;
+            --bg: #f1f5f9;
+            --border: #e2e8f0;
+            --warning: #fff7ed;
+            --warning-border: #fdba74;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            letter-spacing: 1px;
+        }
+
+        .instruction-banner {
+            background: var(--warning);
+            border-bottom: 2px solid var(--warning-border);
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            color: #9a3412;
+            font-size: 0.9rem;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .upload-box {
+            border: 2px dashed var(--accent);
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px;
+            background: #f0f7ff;
+            cursor: pointer;
+            position: relative;
+        }
+
+        #file-input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-list {
+            height: 350px;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-top: 15px;
+        }
+
+        .item {
+            padding: 10px 15px;
+            border-bottom: 1px solid #f1f5f9;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+        }
+
+        .log-box {
+            background: #1e293b;
+            color: #38bdf8;
+            font-family: 'Consolas', monospace;
+            padding: 15px;
+            height: 350px;
+            overflow-y: auto;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .btn-main {
+            width: 100%;
+            padding: 20px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn-main:hover {
+            background: #1d4ed8;
+        }
+
+        .btn-main:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .badge {
+            background: #dcfce7;
+            color: #166534;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.7rem;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>HAYDEN PRINT</h1>
+        </header>
+
+        <div class="instruction-banner">
+            <span style="font-size: 1.5rem;">💡</span>
+            <span><strong>AVISO AOS OPERADORES:</strong> O sistema aceita apenas arquivos <strong>PDF</strong> para
+                garantir que os 100 documentos saiam em uma única remessa e na ordem correta. Converta arquivos
+                Word/Excel antes de arrastar.</span>
+        </div>
+
+        <div class="layout">
+            <div>
+                <div class="upload-box">
+                    <input type="file" id="file-input" multiple accept=".pdf">
+                    <strong>CLIQUE OU ARRASTE OS PDFs AQUI</strong>
+                    <p style="font-size: 0.8rem; color: #64748b;">A ordem da lista será a ordem da impressão (Máx 100)
+                    </p>
+                </div>
+
+                <div class="file-list" id="file-queue">
+                    <div style="padding: 40px; color: #94a3b8; text-align: center;">Nenhum documento na fila de
+                        separação</div>
+                </div>
+            </div>
+
+            <div>
+                <div class="log-box" id="system-log">
+                    > Hayden Print v3.1 pronto.<br>
+                    > Aguardando documentos...
+                </div>
+                <button id="process-btn" class="btn-main" disabled>PROCESSAR E IMPRIMIR LOTE</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { PDFDocument } = PDFLib;
+        const fileInput = document.getElementById('file-input');
+        const fileQueue = document.getElementById('file-queue');
+        const logBox = document.getElementById('system-log');
+        const processBtn = document.getElementById('process-btn');
+
+        let filesArray = [];
+
+        function logger(msg) {
+            const div = document.createElement('div');
+            const now = new Date();
+            const time = now.toLocaleTimeString('pt-BR');
+            div.innerHTML = `<span style="color:#94a3b8">[${time}]</span> > ${msg}`;
+            logBox.appendChild(div);
+            logBox.scrollTop = logBox.scrollHeight;
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            const selected = Array.from(e.target.files);
+            if (selected.length > 100) {
+                alert("⚠️ Atenção: O limite operacional é de 100 arquivos por vez.");
+                return;
+            }
+            filesArray = selected;
+            renderQueue();
+            logger(`${selected.length} documentos carregados.`);
+        });
+
+        function renderQueue() {
+            fileQueue.innerHTML = "";
+            filesArray.forEach((f, index) => {
+                const item = document.createElement('div');
+                item.className = 'item';
+                item.innerHTML = `
+                <span><strong>${index + 1}.</strong> ${f.name.substring(0, 35)}</span>
+                <span class="badge">PDF OK</span>
+            `;
+                fileQueue.appendChild(item);
+            });
+            processBtn.disabled = filesArray.length === 0;
+        }
+
+        processBtn.addEventListener('click', async () => {
+            processBtn.disabled = true;
+            processBtn.innerText = "UNIFICANDO DOCUMENTOS...";
+            logger("Iniciando mesclagem em lote...");
+
+            try {
+                const mergedPdf = await PDFDocument.create();
+
+                for (const file of filesArray) {
+                    logger(`Processando: ${file.name}`);
+                    const fileBytes = await file.arrayBuffer();
+                    const pdf = await PDFDocument.load(fileBytes);
+                    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+                    copiedPages.forEach((page) => mergedPdf.addPage(page));
+                }
+
+                const mergedPdfBytes = await mergedPdf.save();
+                const blob = new Blob([mergedPdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+
+                logger("Lote unificado. Abrindo canal de impressão...");
+
+                printJS({
+                    printable: url,
+                    type: 'pdf',
+                    onPrintDialogClose: () => {
+                        logger("Envio concluído com sucesso.");
+                        processBtn.disabled = false;
+                        processBtn.innerText = "PROCESSAR E IMPRIMIR LOTE";
+                        URL.revokeObjectURL(url);
+                    }
+                });
+
+            } catch (err) {
+                logger(`ERRO: Falha na mesclagem. Verifique os arquivos.`);
+                console.error(err);
+                processBtn.disabled = false;
+            }
+        });
+    </script>
+
+</body>
+
+</html>
