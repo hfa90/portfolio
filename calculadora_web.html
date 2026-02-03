@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#0f172a">
+    <title>CalcPro PWA</title>
+
+    <style>
+        :root {
+            --bg: #0f172a;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-op: #38bdf8;
+            --accent-eq: #10b981;
+            --text: #f8fafc;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            height: 100vh;
+            background: var(--bg);
+            background-image: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--text);
+            overflow: hidden;
+            padding: 15px;
+        }
+
+        .main-wrapper {
+            display: flex;
+            gap: 20px;
+            width: 100%;
+            max-width: 1000px;
+            height: 85vh;
+            max-height: 800px;
+            position: relative;
+        }
+
+        /* AJUDA / TOOLTIP */
+        .help-icon {
+            position: absolute;
+            top: -10px;
+            right: 0;
+            width: 30px;
+            height: 30px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: help;
+            font-weight: bold;
+            color: var(--accent-op);
+            z-index: 100;
+        }
+
+        .help-tooltip {
+            position: absolute;
+            top: 35px;
+            right: 0;
+            background: #1e293b;
+            border: 1px solid var(--glass-border);
+            padding: 15px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            width: 220px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transition: 0.3s;
+            pointer-events: none;
+            z-index: 101;
+        }
+
+        .help-icon:hover+.help-tooltip {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        /* CALCULADORA */
+        .calc-box {
+            flex: 1.5;
+            background: var(--glass);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--glass-border);
+            border-radius: 35px;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .display {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: flex-end;
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .copy-btn {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 8px;
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.7rem;
+        }
+
+        .copy-btn:hover {
+            color: var(--accent-op);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        #curr-val {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 200;
+            text-align: right;
+            width: 100%;
+        }
+
+        .animate-val {
+            animation: slideUpFade 0.2s ease-out;
+        }
+
+        @keyframes slideUpFade {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .btn-grid {
+            flex: 2.5;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+        }
+
+        button {
+            border: 1px solid var(--glass-border);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-radius: 18px;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        button:active,
+        button.active {
+            transform: scale(0.92);
+            background: var(--accent-op);
+        }
+
+        .op {
+            color: var(--accent-op);
+            font-weight: bold;
+        }
+
+        .eq {
+            background: var(--accent-eq);
+            grid-column: span 2;
+            border: none;
+            font-weight: bold;
+        }
+
+        .ac {
+            color: #f43f5e;
+        }
+
+        /* HISTÓRICO */
+        .history-box {
+            flex: 1;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 35px;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--glass-border);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .clear-hist-btn {
+            background: transparent;
+            border: none;
+            color: #f43f5e;
+            font-size: 0.75rem;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 8px;
+            transition: 0.2s;
+        }
+
+        .clear-hist-btn:hover {
+            background: rgba(244, 63, 94, 0.1);
+        }
+
+        .hist-list {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .hist-item {
+            background: rgba(255, 255, 255, 0.02);
+            padding: 12px;
+            border-radius: 15px;
+            text-align: right;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .hist-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        /* RODAPÉ */
+        .footer {
+            margin-top: 30px;
+            font-size: 0.85rem;
+            color: rgba(148, 163, 184, 0.7);
+            letter-spacing: 0.5px;
+        }
+
+        /* POPUPS */
+        #install-popup {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(150%);
+            background: #1e293b;
+            border: 1px solid var(--accent-op);
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            z-index: 1000;
+            width: 90%;
+            max-width: 350px;
+            text-align: center;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        #install-popup.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 800px) {
+            .main-wrapper {
+                flex-direction: column;
+                height: auto;
+                gap: 10px;
+            }
+
+            .history-box,
+            .help-icon {
+                display: none;
+            }
+
+            .footer {
+                margin-top: 15px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="main-wrapper">
+        <div class="help-icon">?</div>
+        <div class="help-tooltip">
+            <strong>Atalhos de Teclado:</strong><br><br>
+            [0-9] : Números<br>
+            [Enter] : Calcular<br>
+            [Esc] : Limpar Tudo (AC)<br>
+            [Backspace] : Apagar (DEL)<br>
+            [+, -, *, /] : Operações<br>
+            [Ctrl + C] : Copiar Resultado
+        </div>
+
+        <div class="calc-box">
+            <div class="display">
+                <span id="copy-text"
+                    style="position:absolute; top:-25px; left:0; color:var(--accent-eq); font-size:0.7rem; opacity:0; transition:0.3s;">Copiado!</span>
+                <button class="copy-btn" onclick="copyResult()" title="Copiar Resultado (Ctrl+C)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copiar
+                </button>
+
+                <div id="prev-val" style="font-size: 1.2rem; color: #94a3b8; min-height: 1.5rem;"></div>
+                <div id="curr-val">0</div>
+            </div>
+            <div class="btn-grid">
+                <button onclick="clearAll()" class="ac" data-key="Escape">AC</button>
+                <button onclick="deleteLast()" class="ac" data-key="Backspace">DEL</button>
+                <button onclick="percent()" class="op" data-key="%">%</button>
+                <button onclick="setOp('÷')" class="op" data-key="/">÷</button>
+
+                <button onclick="addNum('7')" data-key="7">7</button>
+                <button onclick="addNum('8')" data-key="8">8</button>
+                <button onclick="addNum('9')" data-key="9">9</button>
+                <button onclick="setOp('×')" class="op" data-key="*">×</button>
+
+                <button onclick="addNum('4')" data-key="4">4</button>
+                <button onclick="addNum('5')" data-key="5">5</button>
+                <button onclick="addNum('6')" data-key="6">6</button>
+                <button onclick="setOp('-')" class="op" data-key="-">-</button>
+
+                <button onclick="addNum('1')" data-key="1">1</button>
+                <button onclick="addNum('2')" data-key="2">2</button>
+                <button onclick="addNum('3')" data-key="3">3</button>
+                <button onclick="setOp('+')" class="op" data-key="+">+</button>
+
+                <button onclick="addNum('.')" data-key=".">.</button>
+                <button onclick="addNum('0')" data-key="0">0</button>
+                <button onclick="calc()" class="eq" data-key="Enter">=</button>
+            </div>
+        </div>
+
+        <div class="history-box">
+            <div class="history-header">
+                <div style="font-weight: bold; color: var(--accent-op)">HISTÓRICO</div>
+                <button class="clear-hist-btn" onclick="clearHistory()">Limpar</button>
+            </div>
+            <div id="hist-list" class="hist-list"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        Desenvolvido por <strong>Hayden Fernandes</strong> - 2026
+    </footer>
+
+    <div id="install-popup">
+        <div style="font-size: 1.2rem;">✨ Instalar CalcPro?</div>
+        <div style="display: flex; gap: 10px; width: 100%; margin-top: 15px;">
+            <button onclick="closePopup()"
+                style="flex:1; font-size: 1rem; padding: 10px; border-radius: 10px;">Não</button>
+            <button onclick="installApp()"
+                style="flex:1; background: var(--accent-op); color: #000; font-weight: bold; font-size: 1rem; padding: 10px; border-radius: 10px;">Instalar</button>
+        </div>
+    </div>
+
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'click') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'success') {
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+
+        let current = '0', previous = '', operation = undefined;
+        let history = JSON.parse(localStorage.getItem('my_calc_h')) || [];
+
+        const currDisp = document.getElementById('curr-val');
+        const prevDisp = document.getElementById('prev-val');
+        const histList = document.getElementById('hist-list');
+
+        function update() {
+            currDisp.classList.remove('animate-val');
+            void currDisp.offsetWidth;
+            currDisp.classList.add('animate-val');
+            currDisp.innerText = current;
+            prevDisp.innerText = operation ? `${previous} ${operation}` : '';
+        }
+
+        function addNum(n) { playSound('click'); if (n === '.' && current.includes('.')) return; current = current === '0' && n !== '.' ? n : current + n; update(); }
+        function setOp(op) { playSound('click'); if (previous !== '') calc(true); operation = op; previous = current; current = ''; update(); }
+        function clearAll() { playSound('click'); current = '0'; previous = ''; operation = undefined; update(); }
+        function deleteLast() { playSound('click'); current = current.length > 1 ? current.slice(0, -1) : '0'; update(); }
+        function percent() { playSound('click'); current = (parseFloat(current) / 100).toString(); update(); }
+
+        function calc(silent = false) {
+            if (!silent) playSound('success');
+            let r; const p = parseFloat(previous), c = parseFloat(current);
+            if (isNaN(p) || isNaN(c)) return;
+            switch (operation) {
+                case '+': r = p + c; break;
+                case '-': r = p - c; break;
+                case '×': r = p * c; break;
+                case '÷': r = c === 0 ? 'Erro' : p / c; break;
+                default: return;
+            }
+            history.unshift({ f: `${previous} ${operation} ${current}`, r: r });
+            localStorage.setItem('my_calc_h', JSON.stringify(history.slice(0, 20)));
+            current = r.toString(); operation = undefined; previous = '';
+            update(); renderHist();
+        }
+
+        function clearHistory() {
+            playSound('click');
+            history = [];
+            localStorage.removeItem('my_calc_h');
+            renderHist();
+        }
+
+        function copyResult() {
+            navigator.clipboard.writeText(current).then(() => {
+                const feedback = document.getElementById('copy-text');
+                feedback.style.opacity = '1';
+                setTimeout(() => feedback.style.opacity = '0', 1500);
+                playSound('click');
+            });
+        }
+
+        function renderHist() {
+            if (history.length === 0) {
+                histList.innerHTML = '<div style="color:rgba(148,163,184,0.4); text-align:center; margin-top:20px; font-size:0.8rem;">Nenhum cálculo recente</div>';
+                return;
+            }
+            histList.innerHTML = history.map(i => `<div class="hist-item" onclick="current='${i.r}'; update();"><small style="color:#64748b; font-size:0.75rem;">${i.f}=</small><br><strong style="color:var(--accent-eq);">${i.r}</strong></div>`).join('');
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') { copyResult(); return; }
+            let key = e.key;
+            if (key === '/') key = '/';
+            if (key === '*') key = '*';
+            if (key === 'Enter' || key === '=') { e.preventDefault(); key = 'Enter'; }
+            const btn = document.querySelector(`button[data-key="${key}"]`);
+            if (btn) { btn.classList.add('active'); btn.click(); setTimeout(() => btn.classList.remove('active'), 100); }
+        });
+
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; setTimeout(() => { document.getElementById('install-popup').classList.add('show'); }, 3000); });
+        function installApp() { if (!deferredPrompt) return; document.getElementById('install-popup').classList.remove('show'); deferredPrompt.prompt(); deferredPrompt = null; }
+        function closePopup() { document.getElementById('install-popup').classList.remove('show'); }
+
+        window.onload = renderHist;
+        if ('serviceWorker' in navigator) {
+            const swCode = `self.addEventListener('fetch', function(event) {});`;
+            const swBlob = new Blob([swCode], { type: 'text/javascript' });
+            const swURL = URL.createObjectURL(swBlob);
+            navigator.serviceWorker.register(swURL);
+        }
+    </script>
+</body>
+
+</html>
