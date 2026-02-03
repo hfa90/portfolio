@@ -302,6 +302,48 @@
                 margin-top: 15px;
             }
         }
+
+        /* Container dos botões científicos - Escondido por padrão */
+        .sci-grid {
+            display: none;
+            /* Começa escondido */
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--glass-border);
+            padding-bottom: 12px;
+        }
+
+        .sci-grid.show {
+            display: grid;
+        }
+
+        .sci-btn {
+            font-size: 1rem;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--accent-op);
+        }
+
+        /* Botão de alternância discreto */
+        .toggle-sci {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: transparent;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 0.7rem;
+            padding: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .toggle-sci:hover {
+            color: var(--accent-op);
+        }
     </style>
 </head>
 
@@ -320,6 +362,13 @@
         </div>
 
         <div class="calc-box">
+            <button class="toggle-sci" onclick="toggleScientific()" title="Calculadora Científica">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M2 12h20M12 2v20m-5-5l10-10" />
+                </svg>
+                Científica
+            </button>
+
             <div class="display">
                 <span id="copy-text"
                     style="position:absolute; top:-25px; left:0; color:var(--accent-eq); font-size:0.7rem; opacity:0; transition:0.3s;">Copiado!</span>
@@ -335,27 +384,35 @@
                 <div id="prev-val" style="font-size: 1.2rem; color: #94a3b8; min-height: 1.5rem;"></div>
                 <div id="curr-val">0</div>
             </div>
+
+            <div id="sci-btns" class="sci-grid">
+                <button class="sci-btn" onclick="sciOp('sin')">sin</button>
+                <button class="sci-btn" onclick="sciOp('cos')">cos</button>
+                <button class="sci-btn" onclick="sciOp('tan')">tan</button>
+                <button class="sci-btn" onclick="sciOp('log')">log</button>
+                <button class="sci-btn" onclick="sciOp('sqrt')">√</button>
+                <button class="sci-btn" onclick="sciOp('pow')">x²</button>
+                <button class="sci-btn" onclick="sciOp('pi')">π</button>
+                <button class="sci-btn" onclick="sciOp('exp')">exp</button>
+            </div>
+
             <div class="btn-grid">
                 <button onclick="clearAll()" class="ac" data-key="Escape">AC</button>
                 <button onclick="deleteLast()" class="ac" data-key="Backspace">DEL</button>
                 <button onclick="percent()" class="op" data-key="%">%</button>
                 <button onclick="setOp('÷')" class="op" data-key="/">÷</button>
-
                 <button onclick="addNum('7')" data-key="7">7</button>
                 <button onclick="addNum('8')" data-key="8">8</button>
                 <button onclick="addNum('9')" data-key="9">9</button>
                 <button onclick="setOp('×')" class="op" data-key="*">×</button>
-
                 <button onclick="addNum('4')" data-key="4">4</button>
                 <button onclick="addNum('5')" data-key="5">5</button>
                 <button onclick="addNum('6')" data-key="6">6</button>
                 <button onclick="setOp('-')" class="op" data-key="-">-</button>
-
                 <button onclick="addNum('1')" data-key="1">1</button>
                 <button onclick="addNum('2')" data-key="2">2</button>
                 <button onclick="addNum('3')" data-key="3">3</button>
                 <button onclick="setOp('+')" class="op" data-key="+">+</button>
-
                 <button onclick="addNum('.')" data-key=".">.</button>
                 <button onclick="addNum('0')" data-key="0">0</button>
                 <button onclick="calc()" class="eq" data-key="Enter">=</button>
@@ -489,6 +546,35 @@
             const swBlob = new Blob([swCode], { type: 'text/javascript' });
             const swURL = URL.createObjectURL(swBlob);
             navigator.serviceWorker.register(swURL);
+        }
+
+        function toggleScientific() {
+            playSound('click');
+            const sciGrid = document.getElementById('sci-btns');
+            sciGrid.classList.toggle('show');
+        }
+
+        function sciOp(type) {
+            playSound('success');
+            let val = parseFloat(current);
+            let res;
+
+            switch (type) {
+                case 'sin': res = Math.sin(val); break;
+                case 'cos': res = Math.cos(val); break;
+                case 'tan': res = Math.tan(val); break;
+                case 'log': res = Math.log10(val); break;
+                case 'sqrt': res = Math.sqrt(val); break;
+                case 'pow': res = Math.pow(val, 2); break;
+                case 'pi': res = Math.PI; break;
+                case 'exp': res = Math.exp(val); break;
+            }
+
+            history.unshift({ f: `${type}(${current})`, r: res.toFixed(4) });
+            localStorage.setItem('my_calc_h', JSON.stringify(history.slice(0, 20)));
+            current = res.toString();
+            update();
+            renderHist();
         }
     </script>
 </body>
