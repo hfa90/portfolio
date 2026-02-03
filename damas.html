@@ -215,7 +215,7 @@
     <div id="login-screen">
         <div class="login-box">
             <h1>DAMAS ELITE ONLINE 💀</h1>
-            <p id="status-text">Conectando ao servidor de elite...</p>
+            <p id="status-text">Iniciando servidor...</p>
             <input type="text" id="username" placeholder="Seu Nick"
                 style="padding:10px; border-radius:5px; border:none;"><br><br>
             <button id="start-btn" class="btn"
@@ -264,11 +264,12 @@
         let seconds = 0;
         let timerInterval;
         let boardState = Array(8).fill(null).map(() => Array(8).fill(null));
+        const AUDIO_CTX = new (window.AudioContext || window.webkitAudioContext)();
 
         const urlParams = new URLSearchParams(window.location.search);
         const roomId = urlParams.get('room');
 
-        // Inicializa o Peer imediatamente para carregar o ID
+        // Inicializa PeerJS
         peer = new Peer();
 
         peer.on('open', (id) => {
@@ -277,36 +278,48 @@
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.cursor = "pointer";
-            btn.innerText = "ENTRAR NA ARENA";
-            document.getElementById('status-text').innerText = "Servidor pronto!";
+            btn.innerText = roomId ? "ENTRAR NA SALA" : "CRIAR ARENA";
+            document.getElementById('status-text').innerText = "Servidor Pronto!";
         });
 
         peer.on('error', (err) => {
-            console.error('Erro no PeerJS:', err);
-            alert("Erro de conexão: " + err.type);
+            if (err.type === 'peer-unavailable') {
+                alert("Erro: Esta sala não existe mais ou o oponente saiu.");
+                location.href = window.location.pathname;
+            } else {
+                console.error('PeerJS Error:', err);
+            }
         });
+
+        function playNotifySound() {
+            if (AUDIO_CTX.state === 'suspended') AUDIO_CTX.resume();
+            const osc = AUDIO_CTX.createOscillator();
+            const gain = AUDIO_CTX.createGain();
+            osc.connect(gain); gain.connect(AUDIO_CTX.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(523.25, AUDIO_CTX.currentTime); // C5
+            osc.frequency.exponentialRampToValueAtTime(1046.50, AUDIO_CTX.currentTime + 0.1); // C6
+            gain.gain.setValueAtTime(0.1, AUDIO_CTX.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, AUDIO_CTX.currentTime + 0.3);
+            osc.start(); osc.stop(AUDIO_CTX.currentTime + 0.3);
+        }
 
         function initGame() {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('game-ui').style.opacity = '1';
 
             if (roomId) {
-                // Se eu entrei pelo link, eu tento conectar no ID da URL
                 conn = peer.connect(roomId);
                 myColor = 'black';
                 isMyTurn = false;
                 setupConn();
-            } else {
-                document.getElementById('connection-status').innerText = "Esperando amigo...";
             }
 
-            // O dono da sala recebe a conexão aqui
             peer.on('connection', (c) => {
                 conn = c;
                 setupConn();
                 resetBoard();
                 startGame();
-                // Envia o tabuleiro inicial para quem acabou de conectar
                 conn.send({ type: 'init', board: boardState });
             });
 
@@ -316,10 +329,11 @@
 
         function setupConn() {
             conn.on('open', () => {
+                playNotifySound();
                 document.getElementById('connection-status').innerText = "Conectado!";
                 document.getElementById('my-color').innerText = myColor === 'white' ? 'Brancas' : 'Pretas';
                 document.getElementById('rematch-btn').style.display = 'block';
-                addChatMessage('Sistema', 'Oponente entrou na sala!');
+                addChatMessage('Sistema', 'Oponente conectado!');
                 if (myColor === 'black') startGame();
             });
 
@@ -331,33 +345,17 @@
                     render();
                 }
                 if (data.type === 'chat') addChatMessage('Oponente', data.msg);
-                if (data.type === 'init') {
-                    boardState = data.board;
-                    render();
-                    addChatMessage('Sistema', 'Partida sincronizada!');
-                }
+                if (data.type === 'init') { boardState = data.board; render(); }
                 if (data.type === 'rematch_request') {
-                    if (confirm("O oponente pediu uma revanche! Aceitar?")) {
-                        resetBoard();
-                        render();
+                    if (confirm("O oponente quer uma revanche! Aceitar?")) {
+                        resetBoard(); render();
                         conn.send({ type: 'rematch_accept' });
-                        addChatMessage('Sistema', 'Revanche iniciada!');
                     }
                 }
-                if (data.type === 'rematch_accept') {
-                    resetBoard();
-                    render();
-                    addChatMessage('Sistema', 'Revanche aceita!');
-                }
-            });
-
-            conn.on('close', () => {
-                document.getElementById('connection-status').innerText = "Oponente saiu.";
-                addChatMessage('Sistema', 'A conexão foi perdida.');
+                if (data.type === 'rematch_accept') { resetBoard(); render(); }
             });
         }
 
-        // Funções de Jogo
         function resetBoard() {
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
             for (let r = 0; r < 8; r++) {
@@ -386,7 +384,6 @@
 
         function render() {
             const b = document.getElementById('board');
-            if (!b) return;
             b.innerHTML = '';
             boardState.forEach((row, r) => {
                 row.forEach((piece, c) => {
@@ -395,12 +392,11 @@
                     s.dataset.r = r; s.dataset.c = c;
                     s.ondragover = e => e.preventDefault();
                     s.ondrop = handleDrop;
-
                     if (piece) {
                         const p = document.createElement('div');
                         p.className = `piece ${piece.color}-piece ${piece.king ? 'king' : ''}`;
-                        p.draggable = (piece.color === myColor && isMyTurn && gameStarted);
-                        p.ondragstart = (e) => { window.dragged = { r, c }; };
+                        p.draggable = (piece.color === myColor && isMyTurn);
+                        p.ondragstart = () => { window.dragged = { r, c }; };
                         s.appendChild(p);
                     }
                     b.appendChild(s);
@@ -413,102 +409,60 @@
             const tc = parseInt(this.dataset.c);
             const fr = window.dragged.r;
             const fc = window.dragged.c;
-
             const move = validate(fr, fc, tr, tc);
             if (move) {
                 const captured = !!move.cap;
                 boardState[tr][tc] = boardState[fr][fc];
                 boardState[fr][fc] = null;
                 if (captured) boardState[move.cap.r][move.cap.c] = null;
-
                 if ((myColor === 'white' && tr === 0) || (myColor === 'black' && tr === 7)) boardState[tr][tc].king = true;
-
                 isMyTurn = false;
-                const phrases = ["BOOOM! 💀", "VARRIDO! 🧹", "FRACO!", "APRENDE!", "JÁ ERA!"];
-                const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
-
-                conn.send({
-                    type: 'move',
-                    board: boardState,
-                    captured: captured,
-                    capX: e.clientX,
-                    capY: e.clientY,
-                    phrase: randomPhrase
-                });
-
-                if (captured) triggerShatterEffect(e.clientX, e.clientY, randomPhrase);
+                conn.send({ type: 'move', board: boardState, captured, capX: e.clientX, capY: e.clientY, phrase: "ESMAGADO! 💀" });
+                if (captured) triggerShatterEffect(e.clientX, e.clientY, "ESMAGADO! 💀");
                 render();
             }
         }
 
         function validate(fr, fc, tr, tc) {
             if (boardState[tr][tc]) return null;
-            const rd = tr - fr;
-            const cd = Math.abs(tc - fc);
+            const rd = tr - fr; const cd = Math.abs(tc - fc);
             const dir = myColor === 'white' ? -1 : 1;
             const isKing = boardState[fr][fc].king;
-
             if (cd === 1 && (isKing ? Math.abs(rd) === 1 : rd === dir)) return { cap: null };
             if (cd === 2 && (isKing ? Math.abs(rd) === 2 : rd === dir * 2)) {
-                const mr = fr + (rd / 2);
-                const mc = fc + (tc - fc) / 2;
+                const mr = fr + (rd / 2); const mc = fc + (tc - fc) / 2;
                 if (boardState[mr][mc] && boardState[mr][mc].color !== myColor) return { cap: { r: mr, c: mc } };
             }
             return null;
         }
 
         function triggerShatterEffect(x, y, phrase) {
-            const old = document.querySelector('.trash-talk');
-            if (old) old.remove();
+            const old = document.querySelector('.trash-talk'); if (old) old.remove();
             document.getElementById('board-container').classList.add('shake');
             setTimeout(() => document.getElementById('board-container').classList.remove('shake'), 400);
             const t = document.createElement('div');
-            t.className = 'trash-talk';
-            t.innerText = phrase;
+            t.className = 'trash-talk'; t.innerText = phrase;
             t.style.left = (x - 60) + 'px'; t.style.top = (y - 60) + 'px';
             document.body.appendChild(t);
         }
 
         function copyInvite() {
-            if (!myId) { alert("Aguarde o servidor iniciar..."); return; }
-            const url = window.location.origin + window.location.pathname + '?room=' + myId;
-
-            const el = document.createElement('textarea');
-            el.value = url;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-
+            const url = `${window.location.origin}${window.location.pathname}?room=${myId}`;
+            const el = document.createElement('textarea'); el.value = url;
+            document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
             document.getElementById('invite-btn').innerText = "✅ LINK COPIADO!";
             setTimeout(() => document.getElementById('invite-btn').innerText = "🔗 CONVIDAR AMIGO", 2000);
         }
 
-        function requestRematch() {
-            if (!conn) return;
-            conn.send({ type: 'rematch_request' });
-            addChatMessage('Sistema', 'Pedido de revanche enviado...');
-        }
-
+        function requestRematch() { if (conn) conn.send({ type: 'rematch_request' }); }
         function sendMsg() {
-            const i = document.getElementById('chat-input');
-            if (!i.value || !conn) return;
-            conn.send({ type: 'chat', msg: i.value });
-            addChatMessage('Você', i.value);
-            i.value = '';
+            const i = document.getElementById('chat-input'); if (!i.value || !conn) return;
+            conn.send({ type: 'chat', msg: i.value }); addChatMessage('Você', i.value); i.value = '';
         }
-
-        function sendEmoji(e) {
-            if (!conn) return;
-            conn.send({ type: 'chat', msg: e });
-            addChatMessage('Você', e);
-        }
-
+        function sendEmoji(e) { if (conn) { conn.send({ type: 'chat', msg: e }); addChatMessage('Você', e); } }
         function addChatMessage(user, msg) {
             const c = document.getElementById('chat-content');
-            if (!c) return;
-            c.innerHTML += `<div><b>${user}:</b> ${msg}</div>`;
-            c.scrollTop = c.scrollHeight;
+            c.innerHTML += `<div><b>${user}:</b> ${msg}</div>`; c.scrollTop = c.scrollHeight;
         }
     </script>
 </body>
