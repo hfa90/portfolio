@@ -7,7 +7,46 @@
     <title>Hayden Print - CD Logística</title>
     <script src="https://unpkg.com/pdf-lib/dist/pdf-lib.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/print-js/1.6.0/print.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
+        /* Estilos das Marcas */
+        .btn-word {
+            background-color: #2b579a !important;
+            /* Azul Word */
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-pdf {
+            background-color: #ff0000 !important;
+            /* Vermelho Acrobat */
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .conversion-zone {
+            background: #ffffff;
+            border: 2px solid #e2e8f0;
+            margin: 20px;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
         :root {
             --primary: #0f172a;
             --accent: #2563eb;
@@ -181,6 +220,18 @@
                 <button id="process-btn" class="btn-main" disabled>PROCESSAR E IMPRIMIR LOTE</button>
             </div>
         </div>
+
+        <div class="conversion-tools" style="padding: 0 20px; margin-bottom: 20px;">
+            <div
+                style="background: #f8fafc; border: 1px solid var(--border); padding: 15px; border-radius: 8px; display: flex; gap: 15px; align-items: center;">
+                <strong style="color: var(--primary);">🔄 CONVERSOR RÁPIDO:</strong>
+                <input type="file" id="word-converter" accept=".docx" style="font-size: 0.8rem;">
+                <button onclick="convertWordToPdf()" id="conv-btn"
+                    style="padding: 5px 15px; cursor: pointer; background: #059669; color: white; border: none; border-radius: 4px;">Converter
+                    Word para PDF</button>
+                <span id="conv-status" style="font-size: 0.8rem; color: #64748b;"></span>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -265,6 +316,56 @@
                 processBtn.disabled = false;
             }
         });
+
+
+        async function convertWordToPdf() {
+            const fileInput = document.getElementById('word-converter');
+            const status = document.getElementById('conv-status');
+            const btn = document.getElementById('conv-btn');
+
+            if (fileInput.files.length === 0) {
+                alert("Selecione um arquivo .docx");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            btn.disabled = true;
+            status.innerText = "⏳ Convertendo documento Word...";
+            logger(`Iniciando conversão: [WORD] ${file.name}`);
+
+            try {
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    const arrayBuffer = e.target.result;
+                    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    const cleanText = result.value.replace(/<[^>]*>?/gm, '');
+                    const splitText = doc.splitTextToSize(cleanText, 180);
+
+                    doc.text(splitText, 10, 10);
+                    const pdfBlob = doc.output('blob');
+                    const url = URL.createObjectURL(pdfBlob);
+
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = file.name.replace(".docx", ".pdf");
+                    link.click();
+
+                    logger(`SUCESSO: ${file.name} agora é um PDF.`);
+                    status.innerText = "✅ Conversão concluída! O download iniciou.";
+                    btn.disabled = false;
+                };
+                reader.readAsArrayBuffer(file);
+            } catch (err) {
+                logger("ERRO: Falha ao ler o arquivo Word.");
+                btn.disabled = false;
+            }
+        }
+
+
+
     </script>
 
 </body>
