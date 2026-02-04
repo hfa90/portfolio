@@ -1022,9 +1022,15 @@
         async function toggleRecording() {
             if (!isRecording) {
                 try {
+                    // Verifica se o navegador suporta getUserMedia
+                    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        alert("Seu navegador não suporta gravação de áudio ou você está em um site sem HTTPS (segurança).");
+                        return;
+                    }
+
                     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                     mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = []; // Limpa gravações anteriores
+                    audioChunks = [];
 
                     mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
                     mediaRecorder.onstop = () => {
@@ -1037,10 +1043,18 @@
                     document.getElementById('btn-gravacao').innerText = "🛑 Parar Leitura";
                     document.getElementById('rec-indicator').style.display = 'flex';
                 } catch (err) {
-                    alert("Malu, preciso do microfone para ouvir sua leitura linda! 🎙️");
+                    console.error("Erro ao acessar microfone:", err);
+                    // Se o erro for de permissão negada
+                    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                        mostrarAviso("Microfone Bloqueado", "Malu, clique no cadeado lá em cima perto do endereço do site e permita o uso do microfone! 🎙️", "⚠️");
+                    } else {
+                        alert("Erro ao ligar o microfone. Verifique se o site tem HTTPS.");
+                    }
                 }
             } else {
-                mediaRecorder.stop();
+                if (mediaRecorder && mediaRecorder.state !== "inactive") {
+                    mediaRecorder.stop();
+                }
                 isRecording = false;
                 document.getElementById('btn-gravacao').innerText = "✅ Leitura Gravada!";
                 document.getElementById('btn-gravacao').style.background = "#2ecc71";
