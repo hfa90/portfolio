@@ -7,6 +7,8 @@
     <title>Mundo da Malu 💖 | Super Missões</title>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Poppins:wght@400;600&display=swap"
         rel="stylesheet">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         :root {
             --pink: #ff85a2;
@@ -705,31 +707,18 @@
     </div>
 
     <div class="app-container">
-        <header>
-
-            <meta name="apple-mobile-web-app-capable" content="yes">
-            <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-            <meta name="apple-mobile-web-app-title" content="Mundo da Malu">
-            <link rel="apple-touch-icon" href="icone-da-malu.png">
-
-
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px 15px;">
             <div class="clock-section">
-                <div id="time">00:00:00</div>
-                <div id="date">Carregando data...</div>
-            </div>
-            <div class="score-badge">
-                🚀 <span id="total-min">0</span> MINUTOS
+                <div id="time" style="font-size: 1.2rem;">00:00</div>
+                <div id="date" style="font-size: 0.7rem;">Carregando...</div>
             </div>
 
-            <div style="display: flex; gap: 10px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap;">
-                <button class="btn" style="background: var(--yellow); color: #333; border: 3px solid white;"
-                    onclick="fazerBackupManual()">💾 Salvar Progresso</button>
-                <button class="btn" style="background: var(--purple);" onclick="abrirControlePai()">🔑 Controle
-                    Pai</button>
+            <div class="score-badge" style="font-size: 1rem; padding: 8px 15px;">
+                🚀 <span id="total-min">0</span> MIN
             </div>
 
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+            <button onclick="abrirModalSenha()"
+                style="background: none; border: none; font-size: 1.2rem; opacity: 0.4; cursor: pointer;">⚙️</button>
         </header>
 
         <div class="missions-grid">
@@ -1286,13 +1275,18 @@
 
         // Atualize o updateTimerDisplay original para chamar o checkReadyToFinish
         function updateTimerDisplay() {
-            let m = Math.floor(timeLeft / 60);
-            let s = timeLeft % 60;
-            document.getElementById('timer-count').innerText = `${m}:${s < 10 ? '0' + s : s}`;
+            const mins = Math.floor(timeLeft / 60);
+            const secs = timeLeft % 60;
+            const display = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+            document.getElementById('timer-count').innerText = display;
 
             if (timeLeft <= 0) {
-                document.getElementById('reading-timer-display').innerHTML = "✅ Tempo mínimo atingido!";
-                checkReadyToFinish();
+                clearInterval(readingTimer);
+                const btnConcluir = document.getElementById('finish-btn');
+                btnConcluir.disabled = false; // Habilita o botão
+                btnConcluir.style.opacity = "1";
+                btnConcluir.style.background = "var(--purple)"; // Garante que fique colorido
+                btnConcluir.innerText = "Concluir e Ganhar Recompensa! 🏆";
             }
         }
 
@@ -1485,7 +1479,13 @@
         }
 
         async function gerarECompartilharCertificado() {
-            const { jsPDF } = window.jspdf;
+            // Verifica se a biblioteca foi carregada corretamente
+            const { jsPDF } = window.jspdf || {};
+            if (!jsPDF) {
+                alert("Erro: Biblioteca de PDF não carregada. Verifique sua conexão com a internet!");
+                return;
+            }
+
             const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a5" });
             const hoje = new Date().toLocaleDateString('pt-BR');
 
@@ -1563,22 +1563,29 @@
             }
 
             // Marca o momento da conclusão
+            // 1. Salva o registro de que o dia foi concluído
             localStorage.setItem('ultimaConclusaoData', Date.now());
 
-            // Abre o WhatsApp com a mensagem personalizada
-            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, Dra. Maria Luiza Baía Fernandes, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msgZap)}`, '_blank');
-
-            // 1. Salva no Histórico do Papai
+            // 2. Registra no histórico do Papai
             let historico = JSON.parse(localStorage.getItem('historicoCertificados')) || [];
             historico.push(new Date().toLocaleString());
             localStorage.setItem('historicoCertificados', JSON.stringify(historico));
 
-            // 2. Registra o bloqueio
-            localStorage.setItem('ultimaConclusaoData', Date.now());
+            // 3. Abre o WhatsApp ANTES de mostrar o popup final que trava a tela
+            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, Dra. Maria Luiza Baía Fernandes, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(msgZap)}`, '_blank');
 
-            // 3. Popup de Parabéns Final
-            const finalModal = `
+            // 4. Mostra o parabéns final e zera os dados
+            totalMinutes = 0;
+            salvarProgressoAtual();
+            document.getElementById('total-min').innerText = "0"; // Atualiza a tela imediatamente
+        }
+
+        // 2. Registra o bloqueio
+        localStorage.setItem('ultimaConclusaoData', Date.now());
+
+        // 3. Popup de Parabéns Final
+        const finalModal = `
             <div id="parabens-final" class="modal" style="display:flex">
                 <div class="modal-content" style="border-color: var(--yellow);">
                     <h1>🌈</h1>
@@ -1588,14 +1595,11 @@
                     <button class="btn" onclick="location.reload()">Até amanhã! 👋</button>
                 </div>
             </div>`;
-            document.body.insertAdjacentHTML('beforeend', finalModal);
+        document.body.insertAdjacentHTML('beforeend', finalModal);
 
-            // 4. Zera o tempo local para o próximo dia
-            totalMinutes = 0;
-            salvarProgressoAtual();
-        }
-
-
+        // 4. Zera o tempo local para o próximo dia
+        totalMinutes = 0;
+        salvarProgressoAtual();
 
 
         // Backup Automático JSON
@@ -1867,6 +1871,83 @@
             mostrarAviso("Tempo Alterado!", `O tempo foi ajustado para ${totalMinutes} minutos.`, "🛠️");
         }
 
+        let senhaDigitada = "";
+        const SENHA_CORRETA = "271223";
+
+        function abrirModalSenha() {
+            senhaDigitada = "";
+            document.getElementById('senha-display').innerText = "";
+            document.getElementById('senha-modal').style.display = 'flex';
+        }
+
+        function digitarSenha(num) {
+            if (senhaDigitada.length < 6) {
+                senhaDigitada += num;
+                document.getElementById('senha-display').innerText = "*".repeat(senhaDigitada.length);
+
+                if (senhaDigitada === SENHA_CORRETA) {
+                    setTimeout(() => {
+                        closeModal('senha-modal');
+                        // Força a abertura do painel do pai
+                        document.getElementById('pai-modal').style.display = 'flex';
+                        // Carrega o histórico ao abrir
+                        atualizarHistoricoNoPainel();
+                    }, 300);
+                } else if (senhaDigitada.length === 6) {
+                    alert("Senha incorreta! 🛠️");
+                    limparSenha();
+                }
+            }
+        }
+
+        function liberarLeituraManual() {
+            if (confirm("Papai Hayden, deseja liberar os minutos de leitura para a Malu agora?")) {
+                // Simula a conclusão da leitura
+                storyReadToday = true;
+                totalMinutes += 50; // Valor da recompensa de leitura
+                document.getElementById('total-min').innerText = totalMinutes;
+
+                salvarProgressoAtual();
+                closeModal('pai-modal');
+
+                mostrarAviso("Recompensa Liberada!", "O Papai Hayden te deu um bônus de leitura hoje! ✨", "🎁");
+
+                // Se o modal de leitura estiver aberto, fecha ele
+                closeModal('reading-modal');
+                checkAllDone();
+            }
+        }
+
+        function atualizarHistoricoNoPainel() {
+            const historico = JSON.parse(localStorage.getItem('historicoCertificados')) || [];
+            const divH = document.getElementById('historico-certificados');
+            if (divH) {
+                divH.innerHTML = historico.length ?
+                    historico.map(d => `✅ Concluído: ${d}`).join('<br>') :
+                    "Nenhum certificado hoje.";
+            }
+        }
+
+        function liberarCuriosidadesManual() {
+            if (confirm("Papai Hayden, deseja liberar as curiosidades de hoje para a Malu? Isso contará como se ela tivesse aprendido as 2 curiosidades.")) {
+                // Define que ela já viu o máximo de curiosidades permitidas
+                curiositiesViewedToday = MAX_CURIOSITIES_PER_DAY;
+
+                // Adiciona a recompensa (10 min por curiosidade = 20 min)
+                totalMinutes += 20;
+                document.getElementById('total-min').innerText = totalMinutes;
+
+                salvarProgressoAtual();
+                closeModal('pai-modal');
+
+                mostrarAviso("Conhecimento Liberado!", "O Papai Hayden liberou o bônus de curiosidades para você! ✨", "💡");
+
+                // Se o modal de curiosidades estiver aberto, fecha ele
+                closeModal('curiosity-modal');
+                checkAllDone();
+            }
+        }
+
     </script>
 
     <button class="floating-btn" onclick="openCuriosities()">💡 Curiosidades Reais</button>
@@ -1982,43 +2063,51 @@
     </div>
 
     <div id="pai-modal" class="modal">
-        <div class="modal-content"
-            style="border: 10px solid var(--purple); max-width: 480px; background: #fbfaff; padding: 30px;">
+        <div class="modal-content" style="border: 8px solid var(--purple); max-width: 400px;">
             <span class="close-popup" onclick="closeModal('pai-modal')">×</span>
-            <h1 style="font-size: 3rem; margin: 0;">🛠️</h1>
-            <h2 style="font-family: 'Fredoka One'; color: var(--purple); margin-bottom: 5px;">Painel do Papai Hayden
-            </h2>
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">Painel Hayden</h2>
 
-            <div style="background: #fff; padding: 15px; border-radius: 20px; border: 2px solid #eee; margin: 15px 0;">
-                <p style="font-weight: bold; color: var(--purple); margin-bottom: 10px;">⏳ Ajustar Minutos da Malu</p>
-                <div style="display: flex; gap: 10px;">
-                    <input type="number" id="input-ajuste-minutos" placeholder="Ex: 10 ou -10"
-                        style="flex: 1; padding: 12px; border-radius: 12px; border: 2px solid #ddd;">
-                    <button class="btn" style="margin:0; background: var(--purple);"
-                        onclick="ajustarMinutosManual()">Aplicar</button>
+            <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                <button class="btn" style="background: var(--sky); color: #333; font-size: 0.8rem;"
+                    onclick="fazerBackupManual()">💾 Sincronizar/Backup</button>
+
+                <hr style="border: 1px solid #eee; width: 100%;">
+
+                <p style="font-weight: bold; margin: 0; font-size: 0.9rem;">Ajustar Minutos:</p>
+                <div style="display: flex; gap: 5px;">
+                    <input type="number" id="input-ajuste-minutos"
+                        style="flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ddd;">
+                    <button class="btn" style="margin:0;" onclick="ajustarMinutosManual()">Ok</button>
+                </div>
+
+                <button class="btn" style="background: var(--dark-pink);" onclick="abrirConfirmacaoZerar()">Zerar Tudo
+                    🔥</button>
+
+                <div style="background: #f9f9f9; padding: 10px; border-radius: 15px; font-size: 0.7rem;">
+                    <label for="fileRestaurar" style="cursor:pointer; color: var(--purple);">☁️ Restaurar de
+                        Arquivo</label>
+                    <input type="file" id="fileRestaurar" style="display:none" onchange="restaurarBackup(event)">
                 </div>
             </div>
 
             <div
-                style="text-align: left; background: #fff; padding: 15px; border-radius: 20px; border: 2px solid #eee; margin-bottom: 15px;">
-                <p style="font-weight: bold; color: var(--purple);">📜 Histórico de Certificados</p>
-                <div id="historico-certificados"
-                    style="max-height: 80px; overflow-y: auto; font-size: 0.8rem; background: #f9f9f9; padding: 10px; border-radius: 10px;">
-                </div>
+                style="background: #fff3e0; padding: 15px; border-radius: 20px; border: 2px solid #ffb74d; margin-bottom: 15px;">
+                <p style="font-weight: bold; color: #e65100; margin: 0 0 10px 0; font-size: 0.9rem;">🎁 Recompensa
+                    Especial
+                </p>
+                <button class="btn" style="background: #ffb74d; color: #333; width: 100%; font-size: 0.8rem; margin:0;"
+                    onclick="liberarLeituraManual()">Liberar Leitura e Recompensa</button>
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                <button class="btn" style="background: var(--dark-pink); font-size: 0.8rem;"
-                    onclick="abrirConfirmacaoZerar()">Zerar Tudo 🔥</button>
-
-                <div style="background: #eef2ff; padding: 10px; border-radius: 15px; border: 2px dashed var(--purple);">
-                    <label for="fileRestaurar"
-                        style="cursor: pointer; font-size: 0.8rem; font-weight: bold; color: var(--purple);">☁️
-                        Restaurar Backup</label>
-                    <input type="file" id="fileRestaurar" style="display:none" onchange="restaurarBackup(event)">
-                </div>
+            <div
+                style="background: #e1f5fe; padding: 15px; border-radius: 20px; border: 2px solid #03a9f4; margin-bottom: 15px;">
+                <p style="font-weight: bold; color: #01579b; margin: 0 0 10px 0; font-size: 0.9rem;">💡 Curiosidades</p>
+                <button class="btn" style="background: #03a9f4; color: white; width: 100%; font-size: 0.8rem; margin:0;"
+                    onclick="liberarCuriosidadesManual()">Liberar Todas as Curiosidades</button>
             </div>
         </div>
+
+
     </div>
 
     <div id="modal-confirmar-zerar" class="modal">
@@ -2031,6 +2120,26 @@
                     Zerar!</button>
                 <button class="btn" style="background: #ccc; flex: 1;"
                     onclick="closeModal('modal-confirmar-zerar')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="senha-modal" class="modal">
+        <div class="modal-content" style="max-width: 300px; border-color: var(--purple);">
+            <h3 style="font-family: 'Fredoka One'; color: var(--purple);">Acesso do Papai</h3>
+            <div id="senha-display"
+                style="background: #eee; padding: 15px; border-radius: 10px; font-size: 1.5rem; letter-spacing: 5px; margin-bottom: 15px; min-height: 55px;">
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%;">
+                <script>
+                    for (let i = 1; i <= 9; i++) {
+                        document.write(`<button class="btn" style="padding: 15px; margin:0;" onclick="digitarSenha('${i}')">${i}</button>`);
+                    }
+                </script>
+                <button class="btn" style="background: var(--dark-pink); margin:0;" onclick="limparSenha()">C</button>
+                <button class="btn" style="margin:0;" onclick="digitarSenha('0')">0</button>
+                <button class="btn" style="background: #ccc; margin:0;" onclick="closeModal('senha-modal')">X</button>
             </div>
         </div>
     </div>
