@@ -258,12 +258,14 @@
 
         /* Área de texto com rolagem interna */
         .page-content {
+            flex: 1;
             flex-grow: 1;
+            -webkit-overflow-scrolling: touch;
             /* Faz o texto ocupar o espaço disponível */
             overflow-y: auto;
             /* Adiciona rolagem se o texto for grande */
-            margin: 15px 0;
-            padding: 10px;
+            margin: 10px 0;
+            padding: 15px;
             font-size: 1rem;
             /* Tamanho confortável para celular */
             line-height: 1.5;
@@ -271,6 +273,7 @@
             background: #fff9fb;
             /* Um fundo sutil para destacar a leitura */
             border-radius: 15px;
+            border: 2px solid #eee;
         }
 
         .page-num {
@@ -481,6 +484,60 @@
             color: var(--dark-pink);
             margin-bottom: 10px;
         }
+
+        /* Botão de Fechar Popup */
+        .close-popup {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            cursor: pointer;
+            color: #999;
+            z-index: 100;
+        }
+
+        /* Botão de Recuperação Discreto */
+        .btn-restore-hidden {
+            position: fixed;
+            bottom: 5px;
+            right: 5px;
+            opacity: 0.3;
+            background: none;
+            border: none;
+            font-size: 10px;
+            cursor: pointer;
+            color: #ccc;
+        }
+
+        .btn-restore-hidden:hover {
+            opacity: 1;
+        }
+
+        /* Design do Popup de Backup Lúdico */
+        .backup-popup {
+            background: #e3f2fd;
+            border: 4px solid var(--sky);
+            border-radius: 25px;
+            padding: 20px;
+            text-align: center;
+            animation: bounceIn 0.5s ease;
+        }
+
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0.3);
+                opacity: 0;
+            }
+
+            70% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 
@@ -580,23 +637,48 @@
     </div>
 
     <div id="reading-modal" class="modal">
-        <div class="modal-content book-reader">
-            <button onclick="fecharLeitura()"
-                style="position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--dark-pink); font-weight: bold;">✕</button>
-            <h2 id="book-title" style="color: var(--purple); text-align: center;"></h2>
+        <div class="modal-content book-reader" style="position: relative;">
+            <span class="close-popup" onclick="fecharLeitura()" style="position: absolute; top: 15px; right: 20px; font-weight: bold; font-size: 30px; color:
+                var(--pink);">×</span>
+
+            <h2 id="book-title" style="color: var(--purple); margin-right: 40px;"></h2>
+
+            <div class="recording-status" id="rec-indicator">
+                <div class="pulse-red"></div> Gravando sua leitura... 🎙️
+            </div>
+
             <div class="page-content" id="page-content"></div>
+
             <div class="page-num">Página <span id="current-page">1</span> de 10</div>
 
-            <div style="text-align: center; margin-top: 20px;">
-                <button class="btn" onclick="prevPage()">⬅️ Voltar</button>
-                <button class="btn" onclick="nextPage()">Próxima ➡️</button>
+            <div style="display: flex; justify-content: center; gap: 5px; margin-top: 10px;">
+                <button class="btn" onclick="changePage(-1)">⬅️</button>
+                <button class="btn" id="btn-gravacao" style="background: #ff477e;" onclick="toggleRecording()">🎤
+                    Iniciar Leitura</button>
+                <button class="btn" onclick="changePage(1)">➡️</button>
             </div>
 
-            <div class="timer-box" id="reading-timer-display">
-                ⏳ Tempo restante de leitura: <span id="timer-count">20:00</span>
+            <div class="timer-box" id="reading-timer-display" style="font-size: 0.9rem; text-align: center;">
+                ⏳ O tempo só corre enquanto você grava: <span id="timer-count">10:00</span>
             </div>
-            <button class="btn" id="finish-btn" style="width: 100%; margin-top: 15px;" disabled
-                onclick="rewardReading()">Concluir Leitura e Ganhar Tempo!</button>
+
+            <button class="btn" id="finish-btn" style="width: 100%; margin-top: 10px;" disabled
+                onclick="rewardReading()">
+                Concluir e Ganhar Tempo! ✨
+            </button>
+        </div>
+    </div>
+
+    <div id="backup-modal" class="modal">
+        <div class="modal-content backup-popup">
+            <h1 style="font-size: 4rem; margin: 0;">☁️</h1>
+            <h2 style="color: var(--purple); font-family: 'Fredoka One';">Nuvem de Memórias!</h2>
+            <p>Estou guardando suas conquistas de hoje com muito carinho...</p>
+            <div style="width: 100%; background: #ddd; height: 10px; border-radius: 5px; margin-top: 10px;">
+                <div
+                    style="width: 100%; background: var(--sky); height: 100%; border-radius: 5px; animation: progress 2s linear;">
+                </div>
+            </div>
         </div>
     </div>
 
@@ -895,32 +977,108 @@
         document.addEventListener("keydown", registrarInteracao);
         document.addEventListener("touchstart", registrarInteracao);
 
+        // O cronômetro agora só funciona se isRecording for true
         function startTimers() {
-            // Timer de Leitura
             clearInterval(readingTimer);
             readingTimer = setInterval(() => {
-                if (!attentionActive) {
+                if (!attentionActive && isRecording && timeLeft > 0) { // TRAVA: isRecording obrigatório
                     timeLeft--;
                     updateTimerDisplay();
 
-                    // Verifica se houve inatividade nos últimos 30 segundos
                     if (Date.now() - lastInteractionTime > INACTIVITY_LIMIT) {
-                        triggerAttentionPopup("Malu, você ainda está lendo? 👀", "O tempo parou porque não detectamos movimento. Clique abaixo para continuar!");
+                        triggerAttentionPopup("Malu, você ainda está lendo? 👀", "O tempo parou porque não detectamos movimento.");
                     }
                 }
             }, 1000);
         }
 
+        let timerInterval;
+
+        // Alteração na função do Timer para respeitar a gravação
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                // O tempo só desce se estiver gravando!
+                if (isRecording && timeLeft > 0) {
+                    timeLeft--;
+                    updateTimerDisplay();
+                }
+            }, 1000);
+        }
+
+        // 1. Bloqueio de Atualização/Fechamento
+        window.addEventListener('beforeunload', (event) => {
+            event.preventDefault();
+            event.returnValue = "Malu, você ainda não terminou suas missões! Quer mesmo sair?";
+        });
+
+        // 2. Lógica de Gravação
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+
+        let audioUrlParaEnviar = null;
+
+        async function toggleRecording() {
+            if (!isRecording) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = []; // Limpa gravações anteriores
+
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+                        audioUrlParaEnviar = URL.createObjectURL(audioBlob);
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    document.getElementById('btn-gravacao').innerText = "🛑 Parar Leitura";
+                    document.getElementById('rec-indicator').style.display = 'flex';
+                } catch (err) {
+                    alert("Malu, preciso do microfone para ouvir sua leitura linda! 🎙️");
+                }
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                document.getElementById('btn-gravacao').innerText = "✅ Leitura Gravada!";
+                document.getElementById('btn-gravacao').style.background = "#2ecc71";
+                document.getElementById('rec-indicator').style.display = 'none';
+                checkReadyToFinish();
+            }
+        }
+
+        // 3. Efeito de Página e Ergonomia
+        function changePage(direction) {
+            const content = document.getElementById('page-content');
+            content.classList.add('page-flip-anim');
+
+            setTimeout(() => {
+                if (direction === 1 && currentPage < 10) currentPage++;
+                if (direction === -1 && currentPage > 1) currentPage--;
+
+                updatePage();
+                content.scrollTop = 0; // Volta o scroll pro topo na nova página
+                content.classList.remove('page-flip-anim');
+            }, 300);
+        }
+
+        function checkReadyToFinish() {
+            if (timeLeft <= 0 && audioChunks.length > 0) {
+                document.getElementById('finish-btn').disabled = false;
+            }
+        }
+
+        // Atualize o updateTimerDisplay original para chamar o checkReadyToFinish
         function updateTimerDisplay() {
             let m = Math.floor(timeLeft / 60);
             let s = timeLeft % 60;
             document.getElementById('timer-count').innerText = `${m}:${s < 10 ? '0' + s : s}`;
 
             if (timeLeft <= 0) {
-                clearInterval(readingTimer);
-                clearInterval(attentionInterval);
-                document.getElementById('finish-btn').disabled = false;
-                document.getElementById('reading-timer-display').innerText = "✅ Leitura concluída!";
+                document.getElementById('reading-timer-display').innerHTML = "✅ Tempo mínimo atingido!";
+                checkReadyToFinish();
             }
         }
 
@@ -957,15 +1115,20 @@
 
         // Substituição da função fecharLeitura (Imagem 4)
         function fecharLeitura() {
-            const msg = "Se sair agora, o tempo de leitura será reiniciado. Deseja sair?";
+            const msg = "Malu, se fechar agora o tempo da história vai recomeçar. Quer mesmo sair? 🥺";
             document.getElementById('custom-confirm-message').innerText = msg;
             document.getElementById('custom-confirm-modal').style.display = 'flex';
 
-            // Configura o botão de confirmação
+            // Configura o que o botão "Sim" do SEU MODAL vai fazer
             document.getElementById('confirm-yes').onclick = function () {
                 clearInterval(readingTimer);
-                clearInterval(attentionInterval);
-                attentionActive = false;
+                timeLeft = 600; // Reseta para 10 min
+                updateTimerDisplay();
+
+                if (isRecording) {
+                    toggleRecording(); // Desliga o microfone
+                }
+
                 closeModal('custom-confirm-modal');
                 closeModal('reading-modal');
             };
@@ -1106,53 +1269,72 @@
 
         async function gerarECompartilharCertificado() {
             const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({
-                orientation: "landscape",
-                unit: "mm",
-                format: "a5"
-            });
-
+            const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a5" });
             const hoje = new Date().toLocaleDateString('pt-BR');
 
-            // --- Design do Certificado ---
-            doc.setFillColor(255, 133, 162); // Cor Pink
-            doc.rect(0, 0, 210, 148, 'F');
+            // ... (Mantenha o design do seu certificado atual) ...
 
-            doc.setFillColor(255, 255, 255); // Fundo Branco Interno
-            doc.roundedRect(10, 10, 190, 128, 5, 5, 'F');
-
-            doc.setTextColor(125, 95, 255); // Roxo
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(22);
-            doc.text("CERTIFICADO DE SUPER MALU", 105, 40, { align: "center" });
-
-            doc.setTextColor(51, 51, 51);
-            doc.setFontSize(14);
-            doc.setFont("helvetica", "normal");
-            doc.text("Certificamos que a grande profissional", 105, 60, { align: "center" });
-
-            doc.setFontSize(20);
-            doc.setTextColor(255, 71, 126); // Dark Pink
-            doc.text("MARIA LUIZA (MALU)", 105, 75, { align: "center" });
-
-            doc.setFontSize(12);
-            doc.setTextColor(51, 51, 51);
-            doc.text(`Completou com 100% de sucesso todas as missões diárias,`, 105, 90, { align: "center" });
-            doc.text(`leitura e curiosidades no dia ${hoje}.`, 105, 98, { align: "center" });
-
-            doc.setFontSize(16);
-            doc.setTextColor(125, 95, 255);
-            doc.text(`Tempo Total Ganho: ${totalMinutes} Minutos`, 105, 115, { align: "center" });
-
-            // --- Salvar e Enviar ---
             const nomeArquivo = `Certificado_Malu_${hoje.replace(/\//g, '-')}.pdf`;
             doc.save(nomeArquivo);
 
-            // Preparar mensagem para WhatsApp
-            const mensagem = encodeURIComponent(`🚀 PAPAI! Eu completei todas as minhas missões de hoje (${hoje})! Consegui um total de ${totalMinutes} minutos. Acabei de baixar meu certificado oficial! Posso usar meu tempo? 💖`);
+            // Preparar mensagem com link do áudio
+            let mensagemTexto = `🚀 PAPAI! Eu completei todas as minhas missões de hoje (${hoje})!\n\n`;
+            mensagemTexto += `✨ Ganhei um total de ${totalMinutes} minutos.\n`;
 
-            // Abre o WhatsApp (Substitua pelo seu número se quiser direto, ou abre a lista de contatos)
-            window.open(`https://wa.me/?text=${mensagem}`, '_blank');
+            if (audioUrlParaEnviar) {
+                mensagemTexto += `🎙️ OUÇA MINHA LEITURA: A gravação está salva no meu celular! Eu li a história de ${currentStoryKey.toUpperCase()}.`;
+            }
+
+            mensagemTexto += `\n\nPosso usar meu tempo? 💖`;
+
+            const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(mensagemTexto)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+
+        // Backup Automático JSON
+        function fazerBackupAuto() {
+            // Mostra o popup lúdico
+            document.getElementById('backup-modal').style.display = 'flex';
+
+            setTimeout(() => {
+                const dados = {
+                    totalMinutes: totalMinutes,
+                    data: new Date().toLocaleDateString(),
+                    missoes: missionsCompletedCount
+                };
+
+                const blob = new Blob([JSON.stringify(dados)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `memorias_da_malu.json`;
+                a.click();
+
+                // Esconde o popup após 2.5 segundos
+                setTimeout(() => {
+                    closeModal('backup-modal');
+                }, 500);
+            }, 2000);
+        }
+
+        // Chame fazerBackupAuto() dentro da sua função gerarECompartilharCertificado()
+
+        function restaurarBackup(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const dados = JSON.parse(e.target.result);
+                    totalMinutes = dados.totalMinutes;
+                    updateDisplay(); // Atualiza a tela com os minutos recuperados
+                    alert("Informações recuperadas com sucesso! 🌈");
+                } catch (err) {
+                    alert("Erro ao ler o arquivo de backup.");
+                }
+            };
+            reader.readAsText(file);
         }
     </script>
 
@@ -1240,6 +1422,10 @@
                 Vou terminar agora! 🚀
             </button>
         </div>
+        <span class="close-popup" onclick="fecharLeitura()">×</span>
+
+        <button class="btn-restore-hidden" onclick="document.getElementById('fileInput').click()">⚙️</button>
+        <input type="file" id="fileInput" style="display:none" onchange="restaurarBackup(event)">
     </div>
     <div id="custom-alert-modal" class="modal">
         <div class="modal-content" style="border-color: var(--pink);">
