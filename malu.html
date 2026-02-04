@@ -538,6 +538,32 @@
                 opacity: 1;
             }
         }
+
+        /* Animação de Brilho/Pulso */
+        @keyframes pulse-gold {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(254, 202, 87, 0.7);
+            }
+
+            70% {
+                transform: scale(1.05);
+                box-shadow: 0 0 0 15px rgba(254, 202, 87, 0);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(254, 202, 87, 0);
+            }
+        }
+
+        .btn-ready {
+            background: var(--yellow) !important;
+            color: #333 !important;
+            animation: pulse-gold 1.5s infinite;
+            border: 3px solid white !important;
+            font-size: 1.2rem !important;
+        }
     </style>
 </head>
 
@@ -683,6 +709,13 @@
     </div>
 
     <script>
+
+        // Forçar HTTPS para habilitar o microfone
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            location.replace(`https:${location.href.substring(location.protocol.length)}`);
+        }
+
+
         let attentionInterval;
         let attentionActive = false;
         let lastInteractionTime = Date.now();
@@ -723,6 +756,8 @@
         const PUZZLE_ROWS = 5;
         const PUZZLE_COLS = 5; // Total 25 peças (mais jogável que 50 em celular)
         let pieces = [];
+
+        const soundApplause = new Audio('https://www.soundjay.com/human/sounds/applause-01.mp3');
 
         // Atualize sua função checkAllDone existente
         function checkAllDone() {
@@ -960,6 +995,8 @@
             document.getElementById('finish-btn').disabled = true;
 
             startTimers();
+
+            rewardSoundPlayed = false;
         }
 
         document.addEventListener("visibilitychange", function () {
@@ -1079,12 +1116,14 @@
         }
 
         function checkReadyToFinish() {
-            if (timeLeft <= 0 && audioChunks.length > 0) {
+            // O botão deve ativar se o tempo acabou OU se ela já gravou o suficiente
+            if (timeLeft <= 0 && (isRecording || audioChunks.length > 0)) {
                 document.getElementById('finish-btn').disabled = false;
             }
         }
 
-        // Atualize o updateTimerDisplay original para chamar o checkReadyToFinish
+        let rewardSoundPlayed = false; // Variável de controle para o som tocar só uma vez
+
         function updateTimerDisplay() {
             let m = Math.floor(timeLeft / 60);
             let s = timeLeft % 60;
@@ -1092,7 +1131,23 @@
 
             if (timeLeft <= 0) {
                 document.getElementById('reading-timer-display').innerHTML = "✅ Tempo mínimo atingido!";
-                checkReadyToFinish();
+
+                if (audioChunks.length > 0 || isRecording) {
+                    const finishBtn = document.getElementById('finish-btn');
+
+                    // Se o botão ainda estava desativado, significa que acabamos de liberar
+                    if (finishBtn.disabled) {
+                        finishBtn.disabled = false;
+                        finishBtn.classList.add('btn-ready');
+                        finishBtn.innerHTML = "CONCLUIR E GANHAR TEMPO! ✨";
+
+                        // Toca os aplausos para celebrar!
+                        if (!rewardSoundPlayed) {
+                            soundApplause.play().catch(e => console.log("Áudio bloqueado pelo navegador até interação."));
+                            rewardSoundPlayed = true;
+                        }
+                    }
+                }
             }
         }
 
