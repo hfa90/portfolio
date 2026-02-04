@@ -221,7 +221,8 @@
             width: 95%;
             /* Ocupa quase toda a largura em telas pequenas */
             max-width: 500px;
-            max-height: 90vh;
+            max-height: 95vh;
+            overflow-y: auto;
             /* Não ultrapassa 90% da altura da tela */
             border-radius: 30px;
             /* Reduzi um pouco para telas menores */
@@ -233,7 +234,19 @@
             flex-direction: column;
             /* Organiza os itens em coluna */
             overflow: hidden;
+            align-items: center;
+            justify-content: center;
             /* Garante que nada escape das bordas arredondadas */
+        }
+
+        /* Ajuste para o botão de boas-vindas não ultrapassar */
+        #welcome-modal .btn {
+            font-size: 1.2rem;
+            /* Reduzido levemente */
+            padding: 12px 30px;
+            width: 90%;
+            /* Garante que fique dentro da margem */
+            max-width: 300px;
         }
 
         /* Ajuste específico para o leitor de livros */
@@ -429,6 +442,45 @@
                 transform: translateY(0);
             }
         }
+
+        /* Estilos do Quebra-Cabeça */
+        #puzzle-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            /* 5 colunas */
+            gap: 2px;
+            background: #ccc;
+            border: 5px solid var(--purple);
+            width: 300px;
+            height: 300px;
+            margin: 15px auto;
+        }
+
+        .puzzle-piece {
+            background-color: var(--pink);
+            background-size: 300px 300px;
+            /* Tamanho total da imagem */
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .puzzle-piece.empty {
+            background: #eee !important;
+            cursor: default;
+        }
+
+        #game-timer {
+            font-size: 1.5rem;
+            font-family: 'Fredoka One';
+            color: var(--dark-pink);
+            margin-bottom: 10px;
+        }
     </style>
 </head>
 
@@ -457,6 +509,8 @@
             <div class="score-badge">
                 🚀 <span id="total-min">0</span> MINUTOS
             </div>
+
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
         </header>
 
         <div class="missions-grid">
@@ -466,6 +520,7 @@
                 <h3>Cuidar da Lis</h3>
                 <span class="reward">+45 Minutos</span>
             </div>
+
 
             <div class="card"
                 onclick="completeMission(this, 30, '🧼 Lavar a Louça', '<b>Por que isso te faz melhor?</b><br>Uma cirurgiã precisa de um ambiente 100% limpo e organização total. Lavar a louça caprichada treina seu foco e disciplina com a limpeza! <br><br><i>Dra. Malu, as bactérias não podem vencer essa louça!</i>')">
@@ -496,6 +551,14 @@
             </div>
         </div>
 
+        <div style="text-align: center; margin-top: 20px;">
+            <button id="btn-jogo-inteligente" class="btn"
+                style="background: var(--yellow); color: #333; font-size: 1.2rem; border: 3px solid var(--white); opacity: 0.5;"
+                onclick="abrirJogoInteligente()">
+                🎮 Jogo Inteligente (Bloqueado)
+            </button>
+        </div>
+
         <div class="reading-shelf">
             <h2>📚 Biblioteca da Malu (Mín. 20 min)</h2>
             <div class="book-grid">
@@ -518,6 +581,8 @@
 
     <div id="reading-modal" class="modal">
         <div class="modal-content book-reader">
+            <button onclick="fecharLeitura()"
+                style="position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer; color: var(--dark-pink); font-weight: bold;">✕</button>
             <h2 id="book-title" style="color: var(--purple); text-align: center;"></h2>
             <div class="page-content" id="page-content"></div>
             <div class="page-num">Página <span id="current-page">1</span> de 10</div>
@@ -536,6 +601,10 @@
     </div>
 
     <script>
+        let attentionInterval;
+        let attentionActive = false;
+        let lastInteractionTime = Date.now();
+        const INACTIVITY_LIMIT = 30000;
         let totalMinutes = 0;
         let readingTimer;
         let curiosityTimer;
@@ -566,17 +635,162 @@
         setInterval(updateClock, 1000);
         updateClock();
 
-        // Verificador Automático de Conclusão Total
+        // Variáveis de Controle do Jogo
+        let gameTimerInterval;
+        let gameTimeLeft = 15 * 60;
+        const PUZZLE_ROWS = 5;
+        const PUZZLE_COLS = 5; // Total 25 peças (mais jogável que 50 em celular)
+        let pieces = [];
+
+        // Atualize sua função checkAllDone existente
         function checkAllDone() {
+            const btnJogo = document.getElementById('btn-jogo-inteligente');
+
+            // Verifica se todas as missões foram concluídas
             if (missionsCompletedCount >= TOTAL_MISSIONS && storyReadToday && curiositiesViewedToday >= MAX_CURIOSITIES_PER_DAY) {
+                btnJogo.style.opacity = "1";
+                btnJogo.innerText = "🎮 Jogo Inteligente (LIBERADO!)";
+                btnJogo.style.animation = "float 2s infinite ease-in-out";
+
                 setTimeout(() => {
                     showFinalAuthorizationModal();
                 }, 1500);
             }
         }
 
+        function abrirJogoInteligente() {
+            // 1. Verificar os status
+            const missoesOk = missionsCompletedCount >= TOTAL_MISSIONS;
+            const leituraOk = storyReadToday;
+            const curiosidadesOk = curiositiesViewedToday >= MAX_CURIOSITIES_PER_DAY;
+
+            // 2. Se tudo estiver pronto, abre o jogo
+            if (missoesOk && leituraOk && curiosidadesOk) {
+                document.getElementById('game-modal').style.display = 'flex';
+                initPuzzle();
+                startGameTimer();
+                return;
+            }
+
+            // 3. Caso contrário, atualiza o checklist visual
+            const checkM = document.getElementById('check-missions');
+            const checkL = document.getElementById('check-reading');
+            const checkC = document.getElementById('check-curiosity');
+
+            // Atualiza Missões
+            checkM.innerHTML = missoesOk ? "✅ Todas as missões feitas!" : `❌ Faltam ${TOTAL_MISSIONS - missionsCompletedCount} missões`;
+            checkM.style.color = missoesOk ? "green" : "red";
+
+            // Atualiza Leitura
+            checkL.innerHTML = leituraOk ? "✅ História lida!" : "❌ Ler história (20 min)";
+            checkL.style.color = leituraOk ? "green" : "red";
+
+            // Atualiza Curiosidades
+            checkC.innerHTML = curiosidadesOk ? "✅ Curiosidades visualizadas!" : `❌ Ver curiosidades (${curiositiesViewedToday}/${MAX_CURIOSITIES_PER_DAY})`;
+            checkC.style.color = curiosidadesOk ? "green" : "red";
+
+            // 4. Mostra o modal personalizado
+            document.getElementById('game-locked-modal').style.display = 'flex';
+        }
+
+        function initPuzzle() {
+            const container = document.getElementById('puzzle-container');
+            container.innerHTML = '';
+            pieces = [];
+
+            // Criar array de peças (0 a 24)
+            for (let i = 0; i < (PUZZLE_ROWS * PUZZLE_COLS); i++) {
+                pieces.push(i);
+            }
+
+            // Embaralhar
+            pieces.sort(() => Math.random() - 0.5);
+
+            renderPuzzle();
+        }
+
+        function renderPuzzle() {
+            const container = document.getElementById('puzzle-container');
+            container.innerHTML = '';
+
+            pieces.forEach((pieceIdx, currentPos) => {
+                const div = document.createElement('div');
+                div.className = 'puzzle-piece';
+
+                if (pieceIdx === (PUZZLE_ROWS * PUZZLE_COLS) - 1) {
+                    div.classList.add('empty');
+                    div.innerText = '';
+                } else {
+                    // Lógica de posição da imagem (Usa uma foto da internet como exemplo)
+                    const row = Math.floor(pieceIdx / PUZZLE_COLS);
+                    const col = pieceIdx % PUZZLE_COLS;
+                    div.style.backgroundImage = `url('https://api.dicebear.com/7.x/adventurer/svg?seed=Malu&backgroundColor=ff85a2')`;
+                    div.style.backgroundPosition = `-${col * 60}px -${row * 60}px`;
+                    div.innerText = pieceIdx + 1; // Número para ajudar a Malu
+                    div.onclick = () => movePiece(currentPos);
+                }
+                container.appendChild(div);
+            });
+        }
+
+        function movePiece(pos) {
+            const emptyPos = pieces.indexOf((PUZZLE_ROWS * PUZZLE_COLS) - 1);
+            const row = Math.floor(pos / PUZZLE_COLS);
+            const emptyRow = Math.floor(emptyPos / PUZZLE_COLS);
+            const col = pos % PUZZLE_COLS;
+            const emptyCol = emptyPos % PUZZLE_COLS;
+
+            // Verifica se a peça está adjacente ao espaço vazio
+            const isAdjacent = Math.abs(row - emptyRow) + Math.abs(col - emptyCol) === 1;
+
+            if (isAdjacent) {
+                [pieces[pos], pieces[emptyPos]] = [pieces[emptyPos], pieces[pos]];
+                renderPuzzle();
+                checkWin();
+            }
+        }
+
+        function checkWin() {
+            const win = pieces.every((val, i) => val === i);
+            if (win) {
+                clearInterval(gameTimerInterval);
+                alert("INCRÍVEL! Você montou o quebra-cabeça! +45 Minutos! 🏆");
+                totalMinutes += 45;
+                document.getElementById('total-min').innerText = totalMinutes;
+                closeModal('game-modal');
+            }
+        }
+
+        function startGameTimer() {
+            gameTimeLeft = 15 * 60;
+            clearInterval(gameTimerInterval);
+            gameTimerInterval = setInterval(() => {
+                gameTimeLeft--;
+                let m = Math.floor(gameTimeLeft / 60);
+                let s = gameTimeLeft % 60;
+                document.getElementById('game-timer').innerText = `${m}:${s < 10 ? '0' + s : s}`;
+
+                if (gameTimeLeft <= 0) {
+                    clearInterval(gameTimerInterval);
+                    perderJogo();
+                }
+            }, 1000);
+        }
+
+        function perderJogo() {
+            alert("O tempo acabou! Você perdeu 30 minutos. Tente ser mais rápida na próxima! ⏳");
+            totalMinutes = Math.max(0, totalMinutes - 30);
+            document.getElementById('total-min').innerText = totalMinutes;
+            closeModal('game-modal');
+        }
+
+        function desistirJogo() {
+            if (confirm("Tem certeza? Você perderá 30 minutos!")) {
+                perderJogo();
+            }
+        }
+
         function showFinalAuthorizationModal() {
-            // Criar o elemento do modal dinamicamente se não existir
             let authModal = document.getElementById('auth-modal');
             if (!authModal) {
                 const modalHTML = `
@@ -585,13 +799,15 @@
                         <h1 style="font-size: 5rem;">🏆</h1>
                         <h2 style="color: var(--dark-pink); font-family: 'Fredoka One';">MISSÃO CUMPRIDA!</h2>
                         <p style="font-size: 1.2rem; font-weight: bold;">Malu, você completou TUDO por hoje! Parabéns pela disciplina! ✨</p>
-                        <div style="background: #f0f0f0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 3px dashed var(--purple);">
-                            <h3 style="color: var(--purple); margin-top: 0;">📢 AVISO AOS PAIS</h3>
-                            <p>A decisão de liberar os <b>${totalMinutes} minutos</b> agora está nas mãos de:</p>
-                            <p style="font-size: 1.3rem;">👸 <b>Lígia (Mamãe)</b> & 🤴 <b>Hayden (Papai)</b></p>
+                
+                        <div style="background: #f0f0f0; padding: 20px; border-radius: 20px; margin: 20px 0; border: 3px dashed var(--purple); width: 100%;">
+                            <button class="btn" style="background: #25D366; color: white; width: 100%; margin-bottom: 10px; font-size: 1.1rem;" onclick="gerarECompartilharCertificado()">
+                                📄 EMITIR CERTIFICADO & ZAP 🚀
+                            </button>
+                            <p style="font-size: 0.9rem; color: #666;">Envie para o Papai Hayden como prova!</p>
                         </div>
-                        <p>Mostre esta tela para eles autorizarem!</p>
-                        <button class="btn" onclick="closeModal('auth-modal')">Entendido!</button>
+
+                        <button class="btn" onclick="closeModal('auth-modal')">Fechar</button>
                     </div>
                 </div>`;
                 document.body.insertAdjacentHTML('beforeend', modalHTML);
@@ -599,6 +815,8 @@
                 authModal.style.display = 'flex';
             }
         }
+
+
 
 
         function completeMission(el, min, title, msg) {
@@ -647,29 +865,118 @@
 
         function startReading(key) {
             if (storyReadToday) {
-                alert("Malu, você já leu sua história inspiradora de hoje! Foque nas outras missões. 📚");
+                alert("Malu, você já leu sua história inspiradora de hoje! 📚");
                 return;
             }
             currentStoryKey = key;
             currentPage = 1;
-            timeLeft = 10 * 60; // Tempo reduzido
+            timeLeft = 10 * 60;
+
             document.getElementById('book-title').innerText = "Lendo: " + key.toUpperCase();
             updatePage();
             document.getElementById('reading-modal').style.display = 'flex';
             document.getElementById('finish-btn').disabled = true;
 
+            startTimers();
+        }
+
+        document.addEventListener("visibilitychange", function () {
+            if (document.hidden && !attentionActive && timeLeft > 0 && currentStoryKey !== '') {
+                triggerAttentionPopup("Malu, não saia da página! 🌸", "A leitura precisa ser feita sem trocar de aba para contar o tempo.");
+            }
+        });
+
+        // Registra qualquer interação (Toque, Mouse ou Teclado)
+        function registrarInteracao() {
+            lastInteractionTime = Date.now();
+        }
+
+        document.addEventListener("mousemove", registrarInteracao);
+        document.addEventListener("keydown", registrarInteracao);
+        document.addEventListener("touchstart", registrarInteracao);
+
+        function startTimers() {
+            // Timer de Leitura
             clearInterval(readingTimer);
             readingTimer = setInterval(() => {
-                timeLeft--;
-                let m = Math.floor(timeLeft / 60);
-                let s = timeLeft % 60;
-                document.getElementById('timer-count').innerText = `${m}:${s < 10 ? '0' + s : s}`;
-                if (timeLeft <= 0) {
-                    clearInterval(readingTimer);
-                    document.getElementById('finish-btn').disabled = false;
-                    document.getElementById('reading-timer-display').innerText = "✅ Leitura concluída!";
+                if (!attentionActive) {
+                    timeLeft--;
+                    updateTimerDisplay();
+
+                    // Verifica se houve inatividade nos últimos 30 segundos
+                    if (Date.now() - lastInteractionTime > INACTIVITY_LIMIT) {
+                        triggerAttentionPopup("Malu, você ainda está lendo? 👀", "O tempo parou porque não detectamos movimento. Clique abaixo para continuar!");
+                    }
                 }
             }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            let m = Math.floor(timeLeft / 60);
+            let s = timeLeft % 60;
+            document.getElementById('timer-count').innerText = `${m}:${s < 10 ? '0' + s : s}`;
+
+            if (timeLeft <= 0) {
+                clearInterval(readingTimer);
+                clearInterval(attentionInterval);
+                document.getElementById('finish-btn').disabled = false;
+                document.getElementById('reading-timer-display').innerText = "✅ Leitura concluída!";
+            }
+        }
+
+        function triggerAttentionPopup(titulo, mensagem) {
+            if (attentionActive) return; // Evita abrir vários popups
+
+            attentionActive = true;
+            const attModal = `
+            <div id="attention-modal" class="modal" style="display:flex; z-index:3000;">
+                <div class="modal-content" style="border-color: var(--yellow);">
+                    <h1 style="font-size: 3rem;">👀</h1>
+                    <h2 style="font-family: 'Fredoka One'; color: var(--purple);">${titulo}</h2>
+                    <p>${mensagem}</p>
+                    <button class="btn" style="background: var(--purple);" onclick="resumeReading()">Estou aqui! Continuar 📖</button>
+                </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', attModal);
+        }
+
+        function resumeReading() {
+            attentionActive = false;
+            registrarInteracao(); // Reseta o contador de inatividade ao voltar
+            const modal = document.getElementById('attention-modal');
+            if (modal) modal.remove();
+        }
+
+        // Substituição do Alert
+        function mostrarAviso(titulo, mensagem, emoji = "🌸") {
+            document.getElementById('custom-alert-title').innerText = titulo;
+            document.getElementById('custom-alert-message').innerText = mensagem;
+            document.getElementById('custom-alert-emoji').innerText = emoji;
+            document.getElementById('custom-alert-modal').style.display = 'flex';
+        }
+
+        // Substituição da função fecharLeitura (Imagem 4)
+        function fecharLeitura() {
+            const msg = "Se sair agora, o tempo de leitura será reiniciado. Deseja sair?";
+            document.getElementById('custom-confirm-message').innerText = msg;
+            document.getElementById('custom-confirm-modal').style.display = 'flex';
+
+            // Configura o botão de confirmação
+            document.getElementById('confirm-yes').onclick = function () {
+                clearInterval(readingTimer);
+                clearInterval(attentionInterval);
+                attentionActive = false;
+                closeModal('custom-confirm-modal');
+                closeModal('reading-modal');
+            };
+        }
+
+        // Ajuste na função perderJogo (Para não usar alert nativo)
+        function perderJogo() {
+            mostrarAviso("Tempo Esgotado!", "Você perdeu 30 minutos. Tente ser mais rápida na próxima! ⏳", "😢");
+            totalMinutes = Math.max(0, totalMinutes - 30);
+            document.getElementById('total-min').innerText = totalMinutes;
+            closeModal('game-modal');
         }
 
         // Funções auxiliares (reutilizadas do seu código original)
@@ -796,6 +1103,57 @@
             closeModal('curiosity-modal');
             checkAllDone();
         }
+
+        async function gerarECompartilharCertificado() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF({
+                orientation: "landscape",
+                unit: "mm",
+                format: "a5"
+            });
+
+            const hoje = new Date().toLocaleDateString('pt-BR');
+
+            // --- Design do Certificado ---
+            doc.setFillColor(255, 133, 162); // Cor Pink
+            doc.rect(0, 0, 210, 148, 'F');
+
+            doc.setFillColor(255, 255, 255); // Fundo Branco Interno
+            doc.roundedRect(10, 10, 190, 128, 5, 5, 'F');
+
+            doc.setTextColor(125, 95, 255); // Roxo
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.text("CERTIFICADO DE SUPER MALU", 105, 40, { align: "center" });
+
+            doc.setTextColor(51, 51, 51);
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "normal");
+            doc.text("Certificamos que a grande profissional", 105, 60, { align: "center" });
+
+            doc.setFontSize(20);
+            doc.setTextColor(255, 71, 126); // Dark Pink
+            doc.text("MARIA LUIZA (MALU)", 105, 75, { align: "center" });
+
+            doc.setFontSize(12);
+            doc.setTextColor(51, 51, 51);
+            doc.text(`Completou com 100% de sucesso todas as missões diárias,`, 105, 90, { align: "center" });
+            doc.text(`leitura e curiosidades no dia ${hoje}.`, 105, 98, { align: "center" });
+
+            doc.setFontSize(16);
+            doc.setTextColor(125, 95, 255);
+            doc.text(`Tempo Total Ganho: ${totalMinutes} Minutos`, 105, 115, { align: "center" });
+
+            // --- Salvar e Enviar ---
+            const nomeArquivo = `Certificado_Malu_${hoje.replace(/\//g, '-')}.pdf`;
+            doc.save(nomeArquivo);
+
+            // Preparar mensagem para WhatsApp
+            const mensagem = encodeURIComponent(`🚀 PAPAI! Eu completei todas as minhas missões de hoje (${hoje})! Consegui um total de ${totalMinutes} minutos. Acabei de baixar meu certificado oficial! Posso usar meu tempo? 💖`);
+
+            // Abre o WhatsApp (Substitua pelo seu número se quiser direto, ou abre a lista de contatos)
+            window.open(`https://wa.me/?text=${mensagem}`, '_blank');
+        }
     </script>
 
     <button class="floating-btn" onclick="openCuriosities()">💡 Curiosidades Reais</button>
@@ -846,6 +1204,63 @@
                 onclick="closeModal('welcome-modal')">
                 SIM, ESTOU PRONTA! 🚀
             </button>
+        </div>
+    </div>
+
+    <div id="game-modal" class="modal">
+        <div class="modal-content">
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">🧩 Desafio da Malu</h2>
+            <p>Monte o quebra-cabeça para ganhar 45min!</p>
+            <div id="game-timer">15:00</div>
+
+            <div id="puzzle-container"></div>
+
+            <div style="margin-top: 15px;">
+                <button class="btn" style="background:var(--dark-pink)" onclick="desistirJogo()">Desistir
+                    (-30min)</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="game-locked-modal" class="modal">
+        <div class="modal-content" style="border-color: var(--yellow);">
+            <h1 style="font-size: 3rem; margin: 0;">🚧</h1>
+            <h2 style="color: var(--purple); font-family: 'Fredoka One';">Quase lá, Malu!</h2>
+            <p>Para liberar o <b>Jogo Inteligente</b>, você precisa completar:</p>
+
+            <div id="check-list-container"
+                style="text-align: left; background: #f9f9f9; padding: 15px; border-radius: 20px; margin: 10px 0; border: 2px dashed var(--sky);">
+                <div id="check-missions" style="margin-bottom: 8px;">⏳ Missões (0/5)</div>
+                <div id="check-reading" style="margin-bottom: 8px;">⏳ Leitura da História</div>
+                <div id="check-curiosity" style="margin-bottom: 8px;">⏳ 2 Curiosidades Reais</div>
+            </div>
+
+            <button class="btn" style="background: var(--yellow); color: #333; width: 100%;"
+                onclick="closeModal('game-locked-modal')">
+                Vou terminar agora! 🚀
+            </button>
+        </div>
+    </div>
+    <div id="custom-alert-modal" class="modal">
+        <div class="modal-content" style="border-color: var(--pink);">
+            <h1 id="custom-alert-emoji" style="font-size: 3rem; margin: 0;">🌟</h1>
+            <h2 id="custom-alert-title" style="color: var(--purple); font-family: 'Fredoka One';">Aviso</h2>
+            <p id="custom-alert-message" style="font-size: 1.1rem;"></p>
+            <button class="btn" style="width: 100%;" onclick="closeModal('custom-alert-modal')">OK!</button>
+        </div>
+    </div>
+
+    <div id="custom-confirm-modal" class="modal">
+        <div class="modal-content" style="border-color: var(--yellow);">
+            <h1 style="font-size: 3rem; margin: 0;">🤔</h1>
+            <h2 style="color: var(--purple); font-family: 'Fredoka One';">Tem certeza?</h2>
+            <p id="custom-confirm-message" style="font-size: 1.1rem;"></p>
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button id="confirm-yes" class="btn" style="background: var(--dark-pink); flex: 1;">Sim, quero
+                    sair</button>
+                <button class="btn" style="background: var(--sky); color: #333; flex: 1;"
+                    onclick="closeModal('custom-confirm-modal')">Não, vou ficar</button>
+            </div>
         </div>
     </div>
 </body>
