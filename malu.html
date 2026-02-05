@@ -2447,37 +2447,54 @@
         }
 
         // --- CONFIGURAÇÃO SUPABASE ---
+        // --- CONFIGURAÇÃO SUPABASE CORRIGIDA ---
         const supabaseUrl = 'https://laheqcuxwoypkyihweaq.supabase.co';
-        const supabaseKey = 'sb_publishable__XcntHRJaOQ1WmsEVNcd7w_mAbecFjQ'; //
-        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        const supabaseKey = 'sb_publishable__XcntHRJaOQ1WmsEVNcd7w_mAbecFjQ';
+        // Use apenas uma variável constante para o cliente
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
         let usuarioLogado = null;
 
-        // --- FUNÇÃO DE LOGIN ---
+        // --- FUNÇÃO DE LOGIN ATUALIZADA ---
         async function realizarLogin() {
             const senha = document.getElementById('pass-input').value;
-            const { data, error } = await supabase
-                .from('usuarios_malu')
-                .select('*')
-                .eq('nome', 'Malu')
-                .eq('senha', senha)
-                .single();
+            const btn = document.querySelector('#login-overlay button');
 
-            if (data) {
-                usuarioLogado = data;
-                totalMinutes = data.total_minutos;
-                document.getElementById('total-min').innerText = totalMinutes;
+            // Feedback visual de carregamento
+            btn.innerText = "CARREGANDO...";
+            btn.disabled = true;
 
-                // Carrega progresso das missões
-                if (data.dados_progresso.missoes) {
-                    localStorage.setItem('progressoMalu', JSON.stringify(data.dados_progresso.missoes));
-                    carregarProgresso();
+            try {
+                const { data, error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .select('*')
+                    .eq('nome', 'Malu')
+                    .eq('senha', senha)
+                    .single();
+
+                if (data) {
+                    usuarioLogado = data;
+                    totalMinutes = data.total_minutos;
+                    document.getElementById('total-min').innerText = totalMinutes;
+
+                    // Restaura o progresso se existir
+                    if (data.dados_progresso && data.dados_progresso.missoes) {
+                        localStorage.setItem('progressoMalu', JSON.stringify(data.dados_progresso.missoes));
+                        carregarProgresso();
+                    }
+
+                    document.getElementById('login-overlay').style.display = 'none';
+                    console.log("Login realizado com sucesso!");
+                } else {
+                    document.getElementById('login-error').style.display = 'block';
+                    btn.innerText = "ACESSAR MEU MUNDO 🚀";
+                    btn.disabled = false;
                 }
-
-                document.getElementById('login-overlay').style.display = 'none';
-                console.log("Login realizado!");
-            } else {
-                document.getElementById('login-error').style.display = 'block';
+            } catch (err) {
+                console.error("Erro na conexão:", err);
+                alert("Erro de conexão. Verifique a internet!");
+                btn.innerText = "ACESSAR MEU MUNDO 🚀";
+                btn.disabled = false;
             }
         }
 
