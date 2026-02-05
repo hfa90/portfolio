@@ -794,6 +794,24 @@
         .shake-anim {
             animation: shake 0.4s ease-in-out;
         }
+
+        @keyframes glow-green {
+            0% {
+                box-shadow: 0 0 5px #2ecc71;
+            }
+
+            50% {
+                box-shadow: 0 0 20px #2ecc71;
+            }
+
+            100% {
+                box-shadow: 0 0 5px #2ecc71;
+            }
+        }
+
+        .card-gasto:active {
+            transform: scale(0.95);
+        }
     </style>
 </head>
 
@@ -2153,6 +2171,84 @@
             document.getElementById('gastos-modal').style.display = 'flex';
         }
 
+        let appSelecionadoAtualmente = "";
+
+        function gastarApp(nomeApp) {
+            if (totalMinutes <= 0) {
+                mostrarAviso("Saldo Zero!", "Malu, você precisa de minutos para usar o " + nomeApp + ". Faça uma missão! 💪", "❌");
+                return;
+            }
+
+            // Prepara o modal customizado
+            appSelecionadoAtualmente = nomeApp;
+            document.getElementById('titulo-app-gasto').innerText = nomeApp;
+            document.getElementById('saldo-atual-modal').innerText = totalMinutes;
+            document.getElementById('minutos-para-gastar').value = "";
+
+            // Troca o ícone baseado no app
+            const icone = nomeApp.includes('Netflix') ? '🎬' : nomeApp.includes('YouTube') ? '📺' : '💬';
+            document.getElementById('icone-app-gasto').innerText = icone;
+
+            closeModal('gastos-modal');
+            document.getElementById('modal-selecionar-tempo').style.display = 'flex';
+        }
+
+        function processarGastoApp() {
+            const input = document.getElementById('minutos-para-gastar');
+            const minutosGastar = parseInt(input.value);
+
+            if (isNaN(minutosGastar) || minutosGastar <= 0) {
+                alert("Digite um valor válido, Malu! 😊");
+                return;
+            }
+
+            if (minutosGastar > totalMinutes) {
+                mostrarAviso("Saldo Insuficiente", `Você tentou usar ${minutosGastar} min, mas só tem ${totalMinutes}.`, "❌");
+            } else {
+                totalMinutes -= minutosGastar;
+                document.getElementById('total-min').innerText = totalMinutes;
+                salvarProgressoAtual();
+
+                closeModal('modal-selecionar-tempo');
+                mostrarAviso("Aproveite!", `O Papai autorizou ${minutosGastar} minutos de ${appSelecionadoAtualmente}. Divirta-se! ✨`, "✅");
+            }
+        }
+
+        function confirmarGastoRua() {
+            // REGRA: Só libera se o tempo estiver INTEGRO (comparando com o total que ela já ganhou no dia)
+            // Para simplificar, vamos verificar se ela já gastou qualquer minuto.
+            const progresso = JSON.parse(localStorage.getItem('progressoMalu'));
+            const minutosGanhosNoTotal = progresso ? progresso.minutosAcumuladosHoje : totalMinutes;
+
+            // Se o total atual for menor que o que ela já teve, significa que ela gastou.
+            // Como você já tem o 'totalMinutes' atualizado, vamos usar uma trava de "saldo positivo"
+            if (totalMinutes <= 0) {
+                mostrarAviso("Poxa!", "Você precisa de minutos para trocar pela rua!", "🌳");
+                return;
+            }
+
+            // Se o saldo não for o saldo cheio (integral), ela não pode usar o bônus da rua
+            // Dica: Aqui assumimos que se ela gastou 1 min que seja em tela, a rua bloqueia.
+            let saldoJaFoiGasto = localStorage.getItem('saldoTeveGastoHoje') === 'true';
+
+            if (saldoJaFoiGasto) {
+                document.getElementById('modal-rua-bloqueada').style.display = 'flex';
+                return;
+            }
+
+            // Se passou na trava, ganha o bônus
+            let bonusAmanha = JSON.parse(localStorage.getItem('bonusCelularAmanha')) || 0;
+            localStorage.setItem('bonusCelularAmanha', bonusAmanha + 60);
+
+            totalMinutes = 0;
+            salvarProgressoAtual();
+            closeModal('gastos-modal');
+            document.getElementById('rua-bonus-modal').style.display = 'flex';
+        }
+
+        // Adicione esta linha dentro da função processarGastoApp(), logo após subtrair os minutos:
+        // localStorage.setItem('saldoTeveGastoHoje', 'true');
+
     </script>
 
     <button class="floating-btn btn-curiosidades" onclick="openCuriosities()">
@@ -2313,15 +2409,16 @@
                     onclick="liberarCuriosidadesManual()">Liberar Todas as Curiosidades</button>
             </div>
 
+            <div
+                style="background: #f0f0f0; padding: 15px; border-radius: 20px; margin-top: 15px; border: 2px solid var(--purple);">
+                <p style="font-weight: bold; font-size: 0.8rem; margin: 0 0 10px 0;">📊 Controle Semanal de Horas:</p>
+                <div id="historico-semanal-pai"
+                    style="font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                </div>
+            </div>
+
         </div>
 
-        <div
-            style="background: #f0f0f0; padding: 15px; border-radius: 20px; margin-top: 15px; border: 2px solid var(--purple);">
-            <p style="font-weight: bold; font-size: 0.8rem; margin: 0 0 10px 0;">📊 Controle Semanal de Horas:</p>
-            <div id="historico-semanal-pai"
-                style="font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
-            </div>
-        </div>
 
 
     </div>
@@ -2382,19 +2479,38 @@
         <div class="modal-content" style="max-width: 600px; border-color: var(--yellow);">
             <h2 style="font-family: 'Fredoka One'; color: var(--purple);">🛍️ Shopping do Tempo</h2>
 
-            <div id="controle-diario-malu"></div>
-
             <p>Você tem <b style="color: var(--dark-pink); font-size: 1.5rem;"><span
                         id="minutos-disponiveis">0</span></b> minutos!</p>
 
-            <div
-                style="background: #f0faff; padding: 20px; border-radius: 20px; border: 2px solid var(--sky); width: 100%; margin-bottom: 15px;">
-                <p style="font-weight: bold; margin-top: 0;">📱 Celular ou 📺 TV:</p>
-                <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
-                    <input type="number" id="input-gasto-tela" placeholder="Quanto tempo?"
-                        style="padding: 12px; border-radius: 10px; border: 1px solid #ddd; width: 150px;">
-                    <button class="btn" onclick="gastarTempoTela()">Usar Agora! 🚀</button>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%;">
+                <div class="card-gasto"
+                    style="background: #E50914; color: white; padding: 15px; border-radius: 20px; cursor: pointer;"
+                    onclick="gastarApp('Netflix (TV) 🎬')">
+                    <span style="font-size: 2rem;">🎬</span><br><b>Netflix</b>
                 </div>
+                <div class="card-gasto"
+                    style="background: #FF0000; color: white; padding: 15px; border-radius: 20px; cursor: pointer;"
+                    onclick="gastarApp('YouTube (TV/Celular) 📺')">
+                    <span style="font-size: 2rem;">📺</span><br><b>YouTube</b>
+                </div>
+                <div class="card-gasto"
+                    style="background: #25D366; color: white; padding: 15px; border-radius: 20px; cursor: pointer; grid-column: span 2;"
+                    onclick="gastarApp('WhatsApp 💬')">
+                    <span style="font-size: 2rem;">💬</span><br><b>WhatsApp</b>
+                </div>
+            </div>
+
+            <hr style="width: 100%; margin: 20px 0; border: 1px dashed #ccc;">
+
+            <div
+                style="background: #d1ffdb; padding: 20px; border-radius: 25px; border: 4px solid #2ecc71; width: 100%; animation: glow-green 2s infinite;">
+                <h3 style="margin: 0; color: #157347;">🌳 DESAFIO DA NATUREZA</h3>
+                <p style="font-size: 0.9rem; color: #157347;">Troque seus minutos por diversão na rua e <b>ganhe 1 hora
+                        extra amanhã!</b> 🎁</p>
+                <button class="btn" style="background: #2ecc71; color: white; width: 100%; font-size: 1.2rem;"
+                    onclick="confirmarGastoRua()">
+                    QUERO BRINCAR NA RUA! 🏃‍♀️
+                </button>
             </div>
 
             <button class="btn" style="margin-top:20px; background: #ccc; color: #333;"
@@ -2417,6 +2533,45 @@
     <button class="floating-btn btn-gastos" onclick="abrirModalGastos()">
         🎮 <span>Gastar Minutos</span>
     </button>
+
+    <div id="modal-selecionar-tempo" class="modal">
+        <div class="modal-content" style="border-color: var(--pink); max-width: 400px;">
+            <h1 id="icone-app-gasto" style="font-size: 3rem; margin: 0;">📱</h1>
+            <h2 id="titulo-app-gasto" style="color: var(--purple); font-family: 'Fredoka One';"></h2>
+            <p>Quantos minutos você quer usar?</p>
+            <p style="font-size: 0.8rem; color: #666;">(Saldo: <span id="saldo-atual-modal">0</span> min)</p>
+
+            <input type="number" id="minutos-para-gastar" placeholder="Ex: 30"
+                style="width: 100%; padding: 15px; border-radius: 15px; border: 2px solid var(--sky); font-size: 1.2rem; text-align: center; margin-bottom: 15px;">
+
+            <div
+                style="background: #fff3f3; padding: 10px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ffcccc;">
+                <p style="font-size: 0.8rem; color: #d63031; margin: 0;">⚠️ <b>Atenção:</b> Se gastar aqui, você perde o
+                    bônus da Rua de amanhã!</p>
+            </div>
+
+            <div style="display: flex; gap: 10px; width: 100%;">
+                <button class="btn" style="background: var(--pink); flex: 1;"
+                    onclick="processarGastoApp()">Confirmar</button>
+                <button class="btn" style="background: #ccc; flex: 1;"
+                    onclick="closeModal('modal-selecionar-tempo')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-rua-bloqueada" class="modal">
+        <div class="modal-content" style="border-color: var(--yellow);">
+            <h1 style="font-size: 4rem;">🏃‍♀️</h1>
+            <h2 style="color: var(--purple); font-family: 'Fredoka One';">Quase lá, Malu!</h2>
+            <p>O <b>Desafio da Natureza</b> é um prêmio especial para quem guarda todo o tempo para brincar na rua!</p>
+            <div style="background: #f0fdf4; padding: 15px; border-radius: 20px; border: 2px dashed #2ecc71;">
+                <p style="margin: 0; font-size: 0.9rem;">Para liberar, você precisa ter seu <b>saldo total</b>
+                    disponível.</p>
+            </div>
+            <button class="btn" style="background: var(--purple); width: 100%; margin-top: 15px;"
+                onclick="closeModal('modal-rua-bloqueada')">Vou economizar! 💪</button>
+        </div>
+    </div>
 </body>
 
 </html>
