@@ -695,6 +695,69 @@
             border: 3px solid #fff !important;
             font-weight: bold;
         }
+
+        /* Design do Teclado Numérico do Papai */
+        .teclado-numerico {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            width: 100%;
+        }
+
+        .btn-num {
+            background: #0f3460;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 1.4rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+            border-bottom: 4px solid #0a213e;
+        }
+
+        .btn-num:active {
+            transform: translateY(2px);
+            border-bottom: 0;
+        }
+
+        .btn-danger {
+            background: #e94560;
+            border-bottom-color: #951227;
+        }
+
+        .btn-cancel {
+            background: #533483;
+            border-bottom-color: #3b255d;
+        }
+
+        /* Animação de Tremer (Shake) */
+        @keyframes shake {
+            0% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-10px);
+            }
+
+            50% {
+                transform: translateX(10px);
+            }
+
+            75% {
+                transform: translateX(-10px);
+            }
+
+            100% {
+                transform: translateX(0);
+            }
+        }
+
+        .shake-anim {
+            animation: shake 0.4s ease-in-out;
+        }
     </style>
 </head>
 
@@ -820,6 +883,18 @@
         </div>
     </div>
 
+    <div id="leitura-concluida-modal" class="modal">
+        <div class="modal-content" style="border-color: var(--purple); max-width: 380px;">
+            <h1 style="font-size: 4rem; margin: 0;">📚</h1>
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">Malu, você já brilhou!</h2>
+            <p style="font-weight: bold; color: var(--dark-pink);">Sua história inspiradora de hoje já foi lida com
+                sucesso! ✨</p>
+            <p style="font-size: 0.9rem;">Que tal focar em outra missão para ganhar mais minutos?</p>
+            <button class="btn" style="background: var(--sky); color: #333; width: 100%;"
+                onclick="closeModal('leitura-concluida-modal')">Entendido! 🚀</button>
+        </div>
+    </div>
+
     <div id="backup-modal" class="modal">
         <div class="modal-content backup-popup">
             <h1 style="font-size: 4rem; margin: 0;">☁️</h1>
@@ -863,17 +938,13 @@
 
         // Disparar popup de boas-vindas ao carregar a página
         window.onload = function () {
-            // 1. Primeiro verifica se há bloqueio de 24h
-            const ultimaConclusao = localStorage.getItem('ultimaConclusaoData');
-            if (ultimaConclusao && (Date.now() - ultimaConclusao < 86400000)) {
-                mostrarBloqueioTempoRestante(ultimaConclusao);
-                return;
-            }
+            // 1. Remove qualquer trava de tempo que tenha ficado no navegador
+            localStorage.removeItem('ultimaConclusaoData');
 
-            // 2. Carrega o progresso salvo (isso já atualiza os minutos e os cards)
+            // 2. Carrega o progresso das tarefas
             carregarProgresso();
 
-            // 3. Lógica de Boas-Vindas
+            // 3. Define a saudação baseada na hora
             const agora = new Date();
             const hora = agora.getHours();
             let saudacao = "Bem-vinda, Malu!";
@@ -884,11 +955,16 @@
             else if (hora >= 12 && hora < 18) { saudacao = "Boa tarde, Malu! 🌸"; mensagem = "Hora perfeita para uma leitura inspiradora."; emoji = "📚"; }
             else if (hora >= 18) { saudacao = "Boa noite, Malu! 🌙"; mensagem = "Você brilhou muito hoje!"; emoji = "🌟"; }
 
+            // 4. Mostra APENAS o modal de Boas-Vindas
             const welcomeModal = document.getElementById('welcome-modal');
             welcomeModal.querySelector('h1').innerText = emoji;
             welcomeModal.querySelector('h2').innerText = saudacao;
             welcomeModal.querySelector('p').innerText = mensagem;
             welcomeModal.style.display = 'flex';
+
+            // Garante que o modal de "Incrível" esteja escondido ao iniciar
+            const parabens = document.getElementById('parabens-final');
+            if (parabens) parabens.style.display = 'none';
         };
 
 
@@ -1089,15 +1165,12 @@
 
         function completeMission(el, min, title, msg) {
             if (!el.classList.contains('complete')) {
-                if (navigator.vibrate) navigator.vibrate(10);
-
                 el.classList.add('complete');
                 totalMinutes += min;
                 missionsCompletedCount++;
                 document.getElementById('total-min').innerText = totalMinutes;
 
-                // SALVA EM TEMPO REAL
-                salvarProgressoAtual();
+                salvarProgressoAtual(); // <--- ADICIONE ESTA LINHA AQUI
 
                 document.getElementById('alert-title').innerText = title;
                 document.getElementById('alert-msg').innerHTML = msg;
@@ -1136,7 +1209,8 @@
 
         function startReading(key) {
             if (storyReadToday) {
-                alert("Malu, você já leu sua história inspiradora de hoje! 📚");
+                // EM VEZ DO ALERT, CHAMA O MODAL LÚDICO:
+                document.getElementById('leitura-concluida-modal').style.display = 'flex';
                 return;
             }
             currentStoryKey = key;
@@ -1379,9 +1453,9 @@
             storyReadToday = true;
             document.getElementById('total-min').innerText = totalMinutes;
             closeModal('reading-modal');
-            checkAllDone();
 
             salvarProgressoAtual()
+            checkAllDone();
         }
 
         function closeModal(id) { document.getElementById(id).style.display = 'none'; }
@@ -1517,23 +1591,22 @@
             const splitText = doc.splitTextToSize(mensagem, 160);
             doc.text(splitText, 105, 60, { align: "center" });
 
-            // --- LISTA DE CONQUISTAS (ÍCONES SIMULADOS) ---
+            // --- LISTA DE CONQUISTAS ---
             doc.setFontSize(10);
             doc.setTextColor(125, 95, 255);
             doc.text("• Missões de Caráter OK", 45, 85);
             doc.text("• Leitura Educativa OK", 45, 92);
             doc.text("• Curiosidades Profissionais OK", 45, 99);
 
-            // --- ÁREA DA ASSINATURA (O toque oficial) ---
+            // --- ÁREA DA ASSINATURA ---
             doc.setDrawColor(150, 150, 150);
             doc.setLineWidth(0.5);
-            doc.line(120, 110, 180, 110); // Linha da assinatura
+            doc.line(120, 110, 180, 110);
 
-            // Desenho da Assinatura "Digital" (Simulação de caneta)
-            doc.setTextColor(30, 30, 90); // Azul caneta
+            doc.setTextColor(30, 30, 90);
             doc.setFont("times", "italic");
             doc.setFontSize(16);
-            doc.text("Hayden Fernandes", 150, 107, { align: "center" }); // Sua assinatura como avaliador
+            doc.text("Hayden Fernandes", 150, 107, { align: "center" });
 
             doc.setTextColor(100, 100, 100);
             doc.setFont("helvetica", "normal");
@@ -1551,55 +1624,44 @@
             doc.text("TOP", 35, 114, { align: "center" });
             doc.text("ALUNA", 35, 118, { align: "center" });
 
-            // --- SALVAMENTO E FEEDBACK ---
+            // --- SALVAMENTO ---
             const nomeArquivo = `Certificado_Dra_Maria_Luiza_${hoje.replace(/\//g, '-')}.pdf`;
             doc.save(nomeArquivo);
 
-            // Após salvar o PDF, vamos destacar o botão de envio
-            const btnZap = document.querySelector('#auth-modal .btn'); // Seleciona o botão no modal de autorização
-            if (btnZap) {
-                btnZap.classList.add('btn-whatsapp-glow');
-                btnZap.innerHTML = "🚀 AVISAR O PAPAI AGORA! ✨";
-            }
+            // --- WHATSAPP ---
+            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, Dra. Maria Luiza Baía Fernandes, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
+            window.open(`https://wa.me/?text=${encodeURIComponent(msgZap)}`, '_blank');
 
-            // Marca o momento da conclusão
-            // 1. Salva o registro de que o dia foi concluído
-            localStorage.setItem('ultimaConclusaoData', Date.now());
-
-            // 2. Registra no histórico do Papai
+            // --- HISTÓRICO ---
             let historico = JSON.parse(localStorage.getItem('historicoCertificados')) || [];
             historico.push(new Date().toLocaleString());
             localStorage.setItem('historicoCertificados', JSON.stringify(historico));
 
-            // 3. Abre o WhatsApp ANTES de mostrar o popup final que trava a tela
-            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, Dra. Maria Luiza Baía Fernandes, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
-            window.open(`https://wa.me/?text=${encodeURIComponent(msgZap)}`, '_blank');
+            // --- POPUP FINAL "VOCÊ É INCRÍVEL" ---
+            const finalModal = `
+                < div id = "parabens-final" class="modal" style = "display:flex; z-index: 9999;" >
+                    <div class="modal-content" style="border-color: var(--yellow); text-align: center;">
+                        <h1>🌈</h1>
+                        <h2 style="font-family: 'Fredoka One'; color: var(--purple);">VOCÊ É INCRÍVEL!</h2>
+                        <p>O certificado foi gerado e o aviso enviado para o Papai!</p>
+                        <button class="btn" onclick="reiniciarSistema()">Até amanhã! 👋</button>
+                    </div>
+                </div > `;
+            document.body.insertAdjacentHTML('beforeend', finalModal);
 
-            // 4. Mostra o parabéns final e zera os dados
+            // Zera os dados localmente sem recarregar a página ainda
             totalMinutes = 0;
-            salvarProgressoAtual();
-            document.getElementById('total-min').innerText = "0"; // Atualiza a tela imediatamente
+            document.getElementById('total-min').innerText = "0";
         }
 
-        // 2. Registra o bloqueio
-        localStorage.setItem('ultimaConclusaoData', Date.now());
 
-        // 3. Popup de Parabéns Final
-        const finalModal = `
-            <div id="parabens-final" class="modal" style="display:flex">
-                <div class="modal-content" style="border-color: var(--yellow);">
-                    <h1>🌈</h1>
-                    <h2 style="font-family: 'Fredoka One'; color: var(--purple);">VOCÊ É INCRÍVEL!</h2>
-                    <p>O certificado foi enviado e seus minutos foram salvos com o Papai!</p>
-                    <p><b>Suas tarefas foram zeradas para o descanso. Amanhã às 08:00 tem mais!</b></p>
-                    <button class="btn" onclick="location.reload()">Até amanhã! 👋</button>
-                </div>
-            </div>`;
-        document.body.insertAdjacentHTML('beforeend', finalModal);
 
-        // 4. Zera o tempo local para o próximo dia
-        totalMinutes = 0;
-        salvarProgressoAtual();
+        // Função nova para limpar tudo e evitar o erro do navegador
+        function reiniciarSistema() {
+            localStorage.removeItem('progressoMalu'); // Limpa as tarefas marcadas
+            // Redireciona para a própria página para limpar o estado do JS de forma limpa
+            window.location.href = window.location.pathname + '?reset=' + Date.now();
+        }
 
 
         // Backup Automático JSON
@@ -1680,7 +1742,7 @@
 
             // Criar o HTML do bloqueio com a Lua e Estrelas
             const bloqueioHTML = `
-            <div id="bloqueio-modal" class="modal night-bg" style="display:flex">
+                < div id = "bloqueio-modal" class="modal night-bg" style = "display:flex" >
                 <div class="moon">🌙</div>
                 <div id="stars-container"></div>
                 
@@ -1696,7 +1758,7 @@
                     
                     <p style="font-style: italic; color: #666;">"O sucesso é a soma de pequenos esforços repetidos dia após dia."</p>
                 </div>
-            </div>`;
+            </div > `;
 
             document.body.innerHTML = bloqueioHTML;
 
@@ -1759,8 +1821,8 @@
                 minutos: totalMinutes,
                 missoesCount: missionsCompletedCount,
                 leituraFeita: storyReadToday,
-                curiosidadesCount: curiositiesViewedToday,
-                // Salva quais cards de missão estão com a classe 'complete'
+                curiositiesCount: curiositiesViewedToday,
+                // Isso grava exatamente quais cards foram clicados
                 missoesEstado: Array.from(document.querySelectorAll('.missions-grid .card')).map(card => card.classList.contains('complete')),
                 dataSalva: new Date().toLocaleDateString()
             };
@@ -1771,31 +1833,27 @@
             const salvo = localStorage.getItem('progressoMalu');
             if (salvo) {
                 const dados = JSON.parse(salvo);
+                const hoje = new Date().toLocaleDateString();
 
                 // Só restaura se for o mesmo dia
-                if (dados.dataSalva === new Date().toLocaleDateString()) {
+                if (dados.dataSalva === hoje) {
                     totalMinutes = dados.minutos || 0;
                     missionsCompletedCount = dados.missoesCount || 0;
                     storyReadToday = dados.leituraFeita || false;
-                    curiositiesViewedToday = dados.curiosidadesCount || 0;
+                    curiositiesViewedToday = dados.curiositiesCount || 0;
 
-                    // Restaura o visual dos cards (bloqueia repetição)
+                    document.getElementById('total-min').innerText = totalMinutes;
+
+                    // Pinta os cards de verde novamente para a Malu ver o que já fez
                     const cards = document.querySelectorAll('.missions-grid .card');
                     if (dados.missoesEstado) {
-                        dados.missoesEstado.forEach((completo, index) => {
-                            if (completo && cards[index]) {
+                        dados.missoesEstado.forEach((foiConcluido, index) => {
+                            if (foiConcluido && cards[index]) {
                                 cards[index].classList.add('complete');
                             }
                         });
                     }
-
-                    document.getElementById('total-min').innerText = totalMinutes;
                     checkAllDone();
-                } else {
-                    // Se mudou o dia, reseta o progresso para ela começar de novo
-                    localStorage.removeItem('progressoMalu');
-                    totalMinutes = 0;
-                    document.getElementById('total-min').innerText = "0";
                 }
             }
         }
@@ -1808,10 +1866,14 @@
 
         // --- CONTROLE PAI ---
         function abrirControlePai() {
-            const historico = JSON.parse(localStorage.getItem('historicoCertificados')) || [];
-            const divH = document.getElementById('historico-certificados');
-            divH.innerHTML = historico.length ? historico.map(d => `✅ Concluído em: ${d}`).join('<br>') : "Nenhum certificado emitido ainda.";
-
+            const banco = obterBancoHoras();
+            const divS = document.getElementById('historico-semanal-pai');
+            divS.innerHTML = `
+        <span>Seg: ${banco.seg}m</span> <span>Sex: ${banco.sex}m</span>
+        <span>Ter: ${banco.ter}m</span> <span>Sáb: ${banco.sab}m</span>
+        <span>Qua: ${banco.qua}m</span> <span>Dom: ${banco.dom}m</span>
+        <span>Qui: ${banco.qui}m</span> <span style="color:var(--dark-pink)">Rua(S-Q): ${banco.ruaSemanaAcumulado}m</span>
+    `;
             document.getElementById('pai-modal').style.display = 'flex';
         }
 
@@ -1880,6 +1942,13 @@
             document.getElementById('senha-modal').style.display = 'flex';
         }
 
+        // --- FUNÇÕES DE ACESSO DO PAPAI ---
+
+        function limparSenha() {
+            senhaDigitada = "";
+            document.getElementById('senha-display').innerText = "";
+        }
+
         function digitarSenha(num) {
             if (senhaDigitada.length < 6) {
                 senhaDigitada += num;
@@ -1888,14 +1957,28 @@
                 if (senhaDigitada === SENHA_CORRETA) {
                     setTimeout(() => {
                         closeModal('senha-modal');
-                        // Força a abertura do painel do pai
                         document.getElementById('pai-modal').style.display = 'flex';
-                        // Carrega o histórico ao abrir
                         atualizarHistoricoNoPainel();
+                        limparSenha();
                     }, 300);
                 } else if (senhaDigitada.length === 6) {
-                    alert("Senha incorreta! 🛠️");
-                    limparSenha();
+                    setTimeout(() => {
+                        const modalErro = document.getElementById('erro-senha-modal');
+                        const shakeBox = document.getElementById('erro-shake-box');
+
+                        // Abre o modal
+                        modalErro.style.display = 'flex';
+
+                        // Aplica a animação de tremer
+                        shakeBox.classList.add('shake-anim');
+
+                        // Remove a classe após a animação para poder repetir depois
+                        setTimeout(() => {
+                            shakeBox.classList.remove('shake-anim');
+                        }, 400);
+
+                        limparSenha();
+                    }, 200);
                 }
             }
         }
@@ -1946,6 +2029,92 @@
                 closeModal('curiosity-modal');
                 checkAllDone();
             }
+        }
+
+        // --- LOGICA DE BANCO DE HORAS SEMANAL ---
+        function obterBancoHoras() {
+            const padrao = { seg: 0, ter: 0, qua: 0, qui: 0, sex: 0, sab: 0, dom: 0, ruaSemanaAcumulado: 0 };
+            return JSON.parse(localStorage.getItem('bancoHorasMalu')) || padrao;
+        }
+
+        function confirmarGastoRua() {
+            const agora = new Date();
+            const diaSemana = agora.getDay(); // 1-Segunda a 4-Quinta
+            const banco = obterBancoHoras();
+
+            // Bloqueio de 5h (300 min) para rua entre Segunda e Quinta
+            if (diaSemana >= 1 && diaSemana <= 4) {
+                if (banco.ruaSemanaAcumulado + totalMinutes > 300) {
+                    mostrarAviso("Limite de Rua", "Malu, você já atingiu o limite de 5h de rua para esta semana (Seg a Qui). Guarde energia para amanhã!", "🛑");
+                    return;
+                }
+            }
+
+            if (totalMinutes <= 0) {
+                mostrarAviso("Poxa!", "Você precisa de minutos ganhos para trocar pela rua!", "🌳");
+                return;
+            }
+
+            // Adiciona 60 min para o Sábado
+            banco.sab += 60;
+            if (diaSemana >= 1 && diaSemana <= 4) banco.ruaSemanaAcumulado += totalMinutes;
+
+            localStorage.setItem('bancoHorasMalu', JSON.stringify(banco));
+
+            totalMinutes = 0;
+            salvarProgressoAtual();
+            closeModal('gastos-modal');
+            document.getElementById('rua-bonus-modal').style.display = 'flex';
+        }
+
+        function gastarTempoTela() {
+            const input = document.getElementById('input-gasto-tela');
+            const valor = parseInt(input.value);
+
+            if (isNaN(valor) || valor <= 0) {
+                mostrarAviso("Ops!", "Digite quantos minutos você quer usar! 😊", "📱");
+                return;
+            }
+
+            if (valor > totalMinutes) {
+                mostrarAviso("Saldo Insuficiente", `Malu, você só tem ${totalMinutes} minutos. Faça mais missões! 💪`, "❌");
+                return;
+            }
+
+            totalMinutes -= valor;
+            document.getElementById('total-min').innerText = totalMinutes;
+            document.getElementById('minutos-disponiveis').innerText = totalMinutes;
+            input.value = "";
+
+            salvarProgressoAtual();
+            mostrarAviso("Aproveite!", `Você gastou ${valor} minutos. Bom divertimento! 🍿`, "📺");
+        }
+
+        function confirmarGastoRua() {
+            if (totalMinutes <= 0) {
+                mostrarAviso("Poxa!", "Você precisa de pelo menos alguns minutos ganhos para trocar pela rua! 🌸", "🌳");
+                return;
+            }
+
+            // Lógica do Bônus: Salvamos um registro para o Papai ver no painel ou para o sistema carregar amanhã
+            let bonusAmanha = JSON.parse(localStorage.getItem('bonusCelularAmanha')) || 0;
+            localStorage.setItem('bonusCelularAmanha', bonusAmanha + 60);
+
+            // Zera o tempo de hoje
+            totalMinutes = 0;
+            salvarProgressoAtual();
+
+            closeModal('gastos-modal');
+            document.getElementById('rua-bonus-modal').style.display = 'flex';
+        }
+
+        // Função para abrir o Shopping do Tempo
+        function abrirModalGastos() {
+            // Atualiza o texto do saldo disponível antes de mostrar
+            document.getElementById('minutos-disponiveis').innerText = totalMinutes;
+
+            // Faz o modal aparecer
+            document.getElementById('gastos-modal').style.display = 'flex';
         }
 
     </script>
@@ -2105,6 +2274,15 @@
                 <button class="btn" style="background: #03a9f4; color: white; width: 100%; font-size: 0.8rem; margin:0;"
                     onclick="liberarCuriosidadesManual()">Liberar Todas as Curiosidades</button>
             </div>
+
+        </div>
+
+        <div
+            style="background: #f0f0f0; padding: 15px; border-radius: 20px; margin-top: 15px; border: 2px solid var(--purple);">
+            <p style="font-weight: bold; font-size: 0.8rem; margin: 0 0 10px 0;">📊 Controle Semanal de Horas:</p>
+            <div id="historico-semanal-pai"
+                style="font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+            </div>
         </div>
 
 
@@ -2125,24 +2303,83 @@
     </div>
 
     <div id="senha-modal" class="modal">
-        <div class="modal-content" style="max-width: 300px; border-color: var(--purple);">
-            <h3 style="font-family: 'Fredoka One'; color: var(--purple);">Acesso do Papai</h3>
+        <div class="modal-content"
+            style="max-width: 320px; border-color: var(--purple); background: #1a1a2e; color: white;">
+            <h3 style="font-family: 'Fredoka One'; color: var(--sky); margin-bottom: 5px;">Acesso Restrito</h3>
+            <p style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 15px;">Papai Hayden, digite sua chave:</p>
+
             <div id="senha-display"
-                style="background: #eee; padding: 15px; border-radius: 10px; font-size: 1.5rem; letter-spacing: 5px; margin-bottom: 15px; min-height: 55px;">
+                style="background: #16213e; padding: 15px; border-radius: 15px; font-size: 1.8rem; letter-spacing: 8px; margin-bottom: 20px; min-height: 65px; border: 2px solid var(--purple); color: var(--yellow); display: flex; align-items: center; justify-content: center;">
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%;">
-                <script>
-                    for (let i = 1; i <= 9; i++) {
-                        document.write(`<button class="btn" style="padding: 15px; margin:0;" onclick="digitarSenha('${i}')">${i}</button>`);
-                    }
-                </script>
-                <button class="btn" style="background: var(--dark-pink); margin:0;" onclick="limparSenha()">C</button>
-                <button class="btn" style="margin:0;" onclick="digitarSenha('0')">0</button>
-                <button class="btn" style="background: #ccc; margin:0;" onclick="closeModal('senha-modal')">X</button>
+            <div class="teclado-numerico">
+                <button class="btn-num" onclick="digitarSenha('1')">1</button>
+                <button class="btn-num" onclick="digitarSenha('2')">2</button>
+                <button class="btn-num" onclick="digitarSenha('3')">3</button>
+                <button class="btn-num" onclick="digitarSenha('4')">4</button>
+                <button class="btn-num" onclick="digitarSenha('5')">5</button>
+                <button class="btn-num" onclick="digitarSenha('6')">6</button>
+                <button class="btn-num" onclick="digitarSenha('7')">7</button>
+                <button class="btn-num" onclick="digitarSenha('8')">8</button>
+                <button class="btn-num" onclick="digitarSenha('9')">9</button>
+
+                <button class="btn-num btn-danger" onclick="limparSenha()">C</button>
+                <button class="btn-num" onclick="digitarSenha('0')">0</button>
+                <button class="btn-num btn-cancel" onclick="closeModal('senha-modal')">✕</button>
             </div>
         </div>
     </div>
+
+    <div id="erro-senha-modal" class="modal">
+        <div id="erro-shake-box" class="modal-content" style="border-color: var(--dark-pink); max-width: 350px;">
+            <h1 style="font-size: 4rem; margin: 0;">🛑</h1>
+            <h2 style="font-family: 'Fredoka One'; color: var(--dark-pink);">Acesso Negado!</h2>
+            <p style="font-weight: bold;">Papai Hayden, essa chave não abriu o cofre. Tente novamente! 🛠️</p>
+            <button class="btn" style="background: var(--purple); width: 100%;"
+                onclick="closeModal('erro-senha-modal')">Tentar de Novo 🔄</button>
+        </div>
+    </div>
+
+    <div id="gastos-modal" class="modal">
+        <div class="modal-content" style="max-width: 600px; border-color: var(--yellow);">
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">🛍️ Shopping do Tempo</h2>
+
+            <div id="controle-diario-malu"></div>
+
+            <p>Você tem <b style="color: var(--dark-pink); font-size: 1.5rem;"><span
+                        id="minutos-disponiveis">0</span></b> minutos!</p>
+
+            <div
+                style="background: #f0faff; padding: 20px; border-radius: 20px; border: 2px solid var(--sky); width: 100%; margin-bottom: 15px;">
+                <p style="font-weight: bold; margin-top: 0;">📱 Celular ou 📺 TV:</p>
+                <div style="display: flex; gap: 10px; align-items: center; justify-content: center;">
+                    <input type="number" id="input-gasto-tela" placeholder="Quanto tempo?"
+                        style="padding: 12px; border-radius: 10px; border: 1px solid #ddd; width: 150px;">
+                    <button class="btn" onclick="gastarTempoTela()">Usar Agora! 🚀</button>
+                </div>
+            </div>
+
+            <button class="btn" style="margin-top:20px; background: #ccc; color: #333;"
+                onclick="closeModal('gastos-modal')">Voltar</button>
+        </div>
+    </div>
+
+    <div id="rua-bonus-modal" class="modal">
+        <div class="modal-content" style="border-color: #2ecc71;">
+            <h1 style="font-size: 5rem;">🌳</h1>
+            <h2 style="font-family: 'Fredoka One'; color: #2ecc71;">DECISÃO DE CAMPEÃ!</h2>
+            <p style="font-size: 1.1rem;">Você escolheu a diversão real! Por causa disso, o Papai Hayden já guardou
+                <b>60 minutos bônus</b> para o seu celular amanhã! 🎁
+            </p>
+            <button class="btn" style="background: #2ecc71; width: 100%;" onclick="location.reload()">DIVIRTA-SE NA RUA!
+                👋</button>
+        </div>
+    </div>
+
+    <button class="floating-btn" style="right: auto; left: 30px; background: var(--pink); color: white;"
+        onclick="abrirModalGastos()">
+        🎮 Gastar Meus Minutos
+    </button>
 </body>
 
 </html>
