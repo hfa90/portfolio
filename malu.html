@@ -9,6 +9,7 @@
         rel="stylesheet">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --pink: #ff85a2;
@@ -896,6 +897,8 @@
 
 <body>
 
+
+
     <div class="bg-elements">
         <div class="cloud" style="top: 10%; animation-duration: 15s;">☁️</div>
         <div class="cloud" style="top: 30%; animation-duration: 20s;">⭐</div>
@@ -1084,6 +1087,7 @@
 
         // Disparar popup de boas-vindas ao carregar a página
         window.onload = function () {
+            carregarDoSupabase();
             // 1. Remove qualquer trava de tempo que tenha ficado no navegador
             localStorage.removeItem('ultimaConclusaoData');
 
@@ -1251,6 +1255,8 @@
                 let s = gameTimeLeft % 60;
                 document.getElementById('game-timer').innerText = `${m}:${s < 10 ? '0' + s : s}`;
 
+                gravarTudoInstantaneo();
+
                 if (gameTimeLeft <= 0) {
                     clearInterval(gameTimerInterval);
                     perderJogo();
@@ -1262,6 +1268,8 @@
             alert("O tempo acabou! Você perdeu 30 minutos. Tente ser mais rápida na próxima! ⏳");
             totalMinutes = Math.max(0, totalMinutes - 30);
             document.getElementById('total-min').innerText = totalMinutes;
+
+            gravarTudoInstantaneo();
             closeModal('game-modal');
         }
 
@@ -1274,6 +1282,8 @@
                 totalMinutes = Math.max(0, totalMinutes - 30);
                 localStorage.setItem('minutosMalu', totalMinutes);
                 document.getElementById('total-min').innerText = totalMinutes;
+
+                gravarTudoInstantaneo();
                 closeModal('custom-confirm-modal');
                 closeModal('game-modal');
                 clearInterval(gameTimerInterval);
@@ -1325,12 +1335,15 @@
             if (!el.classList.contains('complete')) {
                 el.classList.add('complete');
                 totalMinutes += min;
+                gravarTudoInstantaneo();
                 missionsCompletedCount++;
                 document.getElementById('total-min').innerText = totalMinutes;
 
+                sincronizarNuvem();
                 registrarGanhoNoBanco(min); // <--- ADICIONE ESTA LINHA AQUI
                 salvarProgressoAtual();
                 checkAllDone();
+
             }
         }
 
@@ -1700,11 +1713,13 @@
         function claimCuriosityReward() {
             curiositiesViewedToday++;
             totalMinutes += 10;
+            gravarTudoInstantaneo();
             document.getElementById('total-min').innerText = totalMinutes;
             closeModal('curiosity-modal');
             checkAllDone();
 
             salvarProgressoAtual()
+            sincronizarNuvem()
         }
 
         async function gerarECompartilharCertificado() {
@@ -2365,6 +2380,7 @@
             } else {
                 totalMinutes -= minutosGastar;
                 document.getElementById('total-min').innerText = totalMinutes;
+                sincronizarNuvem();
                 salvarProgressoAtual();
 
                 // === ESTA É A LINHA QUE ESTAVA FALTANDO ===
@@ -2408,6 +2424,8 @@
             salvarProgressoAtual();
             closeModal('gastos-modal');
             document.getElementById('rua-bonus-modal').style.display = 'flex';
+
+            sincronizarNuvem()
         }
 
         // Adicione esta linha dentro da função processarGastoApp(), logo após subtrair os minutos:
@@ -2428,6 +2446,89 @@
             window.location.reload();
         }
 
+        // --- CONFIGURAÇÃO SUPABASE ---
+        const supabaseUrl = 'https://laheqcuxwoypkyihweaq.supabase.co';
+        const supabaseKey = 'sb_publishable__XcntHRJaOQ1WmsEVNcd7w_mAbecFjQ'; //
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+        let usuarioLogado = null;
+
+        // --- FUNÇÃO DE LOGIN ---
+        async function realizarLogin() {
+            const senha = document.getElementById('pass-input').value;
+            const { data, error } = await supabase
+                .from('usuarios_malu')
+                .select('*')
+                .eq('nome', 'Malu')
+                .eq('senha', senha)
+                .single();
+
+            if (data) {
+                usuarioLogado = data;
+                totalMinutes = data.total_minutos;
+                document.getElementById('total-min').innerText = totalMinutes;
+
+                // Carrega progresso das missões
+                if (data.dados_progresso.missoes) {
+                    localStorage.setItem('progressoMalu', JSON.stringify(data.dados_progresso.missoes));
+                    carregarProgresso();
+                }
+
+                document.getElementById('login-overlay').style.display = 'none';
+                console.log("Login realizado!");
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+
+        // FUNÇÃO PARA CARREGAR TUDO DA NUVEM
+        async function carregarDoSupabase() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('saldo_malu')
+                    .select('*')
+                    .eq('id', 1)
+                    .single();
+
+                if (data && data.dados_progresso) {
+                    const dp = data.dados_progresso;
+
+                    // 1. Restaura o Saldo
+                    totalMinutes = data.total_minutos || 0;
+                    document.getElementById('total-min').innerText = totalMinutes;
+
+                    // 2. Restaura o LocalStorage com os dados da nuvem
+                    if (dp.progressoMalu) localStorage.setItem('progressoMalu', JSON.stringify(dp.progressoMalu));
+                    if (dp.usoAppsMalu) localStorage.setItem('usoAppsMalu', JSON.stringify(dp.usoAppsMalu));
+                    if (dp.bancoHorasMalu) localStorage.setItem('bancoHorasMalu', JSON.stringify(dp.bancoHorasMalu));
+
+                    // 3. Atualiza a interface (marcar os cards verdes)
+                    carregarProgresso();
+                    console.log("🚀 Sistema restaurado via Nuvem!");
+                }
+            } catch (err) {
+                console.error("Erro ao carregar banco:", err);
+            }
+        }
+
+        // --- FUNÇÃO DE GRAVAÇÃO INSTANTÂNEA ---
+        async function gravarTudoInstantaneo() {
+            if (!usuarioLogado) return;
+
+            const payload = {
+                total_minutos: totalMinutes,
+                dados_progresso: {
+                    missoes: JSON.parse(localStorage.getItem('progressoMalu')) || {},
+                    usoApps: JSON.parse(localStorage.getItem('usoAppsMalu')) || {}
+                },
+                ultima_atualizacao: new Date().toISOString()
+            };
+
+            await supabase
+                .from('usuarios_malu')
+                .update(payload)
+                .eq('id', usuarioLogado.id);
+        }
 
 
     </script>
@@ -2751,6 +2852,28 @@
             </div>
             <button class="btn" style="background: var(--purple); width: 100%; margin-top: 15px;"
                 onclick="closeModal('modal-rua-bloqueada')">Vou economizar! 💪</button>
+        </div>
+    </div>
+
+    <div id="login-overlay"
+        style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--purple); z-index: 10000; display: flex; align-items: center; justify-content: center; color: white;">
+        <div
+            style="background: white; color: #333; padding: 30px; border-radius: 30px; text-align: center; width: 90%; max-width: 350px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple); margin-bottom: 5px;">Mundo da Malu 🌍</h2>
+            <p style="font-size: 0.9rem; margin-bottom: 20px;">Olá, futura Dra. Malu!<br>Digite sua senha de 6 dígitos:
+            </p>
+
+            <input type="password" id="pass-input" maxlength="6"
+                style="width: 100%; padding: 15px; margin-bottom: 20px; border: 3px solid #eee; border-radius: 15px; font-size: 24px; text-align: center; letter-spacing: 5px;"
+                placeholder="******">
+
+            <button onclick="realizarLogin()"
+                style="width: 100%; padding: 15px; background: var(--pink); color: white; border: none; border-radius: 15px; font-weight: bold; font-size: 1.1rem; cursor: pointer;">
+                ACESSAR MEU MUNDO 🚀
+            </button>
+
+            <p id="login-error" style="color: #ff477e; display: none; margin-top: 15px; font-weight: 600;">❌ Senha
+                incorreta!</p>
         </div>
     </div>
 </body>
