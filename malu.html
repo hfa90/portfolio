@@ -812,6 +812,85 @@
         .card-gasto:active {
             transform: scale(0.95);
         }
+
+        /* Layout do Super Painel do Papai */
+        #pai-modal .modal-content {
+            max-width: 1000px;
+            width: 95%;
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            width: 100%;
+            text-align: left;
+        }
+
+        @media (max-width: 800px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .dash-card {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #eee;
+        }
+
+        .dash-title {
+            font-family: 'Fredoka One';
+            color: var(--purple);
+            font-size: 1.1rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Gráficos de Barra Simples */
+        .bar-container {
+            margin-bottom: 10px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .bar-bg {
+            background: #eee;
+            height: 12px;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        /* Botões do Painel */
+        .admin-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-badge {
+            padding: 5px 12px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: bold;
+        }
     </style>
 </head>
 
@@ -1918,26 +1997,77 @@
             fazerBackupAuto(); // Usa sua função já existente para baixar o arquivo
         }
 
-        // --- CONTROLE PAI ---
-        function abrirControlePai() {
-            const banco = obterBancoHoras();
-            const divS = document.getElementById('historico-semanal-pai');
-            divS.innerHTML = `
-        <span>Seg: ${banco.seg}m</span> <span>Sex: ${banco.sex}m</span>
-        <span>Ter: ${banco.ter}m</span> <span>Sáb: ${banco.sab}m</span>
-        <span>Qua: ${banco.qua}m</span> <span>Dom: ${banco.dom}m</span>
-        <span>Qui: ${banco.qui}m</span> <span style="color:var(--dark-pink)">Rua(S-Q): ${banco.ruaSemanaAcumulado}m</span>
-    `;
-            document.getElementById('pai-modal').style.display = 'flex';
+        // Funções de Rastreamento
+        function registrarGastoApp(app, minutos) {
+            let uso = JSON.parse(localStorage.getItem('usoAppsMalu')) || { 'Netflix': 0, 'YouTube': 0, 'WhatsApp': 0 };
+            if (app.includes('Netflix')) uso['Netflix'] += minutos;
+            else if (app.includes('YouTube')) uso['YouTube'] += minutos;
+            else if (app.includes('WhatsApp')) uso['WhatsApp'] += minutos;
+            localStorage.setItem('usoAppsMalu', JSON.stringify(uso));
         }
 
-        function resetManualTotal() {
-            if (confirm("Papai, tem certeza que quer zerar o tempo e tarefas da Malu?")) {
-                localStorage.removeItem('progressoMalu');
-                localStorage.removeItem('ultimaConclusaoData');
-                location.reload(); // Recarrega para limpar tudo
-            }
+        function registrarDiaRua() {
+            const diasNomes = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const hoje = diasNomes[new Date().getDay()];
+            let historicoRua = JSON.parse(localStorage.getItem('historicoRuaMalu')) || [];
+            if (!historicoRua.includes(hoje)) historicoRua.push(hoje);
+            localStorage.setItem('historicoRuaMalu', JSON.stringify(historicoRua));
         }
+
+        // Abre o Painel e renderiza os dados
+        function abrirControlePai() {
+            document.getElementById('pai-modal').style.display = 'flex';
+            document.getElementById('saldo-admin').innerText = totalMinutes;
+
+            // --- 1. ATUALIZAR BANCO SEMANAL ---
+            // Registra o saldo atual no dia de hoje antes de exibir
+            const diasNomes = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+            const hojeNome = diasNomes[new Date().getDay()];
+            let banco = obterBancoHoras();
+            banco[hojeNome] = totalMinutes; // Atualiza o valor do dia atual
+            localStorage.setItem('bancoHorasMalu', JSON.stringify(banco));
+
+            const diasExibicao = [
+                { n: 'Seg', v: banco.seg }, { n: 'Ter', v: banco.ter }, { n: 'Qua', v: banco.qua },
+                { n: 'Qui', v: banco.qui }, { n: 'Sex', v: banco.sex }, { n: 'Sáb', v: banco.sab }, { n: 'Dom', v: banco.dom }
+            ];
+
+            const maxMinutos = Math.max(...diasExibicao.map(d => d.v), 1);
+            let htmlSemana = "";
+            diasExibicao.forEach(d => {
+                const perc = (d.v / (maxMinutos * 1.2)) * 100;
+                htmlSemana += `
+            <div class="bar-container">
+                <div class="bar-label"><span>${d.n}</span> <b>${d.v}m</b></div>
+                <div class="bar-bg"><div class="bar-fill" style="width:${perc}%; background:var(--purple)"></div></div>
+            </div>`;
+            });
+            document.getElementById('chart-semanal').innerHTML = htmlSemana;
+
+            // --- 2. RENDERIZAR GRÁFICO DE APPS ---
+            const uso = JSON.parse(localStorage.getItem('usoAppsMalu')) || { 'Netflix': 0, 'YouTube': 0, 'WhatsApp': 0 };
+            const totalGasto = Object.values(uso).reduce((a, b) => a + b, 0) || 0;
+            let htmlApps = "";
+            const cores = { 'Netflix': '#E50914', 'YouTube': '#FF0000', 'WhatsApp': '#25D366' };
+
+            Object.keys(uso).forEach(app => {
+                const perc = totalGasto > 0 ? Math.round((uso[app] / totalGasto) * 100) : 0;
+                htmlApps += `
+            <div class="bar-container">
+                <div class="bar-label"><span>${app}</span> <b>${uso[app]}m (${perc}%)</b></div>
+                <div class="bar-bg"><div class="bar-fill" style="width:${perc}%; background:${cores[app]}"></div></div>
+            </div>`;
+            });
+            document.getElementById('chart-apps').innerHTML = htmlApps;
+
+            // --- 3. DIAS DE RUA ---
+            const historicoRua = JSON.parse(localStorage.getItem('historicoRuaMalu')) || [];
+            document.getElementById('dias-rua').innerText = historicoRua.length > 0 ? historicoRua.join(', ') : "Nenhum ainda";
+        }
+
+        // ATUALIZAÇÃO: Chame as funções de registro nos locais certos:
+        // Dentro de processarGastoApp(), adicione: registrarGastoApp(appSelecionadoAtualmente, minutosGastar);
+        // Dentro de confirmarGastoRua(), adicione: registrarDiaRua();
 
         // --- FUNÇÃO DE AJUSTE MANUAL PELO PAI ---
         // --- FUNÇÃO DE AJUSTE MANUAL PELO PAI ---
@@ -2212,6 +2342,9 @@
                 closeModal('modal-selecionar-tempo');
                 mostrarAviso("Aproveite!", `O Papai autorizou ${minutosGastar} minutos de ${appSelecionadoAtualmente}. Divirta-se! ✨`, "✅");
             }
+
+            registrarGastoApp(appSelecionadoAtualmente, minutosGastar);
+            localStorage.setItem('saldoTeveGastoHoje', 'true');
         }
 
         function confirmarGastoRua() {
@@ -2248,6 +2381,21 @@
 
         // Adicione esta linha dentro da função processarGastoApp(), logo após subtrair os minutos:
         // localStorage.setItem('saldoTeveGastoHoje', 'true');
+
+
+        function resetManualTotal() {
+            // Limpa os dados principais
+            localStorage.removeItem('progressoMalu');
+            localStorage.removeItem('usoAppsMalu');
+            localStorage.removeItem('saldoTeveGastoHoje');
+
+            // Opcional: Se quiser manter o histórico da rua e banco semanal, não remova esses dois abaixo
+            // localStorage.removeItem('historicoRuaMalu');
+            // localStorage.removeItem('bancoHorasMalu');
+
+            // Recarrega a página para resetar o visual
+            window.location.reload();
+        }
 
     </script>
 
@@ -2366,61 +2514,61 @@
     </div>
 
     <div id="pai-modal" class="modal">
-        <div class="modal-content" style="border: 8px solid var(--purple); max-width: 400px;">
+        <div class="modal-content" style="border: 8px solid var(--purple);">
             <span class="close-popup" onclick="closeModal('pai-modal')">×</span>
-            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">Painel Hayden</h2>
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple); margin-top: 0;">📊 Painel de Controle Hayden
+            </h2>
 
-            <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
-                <button class="btn" style="background: var(--sky); color: #333; font-size: 0.8rem;"
-                    onclick="fazerBackupManual()">💾 Sincronizar/Backup</button>
+            <div class="dashboard-grid">
 
-                <hr style="border: 1px solid #eee; width: 100%;">
-
-                <p style="font-weight: bold; margin: 0; font-size: 0.9rem;">Ajustar Minutos:</p>
-                <div style="display: flex; gap: 5px;">
-                    <input type="number" id="input-ajuste-minutos"
-                        style="flex: 1; padding: 10px; border-radius: 10px; border: 1px solid #ddd;">
-                    <button class="btn" style="margin:0;" onclick="ajustarMinutosManual()">Ok</button>
+                <div class="dash-card">
+                    <div class="dash-title">📅 Minutos Ganhos na Semana</div>
+                    <div id="chart-semanal">
+                    </div>
                 </div>
 
-                <button class="btn" style="background: var(--dark-pink);" onclick="abrirConfirmacaoZerar()">Zerar Tudo
-                    🔥</button>
-
-                <div style="background: #f9f9f9; padding: 10px; border-radius: 15px; font-size: 0.7rem;">
-                    <label for="fileRestaurar" style="cursor:pointer; color: var(--purple);">☁️ Restaurar de
-                        Arquivo</label>
-                    <input type="file" id="fileRestaurar" style="display:none" onchange="restaurarBackup(event)">
+                <div class="dash-card">
+                    <div class="dash-title">📱 Onde ela gasta mais tempo?</div>
+                    <div id="chart-apps">
+                    </div>
+                    <div
+                        style="margin-top: 15px; padding: 10px; background: #fff9f0; border-radius: 10px; border: 1px dashed #ffb74d;">
+                        <small><b>🌳 Desafio da Natureza:</b> Escolhido nos dias: <br><span id="dias-rua"
+                                style="color:#2ecc71; font-weight:bold;">Nenhum ainda</span></small>
+                    </div>
                 </div>
-            </div>
 
-            <div
-                style="background: #fff3e0; padding: 15px; border-radius: 20px; border: 2px solid #ffb74d; margin-bottom: 15px;">
-                <p style="font-weight: bold; color: #e65100; margin: 0 0 10px 0; font-size: 0.9rem;">🎁 Recompensa
-                    Especial
-                </p>
-                <button class="btn" style="background: #ffb74d; color: #333; width: 100%; font-size: 0.8rem; margin:0;"
-                    onclick="liberarLeituraManual()">Liberar Leitura e Recompensa</button>
-            </div>
-
-            <div
-                style="background: #e1f5fe; padding: 15px; border-radius: 20px; border: 2px solid #03a9f4; margin-bottom: 15px;">
-                <p style="font-weight: bold; color: #01579b; margin: 0 0 10px 0; font-size: 0.9rem;">💡 Curiosidades</p>
-                <button class="btn" style="background: #03a9f4; color: white; width: 100%; font-size: 0.8rem; margin:0;"
-                    onclick="liberarCuriosidadesManual()">Liberar Todas as Curiosidades</button>
-            </div>
-
-            <div
-                style="background: #f0f0f0; padding: 15px; border-radius: 20px; margin-top: 15px; border: 2px solid var(--purple);">
-                <p style="font-weight: bold; font-size: 0.8rem; margin: 0 0 10px 0;">📊 Controle Semanal de Horas:</p>
-                <div id="historico-semanal-pai"
-                    style="font-size: 0.75rem; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                <div class="dash-card">
+                    <div class="dash-title">🛠️ Ajuste Manual de Saldo</div>
+                    <p style="font-size: 0.8rem; color: #666;">Saldo Atual: <b id="saldo-admin">0</b> min</p>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="number" id="input-ajuste-minutos" placeholder="Ex: 60 ou -30"
+                            style="flex:1; padding:12px; border-radius:15px; border:2px solid #ddd;">
+                        <button class="btn" style="margin:0; background:var(--purple);"
+                            onclick="ajustarMinutosManual()">Aplicar</button>
+                    </div>
+                    <div class="admin-actions">
+                        <button class="btn" style="background: #ffb74d; color: #333; font-size: 0.75rem;"
+                            onclick="liberarLeituraManual()">🎁 Liberar Leitura</button>
+                        <button class="btn" style="background: #03a9f4; font-size: 0.75rem;"
+                            onclick="liberarCuriosidadesManual()">💡 Liberar Curiosidades</button>
+                    </div>
                 </div>
-            </div>
 
+                <div class="dash-card">
+                    <div class="dash-title">⚙️ Gestão do Sistema</div>
+                    <div class="admin-actions" style="grid-template-columns: 1fr;">
+                        <button class="btn" style="background: var(--sky); color: #333;"
+                            onclick="fazerBackupManual()">💾 Sincronizar & Backup</button>
+                        <button class="btn" style="background: var(--dark-pink);" onclick="abrirConfirmacaoZerar()">🔥
+                            Zerar Tudo (Novo Dia)</button>
+                    </div>
+                    <p style="font-size: 0.7rem; color: #999; margin-top: 10px; text-align: center;">Dra. Maria Luiza -
+                        Sistema v2.0</p>
+                </div>
+
+            </div>
         </div>
-
-
-
     </div>
 
     <div id="modal-confirmar-zerar" class="modal">
