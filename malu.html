@@ -9,6 +9,7 @@
         rel="stylesheet">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <style>
         :root {
             --pink: #ff85a2;
@@ -891,10 +892,73 @@
             font-size: 0.8rem;
             font-weight: bold;
         }
+
+        /* Estilização da Tela de Login e Cadastro */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--sky);
+            z-index: 5000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-box {
+            background: white;
+            padding: 30px;
+            border-radius: 30px;
+            border: 6px solid var(--pink);
+            text-align: center;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-box h2 {
+            font-family: 'Fredoka One', cursive;
+            color: var(--purple);
+            margin-bottom: 20px;
+        }
+
+        .login-box input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 15px;
+            border: 2px solid var(--sky);
+            font-family: 'Poppins', sans-serif;
+            outline: none;
+        }
+
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: var(--pink);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .login-box p {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 15px;
+            cursor: pointer;
+            text-decoration: underline;
+        }
     </style>
 </head>
 
 <body>
+
+
 
     <div class="bg-elements">
         <div class="cloud" style="top: 10%; animation-duration: 15s;">☁️</div>
@@ -913,8 +977,15 @@
                 🚀 <span id="total-min">0</span> MIN
             </div>
 
-            <button onclick="abrirModalSenha()"
-                style="background: none; border: none; font-size: 1.2rem; opacity: 0.4; cursor: pointer;">⚙️</button>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button onclick="confirmarSair()" title="Sair do Mundo da Malu"
+                    style="background: #ff477e; border: none; color: white; padding: 5px 10px; border-radius: 10px; cursor: pointer; font-size: 0.8rem; font-weight: bold;">
+                    SAIR 🚪
+                </button>
+
+                <button onclick="abrirModalSenha()"
+                    style="background: none; border: none; font-size: 1.2rem; opacity: 0.4; cursor: pointer;">⚙️</button>
+            </div>
         </header>
 
         <div class="missions-grid">
@@ -1055,11 +1126,14 @@
     </div>
 
     <script>
+        let nomeUsuarioLogado = ""; // Variável global
+        let minutosGanhosHoje = 0; // Acumula tudo que ela ganhou nas missões/leitura
         let attentionInterval;
         let attentionActive = false;
         let lastInteractionTime = Date.now();
         const INACTIVITY_LIMIT = 30000;
         let totalMinutes = 0;
+        let podeSairDaPagina = false;
         let readingTimer;
         let curiosityTimer;
         let timeLeft = 20 * 60; // Reduzido para 10 minutos (ajustável)
@@ -1083,35 +1157,36 @@
         }
 
         // Disparar popup de boas-vindas ao carregar a página
-        window.onload = function () {
-            // 1. Remove qualquer trava de tempo que tenha ficado no navegador
-            localStorage.removeItem('ultimaConclusaoData');
-
-            // 2. Carrega o progresso das tarefas
-            carregarProgresso();
-
-            // 3. Define a saudação baseada na hora
+        function mostrarBoasVindasPersonalizado(nomeUsuario) {
             const agora = new Date();
             const hora = agora.getHours();
-            let saudacao = "Bem-vinda, Malu!";
+            let saudacao = `Bem-vinda, ${nomeUsuario}!`;
             let mensagem = "Pronta para brilhar hoje?";
             let emoji = "✨";
 
-            if (hora >= 5 && hora < 12) { saudacao = "Bom dia, Malu! ☀️"; mensagem = "O sol nasceu! Que tal começar suas missões?"; emoji = "☀️"; }
-            else if (hora >= 12 && hora < 18) { saudacao = "Boa tarde, Malu! 🌸"; mensagem = "Hora perfeita para uma leitura inspiradora."; emoji = "📚"; }
-            else if (hora >= 18) { saudacao = "Boa noite, Malu! 🌙"; mensagem = "Você brilhou muito hoje!"; emoji = "🌟"; }
+            if (hora >= 5 && hora < 12) {
+                saudacao = `Bom dia, ${nomeUsuario}! ☀️`;
+                mensagem = "O sol nasceu! Que tal começar suas missões?";
+                emoji = "☀️";
+            }
+            else if (hora >= 12 && hora < 18) {
+                saudacao = `Boa tarde, ${nomeUsuario}! 🌸`;
+                mensagem = "Hora perfeita para uma leitura inspiradora.";
+                emoji = "📚";
+            }
+            else if (hora >= 18) {
+                saudacao = `Boa noite, ${nomeUsuario}! 🌙`;
+                mensagem = "Você brilhou muito hoje!";
+                emoji = "🌟";
+            }
 
-            // 4. Mostra APENAS o modal de Boas-Vindas
             const welcomeModal = document.getElementById('welcome-modal');
             welcomeModal.querySelector('h1').innerText = emoji;
             welcomeModal.querySelector('h2').innerText = saudacao;
             welcomeModal.querySelector('p').innerText = mensagem;
+            document.getElementById('welcome-name').innerText = saudacao;
             welcomeModal.style.display = 'flex';
-
-            // Garante que o modal de "Incrível" esteja escondido ao iniciar
-            const parabens = document.getElementById('parabens-final');
-            if (parabens) parabens.style.display = 'none';
-        };
+        }
 
 
         setInterval(updateClock, 1000);
@@ -1140,12 +1215,11 @@
         }
 
         function abrirJogoInteligente() {
-            // 1. Verificar os status
+            // Agora o missionsCompletedCount terá o valor correto (ex: 7 de 5)
             const missoesOk = missionsCompletedCount >= TOTAL_MISSIONS;
             const leituraOk = storyReadToday;
             const curiosidadesOk = curiositiesViewedToday >= MAX_CURIOSITIES_PER_DAY;
 
-            // 2. Se tudo estiver pronto, abre o jogo
             if (missoesOk && leituraOk && curiosidadesOk) {
                 document.getElementById('game-modal').style.display = 'flex';
                 initPuzzle();
@@ -1235,9 +1309,12 @@
             const win = pieces.every((val, i) => val === i);
             if (win) {
                 clearInterval(gameTimerInterval);
-                alert("INCRÍVEL! Você montou o quebra-cabeça! +45 Minutos! 🏆");
+                alert("INCRÍVEL! +45 Minutos! 🏆");
                 totalMinutes += 45;
                 document.getElementById('total-min').innerText = totalMinutes;
+
+                gravarTudoInstantaneo(); // <--- SALVA NO BANCO
+
                 closeModal('game-modal');
             }
         }
@@ -1251,6 +1328,8 @@
                 let s = gameTimeLeft % 60;
                 document.getElementById('game-timer').innerText = `${m}:${s < 10 ? '0' + s : s}`;
 
+                gravarTudoInstantaneo();
+
                 if (gameTimeLeft <= 0) {
                     clearInterval(gameTimerInterval);
                     perderJogo();
@@ -1262,6 +1341,8 @@
             alert("O tempo acabou! Você perdeu 30 minutos. Tente ser mais rápida na próxima! ⏳");
             totalMinutes = Math.max(0, totalMinutes - 30);
             document.getElementById('total-min').innerText = totalMinutes;
+
+            gravarTudoInstantaneo();
             closeModal('game-modal');
         }
 
@@ -1274,6 +1355,8 @@
                 totalMinutes = Math.max(0, totalMinutes - 30);
                 localStorage.setItem('minutosMalu', totalMinutes);
                 document.getElementById('total-min').innerText = totalMinutes;
+
+                gravarTudoInstantaneo();
                 closeModal('custom-confirm-modal');
                 closeModal('game-modal');
                 clearInterval(gameTimerInterval);
@@ -1324,13 +1407,16 @@
         function completeMission(el, min, title, msg) {
             if (!el.classList.contains('complete')) {
                 el.classList.add('complete');
-                totalMinutes += min;
-                missionsCompletedCount++;
-                document.getElementById('total-min').innerText = totalMinutes;
 
-                registrarGanhoNoBanco(min); // <--- ADICIONE ESTA LINHA AQUI
+                // ADICIONE ESTA LINHA ABAIXO:
+                missionsCompletedCount++;
+
+                totalMinutes += min;
+                document.getElementById('total-min').innerText = totalMinutes;
                 salvarProgressoAtual();
-                checkAllDone();
+                gravarTudoInstantaneo();
+                checkAllDone(); // Esta função agora vai funcionar pois o contador subiu!
+                mostrarAviso(title, msg, "🌟");
             }
         }
 
@@ -1426,6 +1512,7 @@
 
         // 1. Bloqueio de Atualização/Fechamento
         window.addEventListener('beforeunload', (event) => {
+            if (podeSairDaPagina) return; // Se for uma ação permitida, não mostra o aviso
             event.preventDefault();
             event.returnValue = "Malu, você ainda não terminou suas missões! Quer mesmo sair?";
         });
@@ -1608,8 +1695,8 @@
             storyReadToday = true;
             document.getElementById('total-min').innerText = totalMinutes;
             closeModal('reading-modal');
-
-            salvarProgressoAtual()
+            salvarProgressoAtual();
+            gravarTudoInstantaneo(); // Salva no Supabase
             checkAllDone();
         }
 
@@ -1697,25 +1784,63 @@
             }, 1000);
         }
 
-        function claimCuriosityReward() {
-            curiositiesViewedToday++;
-            totalMinutes += 10;
-            document.getElementById('total-min').innerText = totalMinutes;
-            closeModal('curiosity-modal');
-            checkAllDone();
+        async function claimCuriosityReward() {
+            if (!currentCuriosity || !usuarioLogado) return;
 
-            salvarProgressoAtual()
+            // 1. Busca os dados mais recentes do banco para garantir sincronia
+            const { data } = await supabaseClient
+                .from('usuarios_malu')
+                .select('dados_progresso')
+                .eq('id', usuarioLogado.id)
+                .single();
+
+            let leiturasNuvem = data.dados_progresso.leituras || [];
+
+            // 2. Verifica se este ID já foi lido hoje
+            if (!leiturasNuvem.includes(currentCuriosity.id)) {
+                leiturasNuvem.push(currentCuriosity.id);
+
+                // Atualiza localmente
+                totalMinutes += 5;
+                document.getElementById('total-min').innerText = totalMinutes;
+                localStorage.setItem('curiosidadesLidas', JSON.stringify(leiturasNuvem));
+
+                // 3. Grava no banco instantaneamente
+                await gravarTudoInstantaneo();
+                await registrarLogPai("Leitura", `Malu leu: ${currentCuriosity.titulo}`, 5);
+
+                fecharCuriosidade();
+                mostrarAviso("Incrível!", "Você aprendeu algo novo e ganhou 5 minutos!", "💡");
+            } else {
+                alert("Você já ganhou o bônus por esta leitura hoje! ✨");
+            }
         }
 
         async function gerarECompartilharCertificado() {
-            // Verifica se a biblioteca foi carregada corretamente
             const { jsPDF } = window.jspdf || {};
             if (!jsPDF) {
-                alert("Erro: Biblioteca de PDF não carregada. Verifique sua conexão com a internet!");
+                alert("Erro: Biblioteca de PDF não carregada!");
                 return;
             }
 
+            // --- MELHORIA AQUI: Limpa o nome para não vir "Boa noite, Hayden!" ---
+            let nomeUsuario = nomeUsuarioLogado || "";
+
+            // Se a variável estiver vazia, pega do HTML e remove saudações comuns
+            if (!nomeUsuario) {
+                nomeUsuario = document.getElementById('welcome-name').innerText
+                    .replace(/Bom dia, |Boa tarde, |Boa noite, |Bem-vinda, /gi, "")
+                    .replace(/!/g, "")
+                    .trim();
+            }
+
+            // Formatação especial para a Malu ou nome limpo para os outros
+            const nomeExibicao = (nomeUsuario.toLowerCase().includes("malu"))
+                ? "Dra. Maria Luiza Baía Fernandes"
+                : nomeUsuario;
+
             const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a5" });
+
             const hoje = new Date().toLocaleDateString('pt-BR');
 
             // --- FUNDO E BORDAS ---
@@ -1730,22 +1855,24 @@
             // --- TÍTULO ---
             doc.setTextColor(125, 95, 255);
             doc.setFont("helvetica", "bold");
-            doc.setFontSize(26);
+            doc.text(String(nomeExibicao), 105, 45, { align: "center" });
             doc.text("CERTIFICADO DE EXCELÊNCIA", 105, 25, { align: "center" });
 
-            // --- NOME COMPLETO ---
+            // --- NOME COMPLETO (ALTERADO AQUI) ---
             doc.setTextColor(255, 71, 126);
             doc.setFontSize(22);
-            doc.text("Dra. Maria Luiza Baía Fernandes", 105, 45, { align: "center" });
+            doc.text(nomeExibicao, 105, 45, { align: "center" }); // <--- Usando o nome dinâmico
 
-            // --- TEXTO DE MÉRITO ---
+            // --- TEXTO DE MÉRITO (ALTERADO AQUI) ---
             doc.setTextColor(60, 60, 60);
             doc.setFontSize(13);
             doc.setFont("helvetica", "normal");
-            const mensagem = `Certificamos que nesta data, Maria Luiza completou com distinção todas as suas missões diárias, demonstrando os valores de responsabilidade e dedicação necessários para uma futura Ministra, acumulando ${totalMinutes} minutos de bônus.`;
+            // Substituímos "Maria Luiza" por ${nomeUsuario} na mensagem
+            const mensagem = `Certificamos que nesta data, ${nomeUsuario} completou com distinção todas as suas missões diárias, demonstrando os valores de responsabilidade e dedicação necessários, acumulando ${totalMinutes} minutos de bônus.`;
             const splitText = doc.splitTextToSize(mensagem, 160);
             doc.text(splitText, 105, 60, { align: "center" });
 
+            // ... (restante do código de missões e assinatura) ...
             // --- LISTA DE CONQUISTAS ---
             doc.setFontSize(10);
             doc.setTextColor(125, 95, 255);
@@ -1757,12 +1884,10 @@
             doc.setDrawColor(150, 150, 150);
             doc.setLineWidth(0.5);
             doc.line(120, 110, 180, 110);
-
             doc.setTextColor(30, 30, 90);
             doc.setFont("times", "italic");
             doc.setFontSize(16);
             doc.text("Hayden Fernandes", 150, 107, { align: "center" });
-
             doc.setTextColor(100, 100, 100);
             doc.setFont("helvetica", "normal");
             doc.setFontSize(8);
@@ -1779,32 +1904,32 @@
             doc.text("TOP", 35, 114, { align: "center" });
             doc.text("ALUNA", 35, 118, { align: "center" });
 
-            // --- SALVAMENTO ---
-            const nomeArquivo = `Certificado_Dra_Maria_Luiza_${hoje.replace(/\//g, '-')}.pdf`;
+            doc.save(`Certificado_${nomeLimpo}_${hoje.replace(/\//g, '-')}.pdf`);
+
+            // --- SALVAMENTO (ALTERADO AQUI) ---
+            const nomeArquivo = `Certificado_${nomeUsuario.replace(/\s/g, '_')}_${hoje.replace(/\//g, '-')}.pdf`;
             doc.save(nomeArquivo);
 
-            // --- WHATSAPP ---
-            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, Dra. Maria Luiza Baía Fernandes, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
+            // --- WHATSAPP (ALTERADO AQUI) ---
+            let msgZap = `✨ MISSÃO CUMPRIDA! ✨\n\nEu, ${nomeExibicao}, acabo de gerar meu certificado oficial!\nConquistei ${totalMinutes} minutos de prêmio hoje!\n\nOrgulho da família! 🚀`;
             window.open(`https://wa.me/?text=${encodeURIComponent(msgZap)}`, '_blank');
 
-            // --- HISTÓRICO ---
+            // ... (resto do código de histórico e popup final) ...
             let historico = JSON.parse(localStorage.getItem('historicoCertificados')) || [];
             historico.push(new Date().toLocaleString());
             localStorage.setItem('historicoCertificados', JSON.stringify(historico));
 
-            // --- POPUP FINAL "VOCÊ É INCRÍVEL" ---
             const finalModal = `
-                < div id = "parabens-final" class="modal" style = "display:flex; z-index: 9999;" >
-                    <div class="modal-content" style="border-color: var(--yellow); text-align: center;">
-                        <h1>🌈</h1>
-                        <h2 style="font-family: 'Fredoka One'; color: var(--purple);">VOCÊ É INCRÍVEL!</h2>
-                        <p>O certificado foi gerado e o aviso enviado para o Papai!</p>
-                        <button class="btn" onclick="reiniciarSistema()">Até amanhã! 👋</button>
-                    </div>
-                </div > `;
+            div id="parabens-final" class="modal" style="display:flex; z-index: 9999;">
+                <div class="modal-content" style="border-color: var(--yellow); text-align: center;">
+                    <h1>🌈</h1>
+                    <h2 style="font-family: 'Fredoka One'; color: var(--purple);">VOCÊ É INCRÍVEL!</h2>
+                    <p>O certificado foi gerado e o aviso enviado para o Papai!</p>
+                    <button class="btn" onclick="reiniciarSistema()">Até amanhã! 👋</button>
+                </div>
+            </div>`;
             document.body.insertAdjacentHTML('beforeend', finalModal);
 
-            // Zera os dados localmente sem recarregar a página ainda
             totalMinutes = 0;
             document.getElementById('total-min').innerText = "0";
         }
@@ -2002,9 +2127,11 @@
                     // Pinta os cards de verde novamente para a Malu ver o que já fez
                     const cards = document.querySelectorAll('.missions-grid .card');
                     if (dados.missoesEstado) {
+                        missionsCompletedCount = 0; // Reseta para contar do zero ao carregar
                         dados.missoesEstado.forEach((foiConcluido, index) => {
                             if (foiConcluido && cards[index]) {
                                 cards[index].classList.add('complete');
+                                missionsCompletedCount++; // Conta as missões que já estavam prontas
                             }
                         });
                     }
@@ -2243,34 +2370,52 @@
             return JSON.parse(localStorage.getItem('bancoHorasMalu')) || padrao;
         }
 
-        function confirmarGastoRua() {
-            const agora = new Date();
-            const diaSemana = agora.getDay(); // 1-Segunda a 4-Quinta
-            const banco = obterBancoHoras();
+        // --- FUNÇÃO ÚNICA DE RESET (BANCO + LOCAL) ---
+        async function executarResetTotal(comBonusRua = false) {
+            console.log("Iniciando reset total do sistema...");
 
-            // Bloqueio de 5h (300 min) para rua entre Segunda e Quinta
-            if (diaSemana >= 1 && diaSemana <= 4) {
-                if (banco.ruaSemanaAcumulado + totalMinutes > 300) {
-                    mostrarAviso("Limite de Rua", "Malu, você já atingiu o limite de 5h de rua para esta semana (Seg a Qui). Guarde energia para amanhã!", "🛑");
-                    return;
+            // 1. Limpeza Local (Variáveis na memória)
+            totalMinutes = comBonusRua ? 0 : 0;
+            missionsCompletedCount = 0;
+            storyReadToday = false;
+            curiositiesViewedToday = 0;
+
+            // 2. Limpeza do LocalStorage (Navegador)
+            localStorage.removeItem('progressoMalu');
+            localStorage.removeItem('usoAppsMalu');
+            localStorage.removeItem('saldoTeveGastoHoje');
+            localStorage.removeItem('curiosidadesLidas');
+
+            // 3. Sincronização com o Banco de Dados (Supabase)
+            if (usuarioLogado) {
+                const payload = {
+                    total_minutos: 0,
+                    dados_progresso: {
+                        missoes: {}, // Linha que "exclui" as tarefas no banco
+                        leituras: [],
+                        bonusRuaAgendado: comBonusRua ? 60 : 0, // Define se ganha bônus ou não
+                        dataDoDesafio: new Date().toISOString().split('T')[0],
+                        ultimaSincronia: new Date().toISOString()
+                    },
+                    ultima_atualizacao: new Date().toISOString()
+                };
+
+                const { error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .update(payload)
+                    .eq('id', usuarioLogado.id);
+
+                if (error) {
+                    console.error("Erro ao resetar banco:", error);
+                } else {
+                    const evento = comBonusRua ? "DESAFIO DA NATUREZA" : "RESET MANUAL";
+                    await registrarLogPai(evento, "Sistema zerado e tarefas excluídas.", 0);
                 }
             }
 
-            if (totalMinutes <= 0) {
-                mostrarAviso("Poxa!", "Você precisa de minutos ganhos para trocar pela rua!", "🌳");
-                return;
-            }
-
-            // Adiciona 60 min para o Sábado
-            banco.sab += 60;
-            if (diaSemana >= 1 && diaSemana <= 4) banco.ruaSemanaAcumulado += totalMinutes;
-
-            localStorage.setItem('bancoHorasMalu', JSON.stringify(banco));
-
-            totalMinutes = 0;
-            salvarProgressoAtual();
-            closeModal('gastos-modal');
-            document.getElementById('rua-bonus-modal').style.display = 'flex';
+            // 4. Atualização Visual
+            document.getElementById('total-min').innerText = "0";
+            document.querySelectorAll('.card').forEach(card => card.classList.remove('complete'));
         }
 
         function gastarTempoTela() {
@@ -2295,60 +2440,97 @@
             salvarProgressoAtual();
             mostrarAviso("Aproveite!", `Você gastou ${valor} minutos. Bom divertimento! 🍿`, "📺");
         }
-
-        function confirmarGastoRua() {
+        // Esta versão substitui as duas anteriores e garante o reset no banco e no local
+        async function confirmarGastoRua() {
+            // Validação de saldo
             if (totalMinutes <= 0) {
-                mostrarAviso("Poxa!", "Você precisa de pelo menos alguns minutos ganhos para trocar pela rua! 🌸", "🌳");
+                mostrarAviso("Poxa!", "Você precisa de minutos para trocar pela rua! 🌸", "🌳");
                 return;
             }
 
-            // Lógica do Bônus: Salvamos um registro para o Papai ver no painel ou para o sistema carregar amanhã
-            let bonusAmanha = JSON.parse(localStorage.getItem('bonusCelularAmanha')) || 0;
-            localStorage.setItem('bonusCelularAmanha', bonusAmanha + 60);
+            // Trava de segurança: só ganha bônus se não gastou nada em apps hoje
+            let saldoJaFoiGasto = localStorage.getItem('saldoTeveGastoHoje') === 'true';
+            if (saldoJaFoiGasto) {
+                document.getElementById('modal-rua-bloqueada').style.display = 'flex';
+                return;
+            }
 
-            // Zera o tempo de hoje
-            totalMinutes = 0;
-            salvarProgressoAtual();
+            if (confirm("Malu, você vai zerar seu tempo de hoje para brincar na rua, mas ganhará 60 MINUTOS EXTRAS amanhã. Aceita?")) {
+                // CHAMA A FUNÇÃO ÚNICA DE RESET QUE CRIAMOS
+                await executarResetTotal(true);
 
-            closeModal('gastos-modal');
-            document.getElementById('rua-bonus-modal').style.display = 'flex';
+                closeModal('gastos-modal');
+                document.getElementById('rua-bonus-modal').style.display = 'flex';
+            }
         }
 
         // Função para abrir o Shopping do Tempo
-        function abrirModalGastos() {
-            const agora = new Date();
-            const hora = agora.getHours();
+        let travaAtivaGlobal = true;
 
-            // Bloqueio até as 14:00
-            if (hora < 14) {
-                mostrarAviso("Horário de Aula!", "Malu, foco nos estudos agora! O shopping abre às 14:00. ✍️", "🏫");
-                return;
+        // Função que a Malu clica
+        async function abrirModalGasto() {
+            try {
+                const { data } = await supabaseClient
+                    .from('configuracoes_sistema')
+                    .select('shopping_aberto_hora, trava_ativa')
+                    .eq('id', 1)
+                    .single();
+
+                // Se o pai desativou a trava OU se já passou do horário de abertura
+                if (data && (data.trava_ativa === false || new Date().getHours() >= data.shopping_aberto_hora)) {
+                    document.getElementById('minutos-disponiveis').innerText = totalMinutes;
+                    document.getElementById('gastos-modal').style.display = 'flex';
+                } else {
+                    const hora = data ? data.shopping_aberto_hora : 17;
+                    mostrarAviso("Horário de Estudo!", `O shopping abre às ${hora}h. Continue focada! 🚀`, "🏫");
+                }
+            } catch (err) {
+                console.error("Erro ao validar trava:", err);
+                // Fallback: se o banco falhar, abre se for após 17h
+                if (new Date().getHours() >= 17) {
+                    document.getElementById('gastos-modal').style.display = 'flex';
+                }
             }
+        }
 
-            document.getElementById('minutos-disponiveis').innerText = totalMinutes;
-            document.getElementById('gastos-modal').style.display = 'flex';
+        // Função que VOCÊ usa no Painel do Pai
+        async function toggleTravaShopping() {
+            travaAtivaGlobal = !travaAtivaGlobal;
+
+            const { error } = await supabaseClient
+                .from('configuracoes_sistema')
+                .update({ trava_ativa: travaAtivaGlobal })
+                .eq('id', 1);
+
+            if (!error) {
+                const btn = document.getElementById('btn-trava-global');
+                const status = document.getElementById('status-trava');
+
+                btn.innerText = travaAtivaGlobal ? "LIBERAR SHOPPING AGORA 🔓" : "ATIVAR TRAVA DE HORÁRIO 🔒";
+                btn.style.background = travaAtivaGlobal ? "#2ecc71" : "#e67e22";
+                status.innerText = travaAtivaGlobal ? "Protegido (Abre às 17h)" : "Liberado 24h";
+
+                mostrarAviso("Sucesso!", "Configuração de acesso atualizada na nuvem!", "☁️");
+            }
         }
 
         let appSelecionadoAtualmente = "";
 
         function gastarApp(nomeApp) {
-            if (totalMinutes <= 0) {
-                mostrarAviso("Saldo Zero!", "Malu, você precisa de minutos para usar o " + nomeApp + ". Faça uma missão! 💪", "❌");
-                return;
-            }
-
-            // Prepara o modal customizado
             appSelecionadoAtualmente = nomeApp;
+
+            // Define o ícone baseado no app para o visual ficar bonito
+            let icone = "📱";
+            if (nomeApp.includes("Netflix")) icone = "🎬";
+            if (nomeApp.includes("YouTube")) icone = "📺";
+            if (nomeApp.includes("WhatsApp")) icone = "💬";
+
+            document.getElementById('icone-app-gasto').innerText = icone;
             document.getElementById('titulo-app-gasto').innerText = nomeApp;
             document.getElementById('saldo-atual-modal').innerText = totalMinutes;
-            document.getElementById('minutos-para-gastar').value = "";
+            document.getElementById('minutos-para-gastar').value = ""; // Limpa o campo
 
-            // Troca o ícone baseado no app
-            const icone = nomeApp.includes('Netflix') ? '🎬' : nomeApp.includes('YouTube') ? '📺' : '💬';
-            document.getElementById('icone-app-gasto').innerText = icone;
-
-            closeModal('gastos-modal');
-            document.getElementById('modal-selecionar-tempo').style.display = 'flex';
+            openModal('modal-selecionar-tempo');
         }
 
         function processarGastoApp() {
@@ -2365,6 +2547,7 @@
             } else {
                 totalMinutes -= minutosGastar;
                 document.getElementById('total-min').innerText = totalMinutes;
+
                 salvarProgressoAtual();
 
                 // === ESTA É A LINHA QUE ESTAVA FALTANDO ===
@@ -2378,37 +2561,7 @@
             }
         }
 
-        function confirmarGastoRua() {
-            // REGRA: Só libera se o tempo estiver INTEGRO (comparando com o total que ela já ganhou no dia)
-            // Para simplificar, vamos verificar se ela já gastou qualquer minuto.
-            const progresso = JSON.parse(localStorage.getItem('progressoMalu'));
-            const minutosGanhosNoTotal = progresso ? progresso.minutosAcumuladosHoje : totalMinutes;
 
-            // Se o total atual for menor que o que ela já teve, significa que ela gastou.
-            // Como você já tem o 'totalMinutes' atualizado, vamos usar uma trava de "saldo positivo"
-            if (totalMinutes <= 0) {
-                mostrarAviso("Poxa!", "Você precisa de minutos para trocar pela rua!", "🌳");
-                return;
-            }
-
-            // Se o saldo não for o saldo cheio (integral), ela não pode usar o bônus da rua
-            // Dica: Aqui assumimos que se ela gastou 1 min que seja em tela, a rua bloqueia.
-            let saldoJaFoiGasto = localStorage.getItem('saldoTeveGastoHoje') === 'true';
-
-            if (saldoJaFoiGasto) {
-                document.getElementById('modal-rua-bloqueada').style.display = 'flex';
-                return;
-            }
-
-            // Se passou na trava, ganha o bônus
-            let bonusAmanha = JSON.parse(localStorage.getItem('bonusCelularAmanha')) || 0;
-            localStorage.setItem('bonusCelularAmanha', bonusAmanha + 60);
-
-            totalMinutes = 0;
-            salvarProgressoAtual();
-            closeModal('gastos-modal');
-            document.getElementById('rua-bonus-modal').style.display = 'flex';
-        }
 
         // Adicione esta linha dentro da função processarGastoApp(), logo após subtrair os minutos:
         // localStorage.setItem('saldoTeveGastoHoje', 'true');
@@ -2428,7 +2581,654 @@
             window.location.reload();
         }
 
+        // --- CONFIGURAÇÃO SUPABASE ---
+        // --- CONFIGURAÇÃO SUPABASE CORRIGIDA ---
+        const supabaseUrl = 'https://laheqcuxwoypkyihweaq.supabase.co';
+        const supabaseKey = 'sb_publishable__XcntHRJaOQ1WmsEVNcd7w_mAbecFjQ';
+        // Use apenas uma variável constante para o cliente
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
 
+        let usuarioLogado = null;
+
+        // --- FUNÇÃO DE LOGIN ATUALIZADA ---
+        async function realizarLogin() {
+            const senha = document.getElementById('pass-input').value;
+            const btn = document.querySelector('#login-overlay button');
+
+            btn.innerText = "VERIFICANDO...";
+            btn.disabled = true;
+
+            try {
+                const { data, error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .select('*')
+                    .eq('nome', 'Malu')
+                    .eq('senha', senha)
+                    .single();
+
+                if (data) {
+                    usuarioLogado = data;
+
+                    // --- LÓGICA DE RESET AUTOMÁTICO DA MEIA-NOITE ---
+                    const hoje = new Date().toLocaleDateString();
+                    const ultimaData = data.dados_progresso?.dataSalva;
+
+                    if (ultimaData !== hoje) {
+                        console.log("🌞 Bom dia! Resetando missões para o novo dia...");
+
+                        // Mantemos o saldo total_minutos, mas limpamos o progresso das missões
+                        totalMinutes = data.total_minutos;
+
+
+                        // Criamos um novo progresso, mas MANTEMOS o aviso_ajuste se ele existir
+                        let novoProgresso = {
+                            dataSalva: hoje,
+                            missoes: {},
+                            leituras: [],
+                            aviso_ajuste: data.dados_progresso?.aviso_ajuste // PRESERVA O AVISO
+                        };
+
+                        // Limpamos o LocalStorage e preparamos novo payload
+                        localStorage.removeItem('progressoMalu');
+                        localStorage.removeItem('curiosidadesLidas');
+
+                        // Atualiza o banco com o novo progresso (que ainda tem o aviso)
+                        await supabaseClient
+                            .from('usuarios_malu')
+                            .update({ dados_progresso: novoProgresso })
+                            .eq('id', data.id);
+
+                        // Atualiza o objeto local para a verificação abaixo funcionar
+                        data.dados_progresso = novoProgresso;
+                    } else {
+                        totalMinutes = data.total_minutos;
+                        if (data.dados_progresso?.missoes) {
+                            localStorage.setItem('progressoMalu', JSON.stringify(data.dados_progresso.missoes));
+                        }
+                    }
+
+                    await verificarBonusPendente(data);
+
+                    verificarAvisoPai(data);
+
+                    // Atualiza interface
+                    document.getElementById('total-min').innerText = totalMinutes;
+                    carregarProgresso();
+                    document.getElementById('login-overlay').style.display = 'none';
+
+                    mostrarBoasVindasPersonalizado(usuarioLogado.nome);
+
+                } else {
+                    document.getElementById('login-error').style.display = 'block';
+                    btn.innerText = "ACESSAR MEU MUNDO 🚀";
+                    btn.disabled = false;
+                }
+
+
+
+            } catch (err) {
+                console.error("Erro:", err);
+                btn.disabled = false;
+            }
+
+
+        }
+
+        // FUNÇÃO PARA CARREGAR TUDO DA NUVEM
+        async function carregarDoSupabase() {
+            try {
+                const { data, error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .select('*')
+                    .eq('id', 1)
+                    .single();
+
+                if (data && data.dados_progresso) {
+                    const dp = data.dados_progresso;
+
+                    // 1. Restaura o Saldo
+                    totalMinutes = data.total_minutos || 0;
+                    document.getElementById('total-min').innerText = totalMinutes;
+
+                    // 2. Restaura o LocalStorage com os dados da nuvem
+                    if (dp.progressoMalu) localStorage.setItem('progressoMalu', JSON.stringify(dp.progressoMalu));
+                    if (dp.usoAppsMalu) localStorage.setItem('usoAppsMalu', JSON.stringify(dp.usoAppsMalu));
+                    if (dp.bancoHorasMalu) localStorage.setItem('bancoHorasMalu', JSON.stringify(dp.bancoHorasMalu));
+
+                    // 3. Atualiza a interface (marcar os cards verdes)
+                    carregarProgresso();
+                    console.log("🚀 Sistema restaurado via Nuvem!");
+                }
+            } catch (err) {
+                console.error("Erro ao carregar banco:", err);
+            }
+        }
+
+        // --- FUNÇÃO DE GRAVAÇÃO INSTANTÂNEA ---
+        async function gravarTudoInstantaneo() {
+            if (!usuarioLogado) return;
+
+            // Captura o estado atual de tudo
+            const payload = {
+                total_minutos: totalMinutes,
+                dados_progresso: {
+                    missoes: JSON.parse(localStorage.getItem('progressoMalu')) || {},
+                    leituras: JSON.parse(localStorage.getItem('curiosidadesLidas')) || [],
+                    usoApps: JSON.parse(localStorage.getItem('usoAppsMalu')) || {},
+                    bonusRuaResgatado: storyReadToday, // Exemplo de persistência
+                    ultimaSincronia: new Date().toISOString()
+                },
+                ultima_atualizacao: new Date().toISOString()
+            };
+
+            const { error } = await supabaseClient
+                .from('usuarios_malu')
+                .update(payload)
+                .eq('id', usuarioLogado.id);
+
+            if (error) console.error("Erro na sincronização:", error);
+        }
+
+        // --- FUNÇÕES DO PAINEL DO PAI (100% SINCRONIZADAS) ---
+
+        async function ajustarMinutosManual() {
+            const input = document.getElementById('input-ajuste-minutos');
+            const valor = parseInt(input.value);
+
+            if (isNaN(valor)) {
+                alert("Papai Hayden, digite um número válido! 🛠️");
+                return;
+            }
+
+            // Aplica o ajuste localmente
+            totalMinutes += valor;
+            if (totalMinutes < 0) totalMinutes = 0;
+
+            // Atualiza a Interface
+            document.getElementById('total-min').innerText = totalMinutes;
+            document.getElementById('saldo-admin').innerText = totalMinutes;
+
+            // Gravação Instantânea no Supabase
+            await gravarTudoInstantaneo();
+            await registrarLogPai("Ajuste Manual", `Papai Hayden ajustou o saldo em ${valor} minutos.`, valor);
+
+            input.value = "";
+            mostrarAviso("Tempo Ajustado!", `Saldo atualizado para ${totalMinutes} minutos na nuvem.`, "🛠️");
+        }
+
+        async function liberarLeituraManual() {
+            if (confirm("Deseja liberar o bônus de leitura para a Malu agora?")) {
+                storyReadToday = true;
+                totalMinutes += 50; // Bônus de leitura
+
+                document.getElementById('total-min').innerText = totalMinutes;
+                document.getElementById('saldo-admin').innerText = totalMinutes;
+
+                // Gravação Instantânea
+                await gravarTudoInstantaneo();
+                await registrarLogPai("Bônus Manual", "Papai Hayden liberou bônus de leitura.", 50);
+
+                closeModal('pai-modal');
+                mostrarAviso("Bônus Liberado!", "O bônus de leitura já está na nuvem! ✨", "🎁");
+                checkAllDone();
+            }
+        }
+
+        async function liberarCuriosidadesManual() {
+            if (confirm("Deseja liberar o bônus de curiosidades?")) {
+                curiositiesViewedToday = MAX_CURIOSITIES_PER_DAY;
+                totalMinutes += 20;
+
+                document.getElementById('total-min').innerText = totalMinutes;
+                document.getElementById('saldo-admin').innerText = totalMinutes;
+
+                // Gravação Instantânea
+                await gravarTudoInstantaneo();
+                await registrarLogPai("Bônus Manual", "Papai Hayden liberou bônus de curiosidades.", 20);
+
+                closeModal('pai-modal');
+                mostrarAviso("Conhecimento Liberado!", "As curiosidades foram marcadas como concluídas no banco! 💡", "✨");
+                checkAllDone();
+            }
+        }
+
+        async function resetManualTotal() {
+            if (!confirm("ISSO APAGARÁ TUDO NA NUVEM. Confirmar reset diário?")) return;
+
+            // Reseta variáveis locais
+            totalMinutes = 0;
+            missionsCompletedCount = 0;
+            storyReadToday = false;
+            curiositiesViewedToday = 0;
+
+            // Limpa LocalStorage
+            localStorage.removeItem('progressoMalu');
+            localStorage.removeItem('usoAppsMalu');
+            localStorage.removeItem('saldoTeveGastoHoje');
+
+            // Sincroniza o "Zerar" com o Banco
+            await gravarTudoInstantaneo();
+            await registrarLogPai("Reset Geral", "O sistema foi zerado para um novo dia.", 0);
+
+            location.reload(); // Recarrega para limpar a interface
+        }
+
+        async function registrarLogPai(evento, detalhes, minutos) {
+            if (!usuarioLogado) return;
+
+            await supabaseClient
+                .from('controle_pai_logs')
+                .insert({
+                    usuario_id: usuarioLogado.id,
+                    evento: evento,
+                    detalhes: detalhes,
+                    valor_minutos: minutos
+                });
+        }
+
+        async function alterarHoraShopping(novaHora) {
+            const { error } = await supabaseClient
+                .from('configuracoes_sistema')
+                .update({ shopping_aberto_hora: parseInt(novaHora) })
+                .eq('id', 1);
+
+            if (!error) {
+                mostrarAviso("Configuração Salva!", `O Shopping agora abrirá às ${novaHora}h`, "⏰");
+                await registrarLogPai("Configuração", `Hora do shopping alterada para ${novaHora}h`, 0);
+            }
+        }
+
+        async function registrarResetDiario(novaData, saldoAtual) {
+            const payload = {
+                total_minutos: saldoAtual,
+                dados_progresso: {
+                    missoes: {},
+                    leituras: [],
+                    dataSalva: novaData,
+                    bonusRuaResgatado: false
+                },
+                ultima_atualizacao: new Date().toISOString()
+            };
+
+            await supabaseClient
+                .from('usuarios_malu')
+                .update(payload)
+                .eq('id', usuarioLogado.id);
+
+            await registrarLogPai("Reset Automático", "O sistema detectou um novo dia e limpou as missões.", 0);
+        }
+
+        // --- FUNÇÃO PARA GASTAR TEMPO EM APPS (NETFLIX, YOUTUBE, ETC) ---
+        async function processarGastoApp() {
+            const input = document.getElementById('minutos-para-gastar');
+            const minutosAGastar = parseInt(input.value);
+
+            // 1. Validações básicas
+            if (isNaN(minutosAGastar) || minutosAGastar <= 0) {
+                alert("Malu, digite quantos minutos você quer usar! 😊");
+                return;
+            }
+
+            if (minutosAGastar > totalMinutes) {
+                mostrarAviso("Saldo Insuficiente", `Você tentou usar ${minutosAGastar} min, mas só tem ${totalMinutes} min.`, "❌");
+                return;
+            }
+
+            // 2. Atualização local
+            totalMinutes -= minutosAGastar;
+            document.getElementById('total-min').innerText = totalMinutes;
+
+            // Marca que o saldo foi gasto (isso bloqueia o bônus de 1h da rua hoje)
+            localStorage.setItem('saldoTeveGastoHoje', 'true');
+            salvarProgressoAtual();
+
+            // 3. Sincronização Assíncrona com o Supabase
+            try {
+                await gravarTudoInstantaneo(); // O 'await' agora funciona porque a função é 'async'
+                if (typeof registrarLogPai === "function") {
+                    await registrarLogPai("Gasto Shopping", `Usou ${minutosAGastar} min em: ${appSelecionadoAtualmente}`, -minutosAGastar);
+                }
+
+                closeModal('modal-selecionar-tempo');
+                closeModal('gastos-modal');
+                mostrarAviso("Aproveite!", `Você liberou ${minutosAGastar} minutos de ${appSelecionadoAtualmente}. Divirta-se! ✨`, "✅");
+            } catch (err) {
+                console.error("Erro ao sincronizar gasto:", err);
+            }
+        }
+
+        // Adicione esta função ao seu bloco de <script>
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            if (modal) {
+                modal.style.display = 'flex';
+            } else {
+                console.error("Modal não encontrado: " + id);
+            }
+        }
+
+        async function verificarBonusPendente(dadosBanco) {
+            const dp = dadosBanco.dados_progresso;
+            const dataHoje = new Date().toISOString().split('T')[0];
+
+            // Verifica se existe o bônus agendado dentro do JSON e se o desafio foi antes de hoje
+            if (dp && dp.bonusRuaAgendado > 0 && dp.dataDoDesafio < dataHoje) {
+                const novoSaldo = (dadosBanco.total_minutos || 0) + dp.bonusRuaAgendado;
+
+                // Limpa o bônus do JSON para não ganhar duas vezes
+                dp.bonusRuaAgendado = 0;
+
+                const { error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .update({
+                        total_minutos: novoSaldo,
+                        dados_progresso: dp // Salva o JSON limpo
+                    })
+                    .eq('id', dadosBanco.id);
+
+                if (!error) {
+                    totalMinutes = novoSaldo;
+                    document.getElementById('total-min').innerText = totalMinutes;
+
+                    mostrarAviso("Bônus de Rua! 🎁", "Você ganhou 60 minutos extras por ter brincado na rua ontem!", "🌳");
+                }
+            }
+        }
+
+        function reiniciarComSeguranca() {
+            podeSairDaPagina = true; // Impede o popup "As alterações talvez não sejam salvas"
+
+            // Em vez de window.location.reload() (que desloga), apenas limpamos a tela
+            document.getElementById('total-min').innerText = "0";
+            closeModal('rua-bonus-modal');
+
+            // Opcional: Desmarca as missões visualmente
+            document.querySelectorAll('.card').forEach(card => card.classList.remove('complete'));
+
+            mostrarAviso("Tudo pronto!", "Vá brincar! Seus 60 minutos bônus estarão aqui amanhã às 08:00! 🌳", "👋");
+        }
+
+        function alternarFormulario(tipo) {
+            if (tipo === 'cadastro') {
+                document.getElementById('login-form').style.display = 'none';
+                document.getElementById('signup-form').style.display = 'block';
+            } else {
+                document.getElementById('login-form').style.display = 'block';
+                document.getElementById('signup-form').style.display = 'none';
+            }
+        }
+
+        async function criarConta() {
+            const email = document.getElementById('reg-email').value;
+            const senha = document.getElementById('reg-pass').value;
+            const nick = document.getElementById('reg-nick').value;
+
+            const { data, error } = await supabaseClient.auth.signUp({
+                email: email,
+                password: senha,
+                options: {
+                    data: {
+                        display_name: nick // Salva o nome/nick aqui
+                    }
+                }
+            });
+
+            if (error) alert("Erro: " + error.message);
+            else alert("Verifique seu e-mail para confirmar a conta! 📧");
+        }
+
+        async function fazerLogin() {
+            const email = document.getElementById('email-input').value;
+            const senha = document.getElementById('pass-input').value;
+            const btn = document.querySelector('#login-form button');
+
+            if (!email || !senha) {
+                alert("Malu, preencha o e-mail e a senha! ✨");
+                return;
+            }
+
+            btn.innerText = "ENTRANDO... 🚀";
+            btn.disabled = true;
+
+            // Método oficial do Supabase para Login
+            const { data, error } = await supabaseClient.auth.signInWithPassword({
+                email: email,
+                password: senha,
+            });
+
+            if (error) {
+                alert("Erro no login: " + error.message);
+                btn.innerText = "ACESSAR 🚀";
+                btn.disabled = false;
+            } else {
+                // Usuário logado com sucesso!
+                usuarioLogado = data.user;
+
+                // Esconde a tela de login
+                document.getElementById('login-overlay').style.display = 'none';
+
+                // Busca os dados da Malu na tabela 'usuarios_malu' usando o ID do Auth
+                await inicializarDadosAposLogin(data.user);
+            }
+
+            // Chame verificarAvisoPai(data) dentro de realizarLogin() logo após definir o usuarioLogado.
+        }
+
+        // Função para buscar o progresso na tabela após o login
+        async function inicializarDadosAposLogin(user) {
+            const { data, error } = await supabaseClient
+                .from('usuarios_malu')
+                .select('*')
+                .eq('id', user.id) // O ID aqui deve bater com o ID da tabela Auth
+                .single();
+
+            if (data) {
+                totalMinutes = data.total_minutos || 0;
+                document.getElementById('total-min').innerText = totalMinutes;
+
+                if (data.dados_progresso) {
+                    localStorage.setItem('progressoMalu', JSON.stringify(data.dados_progresso.missoes || {}));
+                }
+                carregarProgresso();
+
+                mostrarBoasVindasPersonalizado(data.nome);
+            } else {
+                // Se for o primeiro login da amiga, cria um registro inicial para ela
+                console.log("Criando registro inicial para nova usuária...");
+                await criarRegistroInicial(user);
+            }
+        }
+
+        async function criarRegistroInicial(user) {
+            const novoRegistro = {
+                id: user.id,
+                nome: user.user_metadata.display_name || 'Amiga da Malu',
+                total_minutos: 0,
+                dados_progresso: { missoes: {}, leituras: [] },
+                ultima_atualizacao: new Date().toISOString()
+            };
+
+            const { error } = await supabaseClient
+                .from('usuarios_malu')
+                .insert([novoRegistro]);
+
+            if (!error) {
+                console.log("Perfil criado com sucesso!");
+                location.reload(); // Recarrega para aplicar os dados zerados
+            }
+        }
+
+        // Função para confirmar e executar o logout
+        async function confirmarSair() {
+            if (confirm("Malu, deseja sair para trocar de usuário? 🌟")) {
+                try {
+                    // 1. Encerra a sessão no Supabase
+                    await supabaseClient.auth.signOut();
+
+                    // 2. Limpa as variáveis globais
+                    usuarioLogado = null;
+                    totalMinutes = 0;
+
+                    // 3. Limpa o LocalStorage para não misturar dados das amigas
+                    localStorage.removeItem('progressoMalu');
+                    localStorage.removeItem('usoAppsMalu');
+                    localStorage.removeItem('curiosidadesLidas');
+
+                    // 4. Mostra a tela de login novamente e reseta a interface
+                    document.getElementById('login-overlay').style.display = 'flex';
+                    document.getElementById('total-min').innerText = "0";
+                    document.querySelectorAll('.card').forEach(card => card.classList.remove('complete'));
+
+                    // Opcional: Recarrega a página para garantir limpeza total
+                    window.location.reload();
+
+                } catch (error) {
+                    console.error("Erro ao sair:", error);
+                    alert("Erro ao encerrar sessão.");
+                }
+            }
+        }
+
+        async function ajustarMinutosGlobal() {
+            const input = document.getElementById('input-ajuste-global');
+            const valor = parseInt(input.value);
+
+            if (isNaN(valor)) {
+                alert("Papai Hayden, digite um valor para o ajuste global! 🌍");
+                return;
+            }
+
+            if (!confirm(`Deseja mesmo aplicar ${valor} minutos para TODOS os usuários cadastrados?`)) return;
+
+            try {
+                // 1. Primeiro, buscamos todos os usuários para calcular o novo saldo individualmente
+                // (Isso evita que saldos fiquem negativos e garante a integridade dos dados)
+                const { data: usuarios, error: fetchError } = await supabaseClient
+                    .from('usuarios_malu')
+                    .select('id, total_minutos');
+
+                if (fetchError) throw fetchError;
+
+                // 2. Executamos a atualização para cada um
+                const promises = usuarios.map(u => {
+                    let novoSaldo = (u.total_minutos || 0) + valor;
+                    if (novoSaldo < 0) novoSaldo = 0;
+
+                    return supabaseClient
+                        .from('usuarios_malu')
+                        .update({ total_minutos: novoSaldo, ultima_atualizacao: new Date().toISOString() })
+                        .eq('id', u.id);
+                });
+
+                await Promise.all(promises);
+
+                // 3. Registra a ação no log do Pai
+                await registrarLogPai("Ajuste Global", `Papai Hayden ajustou o saldo de todos em ${valor} min.`, valor);
+
+                // 4. Atualiza o saldo local se o usuário atual estiver na lista
+                if (usuarioLogado) {
+                    totalMinutes += valor;
+                    if (totalMinutes < 0) totalMinutes = 0;
+                    document.getElementById('total-min').innerText = totalMinutes;
+                    document.getElementById('saldo-admin').innerText = totalMinutes;
+                }
+
+                input.value = "";
+                mostrarAviso("Sucesso Global!", `Tempo ajustado para todas as amigas na nuvem! 🌍`, "✨");
+
+            } catch (err) {
+                console.error("Erro no ajuste global:", err);
+                alert("Erro ao atualizar todos os usuários. Verifique a conexão.");
+            }
+        }
+
+
+        // Carrega a lista de usuários no select ao abrir o painel
+        // Carrega a lista de todos os usuários no select ao abrir o painel
+        async function carregarUsuariosNoSelect() {
+            console.log("🔄 Buscando usuários no banco...");
+            try {
+                const { data: usuarios, error } = await supabaseClient
+                    .from('usuarios_malu')
+                    .select('id, nome')
+                    .order('nome', { ascending: true });
+
+                if (error) {
+                    console.error("Erro Supabase:", error);
+                    alert("Erro ao buscar usuários: " + error.message);
+                    return;
+                }
+
+                const select = document.getElementById('select-usuario-ajuste');
+
+                // Limpa e mantém a opção global
+                select.innerHTML = '<option value="todos">🌍 Aplicar em Todos (Malu + Amigas)</option>';
+
+                if (usuarios && usuarios.length > 0) {
+                    console.log(`${usuarios.length} usuários encontrados.`);
+                    usuarios.forEach(u => {
+                        const opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.innerText = `👤 ${u.nome}`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    console.warn("Nenhum usuário encontrado na tabela 'usuarios_malu'.");
+                }
+            } catch (err) {
+                console.error("Erro crítico na função:", err);
+            }
+        }
+
+        // Sobrescreva ou chame esta função ao abrir o painel
+        const originalAbrirControlePai = abrirControlePai;
+        abrirControlePai = function () {
+            if (typeof originalAbrirControlePai === 'function') {
+                originalAbrirControlePai();
+            }
+            // Força o carregamento dos usuários toda vez que abrir
+            carregarUsuariosNoSelect();
+        };
+
+
+        async function executarAjusteDirecionado() {
+            const alvo = document.getElementById('select-usuario-ajuste').value;
+            const valor = parseInt(document.getElementById('input-ajuste-direcionado').value);
+
+            if (isNaN(valor)) return alert("Digite um valor válido!");
+
+            try {
+                let query = supabaseClient.from('usuarios_malu').select('id, total_minutos, dados_progresso, nome');
+
+                if (alvo !== 'todos') query = query.eq('id', alvo);
+                const { data: usuarios } = await query;
+
+                const promises = usuarios.map(u => {
+                    let novoSaldo = (u.total_minutos || 0) + valor;
+                    let dp = u.dados_progresso || {};
+
+                    // Marca que há um aviso pendente para este usuário
+                    dp.aviso_ajuste = {
+                        valor: valor,
+                        data: new Date().toLocaleString(),
+                        lido: false
+                    };
+
+                    return supabaseClient
+                        .from('usuarios_malu')
+                        .update({
+                            total_minutos: novoSaldo < 0 ? 0 : novoSaldo,
+                            dados_progresso: dp,
+                            ultima_atualizacao: new Date().toISOString()
+                        })
+                        .eq('id', u.id);
+                });
+
+                await Promise.all(promises);
+                mostrarAviso("Sucesso!", `Ajuste de ${valor}m enviado!`, "🎯");
+                if (usuarioLogado) carregarDoSupabase(); // Atualiza se for você
+            } catch (err) { console.error(err); }
+        }
 
     </script>
 
@@ -2470,7 +3270,8 @@
     <div id="welcome-modal" class="modal" style="display:flex">
         <div class="modal-content" style="border: 10px solid var(--sky); background: #fff;">
             <h1 style="font-size: 5rem; margin-bottom: 10px;">☀️</h1>
-            <h2 style="color: var(--purple); font-family: 'Fredoka One'; font-size: 2.5rem;">Bom dia, Malu!</h2>
+            <h2 id="welcome-name" style="color: var(--purple); font-family: 'Fredoka One'; font-size: 2.5rem;">
+                Bem-vinda!</h2>
             <p style="font-size: 1.3rem; font-weight: bold; color: var(--dark-pink);">
                 O sol já nasceu no seu mundo mágico! ✨
             </p>
@@ -2554,9 +3355,25 @@
 
             <div class="dashboard-grid">
 
+
+
                 <div class="dash-card">
-                    <div class="dash-title">📅 Minutos Ganhos na Semana</div>
-                    <div id="chart-semanal">
+                    <div class="dash-title" style="font-size: 0.9rem; color: var(--dark-pink);">🎯 Ajuste Direcionado
+                    </div>
+                    <div
+                        style="display: flex; flex-direction: column; gap: 10px; background: #fff0f5; padding: 15px; border-radius: 15px;">
+
+                        <select id="select-usuario-ajuste"
+                            style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--pink);">
+                            <option value="todos">🌍 Aplicar em Todos</option>
+                        </select>
+
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" id="input-ajuste-direcionado" placeholder="Minutos (Ex: 30)"
+                                style="flex:1; padding:12px; border-radius:15px; border:2px solid var(--pink);">
+                            <button class="btn" style="margin:0; background:var(--dark-pink);"
+                                onclick="executarAjusteDirecionado()">Aplicar Ajuste</button>
+                        </div>
                     </div>
                 </div>
 
@@ -2598,6 +3415,16 @@
                     </div>
                     <p style="font-size: 0.7rem; color: #999; margin-top: 10px; text-align: center;">Dra. Maria Luiza -
                         Sistema v2.0</p>
+                </div>
+
+                <div class="dash-card">
+                    <div class="dash-title">🔒 Controle de Acesso</div>
+                    <p style="font-size: 0.8rem; color: #666;">Status do Shopping: <b
+                            id="status-trava">Carregando...</b></p>
+                    <button id="btn-trava-global" class="btn" style="width: 100%; background: #2ecc71;"
+                        onclick="toggleTravaShopping()">
+                        LIBERAR SHOPPING AGORA 🔓
+                    </button>
                 </div>
 
             </div>
@@ -2706,30 +3533,26 @@
             <p style="font-size: 1.1rem;">Você escolheu a diversão real! Por causa disso, o Papai Hayden já guardou
                 <b>60 minutos bônus</b> para o seu celular amanhã! 🎁
             </p>
-            <button class="btn" style="background: #2ecc71; width: 100%;" onclick="location.reload()">DIVIRTA-SE NA RUA!
-                👋</button>
+            <button class="btn" style="background: #2ecc71; width: 100%;" onclick="reiniciarComSeguranca()">
+                DIVIRTA-SE NA RUA! 👋
+            </button>
         </div>
     </div>
 
-    <button class="floating-btn btn-gastos" onclick="abrirModalGastos()">
+    <button class="floating-btn btn-gastos" onclick="abrirModalGasto()">
         🎮 <span>Gastar Minutos</span>
     </button>
 
     <div id="modal-selecionar-tempo" class="modal">
         <div class="modal-content" style="border-color: var(--pink); max-width: 400px;">
             <h1 id="icone-app-gasto" style="font-size: 3rem; margin: 0;">📱</h1>
-            <h2 id="titulo-app-gasto" style="color: var(--purple); font-family: 'Fredoka One';"></h2>
+            <h2 id="titulo-app-gasto" style="color: var(--purple); font-family: 'Fredoka One';">Nome do App</h2>
+
             <p>Quantos minutos você quer usar?</p>
             <p style="font-size: 0.8rem; color: #666;">(Saldo: <span id="saldo-atual-modal">0</span> min)</p>
 
             <input type="number" id="minutos-para-gastar" placeholder="Ex: 30"
                 style="width: 100%; padding: 15px; border-radius: 15px; border: 2px solid var(--sky); font-size: 1.2rem; text-align: center; margin-bottom: 15px;">
-
-            <div
-                style="background: #fff3f3; padding: 10px; border-radius: 10px; margin-bottom: 15px; border: 1px solid #ffcccc;">
-                <p style="font-size: 0.8rem; color: #d63031; margin: 0;">⚠️ <b>Atenção:</b> Se gastar aqui, você perde o
-                    bônus da Rua de amanhã!</p>
-            </div>
 
             <div style="display: flex; gap: 10px; width: 100%;">
                 <button class="btn" style="background: var(--pink); flex: 1;"
@@ -2753,6 +3576,57 @@
                 onclick="closeModal('modal-rua-bloqueada')">Vou economizar! 💪</button>
         </div>
     </div>
+
+    <div id="login-overlay">
+        <div class="login-box">
+            <h2>Mundo da Malu 🌍</h2>
+
+            <div id="login-form">
+                <input type="email" id="email-input" placeholder="Seu e-mail">
+                <input type="password" id="pass-input" placeholder="Sua senha">
+                <button onclick="fazerLogin()">ACESSAR 🚀</button>
+                <p onclick="alternarFormulario('cadastro')">Não tem conta? Criar uma agora!</p>
+            </div>
+
+            <div id="signup-form" style="display: none;">
+                <input type="text" id="reg-nick" placeholder="Seu Nickname (Apelido)">
+                <input type="email" id="reg-email" placeholder="Seu e-mail">
+                <input type="password" id="reg-pass" placeholder="Crie uma senha">
+                <button onclick="criarConta()">CADASTRAR E VERIFICAR 📧</button>
+                <p onclick="alternarFormulario('login')">Já tenho conta. Fazer Login.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>    // --- SCRIPT DE AUDITORIA DE BOTÕES ---
+        (function auditoriaBotoesMalu() {
+            console.log("%c🧪 Verificando botões do Mundo da Malu...", "color: purple; font-weight: bold; font-size: 14px;");
+
+            const mapeamento = [
+                { nome: "Cards de Missão", seletor: ".card", funcEsperada: "gravarTudoInstantaneo" },
+                { nome: "Botão Concluir Leitura", seletor: "#finish-btn", funcEsperada: "gravarTudoInstantaneo" },
+                { nome: "Shopping (Gasto Apps)", seletor: ".card-gasto", funcEsperada: "processarGastoApp" },
+                { nome: "Painel do Pai (Ajuste)", seletor: "button[onclick*='ajustarMinutosManual']", funcEsperada: "ajustarMinutosManual" }
+            ];
+
+            mapeamento.forEach(item => {
+                const elementos = document.querySelectorAll(item.seletor);
+                if (elementos.length > 0) {
+                    console.log(`✅ %c${item.nome}:%c ${elementos.length} encontrado(s).`, "font-weight: bold;", "color: green;");
+                } else {
+                    console.error(`❌ %c${item.nome}:%c Não encontrado na página!`, "font-weight: bold;", "color: red;");
+                }
+            });
+
+            // Sobrescreve a função de gravar para avisar quando o banco for acionado
+            const originalGravar = window.gravarTudoInstantaneo;
+            window.gravarTudoInstantaneo = async function () {
+                console.log("%c📡 BANCO DE DADOS: Tentando salvar dados agora...", "color: orange; font-weight: bold;");
+                if (originalGravar) return await originalGravar.apply(this, arguments);
+            };
+        })();</script>
+
+
 </body>
 
 </html>
