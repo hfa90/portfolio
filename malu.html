@@ -953,6 +953,46 @@
             cursor: pointer;
             text-decoration: underline;
         }
+
+        #img-molde {
+            object-fit: contain;
+            /* Mantém a proporção da foto da Malu sem esticar */
+            transition: opacity 0.3s;
+        }
+
+        /* Ajustes para Celular */
+        @media (max-width: 600px) {
+            #modal-colorir .modal-content {
+                width: 100%;
+                height: 100%;
+                max-height: 100vh;
+                border-radius: 0;
+                padding: 10px;
+            }
+
+            #canvas-colorir {
+                height: 350px !important;
+                /* Altura reduzida para caber os controles no mobile */
+            }
+
+            .ferramentas-mobile {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+        }
+
+        #canvas-colorir {
+            touch-action: none;
+            /* Crucial: impede que a página role enquanto ela desenha */
+            background-image:
+                linear-gradient(45deg, #f0f0f0 25%, transparent 25%),
+                linear-gradient(-45deg, #f0f0f0 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #f0f0f0 75%),
+                linear-gradient(-45deg, transparent 75%, #f0f0f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
     </style>
 </head>
 
@@ -2168,6 +2208,8 @@
             document.getElementById('pai-modal').style.display = 'flex';
             document.getElementById('saldo-admin').innerText = totalMinutes;
 
+            carregarUsuariosNoSelect();
+
             // --- 1. ATUALIZAR BANCO SEMANAL ---
             // Registra o saldo atual no dia de hoje antes de exibir
             const diasNomes = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
@@ -3230,10 +3272,160 @@
             } catch (err) { console.error(err); }
         }
 
+        let canvas, ctx, desenhando = false;
+
+        function abrirColorir() {
+            openModal('modal-colorir');
+            if (!canvas) initCanvas(); // Inicializa apenas uma vez
+        }
+
+        function initCanvas() {
+            canvas = document.getElementById('canvas-colorir');
+            ctx = canvas.getContext('2d');
+
+            // Ajusta o tamanho interno do canvas para a tela
+            canvas.width = canvas.offsetWidth;
+            canvas.height = 450; // Altura fixa para o desenho
+
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.lineWidth = document.getElementById('range-tamanho').value;
+
+            // Eventos Mouse
+            canvas.addEventListener('mousedown', iniciarDesenho);
+            canvas.addEventListener('mousemove', desenhar);
+            canvas.addEventListener('mouseup', pararDesenho);
+            canvas.addEventListener('mouseout', pararDesenho);
+
+            // Eventos Touch (Celular)
+            canvas.addEventListener('touchstart', (e) => {
+                const touch = e.touches[0];
+                iniciarDesenho(touch);
+            });
+            canvas.addEventListener('touchmove', (e) => {
+                const touch = e.touches[0];
+                desenhar(touch);
+                e.preventDefault();
+            }, { passive: false });
+            canvas.addEventListener('touchend', pararDesenho);
+        }
+
+        function iniciarDesenho(e) {
+            desenhando = true;
+            const rect = canvas.getBoundingClientRect();
+            ctx.beginPath();
+            ctx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+        }
+
+        function desenhar(e) {
+            if (!desenhando) return;
+            const rect = canvas.getBoundingClientRect();
+            ctx.strokeStyle = document.getElementById('cor-pincel').value;
+            ctx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+            ctx.stroke();
+        }
+
+        function pararDesenho() {
+            desenhando = false;
+        }
+
+        function limparTela() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+
+        const moldesUrls = {
+            medica: 'https://cdn-icons-png.flaticon.com/512/3306/3306560.png',
+            advogada: 'https://cdn-icons-png.flaticon.com/512/3133/3133606.png',
+            arquiteta: 'https://cdn-icons-png.flaticon.com/512/1033/1033282.png'
+        };
+
+        function carregarMolde(tipo) {
+            const img = document.getElementById('img-molde');
+            limparTela();
+
+            if (tipo === 'limpo') {
+                img.style.display = 'none';
+                img.src = '';
+            } else {
+                img.src = moldesUrls[tipo];
+                img.style.display = 'block';
+                mostrarAviso("Lindo Molde!", `Agora você pode colorir sua futura profissão de ${tipo}!`, "🎨");
+            }
+        }
+
+        // Modifique sua função baixarDesenho para incluir o fundo se quiser
+        function baixarDesenho() {
+            // Para salvar com o molde junto, precisaríamos desenhar a imagem no canvas antes de exportar
+            // Por enquanto, salva apenas o que ela pintou (transparente por baixo)
+            const link = document.createElement('a');
+            link.download = `arte_da_malu_${new Date().getTime()}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+
+            // Pequena recompensa por ser criativa
+            totalMinutes += 2;
+            document.getElementById('total-min').innerText = totalMinutes;
+            gravarTudoInstantaneo();
+
+            mostrarAviso("Artista de Sucesso!", "Sua obra foi salva e você ganhou 2 minutos de bônus por sua criatividade! 🎨", "💖");
+        }
+
+        // Atualize sua função carregarFotoPropria para resetar a barra se desejar
+        function carregarFotoPropria(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const img = document.getElementById('img-molde');
+                const range = document.getElementById('range-opacidade');
+                const label = document.getElementById('val-opacidade');
+
+                limparTela();
+
+                img.src = e.target.result;
+                img.style.display = 'block';
+
+                // Reseta para 50% ao carregar nova foto
+                img.style.opacity = '0.5';
+                range.value = 50;
+                label.innerText = 50;
+
+                mostrarAviso("Foto Carregada!", "Ajuste a transparência na barra roxa para facilitar sua pintura! ✨", "📸");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function ajustarOpacidade(valor) {
+            const img = document.getElementById('img-molde');
+            const label = document.getElementById('val-opacidade');
+
+            // Converte o valor de 0-100 para 0-1 (formato CSS)
+            const opacidadeCSS = valor / 100;
+
+            img.style.opacity = opacidadeCSS;
+            label.innerText = valor;
+        }
+
+        function ajustarTamanhoPincel(valor) {
+            if (!ctx) return;
+
+            // Atualiza a espessura da linha no contexto do Canvas
+            ctx.lineWidth = valor;
+
+            // Atualiza o texto para a Malu ver o número
+            document.getElementById('val-tamanho').innerText = valor;
+        }
+
     </script>
 
     <button class="floating-btn btn-curiosidades" onclick="openCuriosities()">
         💡 <span>Curiosidades</span>
+    </button>
+
+    <button class="floating-btn btn-desenho" onclick="abrirColorir()"
+        style="right: 30px; bottom: 90px; background: #ff758c; color: white;">
+        🎨 <span>Colorir</span>
     </button>
 
     <div id="curiosity-modal" class="modal">
@@ -3625,6 +3817,74 @@
                 if (originalGravar) return await originalGravar.apply(this, arguments);
             };
         })();</script>
+
+
+
+    <div id="modal-colorir" class="modal">
+        <div class="modal-content" style="max-width: 95%; width: 850px; padding: 15px; border-color: #7d5fff;">
+            <span class="close-popup" onclick="closeModal('modal-colorir')">×</span>
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple); margin-bottom: 5px;">🎨 Livro de Colorir da
+                Malu</h2>
+
+            <div
+                style="display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px; justify-content: flex-start;">
+                <button class="btn" style="background: #eee; color: #333; font-size: 0.8rem;"
+                    onclick="carregarMolde('limpo')">Tela Branca</button>
+                <button class="btn" style="background: var(--pink); font-size: 0.8rem;"
+                    onclick="carregarMolde('medica')">🩺 Médica</button>
+                <button class="btn" style="background: var(--purple); font-size: 0.8rem;"
+                    onclick="carregarMolde('advogada')">⚖️ Advogada</button>
+                <button class="btn" style="background: var(--yellow); color: #333; font-size: 0.8rem;"
+                    onclick="carregarMolde('arquiteta')">🏗️ Arquiteta</button>
+            </div>
+
+            <button class="btn" style="background: #a2d2ff; color: #333; font-size: 0.8rem;"
+                onclick="document.getElementById('input-foto-colorir').click()">
+                📷 Colorir Foto
+            </button>
+            <input type="file" id="input-foto-colorir" accept="image/*" style="display:none"
+                onchange="carregarFotoPropria(event)">
+
+            <div
+                style="position: relative; background: white; border: 4px solid var(--pink); border-radius: 20px; overflow: hidden;">
+                <img id="img-molde" src=""
+                    style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 90%; max-height: 90%; pointer-events: none; opacity: 0.3; display: none;">
+                <canvas id="canvas-colorir"
+                    style="cursor: crosshair; touch-action: none; width: 100%; height: 450px; position: relative; z-index: 5;"></canvas>
+            </div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: center; align-items: center;">
+                <input type="color" id="cor-pincel" value="#ff477e"
+                    style="width: 50px; height: 50px; border: 3px solid #eee; border-radius: 10px;">
+                <button class="btn" onclick="limparTela()" style="background: #feca57; color: #333;">Limpar</button>
+                <button class="btn" onclick="baixarDesenho()" style="background: #2ecc71;">Salvar Obra ✨</button>
+            </div>
+
+            <div
+                style="margin: 15px 0; background: #f0f0f0; padding: 10px; border-radius: 15px; border: 2px dashed var(--purple);">
+                <label
+                    style="font-size: 0.8rem; font-weight: bold; color: var(--purple); display: block; margin-bottom: 5px;">
+                    Transparência da Foto: <span id="val-opacidade">50</span>%
+                </label>
+                <input type="range" id="range-opacidade" min="0" max="100" value="50"
+                    style="width: 100%; cursor: pointer;" oninput="ajustarOpacidade(this.value)">
+            </div>
+
+            <div
+                style="margin: 15px 0; background: #eef2ff; padding: 10px; border-radius: 15px; border: 2px dashed var(--sky);">
+                <label
+                    style="font-size: 0.8rem; font-weight: bold; color: var(--purple); display: block; margin-bottom: 8px;">
+                    Espessura do Pincel: <span id="val-tamanho">5</span>px
+                </label>
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <span style="font-size: 0.7rem;">Fininho</span>
+                    <input type="range" id="range-tamanho" min="1" max="50" value="5"
+                        style="width: 100%; cursor: pointer;" oninput="ajustarTamanhoPincel(this.value)">
+                    <span style="font-size: 1.2rem;">Grosso</span>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
 </body>
