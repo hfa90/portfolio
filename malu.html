@@ -3283,31 +3283,51 @@
             canvas = document.getElementById('canvas-colorir');
             ctx = canvas.getContext('2d');
 
-            // Ajusta o tamanho interno do canvas para a tela
+            // Ajusta o tamanho real do canvas para o tamanho da tela do celular
             canvas.width = canvas.offsetWidth;
-            canvas.height = 450; // Altura fixa para o desenho
+            canvas.height = canvas.offsetHeight || 350;
 
             ctx.lineJoin = 'round';
             ctx.lineCap = 'round';
             ctx.lineWidth = document.getElementById('range-tamanho').value;
 
-            // Eventos Mouse
-            canvas.addEventListener('mousedown', iniciarDesenho);
-            canvas.addEventListener('mousemove', desenhar);
-            canvas.addEventListener('mouseup', pararDesenho);
-            canvas.addEventListener('mouseout', pararDesenho);
+            function getPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                // Se for touch, pega a posição do primeiro dedo, senão pega do mouse
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            }
 
-            // Eventos Touch (Celular)
-            canvas.addEventListener('touchstart', (e) => {
-                const touch = e.touches[0];
-                iniciarDesenho(touch);
-            });
-            canvas.addEventListener('touchmove', (e) => {
-                const touch = e.touches[0];
-                desenhar(touch);
-                e.preventDefault();
-            }, { passive: false });
-            canvas.addEventListener('touchend', pararDesenho);
+            function start(e) {
+                desenhando = true;
+                const pos = getPos(e);
+                ctx.beginPath();
+                ctx.moveTo(pos.x, pos.y);
+            }
+
+            function move(e) {
+                if (!desenhando) return;
+                const pos = getPos(e);
+                ctx.strokeStyle = document.getElementById('cor-pincel').value;
+                ctx.lineTo(pos.x, pos.y);
+                ctx.stroke();
+            }
+
+            function stop() { desenhando = false; }
+
+            // Eventos Unificados (Mouse + Touch)
+            canvas.addEventListener('mousedown', start);
+            canvas.addEventListener('touchstart', (e) => { start(e); e.preventDefault(); }, { passive: false });
+
+            canvas.addEventListener('mousemove', move);
+            canvas.addEventListener('touchmove', (e) => { move(e); e.preventDefault(); }, { passive: false });
+
+            canvas.addEventListener('mouseup', stop);
+            canvas.addEventListener('touchend', stop);
         }
 
         function iniciarDesenho(e) {
@@ -3821,67 +3841,44 @@
 
 
     <div id="modal-colorir" class="modal">
-        <div class="modal-content" style="max-width: 95%; width: 850px; padding: 15px; border-color: #7d5fff;">
+        <div class="modal-content">
             <span class="close-popup" onclick="closeModal('modal-colorir')">×</span>
-            <h2 style="font-family: 'Fredoka One'; color: var(--purple); margin-bottom: 5px;">🎨 Livro de Colorir da
-                Malu</h2>
+            <h3 style="font-family: 'Fredoka One'; color: var(--purple); margin: 5px;">🎨 Pincel Mágico</h3>
 
             <div
-                style="display: flex; gap: 8px; margin-bottom: 15px; overflow-x: auto; padding: 5px; justify-content: flex-start;">
-                <button class="btn" style="background: #eee; color: #333; font-size: 0.8rem;"
-                    onclick="carregarMolde('limpo')">Tela Branca</button>
-                <button class="btn" style="background: var(--pink); font-size: 0.8rem;"
-                    onclick="carregarMolde('medica')">🩺 Médica</button>
-                <button class="btn" style="background: var(--purple); font-size: 0.8rem;"
-                    onclick="carregarMolde('advogada')">⚖️ Advogada</button>
-                <button class="btn" style="background: var(--yellow); color: #333; font-size: 0.8rem;"
-                    onclick="carregarMolde('arquiteta')">🏗️ Arquiteta</button>
-            </div>
-
-            <button class="btn" style="background: #a2d2ff; color: #333; font-size: 0.8rem;"
-                onclick="document.getElementById('input-foto-colorir').click()">
-                📷 Colorir Foto
-            </button>
-            <input type="file" id="input-foto-colorir" accept="image/*" style="display:none"
-                onchange="carregarFotoPropria(event)">
-
-            <div
-                style="position: relative; background: white; border: 4px solid var(--pink); border-radius: 20px; overflow: hidden;">
+                style="position: relative; width: 100%; border: 3px solid var(--pink); border-radius: 15px; overflow: hidden; background: white;">
                 <img id="img-molde" src=""
-                    style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 90%; max-height: 90%; pointer-events: none; opacity: 0.3; display: none;">
-                <canvas id="canvas-colorir"
-                    style="cursor: crosshair; touch-action: none; width: 100%; height: 450px; position: relative; z-index: 5;"></canvas>
+                    style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 100%; max-height: 100%; pointer-events: none; opacity: 0.5; display: none;">
+                <canvas id="canvas-colorir"></canvas>
             </div>
 
-            <div style="display: flex; gap: 10px; margin-top: 15px; justify-content: center; align-items: center;">
-                <input type="color" id="cor-pincel" value="#ff477e"
-                    style="width: 50px; height: 50px; border: 3px solid #eee; border-radius: 10px;">
-                <button class="btn" onclick="limparTela()" style="background: #feca57; color: #333;">Limpar</button>
-                <button class="btn" onclick="baixarDesenho()" style="background: #2ecc71;">Salvar Obra ✨</button>
-            </div>
-
-            <div
-                style="margin: 15px 0; background: #f0f0f0; padding: 10px; border-radius: 15px; border: 2px dashed var(--purple);">
-                <label
-                    style="font-size: 0.8rem; font-weight: bold; color: var(--purple); display: block; margin-bottom: 5px;">
-                    Transparência da Foto: <span id="val-opacidade">50</span>%
-                </label>
-                <input type="range" id="range-opacidade" min="0" max="100" value="50"
-                    style="width: 100%; cursor: pointer;" oninput="ajustarOpacidade(this.value)">
-            </div>
-
-            <div
-                style="margin: 15px 0; background: #eef2ff; padding: 10px; border-radius: 15px; border: 2px dashed var(--sky);">
-                <label
-                    style="font-size: 0.8rem; font-weight: bold; color: var(--purple); display: block; margin-bottom: 8px;">
-                    Espessura do Pincel: <span id="val-tamanho">5</span>px
-                </label>
-                <div style="display: flex; align-items: center; gap: 15px;">
-                    <span style="font-size: 0.7rem;">Fininho</span>
-                    <input type="range" id="range-tamanho" min="1" max="50" value="5"
-                        style="width: 100%; cursor: pointer;" oninput="ajustarTamanhoPincel(this.value)">
-                    <span style="font-size: 1.2rem;">Grosso</span>
+            <div style="padding: 10px 0;">
+                <div class="ferramentas-mobile">
+                    <div style="background: #f0f0f0; padding: 5px; border-radius: 10px;">
+                        <label style="font-size: 0.7rem;">💧 Opacidade: <span id="val-opacidade">50</span>%</label>
+                        <input type="range" id="range-opacidade" min="0" max="100" value="50" style="width: 100%;"
+                            oninput="ajustarOpacidade(this.value)">
+                    </div>
+                    <div style="background: #eef2ff; padding: 5px; border-radius: 10px;">
+                        <label style="font-size: 0.7rem;">📏 Tamanho: <span id="val-tamanho">5</span>px</label>
+                        <input type="range" id="range-tamanho" min="1" max="50" value="5" style="width: 100%;"
+                            oninput="ajustarTamanhoPincel(this.value)">
+                    </div>
                 </div>
+
+                <div style="display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap;">
+                    <input type="color" id="cor-pincel" value="#ff477e"
+                        style="width: 40px; height: 40px; border: none;">
+                    <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; flex: 1;"
+                        onclick="document.getElementById('input-foto-colorir').click()">📷 Foto</button>
+                    <button class="btn"
+                        style="padding: 5px 10px; font-size: 0.8rem; flex: 1; background: var(--yellow); color: #333;"
+                        onclick="limparTela()">Limpar</button>
+                    <button class="btn" style="padding: 5px 10px; font-size: 0.8rem; flex: 1; background: #2ecc71;"
+                        onclick="baixarDesenho()">Salvar</button>
+                </div>
+                <input type="file" id="input-foto-colorir" accept="image/*" style="display:none"
+                    onchange="carregarFotoPropria(event)">
             </div>
         </div>
     </div>
