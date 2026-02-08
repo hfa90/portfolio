@@ -993,6 +993,49 @@
             background-size: 20px 20px;
             background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
         }
+
+        /* Estilos do Jogo da Memória */
+        #memory-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin: 15px auto;
+            max-width: 300px;
+        }
+
+        .memory-card {
+            height: 80px;
+            background: var(--purple);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            cursor: pointer;
+            transition: transform 0.3s;
+            transform-style: preserve-3d;
+        }
+
+        .memory-card.flipped {
+            background: white;
+            border: 3px solid var(--purple);
+            transform: rotateY(180deg);
+        }
+
+        .memory-card.matched {
+            background: #d1ffdb;
+            border-color: #2ecc71;
+            visibility: visible;
+        }
+
+        /* Ajuste do Puzzle para 10 peças */
+        #puzzle-container {
+            grid-template-columns: repeat(2, 1fr) !important;
+            /* 2 colunas */
+            grid-template-rows: repeat(5, 1fr) !important;
+            /* 5 linhas */
+            height: 350px !important;
+        }
     </style>
 </head>
 
@@ -1233,11 +1276,10 @@
         updateClock();
 
         // Variáveis de Controle do Jogo
-        let gameTimerInterval;
-        let gameTimeLeft = 15 * 60;
-        const PUZZLE_ROWS = 5;
-        const PUZZLE_COLS = 5; // Total 25 peças (mais jogável que 50 em celular)
+        const P_ROWS = 5;
+        const P_COLS = 2;
         let pieces = [];
+        let gameTimerInterval;
 
         // Atualize sua função checkAllDone existente
         function checkAllDone() {
@@ -1288,19 +1330,27 @@
             document.getElementById('game-locked-modal').style.display = 'flex';
         }
 
+        let currentStage = 1; // 1: Puzzle, 2: Memória
+        let memoryCards = [];
+        let flippedCards = [];
+
+        // Redefinindo as configurações do Puzzle para 10 peças (2x5
+
         function initPuzzle() {
+            currentStage = 1;
+            document.getElementById('game-instruction').innerText = "Fase 1: Quebra-Cabeça de 10 Peças 🧩";
+            document.getElementById('puzzle-container').style.display = 'grid';
+            document.getElementById('memory-grid').style.display = 'none';
+
             const container = document.getElementById('puzzle-container');
             container.innerHTML = '';
+
+            // Criar 10 peças (0 a 9). A peça 9 será o espaço vazio.
             pieces = [];
+            for (let i = 0; i < 10; i++) pieces.push(i);
 
-            // Criar array de peças (0 a 24)
-            for (let i = 0; i < (PUZZLE_ROWS * PUZZLE_COLS); i++) {
-                pieces.push(i);
-            }
-
-            // Embaralhar
+            // Embaralhar garantindo que o jogo seja resolvível
             pieces.sort(() => Math.random() - 0.5);
-
             renderPuzzle();
         }
 
@@ -1312,16 +1362,18 @@
                 const div = document.createElement('div');
                 div.className = 'puzzle-piece';
 
-                if (pieceIdx === (PUZZLE_ROWS * PUZZLE_COLS) - 1) {
+                // O número 9 é o nosso "buraco" para mover as peças
+                if (pieceIdx === 9) {
                     div.classList.add('empty');
                     div.innerText = '';
                 } else {
-                    // Lógica de posição da imagem (Usa uma foto da internet como exemplo)
-                    const row = Math.floor(pieceIdx / PUZZLE_COLS);
-                    const col = pieceIdx % PUZZLE_COLS;
+                    const row = Math.floor(pieceIdx / P_COLS);
+                    const col = pieceIdx % P_COLS;
+
                     div.style.backgroundImage = `url('https://api.dicebear.com/7.x/adventurer/svg?seed=Malu&backgroundColor=ff85a2')`;
-                    div.style.backgroundPosition = `-${col * 60}px -${row * 60}px`;
-                    div.innerText = pieceIdx + 1; // Número para ajudar a Malu
+                    // Ajuste da posição da imagem para 2 colunas
+                    div.style.backgroundPosition = `-${col * 150}px -${row * 70}px`;
+                    div.innerText = pieceIdx + 1;
                     div.onclick = () => movePiece(currentPos);
                 }
                 container.appendChild(div);
@@ -1329,16 +1381,17 @@
         }
 
         function movePiece(pos) {
-            const emptyPos = pieces.indexOf((PUZZLE_ROWS * PUZZLE_COLS) - 1);
-            const row = Math.floor(pos / PUZZLE_COLS);
-            const emptyRow = Math.floor(emptyPos / PUZZLE_COLS);
-            const col = pos % PUZZLE_COLS;
-            const emptyCol = emptyPos % PUZZLE_COLS;
+            const emptyPos = pieces.indexOf(9); // Localiza o vazio
+            const row = Math.floor(pos / P_COLS);
+            const emptyRow = Math.floor(emptyPos / P_COLS);
+            const col = pos % P_COLS;
+            const emptyCol = emptyPos % P_COLS;
 
-            // Verifica se a peça está adjacente ao espaço vazio
+            // Só move se estiver ao lado, acima ou abaixo do vazio
             const isAdjacent = Math.abs(row - emptyRow) + Math.abs(col - emptyCol) === 1;
 
             if (isAdjacent) {
+                // Troca a peça de lugar com o vazio
                 [pieces[pos], pieces[emptyPos]] = [pieces[emptyPos], pieces[pos]];
                 renderPuzzle();
                 checkWin();
@@ -1348,15 +1401,73 @@
         function checkWin() {
             const win = pieces.every((val, i) => val === i);
             if (win) {
-                clearInterval(gameTimerInterval);
-                alert("INCRÍVEL! +45 Minutos! 🏆");
-                totalMinutes += 45;
-                document.getElementById('total-min').innerText = totalMinutes;
-
-                gravarTudoInstantaneo(); // <--- SALVA NO BANCO
-
-                closeModal('game-modal');
+                // Passar para a fase da memória
+                currentStage = 2;
+                document.getElementById('game-instruction').innerText = "Fase 2: Jogo da Memória das Profissões 🩺";
+                document.getElementById('puzzle-container').style.display = 'none';
+                initMemoryGame();
             }
+        }
+
+        // NOVO: Jogo da Memória
+        function initMemoryGame() {
+            const grid = document.getElementById('memory-grid');
+            grid.style.display = 'grid';
+            grid.innerHTML = '';
+            flippedCards = [];
+
+            const icons = ['⚖️', '🩺', '🏗️', '✈️', '🎨', '🚀'];
+            const deck = [...icons, ...icons].sort(() => Math.random() - 0.5);
+
+            deck.forEach((icon, index) => {
+                const card = document.createElement('div');
+                card.className = 'memory-card';
+                card.dataset.icon = icon;
+                card.dataset.index = index;
+                card.onclick = () => flipCard(card);
+                grid.appendChild(card);
+            });
+        }
+
+        function flipCard(card) {
+            if (flippedCards.length < 2 && !card.classList.contains('flipped')) {
+                card.classList.add('flipped');
+                card.innerText = card.dataset.icon;
+                flippedCards.push(card);
+
+                if (flippedCards.length === 2) {
+                    setTimeout(checkMemoryMatch, 800);
+                }
+            }
+        }
+
+        function checkMemoryMatch() {
+            const [card1, card2] = flippedCards;
+            if (card1.dataset.icon === card2.dataset.icon) {
+                card1.classList.add('matched');
+                card2.classList.add('matched');
+
+                // Verifica se ganhou o jogo todo
+                const allMatched = document.querySelectorAll('.memory-card.matched').length === 12;
+                if (allMatched) {
+                    finalizarDesafioTotal();
+                }
+            } else {
+                card1.classList.remove('flipped');
+                card2.classList.remove('flipped');
+                card1.innerText = '';
+                card2.innerText = '';
+            }
+            flippedCards = [];
+        }
+
+        function finalizarDesafioTotal() {
+            clearInterval(gameTimerInterval);
+            mostrarAviso("INCRÍVEL! 🏆", "Você venceu os dois desafios e ganhou +45 Minutos!", "🌟");
+            totalMinutes += 45;
+            document.getElementById('total-min').innerText = totalMinutes;
+            gravarTudoInstantaneo();
+            closeModal('game-modal');
         }
 
         function startGameTimer() {
@@ -3500,11 +3611,12 @@
 
     <div id="game-modal" class="modal">
         <div class="modal-content">
-            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">🧩 Desafio da Malu</h2>
-            <p>Monte o quebra-cabeça para ganhar 45min!</p>
+            <h2 style="font-family: 'Fredoka One'; color: var(--purple);">🧠 Desafio Inteligente</h2>
+            <p id="game-instruction">Fase 1: Monte o Quebra-Cabeça (10 peças)</p>
             <div id="game-timer">15:00</div>
 
             <div id="puzzle-container"></div>
+            <div id="memory-grid" style="display:none;"></div>
 
             <div style="margin-top: 15px;">
                 <button class="btn" style="background:var(--dark-pink)" onclick="desistirJogo()">Desistir
