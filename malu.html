@@ -1139,10 +1139,7 @@
             color: white !important;
         }
 
-        .btn-tetris {
-            background: var(--purple) !important;
-            color: white !important;
-        }
+
 
         /* Estilos dos novos jogos */
         #snake-canvas,
@@ -1282,6 +1279,35 @@
             top: 55px;
             right: 0;
         }
+
+        .ranking-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+            border-left: 5px solid var(--purple);
+        }
+
+        .ranking-pos {
+            font-weight: bold;
+            color: var(--purple);
+            width: 40px;
+        }
+
+        .ranking-name {
+            flex: 1;
+            font-weight: 600;
+            color: #444;
+        }
+
+        .ranking-score {
+            font-family: 'Fredoka One', cursive;
+            color: var(--dark-pink);
+        }
     </style>
 </head>
 
@@ -1387,9 +1413,6 @@
                 🐍 Jogo da Sogra
             </button>
 
-            <button class="btn btn-tetris" onclick="abrirTetrisGame()">
-                🧱 Tetris Master
-            </button>
         </div>
 
         <div class="reading-shelf">
@@ -3938,7 +3961,17 @@
         }
 
         function changeDir(nx, ny) {
-            if ((nx === -dx && nx !== 0) || (ny === -dy && ny !== 0)) return;
+            // Impede que a cobra vire 180 graus sobre si mesma
+            const indoParaEsquerda = dx === -10;
+            const indoParaDireita = dx === 10;
+            const indoParaCima = dy === -10;
+            const indoParaBaixo = dy === 10;
+
+            if (nx === 10 && indoParaEsquerda) return;
+            if (nx === -10 && indoParaDireita) return;
+            if (ny === 10 && indoParaCima) return;
+            if (ny === -10 && indoParaBaixo) return;
+
             dx = nx;
             dy = ny;
         }
@@ -4028,62 +4061,6 @@
         });
 
 
-
-
-        let tetrisInterval, tetrisCanvas, tetrisCtx, board, piece, tetrisScore;
-
-        function abrirTetrisGame() {
-            let modal = document.getElementById('tetris-modal');
-            if (!modal) {
-                const html = `
-                <div id="tetris-modal" class="modal">
-                    <div class="modal-content" style="background: #2c3e50; border-color: #7d5fff;">
-                        <span class="close-popup" onclick="fecharTetris()">×</span>
-                        <h2 style="font-family:'Fredoka One'; color:#a2d2ff">🧱 TETRIS MASTER</h2>
-                        <div class="game-score" style="color: #fff;">Score: <span id="tetris-score">0</span></div>
-                        
-                        <canvas id="tetris-canvas" width="200" height="360" style="border: 4px solid #34495e;"></canvas>
-
-                        <div class="game-controller">
-                            <div class="d-pad">
-                                <button class="pad-btn up" onclick="rotateTetris()">🔄</button>
-                                <button class="pad-btn left" onclick="moveTetris(-1)">⬅️</button>
-                                <button class="pad-btn right" onclick="moveTetris(1)">➡️</button>
-                                <button class="pad-btn down" onclick="dropTetris()">⬇️</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-                document.body.insertAdjacentHTML('beforeend', html);
-            }
-            document.getElementById('tetris-modal').style.display = 'flex';
-            initTetris();
-        }
-
-        // Funções de movimentação que você deve adicionar
-        function moveTetris(dir) {
-            piece.pos.x += dir;
-            if (collide()) piece.pos.x -= dir;
-            drawTetris();
-        }
-
-        function rotateTetris() {
-            const pos = piece.pos.x;
-            let offset = 1;
-            rotate(piece.matrix);
-            while (collide()) {
-                piece.pos.x += offset;
-                offset = -(offset + (offset > 0 ? 1 : -1));
-                if (offset > piece.matrix[0].length) {
-                    rotate(piece.matrix, -1);
-                    piece.pos.x = pos;
-                    return;
-                }
-            }
-            drawTetris();
-        }
-
-
         function dropTetris() {
             piece.pos.y++;
             if (collide()) {
@@ -4106,15 +4083,6 @@
             else matrix.reverse();
         }
 
-        // Ouvir teclado para Desktop
-        document.addEventListener('keydown', e => {
-            if (document.getElementById('tetris-modal')?.style.display === 'flex') {
-                if (e.key === "ArrowLeft") moveTetris(-1);
-                if (e.key === "ArrowRight") moveTetris(1);
-                if (e.key === "ArrowDown") dropTetris();
-                if (e.key === "ArrowUp") rotateTetris();
-            }
-        });
 
 
 
@@ -4383,33 +4351,32 @@
             const lista = document.getElementById('ranking-lista');
             lista.innerHTML = "Carregando campeãs... ⏳";
 
-            // Busca todos os usuários e seus recordes
             const { data: usuarios, error } = await supabaseClient
                 .from('usuarios_malu')
                 .select('nome, dados_progresso');
 
             if (error) return lista.innerHTML = "Erro ao carregar.";
 
-            // Mapeia e ordena do maior para o menor
-            // Dentro da função renderizarRanking(jogo)
             const ranking = usuarios
                 .map(u => ({
                     nome: u.nome,
-                    // Busca o recorde dentro do objeto que você me mostrou
                     score: (u.dados_progresso && u.dados_progresso.recordes && u.dados_progresso.recordes[jogo]) || 0
                 }))
-                .sort((a, b) => b.score - a.score); // Ordena do maior para o menor
+                .sort((a, b) => b.score - a.score);
 
-            lista.innerHTML = "";
+            lista.innerHTML = ""; // Limpa o conteúdo antes de adicionar os itens novos
+
             ranking.forEach((user, index) => {
                 const medalha = index === 0 ? "🥇" : (index === 1 ? "🥈" : (index === 2 ? "🥉" : ""));
-                lista.innerHTML += `
-                    < div class="ranking-item" >
-                <span class="ranking-pos">${index + 1}º</span>
-                <span class="ranking-name">${user.nome} ${medalha}</span>
-                <span class="ranking-score">${user.score} pts</span>
-            </div >
-                    `;
+
+                const item = document.createElement('div');
+                item.className = 'ranking-item';
+                item.innerHTML = `
+            <span class="ranking-pos">${index + 1}º</span>
+            <span class="ranking-name">${user.nome} ${medalha}</span>
+            <span class="ranking-score">${user.score} pts</span>
+        `;
+                lista.appendChild(item);
             });
         }
 
@@ -4436,6 +4403,46 @@
                 navigator.vibrate(tempo);
             }
         }
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+
+        // Registra onde o toque começou
+        document.addEventListener('touchstart', e => {
+            touchStartX = e.changedTouches[0].screenX;
+            touchStartY = e.changedTouches[0].screenY;
+        }, { passive: false });
+
+        // Identifica a direção quando o dedo se move
+        document.addEventListener('touchmove', e => {
+            if (!touchStartX || !touchStartY) return;
+
+            let touchEndX = e.changedTouches[0].screenX;
+            let touchEndY = e.changedTouches[0].screenY;
+
+            let diffX = touchStartX - touchEndX;
+            let diffY = touchStartY - touchEndY;
+
+            // Verifica se o movimento foi horizontal ou vertical
+            if (Math.abs(diffX) > Math.abs(diffY)) {
+                // Movimento Horizontal
+                if (diffX > 0) changeDir(-10, 0); // Esquerda
+                else changeDir(10, 0);            // Direita
+            } else {
+                // Movimento Vertical
+                if (diffY > 0) changeDir(0, -10); // Cima
+                else changeDir(0, 10);            // Baixo
+            }
+
+            // Reseta para a próxima detecção
+            touchStartX = touchEndX;
+            touchStartY = touchEndY;
+
+            // Impede o scroll da página enquanto joga
+            if (document.getElementById('snake-modal').style.display === 'flex') {
+                e.preventDefault();
+            }
+        }, { passive: false });
 
     </script>
 
