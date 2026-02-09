@@ -1227,6 +1227,61 @@
                 display: none;
             }
         }
+
+        .game-controller {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .d-pad {
+            position: relative;
+            width: 160px;
+            height: 160px;
+        }
+
+        .pad-btn {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: #4b4b4b;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 1.5rem;
+            box-shadow: 0 4px #222;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pad-btn:active {
+            box-shadow: 0 0 #222;
+            transform: translateY(4px);
+        }
+
+        .up {
+            top: 0;
+            left: 55px;
+            background: #7d5fff;
+        }
+
+        .down {
+            bottom: 0;
+            left: 55px;
+        }
+
+        .left {
+            top: 55px;
+            left: 0;
+        }
+
+        .right {
+            top: 55px;
+            right: 0;
+        }
     </style>
 </head>
 
@@ -3882,11 +3937,10 @@
             initSnake();
         }
 
-        function changeDir(newDx, newDy) {
-            // Impede a cobra de voltar para dentro de si mesma
-            if ((newDx === -dx) || (newDy === -dy)) return;
-            dx = newDx;
-            dy = newDy;
+        function changeDir(nx, ny) {
+            if ((nx === -dx && nx !== 0) || (ny === -dy && ny !== 0)) return;
+            dx = nx;
+            dy = ny;
         }
 
         function initSnake() {
@@ -3983,17 +4037,20 @@
             if (!modal) {
                 const html = `
                 <div id="tetris-modal" class="modal">
-                    <div class="modal-content" style="max-height: 98vh;">
+                    <div class="modal-content" style="background: #2c3e50; border-color: #7d5fff;">
                         <span class="close-popup" onclick="fecharTetris()">×</span>
-                        <h2 style="font-family:'Fredoka One'; color:var(--purple); margin:0;">🧱 Tetris Master</h2>
-                        <div class="game-score">Score: <span id="tetris-score">0</span></div>
-                        <canvas id="tetris-canvas" width="200" height="360"></canvas>
+                        <h2 style="font-family:'Fredoka One'; color:#a2d2ff">🧱 TETRIS MASTER</h2>
+                        <div class="game-score" style="color: #fff;">Score: <span id="tetris-score">0</span></div>
                         
-                        <div class="mobile-controls">
-                            <div style="grid-column: 2;"><button class="ctrl-btn" onclick="rotateTetris()">🔄</button></div>
-                            <button class="ctrl-btn" onclick="moveTetris(-1)">⬅️</button>
-                            <button class="ctrl-btn" onclick="dropTetris()">⬇️</button>
-                            <button class="ctrl-btn" onclick="moveTetris(1)">➡️</button>
+                        <canvas id="tetris-canvas" width="200" height="360" style="border: 4px solid #34495e;"></canvas>
+
+                        <div class="game-controller">
+                            <div class="d-pad">
+                                <button class="pad-btn up" onclick="rotateTetris()">🔄</button>
+                                <button class="pad-btn left" onclick="moveTetris(-1)">⬅️</button>
+                                <button class="pad-btn right" onclick="moveTetris(1)">➡️</button>
+                                <button class="pad-btn down" onclick="dropTetris()">⬇️</button>
+                            </div>
                         </div>
                     </div>
                 </div>`;
@@ -4061,19 +4118,23 @@
 
 
 
-        function initTetris() {
-            const canvas = document.getElementById('tetris-canvas');
-            const ctx = canvas.getContext('2d');
-            const scale = 20;
+        const COLORS = [null, '#FF0D72', '#0DC2FF', '#0DFF72', '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'];
 
-            // Cria tabuleiro 10x18
+        function initTetris() {
+            tetrisCanvas = document.getElementById('tetris-canvas');
+            tetrisCtx = tetrisCanvas.getContext('2d');
+            tetrisCtx.scale(20, 20); // Escala para facilitar o desenho das peças
+
             board = Array.from({ length: 18 }, () => Array(10).fill(0));
             tetrisScore = 0;
             document.getElementById('tetris-score').innerText = "0";
 
             newPiece();
             if (tetrisInterval) clearInterval(tetrisInterval);
-            tetrisInterval = setInterval(updateTetris, 500);
+            tetrisInterval = setInterval(() => {
+                dropTetris();
+            }, 1000);
+            drawTetris();
         }
 
         function newPiece() {
@@ -4127,14 +4188,35 @@
         }
 
         function drawTetris() {
+            // Limpa o fundo
             tetrisCtx.fillStyle = "#1a1a2e";
-            tetrisCtx.fillRect(0, 0, 200, 400);
-            board.forEach((row, y) => row.forEach((val, x) => {
-                if (val) { tetrisCtx.fillStyle = val; tetrisCtx.fillRect(x * 20, y * 20, 19, 19); }
-            }));
-            piece.matrix.forEach((row, y) => row.forEach((val, x) => {
-                if (val) { tetrisCtx.fillStyle = piece.color; tetrisCtx.fillRect((x + piece.pos.x) * 20, (y + piece.pos.y) * 20, 19, 19); }
-            }));
+            tetrisCtx.fillRect(0, 0, tetrisCanvas.width, tetrisCanvas.height);
+
+            // Desenha o tabuleiro
+            board.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        tetrisCtx.fillStyle = COLORS[value];
+                        tetrisCtx.fillRect(x, y, 1, 1);
+                        tetrisCtx.strokeStyle = 'white';
+                        tetrisCtx.lineWidth = 0.05;
+                        tetrisCtx.strokeRect(x, y, 1, 1);
+                    }
+                });
+            });
+
+            // Desenha a peça atual
+            piece.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        tetrisCtx.fillStyle = COLORS[piece.color];
+                        tetrisCtx.fillRect(x + piece.pos.x, y + piece.pos.y, 1, 1);
+                        tetrisCtx.strokeStyle = 'white';
+                        tetrisCtx.lineWidth = 0.05;
+                        tetrisCtx.strokeRect(x + piece.pos.x, y + piece.pos.y, 1, 1);
+                    }
+                });
+            });
         }
 
         function merge() {
@@ -4322,12 +4404,12 @@
             ranking.forEach((user, index) => {
                 const medalha = index === 0 ? "🥇" : (index === 1 ? "🥈" : (index === 2 ? "🥉" : ""));
                 lista.innerHTML += `
-            <div class="ranking-item">
+                    < div class="ranking-item" >
                 <span class="ranking-pos">${index + 1}º</span>
                 <span class="ranking-name">${user.nome} ${medalha}</span>
                 <span class="ranking-score">${user.score} pts</span>
-            </div>
-        `;
+            </div >
+                    `;
             });
         }
 
@@ -4743,9 +4825,9 @@
             mapeamento.forEach(item => {
                 const elementos = document.querySelectorAll(item.seletor);
                 if (elementos.length > 0) {
-                    console.log(`✅ %c${item.nome}:%c ${elementos.length} encontrado(s).`, "font-weight: bold;", "color: green;");
+                    console.log(`✅ % c${item.nome}:% c ${elementos.length} encontrado(s).`, "font-weight: bold;", "color: green;");
                 } else {
-                    console.error(`❌ %c${item.nome}:%c Não encontrado na página!`, "font-weight: bold;", "color: red;");
+                    console.error(`❌ % c${item.nome}:% c Não encontrado na página!`, "font-weight: bold;", "color: red;");
                 }
             });
 
