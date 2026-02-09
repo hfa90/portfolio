@@ -1,0 +1,2910 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hayden Estacionamentos | Gestão HYD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const _supabase = supabase.createClient('https://rwrlhccfltspvqwivuem.supabase.co/', 'sb_publishable_ybAZuMlyoJkPC0g4dRWvfg_IGj0Z7MG');
+    </script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Overpass+Mono:wght@700&family=Overpass:wght@300;400;600;800;900&display=swap"
+        rel="stylesheet">
+    <style>
+        /* Força visual de caixa alta em todos os inputs */
+        input {
+            text-transform: uppercase;
+        }
+
+        body {
+            font-family: 'Overpass', sans-serif;
+        }
+
+        /* Fonte específica para placas e valores financeiros */
+        .font-mono,
+        input#placa,
+        input#input-placa-busca,
+        .text-emerald-600 {
+            font-family: 'Overpass Mono', monospace !important;
+            letter-spacing: -0.05em;
+        }
+
+        #input-placa-busca {
+            letter-spacing: 0.15em;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .toast-active {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            #print-section,
+            #print-section * {
+                visibility: visible;
+            }
+
+            #print-section {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+
+        @keyframes pulse-green {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        .active-dot {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: pulse-green 2s infinite;
+        }
+
+        /* Scrollbar personalizada e elegante */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        /* Garante que o cabeçalho fixo não suma com o fundo */
+        thead.sticky th {
+            background: #f8fafc;
+            /* Mesma cor do fundo da tabela */
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+
+        /* Classes de status para o tempo */
+        .status-normal {
+            color: #10b981;
+        }
+
+        /* Verde */
+        .status-alerta {
+            color: #f59e0b;
+        }
+
+        /* Laranja */
+        .status-critico {
+            color: #ef4444;
+        }
+
+        /* Vermelho */
+
+        #placa.border-rose-500 {
+            border-width: 2px !important;
+            animation: shake 0.5s;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        @keyframes pulse-red-border {
+            0% {
+                border-color: #e11d48;
+                box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.7);
+            }
+
+            70% {
+                border-color: #fb7185;
+                box-shadow: 0 0 0 20px rgba(225, 29, 72, 0);
+            }
+
+            100% {
+                border-color: #e11d48;
+                box-shadow: 0 0 0 0 rgba(225, 29, 72, 0);
+            }
+        }
+
+        #modalAlertaInadimplente .animate-pulse {
+            animation: pulse-red-border 1.5s infinite;
+        }
+
+        .animate-pulse-amber {
+            animation: pulse-amber-border 1.5s infinite;
+        }
+
+        .animate-pulse-green-border {
+            animation: pulse-green-border 1.5s infinite;
+        }
+
+        @keyframes pulse-amber-border {
+            0% {
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+            }
+
+            70% {
+                border-color: #fbbf24;
+                box-shadow: 0 0 0 20px rgba(245, 158, 11, 0);
+            }
+
+            100% {
+                border-color: #f59e0b;
+                box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+            }
+        }
+
+        @keyframes pulse-green-border {
+            0% {
+                border-color: #10b981;
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+            }
+
+            70% {
+                border-color: #34d399;
+                box-shadow: 0 0 0 20px rgba(16, 185, 129, 0);
+            }
+
+            100% {
+                border-color: #10b981;
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+            }
+        }
+
+        /* Animações de Fade para o Modal */
+        .modal-overlay {
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+
+        .modal-content-box {
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s ease;
+        }
+
+        /* Estado de fechamento (suave) */
+        .modal-hidden {
+            opacity: 0 !important;
+            visibility: hidden !important;
+            pointer-events: none;
+        }
+
+        .modal-scale-down {
+            transform: scale(0.9) !important;
+            opacity: 0 !important;
+        }
+    </style>
+</head>
+
+<body class="bg-[#f8fafc] text-slate-900 min-h-screen">
+    <div id="toast"
+        class="fixed top-5 right-5 z-[3000] transform translate-y-[-20px] opacity-0 transition-all duration-300 pointer-events-none">
+        <div
+            class="bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-slate-700">
+            <div id="toast-icon" class="text-emerald-400"></div>
+            <p id="toast-message" class="font-medium text-sm"></p>
+        </div>
+    </div>
+
+    <div id="auth-container" class="fixed inset-0 bg-slate-900 z-[2000] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-10 shadow-2xl animate-in zoom-in-95 duration-300">
+            <div class="text-center mb-8">
+                <h2 class="text-3xl font-black text-slate-800">Hayden<span class="text-indigo-600">Parking</span></h2>
+                <p id="auth-title" class="text-slate-400 text-sm font-medium uppercase tracking-widest">Login de
+                    Parceiro</p>
+            </div>
+            <div class="space-y-4">
+                <input type="email" id="auth-email" placeholder="E-mail"
+                    class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none">
+                <input type="password" id="auth-password" placeholder="Senha"
+                    class="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none">
+                <button onclick="handleAuthAction()" id="btn-auth-submit"
+                    class="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black shadow-lg transition-all">
+                    ENTRAR NO SISTEMA
+                </button>
+                <button onclick="toggleAuthMode()" id="btn-toggle-auth"
+                    class="w-full text-xs text-slate-400 font-bold uppercase tracking-widest pt-4">
+                    Não tem conta? Cadastre seu Estacionamento
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row min-h-screen">
+
+        <aside class="w-full lg:w-72 bg-slate-900 text-white p-6 flex flex-col">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="bg-indigo-500 p-2.5 rounded-xl"><i data-lucide="shield-check" class="w-6 h-6"></i></div>
+                <h1 class="text-xl font-bold">Hayden<span class="text-indigo-400">Parking</span></h1>
+            </div>
+
+            <nav class="flex-1 space-y-1.5">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard"
+                    class="w-full flex items-center gap-3 bg-white/10 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="layout-dashboard" class="w-5 h-5 text-indigo-400"></i> Pátio Ativo
+                </button>
+                <button onclick="switchTab('agendamentos')" id="nav-agendamentos"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="calendar-days" class="w-5 h-5"></i> Agendamentos
+                </button>
+                <button onclick="switchTab('servicos')" id="nav-servicos"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="shopping-cart" class="w-5 h-5"></i> Catálogo/Estoque
+                </button>
+                <button onclick="switchTab('historico')" id="nav-historico"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="history" class="w-5 h-5"></i> Histórico
+                </button>
+                <button onclick="toggleModal('modalConfig')"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="settings" class="w-5 h-5"></i> Configurações
+                </button>
+                <button onclick="switchTab('mensalistas')" id="nav-mensalistas"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="users" class="w-5 h-5"></i> Mensalistas
+                </button>
+                <button onclick="switchTab('insights')" id="nav-insights"
+                    class="w-full flex items-center gap-3 text-slate-400 p-3.5 rounded-xl transition-all">
+                    <i data-lucide="line-chart" class="w-5 h-5"></i> Insights & BI
+                </button>
+
+                <div class="pt-4 mt-4 border-t border-white/10">
+                    <button onclick="handleLogout()"
+                        class="w-full flex items-center gap-3 text-rose-400 hover:bg-rose-500/10 p-3.5 rounded-xl transition-all font-bold">
+                        <i data-lucide="log-out" class="w-5 h-5"></i> Sair do Sistema
+                    </button>
+                </div>
+            </nav>
+
+            <div class="mb-6 px-4 py-3 bg-white/5 rounded-2xl border border-white/10 text-center">
+                <p class="text-[10px] uppercase font-bold text-slate-500 mb-1">Hora Atual</p>
+                <div id="sidebar-clock" class="text-3xl font-bold text-indigo-400 font-mono tracking-widest">00:00:00
+                </div>
+            </div>
+
+            <div class="mt-auto bg-indigo-500/10 rounded-2xl p-4 border border-indigo-500/20">
+                <p class="text-[10px] uppercase font-bold text-indigo-400 mb-2">Ocupação</p>
+                <div class="w-full bg-slate-800 rounded-full h-2 mb-2">
+                    <div id="progressBar" class="bg-indigo-50 h-2 rounded-full transition-all"></div>
+                </div>
+                <p class="text-xs text-slate-400" id="progressText">Calculando...</p>
+            </div>
+        </aside>
+
+        <main class="flex-1 p-4 lg:p-10">
+            ```
+
+            <div class="mt-auto bg-indigo-500/10 rounded-2xl p-4 border border-indigo-500/20">
+                <div class="flex justify-between items-center mb-2">
+                    <p class="text-[10px] uppercase font-bold text-indigo-400">STATUS DO SISTEMA</p>
+                    <span id="licenca-timer"
+                        class="text-[9px] font-mono font-bold text-slate-500 italic">CARREGANDO...</span>
+                </div>
+                <div class="pt-2 border-t border-white/5 mt-2 flex justify-between items-center">
+                    <p class="text-[9px] text-slate-500 font-mono uppercase">ID MÁQUINA:</p>
+                    <p id="display-id-maquina" class="text-[9px] text-indigo-300 font-mono font-bold">--------</p>
+                </div>
+            </div>
+
+            </aside>
+
+            <main class="flex-1 p-4 lg:p-10">
+                <div id="tab-dashboard" class="tab-content active">
+                    <header class="flex justify-between items-center mb-10">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Pátio Ativo</h2>
+                            <p class="text-slate-500 text-sm">Monitoramento em tempo real.</p>
+                        </div>
+                        <div class="bg-white px-6 py-3 rounded-2xl shadow-sm border border-slate-200 text-right">
+                            <p class="text-[10px] uppercase font-bold text-slate-400">Caixa Total</p>
+                            <p class="text-xl font-bold text-emerald-600" id="totalFinanceiro">R$ 0,00</p>
+                        </div>
+                    </header>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div class="lg:col-span-4">
+                            <section class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                                <div class="flex justify-between items-center mb-6">
+                                    <h3 class="font-bold text-slate-800 uppercase text-xs tracking-widest">Registrar
+                                        Entrada
+                                    </h3>
+                                    <button onclick="toggleModoSupervisor()" id="btn-supervisor"
+                                        class="opacity-10 hover:opacity-100 text-slate-400 transition-all">
+                                        <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                                <div class="space-y-4">
+                                    <input type="text" id="modelo" placeholder="Modelo do Veículo"
+                                        class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all">
+                                    <input type="text" id="placa" maxlength="7" placeholder="PLACA"
+                                        oninput="this.value = this.value.toUpperCase(); verificarClienteInteligente(this.value, 'placa')"
+                                        class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-mono font-bold uppercase focus:ring-2 focus:ring-indigo-500 transition-all">
+
+                                    <input type="tel" id="telefone"
+                                        oninput="mascaraTelefone(this); verificarClienteInteligente(this.value, 'telefone')"
+                                        placeholder="(92) 9 9525-8724"
+                                        class="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono">
+                                    <button onclick="cadastrarVeiculo()"
+                                        class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-indigo-100 transition-all active:scale-95"><i
+                                            data-lucide="play" class="w-5 h-5"></i> Iniciar Tempo</button>
+                                </div>
+                            </section>
+                        </div>
+
+
+                        <div class="lg:col-span-8">
+                            <div class="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
+                                <div class="max-h-[600px] overflow-y-auto overflow-x-auto custom-scrollbar">
+                                    <table class="w-full text-left border-separate border-spacing-0">
+                                        <thead class="sticky top-0 z-20 text-slate-400 text-[10px] uppercase font-bold">
+                                            <tr>
+                                                <th class="px-6 py-4">Veículo</th>
+                                                <th class="px-6 py-4 text-center">Entrada</th>
+                                                <th class="px-6 py-4 text-center">Permanência</th>
+                                                <th class="px-6 py-4 text-center">Total Atual</th>
+                                                <th class="px-6 py-4 text-right">Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="patio" class="divide-y divide-slate-50">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
+                    <div class="mt-10 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div
+                            class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg flex items-center gap-5">
+                            <div class="bg-indigo-100 text-indigo-600 p-4 rounded-2xl"><i data-lucide="car"></i></div>
+                            <div>
+                                <p class="text-[10px] uppercase font-bold text-slate-400">Total em Vagas</p>
+                                <p id="resumo-vagas" class="text-xl font-black text-slate-800">R$ 0,00</p>
+                            </div>
+                        </div>
+                        <div
+                            class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg flex items-center gap-5">
+                            <div class="bg-emerald-100 text-emerald-600 p-4 rounded-2xl"><i
+                                    data-lucide="shopping-bag"></i>
+                            </div>
+                            <div>
+                                <p class="text-[10px] uppercase font-bold text-slate-400">Total em Extras</p>
+                                <p id="resumo-produtos" class="text-xl font-black text-slate-800">R$ 0,00</p>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div id="tab-historico" class="tab-content">
+                    <header class="mb-10">
+                        <h2 class="text-2xl font-bold text-slate-800">Histórico de Saídas</h2>
+                        <p class="text-slate-500 text-sm">Registros de veículos que já deixaram o pátio.</p>
+                    </header>
+                    <div class="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-bold">
+                                <tr>
+                                    <th class="px-6 py-4">Veículo</th>
+                                    <th class="px-6 py-4">Entrada</th>
+                                    <th class="px-6 py-4">Saída</th>
+                                    <th class="px-6 py-4 text-center">Tempo Total</th>
+                                    <th class="px-6 py-4 text-right">Valor Pago</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lista-historico" class="divide-y divide-slate-50"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="tab-agendamentos" class="tab-content">
+                    <header class="mb-10">
+                        <h2 class="text-2xl font-bold text-slate-800">Agendamentos</h2>
+                    </header>
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div class="lg:col-span-4">
+                            <section class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                                <h3 class="font-bold text-slate-800 uppercase text-xs mb-6">Nova Reserva</h3>
+                                <div class="space-y-4">
+                                    <input type="text" id="agenda-modelo" placeholder="Modelo"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none">
+                                    <input type="text" id="agenda-placa" placeholder="Placa"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none uppercase font-mono">
+                                    <input type="datetime-local" id="agenda-data"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none">
+                                    <button onclick="agendarVeiculo()"
+                                        class="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl transition-all">Confirmar
+                                        Reserva</button>
+                                </div>
+                            </section>
+                        </div>
+                        <div class="lg:col-span-8">
+                            <table class="w-full bg-white rounded-[2rem] shadow-xl">
+                                <tbody id="lista-agendamentos"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-servicos" class="tab-content">
+                    <header class="mb-10">
+                        <h2 class="text-2xl font-bold text-slate-800">Catálogo & Estoque</h2>
+                    </header>
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div class="lg:col-span-4">
+                            <section class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                                <h3 class="font-bold text-slate-800 uppercase text-xs mb-6">Novo Item</h3>
+                                <div class="space-y-4">
+                                    <input type="text" id="serv-nome" placeholder="Ex: Lavagem"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none">
+                                    <input type="number" id="serv-preco" placeholder="Preço (R$)"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-bold">
+                                    <div class="bg-slate-50 p-4 rounded-2xl">
+                                        <label class="flex items-center gap-2 cursor-pointer mb-3"><input
+                                                type="checkbox" id="possui-estoque"
+                                                onchange="document.getElementById('campo-estoque').classList.toggle('hidden')"
+                                                class="w-5 h-5 accent-indigo-600"><span
+                                                class="text-sm font-medium text-slate-600">Controlar
+                                                Estoque?</span></label>
+                                        <div id="campo-estoque" class="hidden"><input type="number" id="serv-qtd"
+                                                placeholder="Qtd. em Estoque"
+                                                class="w-full p-3 bg-white border rounded-xl outline-none"></div>
+                                    </div>
+                                    <button onclick="cadastrarServicoCatalogo()"
+                                        class="w-full bg-emerald-600 text-white font-bold py-4 rounded-2xl shadow-lg transition-all">Salvar
+                                        Item</button>
+                                </div>
+                            </section>
+                        </div>
+                        <div class="lg:col-span-8">
+                            <div id="catalogo-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-mensalistas" class="tab-content">
+                    <header class="mb-10 flex justify-between items-end">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Gestão de Mensalistas</h2>
+                            <p class="text-slate-500 text-sm">Controle de planos e clientes recorrentes.</p>
+                        </div>
+                        <button onclick="switchTab('inadimplentes')"
+                            class="bg-rose-50 text-rose-600 px-6 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-rose-600 hover:text-white transition-all flex items-center gap-2 shadow-sm border border-rose-100">
+                            <i data-lucide="user-x" class="w-4 h-4"></i> Ver Inadimplentes
+                        </button>
+                    </header>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        <div class="lg:col-span-4">
+                            <section class="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                                <h3 class="font-bold text-slate-800 uppercase text-xs mb-6 tracking-widest">Novo
+                                    Mensalista
+                                </h3>
+                                <div class="space-y-4">
+                                    <input type="text" id="mens-nome" placeholder="Nome do Cliente"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none">
+                                    <input type="text" id="mens-placa" maxlength="7" placeholder="PLACA"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-mono font-bold uppercase">
+                                    <input type="tel" id="mens-telefone" oninput="mascaraTelefone(this)"
+                                        placeholder="(92) 9 9525-8724"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-mono">
+
+                                    <input type="text" id="mens-cpf" oninput="mascaraCPF(this)"
+                                        placeholder="000.000.000-00"
+                                        class="w-full p-4 bg-slate-50 border rounded-2xl outline-none font-mono">
+
+                                    <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                                        <label
+                                            class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 block">Quantidade
+                                            de Placas (Vagas)</label>
+                                        <div class="flex items-center gap-4">
+                                            <input type="number" id="mens-qtd-placas" value="1" min="1"
+                                                oninput="calcularPrevisaoMensalidade()"
+                                                class="w-20 bg-transparent outline-none font-bold text-indigo-900 text-xl">
+                                            <div class="flex-1 text-right">
+                                                <p class="text-[9px] text-slate-400 uppercase font-bold">Valor do Plano
+                                                </p>
+                                                <p id="previzao-valor-mensal" class="text-indigo-600 font-black">R$ 0,00
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                                        <label
+                                            class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider mb-2 block">Vencimento
+                                            do Plano</label>
+                                        <input type="date" id="mens-vencimento"
+                                            class="w-full bg-transparent outline-none font-bold text-indigo-900">
+                                    </div>
+                                    <button onclick="salvarMensalista()"
+                                        class="w-full bg-indigo-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:bg-indigo-700 transition-all">Ativar
+                                        Plano</button>
+                                </div>
+                            </section>
+                        </div>
+
+                        <div class="lg:col-span-8">
+                            <div class="bg-white rounded-[2rem] shadow-xl border border-slate-100 overflow-hidden">
+                                <table class="w-full text-left border-separate border-spacing-0">
+                                    <thead class="bg-slate-50/50 text-slate-400 text-[10px] uppercase font-bold">
+                                        <tr>
+                                            <th class="px-6 py-4">Cliente / Placa</th>
+                                            <th class="px-6 py-4 text-center">Vencimento</th>
+                                            <th class="px-6 py-4 text-center">Status</th>
+                                            <th class="px-6 py-4 text-right">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lista-mensalistas" class="divide-y divide-slate-50"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-inadimplentes" class="tab-content">
+                    <header class="mb-10">
+                        <h2 class="text-2xl font-bold text-slate-800">Relatório de Inadimplentes</h2>
+                        <p class="text-slate-500 text-sm">Mensalistas com atraso superior a 5 dias.</p>
+                    </header>
+
+                    <div class="bg-white rounded-[2rem] shadow-xl border border-rose-100 overflow-hidden">
+                        <table class="w-full text-left border-separate border-spacing-0">
+                            <thead class="bg-rose-50 text-rose-600 text-[10px] uppercase font-bold">
+                                <tr>
+                                    <th class="px-6 py-4">Mensalista</th>
+                                    <th class="px-6 py-4 text-center">Vencimento</th>
+                                    <th class="px-6 py-4 text-center">Dias de Atraso</th>
+                                    <th class="px-6 py-4 text-right">Ação Urgente</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lista-inadimplentes" class="divide-y divide-rose-50"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="tab-insights" class="tab-content">
+                    <header class="mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h2 class="text-2xl font-bold text-slate-800">Estatísticas & Performance</h2>
+                            <p class="text-slate-500 text-sm">Análise detalhada do faturamento e fluxo.</p>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                            <select id="filtro-mes"
+                                class="bg-slate-50 border-none rounded-xl px-4 py-2 text-xs font-bold outline-none">
+                                <option value="all">TODOS OS MESES</option>
+                                <option value="0">Janeiro</option>
+                                <option value="1">Fevereiro</option>
+                                <option value="2">Março</option>
+                                <option value="3">Abril</option>
+                                <option value="4">Maio</option>
+                                <option value="5">Junho</option>
+                                <option value="6">Julho</option>
+                                <option value="7">Agosto</option>
+                                <option value="8">Setembro</option>
+                                <option value="9">Outubro</option>
+                                <option value="10">Novembro</option>
+                                <option value="11">Dezembro</option>
+                            </select>
+                            <button onclick="gerarRelatorioFiltrado()"
+                                class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all">
+                                <i data-lucide="printer" class="w-3 h-3 inline mr-1"></i> Imprimir Mês
+                            </button>
+                            <button onclick="gerarRelatorioAnualPDF()"
+                                class="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">
+                                <i data-lucide="file-text" class="w-3 h-3 inline mr-1"></i> Relatório Geral
+                            </button>
+                        </div>
+                    </header>
+
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+                        <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg">
+                            <p class="text-[10px] uppercase font-bold text-slate-400">Ticket Médio (Hoje)</p>
+                            <p id="bi-ticket-medio" class="text-2xl font-black text-indigo-600">R$ 0,00</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg">
+                            <p class="text-[10px] uppercase font-bold text-slate-400">Veículos (Mês)</p>
+                            <p id="bi-total-veiculos" class="text-2xl font-black text-slate-800">0</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg">
+                            <p class="text-[10px] uppercase font-bold text-slate-400">Previsão Mensalistas</p>
+                            <p id="bi-previsao-mensal" class="text-2xl font-black text-emerald-600">R$ 0,00</p>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-lg">
+                            <p class="text-[10px] uppercase font-bold text-slate-400">Pico de Hoje</p>
+                            <p id="bi-horario-pico" class="text-2xl font-black text-rose-600">--:00h</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                        <div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl">
+                            <div class="mb-6">
+                                <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Faturamento
+                                    Semanal
+                                </h3>
+                                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest italic">Últimos 7
+                                    dias
+                                    (Avulsos)</p>
+                            </div>
+                            <div class="h-[300px]"><canvas id="chartFaturamentoSemanal"></canvas></div>
+                        </div>
+
+                        <div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl">
+                            <div class="mb-6">
+                                <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Evolução Mensal
+                                </h3>
+                                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest italic">Arrecadação
+                                    acumulada por mês</p>
+                            </div>
+                            <div class="h-[300px]"><canvas id="chartFaturamentoMensal"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl">
+                        <div class="mb-6">
+                            <h3 class="text-xl font-black text-slate-800 uppercase tracking-tight">Fluxo de Entradas
+                            </h3>
+                            <p class="text-xs text-slate-400 font-bold uppercase tracking-widest italic">Picos de
+                                movimentação por hora (Hoje)</p>
+                        </div>
+                        <div class="h-[350px]"><canvas id="movimentacaoChart"></canvas></div>
+                    </div>
+                </div>
+
+
+            </main>
+    </div>
+
+    <div id="modalConfig" onclick="closeOnOutsideClick(event, 'modalConfig')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-8">
+            <h3 class="font-bold text-slate-800 text-xl mb-6">Configurações</h3>
+            <div class="space-y-4">
+                <div><label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Valor da Hora
+                        (R$)</label><input type="number" id="confValor"
+                        class="w-full p-4 bg-slate-50 border rounded-2xl font-bold text-indigo-600 outline-none transition-all">
+                </div>
+                <div><label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Vagas
+                        Totais</label><input type="number" id="confVagas"
+                        class="w-full p-4 bg-slate-50 border rounded-2xl font-bold outline-none"></div>
+                <div class="bg-indigo-50 p-4 rounded-2xl flex items-center justify-between border border-indigo-100">
+                    <div>
+                        <p class="text-sm font-bold text-indigo-900">Cobrança Proporcional</p>
+                        <p class="text-[10px] text-indigo-600 font-medium">Ativado: Minuto a minuto</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer"><input type="checkbox"
+                            id="confProporcional" class="sr-only peer">
+                        <div
+                            class="w-11 h-6 bg-slate-300 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600">
+                        </div>
+                    </label>
+                </div>
+
+
+                <div class="pt-4 border-t border-slate-100 mt-4">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3">Parâmetros de
+                        Mensalistas</p>
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-400 uppercase">Valor Mensal (R$)</label>
+                            <input type="number" id="confMensalValor"
+                                class="w-full p-3 bg-slate-50 border rounded-xl font-bold text-indigo-600 outline-none">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-slate-400 uppercase">Multa Diária (R$)</label>
+                            <input type="number" id="confMensalMulta"
+                                class="w-full p-3 bg-slate-50 border rounded-xl font-bold text-rose-600 outline-none">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-slate-400 uppercase">Limite de Placas por
+                            Cliente</label>
+                        <input type="number" id="confMensalPlacas"
+                            class="w-full p-3 bg-slate-50 border rounded-xl font-bold outline-none">
+                    </div>
+                </div>
+                <button onclick="salvarConfig()"
+                    class="w-full bg-slate-900 text-white font-bold py-4 rounded-2xl mt-4 shadow-lg active:scale-95 transition-all">Aplicar
+                    Configurações</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAddServico" onclick="closeOnOutsideClick(event, 'modalAddServico')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[120] hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl">
+            <h3 class="text-xl font-bold mb-4 tracking-tight">Lançar para: <span id="placa-servico-alvo"
+                    class="text-indigo-600"></span></h3>
+            <div id="opcoes-servicos" class="space-y-2 max-h-60 overflow-y-auto mb-6"></div>
+            <button onclick="toggleModal('modalAddServico')"
+                class="w-full py-4 bg-slate-100 font-bold rounded-2xl">Cancelar</button>
+        </div>
+    </div>
+
+    <div id="modalCheckout" onclick="closeOnOutsideClick(event, 'modalCheckout')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden">
+            <div class="p-8 text-center">
+                <div
+                    class="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="receipt" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-800 mb-2">Finalizar Checkout</h3>
+                <div id="checkout-details"
+                    class="text-slate-500 space-y-2 mb-8 bg-slate-50 p-4 rounded-2xl text-left font-medium"></div>
+                <div class="flex gap-3"><button onclick="toggleModal('modalCheckout')"
+                        class="flex-1 py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl">Voltar</button><button
+                        id="confirm-checkout-btn"
+                        class="flex-1 py-4 bg-indigo-600 text-white font-bold rounded-2xl">Confirmar Pagamento</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // INICIALIZAÇÃO DE DADOS (AGORA VIA SUPABASE)
+        let config = {
+            valorHora: 15.00,
+            tolerancia: 5,
+            vagasTotais: 15,
+            cobrancaProporcional: true,
+            mensalValor: 200.00,
+            mensalMulta: 5.00,
+            mensalLimitePlacas: 1
+        };
+        let catalogo = [];
+        let resumoVendas = { vagas: 0, produtos: 0 };
+        let mensalistas = [];
+        let historico = [];
+        let patioAtivo = [];
+        let agenda = []; // Adicione esta para os agendamentos
+        // Sons do sistema (Efeitos discretos)
+        const sfx = {
+            entrada: new Audio('https://www.soundjay.com/buttons/sounds/button-3.mp3'),
+            saida: new Audio('https://www.soundjay.com/buttons/sounds/button-10.mp3'),
+            sucesso: new Audio('https://www.soundjay.com/buttons/sounds/button-4.mp3')
+        };
+
+        function playSfx(tipo) {
+            sfx[tipo].currentTime = 0;
+            sfx[tipo].volume = 0.4;
+            sfx[tipo].play().catch(() => { }); // Evita erro se o navegador bloquear áudio sem interação
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').innerText = message;
+            const iconEl = document.getElementById('toast-icon');
+            iconEl.innerHTML = type === 'success' ? '<i data-lucide="check-circle-2"></i>' : '<i data-lucide="alert-circle"></i>';
+            iconEl.className = type === 'success' ? 'text-emerald-400' : 'text-rose-400';
+            lucide.createIcons();
+            toast.classList.add('toast-active');
+            setTimeout(() => toast.classList.remove('toast-active'), 3000);
+        }
+
+        function toggleModal(id) {
+            const m = document.getElementById(id);
+            m.classList.toggle('hidden');
+            m.classList.toggle('flex');
+            if (id === 'modalConfig') {
+                document.getElementById('confValor').value = config.valorHora;
+                document.getElementById('confVagas').value = config.vagasTotais;
+                document.getElementById('confProporcional').checked = config.cobrancaProporcional;
+                // Adicione dentro do if(id === 'modalConfig')
+                document.getElementById('confMensalValor').value = config.mensalValor || 200;
+                document.getElementById('confMensalMulta').value = config.mensalMulta || 5;
+                document.getElementById('confMensalPlacas').value = config.mensalLimitePlacas || 1;
+            }
+        }
+
+        function closeOnOutsideClick(event, modalId) { if (event.target.id === modalId) toggleModal(modalId); }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            document.querySelectorAll('nav button').forEach(b => b.classList.replace('bg-white/10', 'text-slate-400'));
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            if (activeBtn) activeBtn.classList.replace('text-slate-400', 'bg-white/10');
+
+            renderizar();
+
+            // ADICIONE ESTA LINHA AQUI:
+            if (tabId === 'dashboard') {
+                atualizarGrafico();
+            }
+        }
+
+        function calcularCobranca(veiculo) {
+            const entrada = new Date(veiculo.entrada);
+            const agora = new Date();
+            const diffMs = agora - entrada;
+            const diffSegundos = Math.floor(diffMs / 1000);
+            const diffMinutos = Math.floor(diffMs / 60000);
+
+            // VERIFICA SE É MENSALISTA ATIVO
+            const mensalista = mensalistas.find(m => m.placa === veiculo.placa);
+            const hoje = new Date().toISOString().split('T')[0];
+            const isMensalistaAtivo = mensalista && mensalista.vencimento >= hoje;
+
+            let valorTempo = 0;
+            // Se for mensalista ativo, o valor da vaga é ZERO
+            if (!isMensalistaAtivo && diffMinutos >= config.tolerancia) {
+                valorTempo = config.cobrancaProporcional ? (diffSegundos / 3600) * config.valorHora : Math.ceil(diffMinutos / 60) * config.valorHora;
+            }
+
+            const valorExtras = (veiculo.servicos || []).reduce((acc, s) => acc + s.preco, 0);
+            return {
+                horas: Math.floor(diffMinutos / 60),
+                minutos: diffMinutos % 60,
+                segundos: diffSegundos % 60,
+                valorTempo,
+                valorExtras,
+                total: valorTempo + valorExtras,
+                isMensalista: isMensalistaAtivo
+            };
+        }
+
+        async function removerMensalista(id) {
+            if (confirm("Deseja realmente excluir este mensalista permanentemente da nuvem?")) {
+                const { error } = await _supabase
+                    .from('mensalistas')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) return showToast("Erro ao excluir do banco!", "error");
+
+                await carregarDadosIniciais();
+                showToast("Registro removido com sucesso!");
+                renderizar();
+            }
+        }
+
+        let clienteParaCobrarGlobal = null;
+
+        function verificarClienteInteligente(valor, tipo) {
+            const termo = valor.toUpperCase();
+            if (termo.length < 3) return;
+
+            // 1. BUSCAR NO PÁTIO (AMARELO)
+
+            const noPatio = patio.find(v => tipo === 'placa' ? v.placa === termo : v.telefone === termo.replace(/\D/g, ''));
+
+            if (noPatio) {
+                document.getElementById('alerta-patio-modelo').innerText = noPatio.modelo;
+                document.getElementById('alerta-patio-hora').innerText = new Date(noPatio.entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                document.getElementById('modalAlertaNoPatio').classList.replace('hidden', 'flex');
+                playSfx('saida');
+                return; // Para aqui, não precisa checar mensalista
+            }
+
+            // 2. BUSCAR MENSALISTA
+            const mensalista = mensalistas.find(m =>
+                tipo === 'placa' ? m.placa === termo : (m.telefone && m.telefone.replace(/\D/g, '') === termo.replace(/\D/g, ''))
+            );
+
+            if (mensalista) {
+                const hoje = new Date();
+                const dataVenc = new Date(mensalista.vencimento);
+
+                if (dataVenc < hoje) {
+                    // VERMELHO: INADIMPLENTE
+                    const diffMs = hoje - dataVenc;
+                    const diasAtraso = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+                    const valorTotalDivida = (mensalista.valorPlano || config.mensalValor) + (diasAtraso * config.mensalMulta);
+
+                    clienteParaCobrarGlobal = { ...mensalista, diasAtraso };
+                    document.getElementById('alerta-nome').innerText = mensalista.nome;
+                    document.getElementById('alerta-valor').innerText = `R$ ${valorTotalDivida.toFixed(2)}`;
+                    document.getElementById('alerta-detalhe').innerText = `Vencido há ${diasAtraso} dias`;
+                    document.getElementById('modalAlertaInadimplente').classList.replace('hidden', 'flex');
+                    playSfx('saida');
+                } else {
+                    // VERDE: VIP EM DIA
+                    document.getElementById('alerta-vip-nome').innerText = mensalista.nome;
+                    document.getElementById('alerta-vip-placa').innerText = mensalista.placa;
+                    document.getElementById('alerta-vip-venc').innerText = `Vencimento: ${dataVenc.toLocaleDateString('pt-BR')}`;
+                    document.getElementById('modalAlertaVip').classList.replace('hidden', 'flex');
+                    playSfx('sucesso');
+
+                    // Auto-preenchimento
+                    if (tipo === 'placa') {
+                        document.getElementById('modelo').value = "MENSALISTA: " + mensalista.nome;
+                        document.getElementById('telefone').value = mensalista.telefone;
+                    }
+                }
+            }
+        }
+
+        // Função auxiliar para o botão do popup
+        function cobrarInadimplentePeloAlerta() {
+            if (clienteParaCobrarGlobal) {
+                cobrarInadimplente(clienteParaCobrarGlobal.id, clienteParaCobrarGlobal.diasAtraso);
+            }
+        }
+
+        async function cadastrarVeiculo() {
+            // 1. Definição do Pátio agora usa a variável global sincronizada com o banco
+            const patio = patioAtivo;
+            const mod = document.getElementById('modelo').value.toUpperCase();
+            const pla = document.getElementById('placa').value.toUpperCase();
+            const tel = document.getElementById('telefone').value.replace(/\D/g, '');
+
+            // Validações Básicas
+            if (patio.length >= config.vagasTotais) return showToast("Pátio sem vagas!", "error");
+            if (!mod || !pla) return showToast("Preencha Modelo e Placa!", "error");
+            if (patio.some(v => v.placa === pla)) return showToast("Este veículo já está no pátio!", "error");
+
+            // 2. BUSCA SE É MENSALISTA E VALIDA ATRASO (Usando a variável mensalistas carregada do banco)
+            const mensalista = mensalistas.find(m => m.placa === pla);
+            if (mensalista) {
+                const hoje = new Date();
+                const dataVenc = new Date(mensalista.vencimento);
+                const diffDias = Math.floor((hoje - dataVenc) / (1000 * 60 * 60 * 24));
+
+                // TRAVA DE SEGURANÇA COM BYPASS DO SUPERVISOR
+                if (diffDias > 10 && !modoSupervisorAtivo) {
+                    playSfx('saida');
+                    return alert(`🚨 ENTRADA BLOQUEADA!\n\nO mensalista ${mensalista.nome} está inadimplente há ${diffDias} dias.\n\nRegularize o plano ou ative o Modo Supervisor.`);
+                }
+
+                const carrosNoPatio = patio.filter(v => {
+                    const mVinculado = mensalistas.find(m => m.placa === v.placa);
+                    return mVinculado && mVinculado.nome === mensalista.nome;
+                }).length;
+
+                const limitePermitido = mensalista.limitePlacas || 1;
+
+                if (carrosNoPatio >= limitePermitido && !modoSupervisorAtivo) {
+                    playSfx('saida');
+                    return alert(`🚨 LIMITE ATINGIDO!\n\nO cliente ${mensalista.nome} já possui ${carrosNoPatio} veículo(s) no pátio.\nO plano contratado permite apenas ${limitePermitido} vaga(s) simultânea(s).`);
+                }
+            }
+
+            // 3. Objeto preparado para o banco (removido o id manual, o banco gerará o id)
+            const novoVeiculo = {
+                modelo: mod,
+                placa: pla,
+                telefone: tel,
+                entrada: new Date().toISOString(),
+                servicos: []
+            };
+
+            // --- INÍCIO DA COMUNICAÇÃO COM SUPABASE ---
+            // EXCLUÍDO: localStorage.setItem('park_pro_patio', ...)
+            const { data, error } = await _supabase
+                .from('veiculos_ativos')
+                .insert([novoVeiculo])
+                .select(); // O select() traz o ID gerado pelo banco para usarmos no ticket
+
+            if (error) {
+                console.error("Erro Supabase:", error);
+                return showToast("Erro ao salvar na nuvem!", "error");
+            }
+            // --- FIM DA COMUNICAÇÃO COM SUPABASE ---
+
+            // 4. Sincroniza o estado local com o que acabou de ser gravado
+            await carregarDadosIniciais();
+
+            // Limpeza de interface
+            document.getElementById('modelo').value = '';
+            document.getElementById('placa').value = '';
+            document.getElementById('telefone').value = '';
+            document.getElementById('modelo').focus();
+
+            playSfx('entrada');
+            showToast("Entrada registrada na nuvem!");
+            renderizar();
+            atualizarGrafico();
+
+            // Passamos o dado retornado do banco (data[0]) para garantir que o ticket tenha as infos corretas
+            prepararTicket(data[0]);
+        }
+
+
+        function openCheckoutModal(id) {
+            const v = patioAtivo.find(x => x.id === id); // Usa a variável global da nuvem
+            if (!v) return;
+
+            const info = calcularCobranca(v);
+
+            document.getElementById('checkout-details').innerHTML = `
+        <p><strong>Veículo:</strong> ${v.modelo} (${v.placa})</p>
+        <p><strong>Permanência:</strong> ${info.horas}h ${info.minutos}m ${info.segundos}s</p>
+        <div class="mt-4 pt-4 border-t border-slate-200">
+            <div class="flex justify-between text-sm"><span>Vaga:</span> <span>R$ ${info.valorTempo.toFixed(2)}</span></div>
+            <div class="flex justify-between text-sm"><span>Extras:</span> <span>R$ ${info.valorExtras.toFixed(2)}</span></div>
+            <p class="text-emerald-600 text-2xl font-black text-center mt-2">TOTAL: R$ ${info.total.toFixed(2)}</p>
+        </div>`;
+
+            document.getElementById('confirm-checkout-btn').onclick = async () => {
+                // 1. SALVAR NO HISTÓRICO DA NUVEM
+                const { error: errHist } = await _supabase.from('historico_saidas').insert([{
+                    modelo: v.modelo,
+                    placa: v.placa,
+                    entrada: v.entrada,
+                    saida: new Date().toISOString(),
+                    tempo: `${info.horas}h ${info.minutos}m`,
+                    valor: info.total
+                }]);
+
+                if (errHist) return showToast("Erro ao salvar histórico!", "error");
+
+                // 2. REMOVER DO PÁTIO NA NUVEM
+                const { error: errDel } = await _supabase.from('veiculos_ativos').delete().eq('id', id);
+
+                if (errDel) return showToast("Erro ao remover do pátio!", "error");
+
+                await carregarDadosIniciais(); // Recarrega tudo do banco
+                toggleModal('modalCheckout');
+                showToast("Pagamento confirmado e salvo na nuvem!");
+                renderizar();
+                prepararReciboSaida(v, info);
+            };
+
+            toggleModal('modalCheckout');
+        }
+
+        function renderizar() {
+            const patio = patioAtivo;
+            const containerPatio = document.getElementById('patio');
+            const totalHistorico = historico.reduce((acc, h) => acc + (h.valor || 0), 0);
+            document.getElementById('totalFinanceiro').innerText = `R$ ${totalHistorico.toFixed(2)}`;
+            document.getElementById('resumo-vagas').innerText = `R$ ${totalHistorico.toFixed(2)}`;
+            document.getElementById('resumo-produtos').innerText = `R$ 0,00`;
+
+            // Define a filtragem para evitar erro de referência
+            const searchQuery = document.getElementById('search-patio') ? document.getElementById('search-patio').value.toUpperCase() : '';
+            const patioFiltrado = patio.filter(v => v.placa.includes(searchQuery) || v.modelo.toUpperCase().includes(searchQuery));
+
+
+            // Desenha o Pátio Ativo (Limitado a 4 ou total)
+            const listaParaExibir = exibirTodosPatio ? patioFiltrado : patioFiltrado.slice(0, 4);
+
+            containerPatio.innerHTML = listaParaExibir.map(v => {
+                const info = calcularCobranca(v);
+                const totalMinutos = (info.horas * 60) + info.minutos;
+                let classeStatus = "status-normal";
+                if (totalMinutos > 360) classeStatus = "status-critico";
+                else if (totalMinutos > 120) classeStatus = "status-alerta";
+
+                const seloMensalista = info.isMensalista ? '<span class="ml-2 text-[8px] bg-indigo-600 text-white px-1.5 py-0.5 rounded-full uppercase font-black">Mensalista</span>' : '';
+
+                return `<tr class="group hover:bg-indigo-50/30 transition-all duration-300">
+            <td class="px-6 py-5"><div class="flex items-center gap-3"><div class="active-dot"></div><div><strong class="text-slate-800 text-lg">${v.modelo}</strong><br><span class="text-[11px] bg-slate-200 text-slate-700 px-2 py-0.5 rounded font-bold font-mono">${v.placa}</span></div></div></td>
+            <td class="px-6 py-5 text-center text-sm font-semibold text-slate-500">${new Date(v.entrada).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+            <td class="px-6 py-5 text-center font-black text-indigo-600 font-mono tracking-tighter ${classeStatus}">${info.horas}h ${info.minutos}m <span class="text-[10px] text-indigo-300">${info.segundos}s</span></td>
+            <td class="px-6 py-5 text-center font-black text-emerald-600 text-2xl tracking-tighter tabular-nums">R$ ${info.total.toFixed(2)}</td>
+            <td class="px-6 py-5 text-right flex gap-2 justify-end">
+                <button onclick="abrirModalServico(${v.id})" class="bg-indigo-50 text-indigo-700 border border-indigo-100 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all"><i data-lucide="plus-circle" class="w-4 h-4"></i></button>
+                <button onclick="openCheckoutModal(${v.id})" class="bg-rose-600 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">SAIR</button>
+            </td>
+        </tr>`;
+            }).join('');
+
+            renderizarBotaoVerTodos(patioFiltrado.length);
+
+            // Renderiza o Histórico se a aba estiver ativa
+            if (document.getElementById('tab-historico').classList.contains('active')) {
+                document.getElementById('lista-historico').innerHTML = historico.map(h => `
+            <tr>
+                <td class="px-6 py-4 font-bold">${h.modelo} <span class="text-[10px] bg-slate-100 px-1 ml-2">${h.placa}</span></td>
+                <td class="px-6 py-4 text-xs">${new Date(h.entrada).toLocaleString()}</td>
+                <td class="px-6 py-4 text-xs">${new Date(h.saida).toLocaleString()}</td>
+                <td class="px-6 py-4 text-center font-mono text-xs">${h.tempo}</td>
+                <td class="px-6 py-4 text-right font-bold text-emerald-600">R$ ${h.valor.toFixed(2)}</td>
+            </tr>
+        `).join('');
+            }
+
+            // Atualiza widgets e renderiza as demais abas
+            document.getElementById('resumo-vagas').innerText = `R$ ${resumoVendas.vagas.toFixed(2)}`;
+            document.getElementById('resumo-produtos').innerText = `R$ ${resumoVendas.produtos.toFixed(2)}`;
+            document.getElementById('totalFinanceiro').innerText = `R$ ${(resumoVendas.vagas + resumoVendas.produtos).toFixed(2)}`;
+            const perc = (patio.length / config.vagasTotais) * 100;
+            document.getElementById('progressBar').style.width = `${perc}%`;
+            document.getElementById('progressText').innerText = `${patio.length} de ${config.vagasTotais} vagas ocupadas`;
+
+            if (document.getElementById('tab-servicos').classList.contains('active')) renderCatalogo();
+            if (document.getElementById('tab-agendamentos').classList.contains('active')) renderAgenda();
+            if (document.getElementById('tab-mensalistas').classList.contains('active')) renderMensalistas();
+            if (document.getElementById('tab-mensalistas').classList.contains('active')) renderMensalistas();
+
+            // COLOQUE ESTA LINHA ABAIXO:
+            if (document.getElementById('tab-inadimplentes').classList.contains('active')) renderInadimplentes();
+            lucide.createIcons();
+        }
+
+        function renderizarBotaoVerTodos(total) {
+            let btn = document.getElementById('btn-ver-todos');
+            if (total <= 4) {
+                if (btn) btn.remove();
+                return;
+            }
+
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.id = 'btn-ver-todos';
+                btn.className = "w-full py-4 text-slate-400 text-[10px] font-bold uppercase tracking-widest hover:text-indigo-600 transition-colors border-t border-slate-50";
+                // Insere o botão logo após o fim da div de scroll da tabela
+                document.querySelector('.custom-scrollbar').after(btn);
+            }
+
+            btn.innerText = exibirTodosPatio ? "↑ Recolher lista" : `↓ Ver todos (${total} veículos)`;
+            btn.onclick = () => { exibirTodosPatio = !exibirTodosPatio; renderizar(); };
+        }
+
+        // FUNÇÕES DE SUPORTE
+        async function cadastrarServicoCatalogo() {
+            const n = document.getElementById('serv-nome'), p = document.getElementById('serv-preco'), c = document.getElementById('possui-estoque'), q = document.getElementById('serv-qtd');
+
+            const novoItem = {
+                nome: n.value,
+                preco: parseFloat(p.value),
+                estoque: c.checked ? parseInt(q.value) : -1
+            };
+
+            const { error } = await _supabase.from('catalogo').insert([novoItem]);
+
+            if (error) return showToast("Erro ao salvar item!", "error");
+
+            await carregarDadosIniciais();
+            showToast("Item salvo no catálogo online!");
+            renderizar();
+        }
+
+        function renderCatalogo() {
+            document.getElementById('catalogo-grid').innerHTML = catalogo.map(s => `<div class="bg-white p-4 rounded-2xl border flex justify-between items-center shadow-sm"><div><p class="font-bold text-slate-800">${s.nome}</p><p class="text-emerald-600 font-bold text-sm">R$ ${s.preco.toFixed(2)}</p><p class="text-[10px] font-bold ${s.estoque === 0 ? 'text-rose-500' : 'text-slate-400'} uppercase">${s.estoque === -1 ? 'Serviço' : `Estoque: ${s.estoque} un`}</p></div><button onclick="deletarItemCatalogo(${s.id})" class="text-slate-300 hover:text-rose-500 transition-all"><i data-lucide="trash-2" class="w-5 h-5"></i></button></div>`).join('');
+        }
+
+        function abrirModalServico(veiculoId) {
+
+            const v = patio.find(x => x.id === veiculoId);
+            document.getElementById('placa-servico-alvo').innerText = v.placa;
+            let html = catalogo.map(s => `<button onclick="lancarServicoNoVeiculo(${veiculoId}, ${s.id})" class="w-full flex justify-between p-4 bg-slate-50 hover:bg-indigo-50 rounded-xl border border-transparent hover:border-indigo-200 transition-all"><span class="font-bold">${s.nome}</span><span class="font-bold text-indigo-600">R$ ${s.preco.toFixed(2)}</span></button>`).join('');
+            document.getElementById('opcoes-servicos').innerHTML = html || '<p class="text-center text-slate-400 py-4">Catálogo vazio.</p>';
+            toggleModal('modalAddServico');
+        }
+
+        function lancarServicoNoVeiculo(veiculoId, servicoId) {
+
+            const vIndex = patio.findIndex(x => x.id === veiculoId);
+            const sIndex = catalogo.findIndex(s => s.id === servicoId);
+            const serv = catalogo[sIndex];
+            if (serv.estoque !== -1 && serv.estoque <= 0) return showToast("Produto esgotado!", "error");
+            if (serv.estoque !== -1) { catalogo[sIndex].estoque -= 1; localStorage.setItem('park_catalogo', JSON.stringify(catalogo)); }
+            if (!patio[vIndex].servicos) patio[vIndex].servicos = [];
+            patio[vIndex].servicos.push({ nome: serv.nome, preco: serv.preco });
+            localStorage.setItem('park_pro_patio', JSON.stringify(patio));
+            toggleModal('modalAddServico'); showToast("Item lançado!"); renderizar();
+        }
+
+        async function salvarConfig() {
+            const novosDados = {
+                valor_hora: parseFloat(document.getElementById('confValor').value),
+                vagas_totais: parseInt(document.getElementById('confVagas').value),
+                cobranca_proporcional: document.getElementById('confProporcional').checked,
+                mensal_valor: parseFloat(document.getElementById('confMensalValor').value)
+            };
+
+            // Atualiza a linha de configuração (assumindo ID 1 para o usuário)
+            const { error } = await _supabase.from('configuracoes').upsert([{ id: 1, ...novosDados }]);
+
+            if (error) return showToast("Erro ao salvar configurações!", "error");
+
+            await carregarDadosIniciais();
+            toggleModal('modalConfig');
+            showToast("Configurações sincronizadas!");
+        }
+
+
+
+        function zerarRelatorio() {
+            // Sugestão de backup antes de apagar
+            if (confirm("Deseja baixar um BACKUP de segurança antes de zerar o financeiro?")) {
+                exportarBackup();
+            }
+
+            if (confirm("Tem certeza que deseja ZERAR o financeiro e o histórico? Esta ação não pode ser desfeita.")) {
+                resumoVendas = { vagas: 0, produtos: 0 };
+                historico = [];
+                localStorage.setItem('park_resumo', JSON.stringify(resumoVendas));
+                localStorage.setItem('park_pro_historico', JSON.stringify(historico));
+                renderizar();
+                showToast("Sistema zerado com segurança!", "success");
+            }
+            if (confirm("Tem certeza que deseja ZERAR...")) {
+                // ... (limpeza do localStorage)
+                renderizar();
+                // Limpa o gráfico
+                atualizarGrafico();
+                showToast("Sistema zerado com segurança!", "success");
+            }
+        }
+
+        function deletarItemCatalogo(id) { catalogo = catalogo.filter(i => i.id !== id); localStorage.setItem('park_catalogo', JSON.stringify(catalogo)); renderizar(); }
+
+        async function iniciarDaReserva(id) {
+            const res = agenda.find(x => x.id === id);
+            if (!res) return;
+
+            if (patioAtivo.length >= config.vagas_totais) return showToast("Pátio lotado!", "error");
+
+            const novoVeiculo = {
+                modelo: res.modelo,
+                placa: res.placa,
+                entrada: new Date().toISOString(),
+                servicos: []
+            };
+
+            // 1. Insere no Pátio Ativo do Supabase
+            const { error: errInsert } = await _supabase.from('veiculos_ativos').insert([novoVeiculo]);
+            if (errInsert) return showToast("Erro ao iniciar entrada!", "error");
+
+            // 2. Remove do Agendamento do Supabase
+            const { error: errDel } = await _supabase.from('agendamentos').delete().eq('id', id);
+            if (errDel) return showToast("Erro ao remover reserva!", "error");
+
+            await carregarDadosIniciais(); // Atualiza a memória local com os dados da nuvem
+            switchTab('dashboard');
+            showToast("Entrada da reserva confirmada!");
+        }
+
+        async function agendarVeiculo() {
+            const mod = document.getElementById('agenda-modelo').value;
+            const pla = document.getElementById('agenda-placa').value.toUpperCase();
+            const data = document.getElementById('agenda-data').value;
+
+            if (!mod || !pla || !data) return showToast("Faltam dados!", "error");
+
+            const { error } = await _supabase.from('agendamentos').insert([{
+                modelo: mod,
+                placa: pla,
+                data_prevista: data
+            }]);
+
+            if (error) return showToast("Erro ao agendar!", "error");
+
+            await carregarDadosIniciais();
+            showToast("Reserva salva no banco de dados!");
+            renderizar();
+        }
+
+
+        function updateSidebarClock() { document.getElementById('sidebar-clock').innerText = new Date().toLocaleTimeString('pt-BR'); }
+
+
+        // Função para realizar o Login
+        async function handleLogin() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+            const btn = document.getElementById('btn-auth-submit');
+
+            if (!email || !password) return showToast("Preencha e-mail e senha!", "error");
+
+            btn.innerText = "CARREGANDO...";
+            btn.disabled = true;
+
+            // Tentativa de login no Supabase
+            const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                btn.innerText = "ENTRAR NO SISTEMA";
+                btn.disabled = false;
+                return alert("Erro no login: " + error.message);
+            }
+
+            // SE CHEGOU AQUI, O LOGIN FOI SUCESSO
+            showToast("Acesso autorizado!");
+
+            // Esconde a tela de login
+            document.getElementById('auth-container').classList.add('hidden');
+
+            // Carrega os dados do banco vinculados a este usuário
+            await carregarDadosIniciais();
+            renderizar();
+            lucide.createIcons();
+        }
+
+        // Função para encerrar a sessão no Supabase
+        async function handleLogout() {
+            if (confirm("Deseja realmente sair e encerrar sua sessão?")) {
+                const { error } = await _supabase.auth.signOut();
+
+                if (error) {
+                    return showToast("Erro ao sair: " + error.message, "error");
+                }
+
+                // Limpa os dados da memória e mostra a tela de login novamente
+                mensalistas = [];
+                historico = [];
+                patioAtivo = [];
+
+                document.getElementById('auth-container').classList.remove('hidden');
+                showToast("Sessão encerrada com sucesso!");
+
+                // Foca no campo de e-mail para o próximo acesso
+                document.getElementById('auth-email').value = '';
+                document.getElementById('auth-password').value = '';
+                document.getElementById('auth-email').focus();
+            }
+        }
+
+        // Verifica se o usuário já está logado ao abrir a página
+        async function checkUserSession() {
+            const { data: { user } } = await _supabase.auth.getUser();
+            if (user) {
+                document.getElementById('auth-container').classList.add('hidden');
+                await carregarDadosIniciais();
+                renderizar();
+            }
+        }
+
+
+        window.onload = async () => {
+            // 1. Verifica se tem sessão ativa primeiro
+            await checkUserSession();
+
+            // 2. Restante das inicializações de interface
+            setInterval(updateSidebarClock, 1000);
+            lucide.createIcons();
+
+            // Foco no campo de e-mail caso não esteja logado
+            if (!document.getElementById('auth-container').classList.contains('hidden')) {
+                document.getElementById('auth-email').focus();
+            }
+        };
+
+        async function carregarDadosIniciais() {
+            const { data: { user } } = await _supabase.auth.getUser();
+            if (!user) return;
+
+            // Busca os dados e substitui os valores das variáveis globais
+            const [resConf, resCat, resMens, resHist, resPatio, resAgenda] = await Promise.all([
+                _supabase.from('configuracoes').select('*').single(),
+                _supabase.from('catalogo').select('*'),
+                _supabase.from('mensalistas').select('*'),
+                _supabase.from('historico_saidas').select('*').order('saida', { ascending: false }),
+                _supabase.from('veiculos_ativos').select('*'),
+                _supabase.from('agendamentos').select('*')
+            ]);
+
+            // Se houver dados no banco, usamos eles. Se não, mantemos o padrão.
+            if (resConf.data) config = resConf.data;
+            catalogo = resCat.data || [];
+            mensalistas = resMens.data || [];
+            historico = resHist.data || [];
+            patioAtivo = resPatio.data || [];
+            agenda = resAgenda.data || [];
+        }
+
+
+        function buscarVeiculoPelaPlaca() {
+            const placaDigitada = document.getElementById('input-placa-busca').value.toUpperCase();
+            if (placaDigitada.length < 3) return;
+
+
+            const agenda = JSON.parse(localStorage.getItem('park_pro_agenda')) || [];
+
+            const veiculoNoPatio = patio.find(v => v.placa === placaDigitada);
+            const mensalista = mensalistas.find(m => m.placa === placaDigitada);
+            const agendado = agenda.find(a => a.placa === placaDigitada);
+
+            const boxResultado = document.getElementById('resultado-busca-placa');
+            const resModelo = document.getElementById('res-modelo');
+            const resTempo = document.getElementById('res-tempo');
+            const resValor = document.getElementById('res-valor');
+            const btnSair = document.getElementById('btn-sair-res');
+            const btnServ = document.getElementById('btn-add-serv-res');
+
+            // Resetar estilos de cor padrão
+            resValor.className = "text-2xl font-black text-emerald-600 tracking-tighter";
+            btnSair.innerText = "FINALIZAR (SAIR)";
+
+            // 1. PRIORIDADE: SE JÁ ESTIVER NO PÁTIO (Independente de ser mensalista ou avulso)
+            if (veiculoNoPatio) {
+                const info = calcularCobranca(veiculoNoPatio);
+                playSfx('sucesso');
+
+                resModelo.innerText = veiculoNoPatio.modelo;
+                resTempo.innerText = `TEMPO: ${info.horas}h ${info.minutos}m`;
+                resValor.innerText = `R$ ${info.total.toFixed(2)}`;
+
+                btnSair.onclick = () => { toggleModal('modalBuscaPlaca'); openCheckoutModal(veiculoNoPatio.id); };
+                btnServ.onclick = () => { toggleModal('modalBuscaPlaca'); abrirModalServico(veiculoNoPatio.id); };
+                btnServ.classList.remove('hidden');
+
+                boxResultado.classList.remove('hidden');
+                boxResultado.classList.add('flex');
+            }
+            // 2. SE FOR MENSALISTA (E NÃO ESTIVER NO PÁTIO AINDA)
+            else if (mensalista) {
+                const hoje = new Date();
+                const dataVenc = new Date(mensalista.vencimento);
+
+                // Se estiver vencido (Inadimplente)
+                if (dataVenc < hoje) {
+                    const diasAtraso = Math.ceil((hoje - dataVenc) / (1000 * 60 * 60 * 24));
+                    const valorDivida = (mensalista.valorPlano || config.mensalValor) + (diasAtraso * config.mensalMulta);
+
+                    resModelo.innerText = `MENSALISTA: ${mensalista.nome}`;
+                    resTempo.innerText = `VENCIDO HÁ ${diasAtraso} DIAS`;
+                    resValor.innerText = `R$ ${valorDivida.toFixed(2)}`;
+                    resValor.className = "text-2xl font-black text-rose-600 tracking-tighter";
+
+                    btnSair.innerText = "COBRAR WHATSAPP";
+                    btnSair.onclick = () => cobrarInadimplente(mensalista.id, diasAtraso);
+                    btnServ.classList.add('hidden');
+                }
+                // Se estiver em dia (VIP)
+                else {
+                    resModelo.innerText = `MENSALISTA: ${mensalista.nome}`;
+                    resTempo.innerText = `VENCE EM: ${dataVenc.toLocaleDateString('pt-BR')}`;
+                    resValor.innerText = "PLANO ATIVO";
+                    resValor.className = "text-2xl font-black text-indigo-600 tracking-tighter";
+
+                    btnSair.innerText = "INICIAR ENTRADA";
+                    btnSair.onclick = () => {
+                        toggleModal('modalBuscaPlaca');
+                        switchTab('dashboard');
+                        document.getElementById('placa').value = mensalista.placa;
+                        document.getElementById('modelo').value = "MENSALISTA: " + mensalista.nome;
+                        document.getElementById('telefone').value = mensalista.telefone || '';
+                        cadastrarVeiculo();
+                    };
+                    btnServ.classList.add('hidden');
+                }
+
+                boxResultado.classList.remove('hidden');
+                boxResultado.classList.add('flex');
+            }
+            // 3. SE ESTIVER AGENDADO
+            else if (agendado) {
+                resModelo.innerText = `RESERVA: ${agendado.modelo}`;
+                resTempo.innerText = `PARA: ${new Date(agendado.dataPrevista).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                resValor.innerText = "AGENDADO";
+
+                btnSair.innerText = "INICIAR ENTRADA";
+                btnSair.onclick = () => { toggleModal('modalBuscaPlaca'); iniciarDaReserva(agendado.id); };
+                btnServ.classList.add('hidden');
+
+                boxResultado.classList.remove('hidden');
+                boxResultado.classList.add('flex');
+            }
+            // 4. SE REALMENTE NÃO EXISTIR NO SISTEMA
+            else if (placaDigitada.length === 7) {
+                toggleModal('modalBuscaPlaca');
+                document.getElementById('span-nova-placa').innerText = placaDigitada;
+                toggleModal('modalDecisaoNovaPlaca');
+            }
+        }
+
+        // Funções de ponte para o novo modal
+        function prepararEntradaRapida() {
+            const placa = document.getElementById('span-nova-placa').innerText;
+            toggleModal('modalDecisaoNovaPlaca');
+            switchTab('dashboard');
+            document.getElementById('placa').value = placa;
+            document.getElementById('modelo').focus();
+            showToast("Informe o modelo para iniciar.");
+        }
+
+        function prepararAgendamentoRapido() {
+            const placa = document.getElementById('span-nova-placa').innerText;
+            toggleModal('modalDecisaoNovaPlaca');
+            switchTab('agendamentos');
+            document.getElementById('agenda-placa').value = placa;
+            document.getElementById('agenda-modelo').focus();
+        }
+
+        // Resetar o campo quando abrir o modal
+        const originalToggle = toggleModal;
+        toggleModal = function (id) {
+            originalToggle(id);
+            if (id === 'modalBuscaPlaca' && !document.getElementById(id).classList.contains('hidden')) {
+                document.getElementById('input-placa-busca').value = '';
+                document.getElementById('input-placa-busca').focus();
+                document.getElementById('resultado-busca-placa').classList.add('hidden');
+            }
+        }
+
+        // Atalho F2 para abrir a busca rápida
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'F2') {
+                e.preventDefault(); // Impede funções padrões do navegador
+                toggleModal('modalBuscaPlaca');
+            }
+        });
+
+        function prepararTicket(veiculo) {
+            const dataFormatada = new Date(veiculo.entrada).toLocaleString('pt-BR');
+            document.getElementById('info-veiculo-sucesso').innerText = `${veiculo.modelo} - ${veiculo.placa}`;
+
+            // CONFIGURAÇÃO DA IMPRESSÃO TÉRMICA
+            document.getElementById('btn-imprimir-ticket').onclick = () => {
+                const printSec = document.getElementById('print-section');
+
+                // Removemos a classe 'hidden' para o navegador "enxergar" o conteúdo antes de imprimir
+                printSec.classList.remove('hidden');
+
+                printSec.innerHTML = `
+            <div style="width: 80mm; padding: 5mm; font-family: 'Overpass Mono', monospace; color: #000; background: #fff;">
+                <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 10px;">
+                    <h2 style="margin: 0; font-size: 18px;">HAYDEN PARKING</h2>
+                    <p style="font-size: 10px; margin: 2px 0;">Controle de Acesso</p>
+                </div>
+                
+                <div style="text-align: center; font-size: 24px; font-weight: 900; margin: 10px 0;">
+                    ${veiculo.placa}
+                </div>
+                
+                <div style="font-size: 12px; line-height: 1.5;">
+                    <p><strong>MOD:</strong> ${veiculo.modelo}</p>
+                    <p><strong>DATA:</strong> ${dataFormatada}</p>
+                    <p><strong>VALOR HORA:</strong> R$ ${config.valorHora.toFixed(2)}</p>
+                </div>
+
+                <div style="text-align: center; border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; font-size: 9px;">
+                    NÃO SOMOS RESPONSÁVEIS POR OBJETOS DEIXADOS NO INTERIOR DO VEÍCULO.
+                </div>
+            </div>`;
+
+                window.print();
+
+                // Ocultamos novamente após enviar para a fila de impressão
+                setTimeout(() => printSec.classList.add('hidden'), 500);
+            };
+
+            // CONFIGURAÇÃO DO WHATSAPP DIRETO
+            document.getElementById('btn-whatsapp-ticket').onclick = () => {
+                const texto = `*TICKET DE ENTRADA - HAYDEN PARKING*\n\n` +
+                    `🚗 *Veículo:* ${veiculo.modelo}\n` +
+                    `🆔 *Placa:* ${veiculo.placa}\n` +
+                    `🕒 *Entrada:* ${dataFormatada}\n` +
+                    `💰 *Valor Hora:* R$ ${config.valorHora.toFixed(2)}\n\n` +
+                    `_Conserve este ticket para a sua saída._`;
+
+                const urlBase = veiculo.telefone
+                    ? `https://api.whatsapp.com/send?phone=55${veiculo.telefone}&text=${encodeURIComponent(texto)}`
+                    : `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
+
+                window.open(urlBase, '_blank');
+            };
+
+            toggleModal('modalSucessoEntrada');
+        }
+
+        function prepararReciboSaida(veiculo, info) {
+            const dataSaida = new Date().toLocaleString('pt-BR');
+            const dataEntrada = new Date(veiculo.entrada).toLocaleString('pt-BR');
+
+            document.getElementById('info-veiculo-saida').innerText = `${veiculo.modelo} - ${veiculo.placa}`;
+
+            // CONFIGURAÇÃO DA IMPRESSÃO TÉRMICA DE SAÍDA
+            document.getElementById('btn-imprimir-recibo').onclick = () => {
+                const printSec = document.getElementById('print-section');
+                printSec.classList.remove('hidden');
+
+                printSec.innerHTML = `
+            <div style="width: 80mm; padding: 5mm; font-family: 'Overpass Mono', monospace; color: #000; background: #fff;">
+                <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 10px;">
+                    <h2 style="margin: 0; font-size: 18px;">HAYDEN PARKING</h2>
+                    <p style="font-size: 10px; margin: 2px 0;">Recibo de Pagamento</p>
+                </div>
+                
+                <div style="text-align: center; font-size: 20px; font-weight: 900; margin: 10px 0;">
+                    ${veiculo.placa}
+                </div>
+                
+                <div style="font-size: 11px; line-height: 1.4;">
+                    <p><strong>ENTRADA:</strong> ${dataEntrada}</p>
+                    <p><strong>SAÍDA:</strong> ${dataSaida}</p>
+                    <p><strong>TEMPO:</strong> ${info.horas}h ${info.minutos}m</p>
+                    <hr style="border: 0; border-top: 1px dashed #000; margin: 10px 0;">
+                    <div style="display: flex; justify-content: space-between;"><span>VAGA:</span> <span>R$ ${info.valorTempo.toFixed(2)}</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>EXTRAS:</span> <span>R$ ${info.valorExtras.toFixed(2)}</span></div>
+                    <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 14px; margin-top: 5px;">
+                        <span>TOTAL PAGO:</span> <span>R$ ${info.total.toFixed(2)}</span>
+                    </div>
+                </div>
+
+                <div style="text-align: center; border-top: 1px dashed #000; margin-top: 10px; padding-top: 5px; font-size: 9px;">
+                    OBRIGADO PELA PREFERÊNCIA! VOLTE SEMPRE.
+                </div>
+            </div>`;
+
+                window.print();
+                setTimeout(() => printSec.classList.add('hidden'), 500);
+            };
+
+            // CONFIGURAÇÃO DO WHATSAPP DE SAÍDA
+            document.getElementById('btn-whatsapp-recibo').onclick = () => {
+                const texto = `*RECIBO DE PAGAMENTO - HAYDEN PARKING*\n\n` +
+                    `🚗 *Veículo:* ${veiculo.modelo} (${veiculo.placa})\n` +
+                    `🕒 *Entrada:* ${dataEntrada}\n` +
+                    `🕒 *Saída:* ${dataSaida}\n` +
+                    `⌛ *Permanência:* ${info.horas}h ${info.minutos}m\n` +
+                    `------------------------------\n` +
+                    `💰 *Valor Vaga:* R$ ${info.valorTempo.toFixed(2)}\n` +
+                    `➕ *Serviços/Extras:* R$ ${info.valorExtras.toFixed(2)}\n` +
+                    `✅ *TOTAL PAGO:* R$ ${info.total.toFixed(2)}\n\n` +
+                    `_Obrigado pela preferência!_`;
+
+                const urlBase = veiculo.telefone
+                    ? `https://api.whatsapp.com/send?phone=55${veiculo.telefone}&text=${encodeURIComponent(texto)}`
+                    : `https://api.whatsapp.com/send?text=${encodeURIComponent(texto)}`;
+
+                window.open(urlBase, '_blank');
+            };
+
+            toggleModal('modalSucessoSaida');
+        }
+
+        // Estado global para controlar a exibição da tabela
+        let exibirTodosPatio = false;
+
+        // MÁSCARA INTELIGENTE: (92) 9 9525-8724
+        function mascaraTelefone(input) {
+            let v = input.value.replace(/\D/g, ''); // Remove tudo que não é número
+            if (v.length > 11) v = v.slice(0, 11);
+
+            if (v.length <= 2) {
+                input.value = v.length > 0 ? `(${v}` : v;
+            } else if (v.length <= 3) {
+                input.value = `(${v.slice(0, 2)}) ${v.slice(2)}`;
+            } else if (v.length <= 7) {
+                input.value = `(${v.slice(0, 2)}) ${v.slice(2, 3)} ${v.slice(3)}`;
+            } else {
+                input.value = `(${v.slice(0, 2)}) ${v.slice(2, 3)} ${v.slice(3, 7)}-${v.slice(7)}`;
+            }
+        }
+
+
+        function exportarBackup() {
+            const dados = {
+                config: localStorage.getItem('park_config'),
+
+                catalogo: localStorage.getItem('park_catalogo'),
+                resumo: localStorage.getItem('park_resumo'),
+                historico: localStorage.getItem('park_pro_historico')
+            };
+            const blob = new Blob([JSON.stringify(dados)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `backup_hayden_${new Date().toLocaleDateString()}.json`;
+            a.click();
+            showToast("Backup baixado com sucesso!");
+        }
+
+        function exportarBackup() {
+            // Reúne todos os dados do sistema
+            const dadosParaBackup = {
+                configuracoes: localStorage.getItem('park_config'),
+
+                catalogoItens: localStorage.getItem('park_catalogo'),
+                financeiro: localStorage.getItem('park_resumo'),
+                historicoGeral: localStorage.getItem('park_pro_historico'),
+                dataExportacao: new Date().toISOString()
+            };
+
+            // Cria o arquivo JSON
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(dadosParaBackup, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `HAYDEN_BACKUP_${new Date().toLocaleDateString().replace(/\//g, '-')}.json`);
+            document.body.appendChild(downloadAnchorNode);
+
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+
+            showToast("Backup gerado com sucesso!");
+        }
+
+        function importarBackup(event) {
+            const arquivo = event.target.files[0];
+            if (!arquivo) return;
+
+            const leitor = new FileReader();
+            leitor.onload = function (e) {
+                try {
+                    const dados = JSON.parse(e.target.result);
+
+                    // Validação básica: verifica se existem chaves essenciais
+                    if (!dados.configuracoes && !dados.patioAtivo) {
+                        throw new Error("Arquivo de backup inválido.");
+                    }
+
+                    // Mapeia os dados do arquivo de volta para o LocalStorage
+                    if (dados.configuracoes) localStorage.setItem('park_config', dados.configuracoes);
+                    if (dados.patioAtivo) localStorage.setItem('park_pro_patio', dados.patioAtivo);
+                    if (dados.catalogoItens) localStorage.setItem('park_catalogo', dados.catalogoItens);
+                    if (dados.financeiro) localStorage.setItem('park_resumo', dados.financeiro);
+                    if (dados.historicoGeral) localStorage.setItem('park_pro_historico', dados.historicoGeral);
+
+                    showToast("Backup restaurado com sucesso!", "success");
+
+                    // Recarrega as variáveis globais e a tela
+                    setTimeout(() => {
+                        location.reload(); // Recarrega a página para aplicar todas as configurações
+                    }, 1500);
+
+                } catch (erro) {
+                    showToast("Erro ao importar: Arquivo corrompido ou inválido.", "error");
+                }
+            };
+            leitor.readAsText(arquivo);
+        }
+
+        let meuGrafico = null; // Armazena a instância do gráfico
+
+        let chartSemanal = null;
+        let chartMensal = null;
+
+        function atualizarGrafico() {
+            // 1. DADOS BASE
+            const historicoGeral = JSON.parse(localStorage.getItem('park_pro_historico')) || [];
+
+            const hoje = new Date();
+            const hojeStr = hoje.toLocaleDateString();
+
+            // 2. CÁLCULO FLUXO POR HORA (HOJE)
+            const ctxFluxo = document.getElementById('movimentacaoChart').getContext('2d');
+            // Altere para usar a variável que alimentamos do Supabase
+            const todasEntradasHoje = [
+                ...patioAtivo.map(v => ({ entrada: v.entrada })), // Use patioAtivo aqui
+                ...historico.filter(h => new Date(h.entrada).toLocaleDateString() === hojeStr)
+            ];
+            const contagemHoras = Array(24).fill(0);
+            todasEntradasHoje.forEach(item => contagemHoras[new Date(item.entrada).getHours()]++);
+
+            // Identificar Pico
+            const maiorVolume = Math.max(...contagemHoras);
+            const horaPico = contagemHoras.indexOf(maiorVolume);
+            document.getElementById('bi-horario-pico').innerText = maiorVolume > 0 ? `${horaPico.toString().padStart(2, '0')}:00h` : "--:00h";
+
+            // 3. CÁLCULO FATURAMENTO SEMANAL (Últimos 7 dias)
+            const ctxSemanal = document.getElementById('chartFaturamentoSemanal').getContext('2d');
+            const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const labelsSemana = [];
+            const valoresSemana = [];
+
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dataStr = d.toLocaleDateString();
+                labelsSemana.push(diasSemana[d.getDay()]);
+
+                const totalDia = historicoGeral
+                    .filter(h => new Date(h.saida).toLocaleDateString() === dataStr)
+                    .reduce((acc, h) => acc + h.valor, 0);
+                valoresSemana.push(totalDia);
+            }
+
+            // 4. CÁLCULO FATURAMENTO MENSAL (Ano Atual)
+            const ctxMensal = document.getElementById('chartFaturamentoMensal').getContext('2d');
+            const mesesLabel = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+            const valoresMensal = Array(12).fill(0);
+
+            historicoGeral.forEach(h => {
+                const dataSaida = new Date(h.saida);
+                if (dataSaida.getFullYear() === hoje.getFullYear()) {
+                    valoresMensal[dataSaida.getMonth()] += h.valor;
+                }
+            });
+
+            // 5. ATUALIZAR INDICADORES
+            const atendidosMes = historicoGeral.filter(h => new Date(h.saida).getMonth() === hoje.getMonth());
+            const totalMes = atendidosMes.reduce((acc, h) => acc + h.valor, 0);
+            const ticketMédio = atendidosMes.length > 0 ? totalMes / atendidosMes.length : 0;
+            const totalMensalistas = mensalistas.reduce((acc, m) => acc + (m.valorPlano || config.mensalValor), 0);
+
+            document.getElementById('bi-ticket-medio').innerText = `R$ ${ticketMédio.toFixed(2)}`;
+            document.getElementById('bi-total-veiculos').innerText = atendidosMes.length;
+            document.getElementById('bi-previsao-mensal').innerText = `R$ ${totalMensalistas.toFixed(2)}`;
+
+            // 6. RENDERIZAR GRÁFICOS (Chart.js)
+            renderizarChart(ctxFluxo, 'Entradas', contagemHoras, '#6366f1', true);
+            if (chartSemanal) chartSemanal.destroy();
+            chartSemanal = new Chart(ctxSemanal, {
+                type: 'bar',
+                data: {
+                    labels: labelsSemana,
+                    datasets: [{ label: 'Faturamento R$', data: valoresSemana, backgroundColor: '#10b981', borderRadius: 8 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            if (chartMensal) chartMensal.destroy();
+            chartMensal = new Chart(ctxMensal, {
+                type: 'line',
+                data: {
+                    labels: mesesLabel,
+                    datasets: [{ label: 'Faturamento R$', data: valoresMensal, borderColor: '#4f46e5', tension: 0.4, fill: true, backgroundColor: 'rgba(79, 70, 229, 0.1)' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function renderizarChart(ctx, label, data, color, isLine = false) {
+            if (window.meuGrafico) window.meuGrafico.destroy();
+            window.meuGrafico = new Chart(ctx, {
+                type: isLine ? 'line' : 'bar',
+                data: {
+                    labels: data.map((_, i) => `${i}h`),
+                    datasets: [{ label: label, data: data, borderColor: color, backgroundColor: color + '20', borderWidth: 3, fill: true, tension: 0.4 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function calcularPrevisaoMensalidade() {
+            const qtd = parseInt(document.getElementById('mens-qtd-placas').value) || 1;
+            const total = qtd * config.mensalValor;
+            document.getElementById('previzao-valor-mensal').innerText = `R$ ${total.toFixed(2)}`;
+            return total;
+        }
+
+        // Inicialização do banco de mensalistas
+
+
+        // 2. Atualizar função de Salvar Mensalista
+        async function salvarMensalista() {
+            const nome = document.getElementById('mens-nome').value.toUpperCase();
+            const placa = document.getElementById('mens-placa').value.toUpperCase();
+            const tel = document.getElementById('mens-telefone').value;
+            const cpf = document.getElementById('mens-cpf').value;
+            const venc = document.getElementById('mens-vencimento').value;
+            const qtdPlacas = parseInt(document.getElementById('mens-qtd-placas').value) || 1;
+
+            if (!nome || !placa || !venc) return showToast("Preencha os campos obrigatórios!", "error");
+
+            // Objeto formatado para o banco de dados Supabase
+            const novoMensalista = {
+                nome: nome,
+                placa: placa,
+                telefone: tel,
+                cpf: cpf,
+                vencimento: venc,
+                limite_placas: qtdPlacas,
+                valor_plano: qtdPlacas * config.mensalValor
+            };
+
+            // --- COMUNICAÇÃO COM SUPABASE ---
+            const { error } = await _supabase
+                .from('mensalistas')
+                .insert([novoMensalista]);
+
+            if (error) {
+                console.error("Erro ao salvar mensalista:", error);
+                return showToast("Erro ao salvar no banco de dados!", "error");
+            }
+
+            // Atualiza as variáveis globais carregando os dados novos do banco
+            await carregarDadosIniciais();
+
+            // Limpar campos da interface
+            ['mens-nome', 'mens-placa', 'mens-telefone', 'mens-cpf', 'mens-vencimento'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+
+            showToast("Mensalista salvo na nuvem!");
+            renderizar();
+        }
+
+        function editarMensalista(id) {
+            const m = mensalistas.find(x => x.id === id);
+            if (!m) return;
+
+            // Preenche os inputs com os dados atuais
+            document.getElementById('mens-nome').value = m.nome;
+            document.getElementById('mens-placa').value = m.placa;
+            document.getElementById('mens-telefone').value = m.telefone || '';
+            document.getElementById('mens-vencimento').value = m.vencimento;
+            document.getElementById('mens-qtd-placas').value = m.limitePlacas || 1;
+
+            // Atualiza o valor visual do plano no formulário
+            calcularPrevisaoMensalidade();
+
+            // Remove o registro antigo para que, ao clicar em "Ativar Plano", ele salve como novo/atualizado
+            // Ou você pode mudar o texto do botão para "Atualizar"
+            mensalistas = mensalistas.filter(x => x.id !== id);
+
+            showToast("Dados carregados para edição!");
+            document.getElementById('mens-nome').focus();
+        }
+
+        function renderMensalistas() {
+            const container = document.getElementById('lista-mensalistas');
+            if (!container) return;
+
+            container.innerHTML = mensalistas.map(m => {
+                return `
+            <tr class="hover:bg-slate-50/50 transition-all">
+                <td class="px-6 py-4">
+                    <strong class="text-slate-800">${m.nome}</strong>
+                    <span class="ml-2 text-[9px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-bold">
+                        ${m.limitePlacas || 1} Placa(s)
+                    </span>
+                    <br>
+                    <span class="text-[11px] bg-slate-200 px-2 py-0.5 rounded font-bold font-mono">${m.placa}</span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">Vencimento</p>
+                    <span class="font-bold text-sm text-slate-600">${new Date(m.vencimento).toLocaleDateString('pt-BR')}</span>
+                </td>
+                <td class="px-6 py-4 text-center">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase">Valor Mensal</p>
+                    <span class="font-black text-indigo-600">R$ ${(m.valorPlano || config.mensalValor).toFixed(2)}</span>
+                </td>
+                <td class="px-6 py-4 text-right flex justify-end gap-2">
+                    <button onclick="visualizarMensalista(${m.id})" class="text-slate-400 hover:text-indigo-600 p-2 rounded-lg transition-all" title="Visualizar Detalhes">
+                        <i data-lucide="eye" class="w-5 h-5"></i>
+                    </button>
+
+                    <button onclick="editarMensalista(${m.id})" class="text-amber-500 hover:bg-amber-50 p-2 rounded-lg transition-all" title="Editar Cadastro">
+                        <i data-lucide="edit-3" class="w-5 h-5"></i>
+                    </button>
+                    
+                    <button onclick="renovarMensalista(${m.id})" class="text-indigo-500 hover:bg-indigo-50 p-2 rounded-lg transition-all" title="Renovar 30 dias">
+                        <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                    </button>
+                    
+                    <button onclick="removerMensalista(${m.id})" class="text-slate-300 hover:text-rose-500 p-2 rounded-lg transition-all">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        async function renovarMensalista(id) {
+            const index = mensalistas.findIndex(m => m.id === id);
+            if (index === -1) return;
+
+            const hoje = new Date();
+            let dataAtual = new Date(mensalistas[index].vencimento);
+
+            if (dataAtual < hoje) dataAtual = hoje;
+
+            dataAtual.setDate(dataAtual.getDate() + 30);
+            const novaDataStr = dataAtual.toISOString().split('T')[0];
+
+            // --- ATUALIZAÇÃO NO SUPABASE ---
+            const { error } = await _supabase
+                .from('mensalistas')
+                .update({ vencimento: novaDataStr })
+                .eq('id', id);
+
+            if (error) {
+                return showToast("Erro ao renovar no banco!", "error");
+            }
+
+            await carregarDadosIniciais();
+            showToast(`Plano de ${mensalistas[index].nome} renovado no sistema!`);
+            renderizar();
+
+            // Lógica de envio de WhatsApp permanece a mesma...
+            enviarNotificacaoWpp(mensalistas[index], novaDataStr);
+        }
+
+        function cobrarInadimplente(id, dias) {
+            const m = mensalistas.find(x => x.id === id);
+            if (!m || !m.telefone) return showToast("Telefone não cadastrado!", "error");
+
+            const texto = `*AVISO DE COBRANÇA - HAYDEN PARKING*\n\n` +
+                `⚠️ Olá, *${m.nome}*.\n` +
+                `Identificamos que seu plano (Placa: *${m.placa}*) está vencido há *${dias} dias*.\n\n` +
+                `Por favor, regularize sua situação para evitar a cobrança de tarifa avulsa por hora.\n\n` +
+                `_Dúvidas? Entre em contato conosco._`;
+
+            const telLimpo = m.telefone.replace(/\D/g, '');
+            const url = `https://wa.me/55${telLimpo}?text=${encodeURIComponent(texto)}`;
+
+            const win = window.open(url, '_blank');
+            if (!win) showToast("Pop-up bloqueado pelo navegador!", "error");
+        }
+
+        function renderInadimplentes() {
+            const container = document.getElementById('lista-inadimplentes');
+            const hoje = new Date();
+
+            // Filtra mensalistas vencidos há mais de 5 dias
+            const inadimplentes = mensalistas.filter(m => {
+                const dataVenc = new Date(m.vencimento);
+                const diffMs = hoje - dataVenc;
+                const diffDias = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                return diffDias > 5;
+            });
+
+            if (inadimplentes.length === 0) {
+                container.innerHTML = `<tr><td colspan="4" class="px-6 py-10 text-center text-slate-400 font-medium">Nenhum inadimplente crítico encontrado.</td></tr>`;
+                return;
+            }
+
+            container.innerHTML = inadimplentes.map(m => {
+                const dataVenc = new Date(m.vencimento);
+                const diffDias = Math.floor((hoje - dataVenc) / (1000 * 60 * 60 * 24));
+
+                return `
+            <tr class="bg-rose-50/30 hover:bg-rose-50 transition-all">
+                <td class="px-6 py-5">
+                    <strong class="text-rose-900">${m.nome}</strong><br>
+                    <span class="text-[11px] bg-rose-200 text-rose-700 px-2 py-0.5 rounded font-bold font-mono">${m.placa}</span>
+                </td>
+                <td class="px-6 py-5 text-center font-bold text-rose-600">${dataVenc.toLocaleDateString('pt-BR')}</td>
+                <td class="px-6 py-5 text-center font-black text-rose-700 text-lg">${diffDias} DIAS</td>
+                <td class="px-6 py-5 text-right">
+                    <button onclick="cobrarInadimplente(${m.id}, ${diffDias})" class="bg-rose-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all flex items-center gap-2 ml-auto">
+                        <i data-lucide="message-square" class="w-4 h-4"></i> COBRAR AGORA
+                    </button>
+                </td>
+            </tr>
+        `;
+            }).join('');
+            lucide.createIcons();
+        }
+
+        function cobrarInadimplente(id, dias) {
+            const m = mensalistas.find(x => x.id === id);
+            const texto = `*AVISO DE COBRANÇA - HAYDEN PARKING*\n\n` +
+                `⚠️ Olá, *${m.nome}*.\n` +
+                `Identificamos que seu plano (Placa: *${m.placa}*) está vencido há *${dias} dias*.\n\n` +
+                `Por favor, regularize sua situação para evitar a cobrança de tarifa avulsa por hora.\n\n` +
+                `_Dúvidas? Entre em contato conosco._`;
+
+            const telLimpo = m.telefone.replace(/\D/g, '');
+            window.open(`https://api.whatsapp.com/send?phone=55${telLimpo}&text=${encodeURIComponent(texto)}`, '_blank');
+        }
+
+        // --- SISTEMA DE SEGURANÇA HAYDEN PARKING PRO 2.0 ---
+        // Certifique-se de que este objeto está no topo do seu script
+        const SEGURANCA_PRO = {
+            TEMPO_DEMO_TOTAL: 30 * 60, // 30 minutos
+            // Gera um ID baseado no hardware/navegador
+            ID_MAQUINA: btoa(navigator.userAgent + screen.colorDepth).slice(5, 15).toUpperCase()
+        };
+
+        let tempoRestante = parseInt(localStorage.getItem('park_demo_timer')) || SEGURANCA_PRO.TEMPO_DEMO_TOTAL;
+        let licencaAtiva = localStorage.getItem('park_licenca_permanente') === 'true';
+
+        // Função consolidada de Inicialização
+        window.onload = () => {
+            // 1. Mostrar o ID no Modal e na Sidebar
+            const idModal = document.getElementById('display-id-modal');
+            const idSidebar = document.getElementById('display-id-maquina');
+
+            if (idModal) idModal.innerText = SEGURANCA_PRO.ID_MAQUINA;
+            if (idSidebar) idSidebar.innerText = SEGURANCA_PRO.ID_MAQUINA;
+
+            // 2. Configurar o Atalho Secreto (5 cliques na Chave)
+            const iconeChave = document.getElementById('chave-secreta-ativa');
+            let cliquesChave = 0;
+
+            if (iconeChave) {
+                iconeChave.onclick = () => {
+                    cliquesChave++;
+                    console.log("Cliques na chave:", cliquesChave); // Para você testar no F12
+                    if (cliquesChave === 5) {
+                        document.getElementById('modalGeradorHayden').classList.replace('hidden', 'flex');
+                        cliquesChave = 0;
+                        showToast("Acesso Administrativo Liberado");
+                        lucide.createIcons();
+                    }
+                };
+            }
+
+            // 3. Verificar status da licença ao abrir
+            if (licencaAtiva) {
+                configurarInterfaceAtivada();
+            } else {
+                if (tempoRestante <= 0) encerrarSessao();
+            }
+
+            // 4. Funções Padrão do Sistema
+            renderizar();
+            atualizarGrafico();
+            setInterval(renderizar, 1000);
+            setInterval(updateSidebarClock, 1000);
+            lucide.createIcons();
+
+            // Foco inicial
+            const campoModelo = document.getElementById('modelo');
+            if (campoModelo) campoModelo.focus();
+        };
+
+        // Funções de Suporte à Licença
+        function configurarInterfaceAtivada() {
+            const modal = document.getElementById('modalLicenca');
+            if (modal) modal.classList.add('hidden');
+
+            const timer = document.getElementById('licenca-timer');
+            if (timer) {
+                timer.innerText = "VERSÃO PROFISSIONAL";
+                timer.classList.replace('text-slate-500', 'text-emerald-500');
+            }
+        }
+
+        // --- SISTEMA DE GERAÇÃO E VALIDAÇÃO CORRIGIDO ---
+
+        function processarGeracao() {
+            const idCliente = document.getElementById('gen-id-cliente').value.trim().toUpperCase();
+            if (idCliente.length < 5) return showToast("ID do Cliente Inválido!", "error");
+
+            // O segredo (SALT) deve ser exatamente o mesmo na geração e na validação
+            const segredo = "HAYDEN_PRO_2026";
+            const payload = btoa(idCliente + segredo);
+
+            // Formata a chave final
+            const chave = "HP-" + payload.slice(0, 4) + "-" + payload.slice(8, 12) + "-" + payload.slice(14, 18).toUpperCase();
+
+            document.getElementById('gen-chave-resultado').value = chave;
+            showToast("Licença gerada com sucesso!");
+        }
+
+        function copiarChaveGerada() {
+            const input = document.getElementById('gen-chave-resultado');
+            if (!input.value) return showToast("Gere uma chave primeiro!", "error");
+
+            input.select();
+            document.execCommand('copy');
+            showToast("Chave copiada para o WhatsApp!");
+        }
+
+        function ativarLicencaPeloModal() {
+            const input = document.getElementById('input-chave-licenca').value.trim().toUpperCase();
+            const idLocal = SEGURANCA_PRO.ID_MAQUINA;
+
+            // Recria a lógica exata do gerador para validar
+            const segredo = "HAYDEN_PRO_2026";
+            const payloadEsperado = btoa(idLocal + segredo);
+            const chaveCorreta = "HP-" + payloadEsperado.slice(0, 4) + "-" + payloadEsperado.slice(8, 12) + "-" + payloadEsperado.slice(14, 18).toUpperCase();
+
+            // Chave Mestra para seu uso pessoal ou Chave Gerada pelo algoritmo
+            if (input === "2026HAYDENPARKING" || input.toUpperCase() === chaveCorreta.toUpperCase()) {
+                licencaAtiva = true;
+                localStorage.setItem('park_licenca_permanente', 'true');
+                configurarInterfaceAtivada();
+                showToast("Sistema Hayden Parking Ativado!", "success");
+            } else {
+                showToast("Esta chave não serve para este PC!", "error");
+                console.log("ID Local:", idLocal);
+                console.log("Chave que deveria ser usada:", chaveCorreta);
+            }
+        }
+
+        // Adicione também a função de Modo Demo que estava faltando:
+        function iniciarModoDemo() {
+            if (tempoRestante <= 0) return encerrarSessao();
+            document.getElementById('modalLicenca').classList.add('hidden');
+            showToast("Modo Demo: 30 minutos liberados!", "success");
+
+            const countdown = setInterval(() => {
+                if (licencaAtiva) return clearInterval(countdown);
+
+                tempoRestante--;
+                localStorage.setItem('park_demo_timer', tempoRestante);
+
+                if (tempoRestante <= 0) {
+                    clearInterval(countdown);
+                    encerrarSessao();
+                }
+            }, 1000);
+        }
+
+        function encerrarSessao() {
+            location.reload(); // Força o bloqueio ao recarregar com tempo zerado
+        }
+
+        // 1. Máscara de CPF
+        function mascaraCPF(input) {
+            let v = input.value.replace(/\D/g, '');
+            if (v.length > 11) v = v.slice(0, 11);
+            if (v.length <= 11) {
+                v = v.replace(/(\itud{3})(\d)/, "$1.$2");
+                v = v.replace(/(\itud{3})(\d)/, "$1.$2");
+                v = v.replace(/(\itud{3})(\d{1,2})$/, "$1-$2");
+            }
+            input.value = v;
+        }
+        // 3. Função para Visualizar Detalhes e Contar Usos
+        function visualizarMensalista(id) {
+            const m = mensalistas.find(x => x.id === id);
+            if (!m) return;
+
+            // Lógica para contar usos no mês atual
+            const hoje = new Date();
+            const mesAtual = hoje.getMonth();
+            const anoAtual = hoje.getFullYear();
+
+            const usosNoMes = historico.filter(h => {
+                const dataSaida = new Date(h.saida);
+                return h.placa === m.placa &&
+                    dataSaida.getMonth() === mesAtual &&
+                    dataSaida.getFullYear() === anoAtual;
+            }).length;
+
+            // Preencher o modal
+            document.getElementById('det-nome').innerText = m.nome;
+            document.getElementById('det-cpf').innerText = m.cpf || 'Não informado';
+            document.getElementById('det-placa').innerText = m.placa;
+            document.getElementById('det-usos-mes').innerText = usosNoMes;
+
+            toggleModal('modalDetalhesMensalista');
+        }
+
+        function gerarRelatorioMensalPDF() {
+            const hoje = new Date();
+            const mesAtual = hoje.getMonth();
+            const anoAtual = hoje.getFullYear();
+            const nomeMes = hoje.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+
+            // 1. Filtrar histórico do mês atual
+            const historicoMes = historico.filter(h => {
+                const data = new Date(h.saida);
+                return data.getMonth() === mesAtual && data.getFullYear() === anoAtual;
+            });
+
+            // 2. Cálculo de Horário de Pico Mensal
+            const contagemHorasMensal = Array(24).fill(0);
+            historicoMes.forEach(h => {
+                const hora = new Date(h.entrada).getHours();
+                contagemHorasMensal[hora]++;
+            });
+            const maiorVolumeMes = Math.max(...contagemHorasMensal);
+            const horaPicoMes = contagemHorasMensal.indexOf(maiorVolumeMes);
+            const strHoraPico = maiorVolumeMes > 0 ? `${horaPicoMes.toString().padStart(2, '0')}:00h` : "--:00h";
+
+            const totalAvulso = historicoMes.reduce((acc, h) => acc + h.valor, 0);
+            const totalMensalistas = mensalistas.reduce((acc, m) => acc + (m.valorPlano || config.mensalValor), 0);
+            const totalGeral = totalAvulso + totalMensalistas;
+
+            const printSec = document.getElementById('print-section');
+            if (!printSec) return alert("Erro: Área de impressão não encontrada.");
+
+            printSec.classList.remove('hidden');
+
+            printSec.innerHTML = `
+        <div style="width: 210mm; padding: 15mm; font-family: 'Overpass', sans-serif; color: #1e293b; background: #fff;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 4px solid #6366f1; padding-bottom: 15px; margin-bottom: 25px;">
+                <div>
+                    <h1 style="font-size: 26px; font-weight: 900; margin: 0;">RELATÓRIO DE PERFORMANCE</h1>
+                    <p style="font-size: 14px; font-weight: 700; color: #6366f1; margin: 5px 0;">REF: ${nomeMes} / ${anoAtual}</p>
+                </div>
+                <div style="text-align: right;">
+                    <h2 style="font-size: 18px; font-weight: 900; margin: 0;">HAYDEN PARKING</h2>
+                    <p style="font-size: 10px; color: #64748b;">ID MÁQUINA: ${SEGURANCA_PRO.ID_MAQUINA}</p>
+                </div>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 25px;">
+                <div style="background: #f8fafc; padding: 15px; border-radius: 15px; border: 1px solid #e2e8f0; text-align: center;">
+                    <p style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Receita Mensalistas</p>
+                    <p style="font-size: 18px; font-weight: 900; color: #4f46e5; margin: 5px 0;">R$ ${totalMensalistas.toFixed(2)}</p>
+                </div>
+                <div style="background: #f8fafc; padding: 15px; border-radius: 15px; border: 1px solid #e2e8f0; text-align: center;">
+                    <p style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Receita Avulsos</p>
+                    <p style="font-size: 18px; font-weight: 900; color: #10b981; margin: 5px 0;">R$ ${totalAvulso.toFixed(2)}</p>
+                </div>
+                <div style="background: #fff1f2; padding: 15px; border-radius: 15px; border: 1px solid #fecdd3; text-align: center;">
+                    <p style="font-size: 9px; font-weight: 800; color: #e11d48; text-transform: uppercase;">Horário de Pico</p>
+                    <p style="font-size: 18px; font-weight: 900; color: #e11d48; margin: 5px 0;">${strHoraPico}</p>
+                </div>
+            </div>
+
+            <div style="background: #1e293b; color: #fff; padding: 20px; text-align: center; border-radius: 20px; margin-bottom: 30px;">
+                <p style="font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7;">Faturamento Bruto Consolidado</p>
+                <p style="font-size: 32px; font-weight: 900; margin: 5px 0;">R$ ${totalGeral.toFixed(2)}</p>
+            </div>
+
+            <h3 style="font-size: 13px; font-weight: 900; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; margin-bottom: 12px; text-transform: uppercase;">Detalhamento de Fluxo Mensal</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 10px;">
+                <thead>
+                    <tr style="background: #f8fafc; text-align: left;">
+                        <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">DATA/HORA SAÍDA</th>
+                        <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">VEÍCULO</th>
+                        <th style="padding: 10px; border-bottom: 2px solid #e2e8f0;">PLACA</th>
+                        <th style="padding: 10px; border-bottom: 2px solid #e2e8f0; text-align: right;">VALOR</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${historicoMes.length > 0 ? historicoMes.map(h => `
+                        <tr>
+                            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${new Date(h.saida).toLocaleString('pt-BR')}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; font-weight: 700;">${h.modelo}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9;">${h.placa}</td>
+                            <td style="padding: 8px; border-bottom: 1px solid #f1f5f9; text-align: right; font-weight: 800; color: #10b981;">R$ ${h.valor.toFixed(2)}</td>
+                        </tr>
+                    `).join('') : '<tr><td colspan="4" style="padding: 20px; text-align: center;">Nenhum registro no período.</td></tr>'}
+                </tbody>
+            </table>
+
+            <div style="margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px; text-align: center; font-size: 9px; color: #94a3b8;">
+                Relatório gerado automaticamente via Hayden Parking Pro.
+            </div>
+        </div>
+    `;
+
+            setTimeout(() => {
+                window.print();
+                printSec.classList.add('hidden');
+                printSec.innerHTML = '';
+            }, 250);
+
+        }
+
+
+        function gerarRelatorioFiltrado() {
+            const mesFiltro = document.getElementById('filtro-mes').value;
+            if (mesFiltro === "all") {
+                return alert("Para imprimir todos os meses, use o botão 'Relatório Geral'.");
+            }
+
+            // Reutiliza a lógica existente mas com o mês selecionado
+            const dataFalsa = new Date();
+            dataFalsa.setMonth(parseInt(mesFiltro));
+
+            // Chamamos a função de geração alterando temporariamente o contexto (se necessário) ou criando uma nova
+            gerarRelatorioEspecifico(parseInt(mesFiltro), dataFalsa.getFullYear());
+        }
+
+        function gerarRelatorioAnualPDF() {
+            const historicoGeral = JSON.parse(localStorage.getItem('park_pro_historico')) || [];
+            const hoje = new Date();
+            const ano = hoje.getFullYear();
+
+            const printSec = document.getElementById('print-section');
+            printSec.classList.remove('hidden');
+
+            let htmlTabelaMeses = "";
+            let totalAnual = 0;
+
+            for (let m = 0; m < 12; m++) {
+                const hMes = historicoGeral.filter(h => {
+                    const d = new Date(h.saida);
+                    return d.getMonth() === m && d.getFullYear() === ano;
+                });
+                const total = hMes.reduce((acc, h) => acc + h.valor, 0);
+                if (total > 0 || m <= hoje.getMonth()) {
+                    totalAnual += total;
+                    const nomeMes = new Date(2000, m, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+                    htmlTabelaMeses += `
+                <tr style="border-bottom: 1px solid #f1f5f9;">
+                    <td style="padding: 12px; font-weight: 800;">${nomeMes}</td>
+                    <td style="padding: 12px; text-align: center;">${hMes.length} Veículos</td>
+                    <td style="padding: 12px; text-align: right; font-weight: 900; color: #4f46e5;">R$ ${total.toFixed(2)}</td>
+                </tr>
+            `;
+                }
+            }
+
+            printSec.innerHTML = `
+        <div style="width: 210mm; padding: 20mm; font-family: 'Overpass', sans-serif;">
+            <div style="display: flex; justify-content: space-between; border-bottom: 5px solid #1e293b; padding-bottom: 20px; margin-bottom: 30px;">
+                <h1 style="font-size: 32px; font-weight: 900; margin: 0;">RELATÓRIO ANUAL GERAL</h1>
+                <div style="text-align: right;">
+                    <p style="font-weight: 900; margin: 0;">HAYDEN PARKING ${ano}</p>
+                    <p style="font-size: 10px; color: #64748b;">CONSOLIDADO DE FATURAMENTO</p>
+                </div>
+            </div>
+            
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px;">
+                <thead style="background: #f8fafc;">
+                    <tr style="text-align: left; font-size: 10px; color: #64748b;">
+                        <th style="padding: 12px;">MÊS DE REFERÊNCIA</th>
+                        <th style="padding: 12px; text-align: center;">VOLUME</th>
+                        <th style="padding: 12px; text-align: right;">TOTAL ARRECADADO</th>
+                    </tr>
+                </thead>
+                <tbody>${htmlTabelaMeses}</tbody>
+            </table>
+
+            <div style="background: #1e293b; color: #fff; padding: 30px; border-radius: 25px; text-align: center;">
+                <p style="font-size: 12px; font-weight: 700; opacity: 0.7; margin-bottom: 5px;">FATURAMENTO BRUTO ANUAL (AVULSOS)</p>
+                <p style="font-size: 42px; font-weight: 900; margin: 0;">R$ ${totalAnual.toFixed(2)}</p>
+            </div>
+        </div>
+    `;
+
+            setTimeout(() => {
+                window.print();
+                printSec.classList.add('hidden');
+            }, 250);
+        }
+
+        // Função para gerar relatório de um mês específico (filtrado)
+        function gerarRelatorioEspecifico(mes, ano) {
+            const historicoGeral = JSON.parse(localStorage.getItem('park_pro_historico')) || [];
+            const nomeMes = new Date(ano, mes, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+
+            const historicoFiltrado = historicoGeral.filter(h => {
+                const d = new Date(h.saida);
+                return d.getMonth() === mes && d.getFullYear() === ano;
+            });
+
+            const total = historicoFiltrado.reduce((acc, h) => acc + h.valor, 0);
+            const printSec = document.getElementById('print-section');
+            printSec.classList.remove('hidden');
+
+            printSec.innerHTML = `
+        <div style="width: 210mm; padding: 20mm; font-family: 'Overpass', sans-serif;">
+            <h1 style="border-bottom: 4px solid #10b981; padding-bottom: 10px;">RELATÓRIO MENSAL: ${nomeMes}</h1>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0;">
+                <div style="background: #f0fdf4; p: 20px; border-radius: 20px; border: 1px solid #bbf7d0; padding: 20px;">
+                    <p style="font-size: 10px; font-weight: 800; color: #166534;">TOTAL ARRECADADO</p>
+                    <p style="font-size: 28px; font-weight: 900; color: #10b981;">R$ ${total.toFixed(2)}</p>
+                </div>
+                <div style="background: #f8fafc; p: 20px; border-radius: 20px; border: 1px solid #e2e8f0; padding: 20px;">
+                    <p style="font-size: 10px; font-weight: 800; color: #64748b;">VEÍCULOS ATENDIDOS</p>
+                    <p style="font-size: 28px; font-weight: 900; color: #1e293b;">${historicoFiltrado.length}</p>
+                </div>
+            </div>
+            <h3>Detalhamento de Saídas:</h3>
+            <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
+                <tr style="background: #f1f5f9; text-align: left;">
+                    <th style="padding: 8px;">DATA</th><th style="padding: 8px;">PLACA</th><th style="padding: 8px;">VALOR</th>
+                </tr>
+                ${historicoFiltrado.map(h => `<tr><td style="padding: 5px; border-bottom: 1px solid #eee;">${new Date(h.saida).toLocaleDateString()}</td><td style="padding: 5px; border-bottom: 1px solid #eee;">${h.placa}</td><td style="padding: 5px; border-bottom: 1px solid #eee;">R$ ${h.valor.toFixed(2)}</td></tr>`).join('')}
+            </table>
+        </div>
+    `;
+
+            setTimeout(() => {
+                window.print();
+                printSec.classList.add('hidden');
+            }, 250);
+        }
+
+
+        let isSignUpMode = false;
+
+        // Alterna entre Login e Cadastro na interface
+        function toggleAuthMode() {
+            isSignUpMode = !isSignUpMode;
+            const title = document.getElementById('auth-title');
+            const btnSubmit = document.getElementById('btn-auth-submit');
+            const btnToggle = document.getElementById('btn-toggle-auth');
+
+            if (isSignUpMode) {
+                title.innerText = "Novo Estacionamento";
+                btnSubmit.innerText = "CRIAR MINHA CONTA";
+                btnToggle.innerText = "Já tenho conta? Fazer Login";
+            } else {
+                title.innerText = "Login de Parceiro";
+                btnSubmit.innerText = "ENTRAR NO SISTEMA";
+                btnToggle.innerText = "Não tem conta? Cadastre seu Estacionamento";
+            }
+        }
+
+        // Decide qual ação tomar (Login ou Cadastro)
+        async function handleAuthAction() {
+            if (isSignUpMode) {
+                await handleSignUp();
+            } else {
+                await handleLogin(); // Aquela que já criamos
+            }
+        }
+
+        // Função de Cadastro Real
+        async function handleSignUp() {
+            const email = document.getElementById('auth-email').value;
+            const password = document.getElementById('auth-password').value;
+
+            if (password.length < 6) return alert("A senha deve ter no mínimo 6 caracteres!");
+
+            const { data, error } = await _supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    data: {
+                        role: 'owner' // Metadado para identificar que é um dono
+                    }
+                }
+            });
+
+            if (error) return alert("Erro no cadastro: " + error.message);
+
+            alert("Sucesso! Verifique seu e-mail para confirmar o cadastro e começar a usar.");
+            toggleAuthMode(); // Volta para o login
+        }
+
+    </script>
+
+    <div id="modalSucessoSaida" onclick="closeOnOutsideClick(event, 'modalSucessoSaida')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[160] hidden items-center justify-center p-4 no-print">
+        <div
+            class="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 text-center animate-in zoom-in-95 duration-300">
+            <div
+                class="w-20 h-20 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="receipt" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2">Pagamento Recebido!</h3>
+            <p id="info-veiculo-saida" class="text-slate-500 text-sm mb-8 font-medium italic"></p>
+
+            <div class="space-y-3">
+                <button id="btn-imprimir-recibo"
+                    class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-black transition-all">
+                    <i data-lucide="printer" class="w-5 h-5"></i> IMPRIMIR RECIBO
+                </button>
+                <button id="btn-whatsapp-recibo"
+                    class="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-all">
+                    <i data-lucide="message-circle" class="w-5 h-5"></i> ENVIAR RECIBO WHATSAPP
+                </button>
+                <button onclick="toggleModal('modalSucessoSaida')"
+                    class="w-full text-slate-400 text-xs font-bold uppercase tracking-widest pt-4">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalSucessoEntrada" onclick="closeOnOutsideClick(event, 'modalSucessoEntrada')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[160] hidden items-center justify-center p-4 no-print">
+        <div
+            class="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 text-center animate-in zoom-in-95 duration-300">
+            <div
+                class="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                <i data-lucide="check-circle" class="w-10 h-10"></i>
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2">Entrada Confirmada!</h3>
+            <p id="info-veiculo-sucesso" class="text-slate-500 text-sm mb-8 font-medium italic"></p>
+
+            <div class="space-y-3">
+                <button id="btn-imprimir-ticket"
+                    class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-black transition-all">
+                    <i data-lucide="printer" class="w-5 h-5"></i> IMPRIMIR TICKET
+                </button>
+                <button id="btn-whatsapp-ticket"
+                    class="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:opacity-90 transition-all">
+                    <i data-lucide="message-circle" class="w-5 h-5"></i> ENVIAR WHATSAPP
+                </button>
+                <button onclick="toggleModal('modalSucessoEntrada')"
+                    class="w-full text-slate-400 text-xs font-bold uppercase tracking-widest pt-4">FECHAR</button>
+            </div>
+        </div>
+    </div>
+    <div id="modalAlertaInadimplente"
+        class="fixed inset-0 bg-rose-900/90 backdrop-blur-md z-[300] hidden items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-pulse border-[8px] border-rose-600">
+            <div class="bg-rose-600 p-6 text-white text-center">
+                <i data-lucide="shield-alert" class="w-16 h-16 mx-auto mb-2"></i>
+                <h3 class="text-2xl font-black uppercase tracking-tighter">Acesso Bloqueado</h3>
+            </div>
+            <div class="p-8 text-center">
+                <p class="text-slate-400 text-xs font-bold uppercase mb-1">Mensalista Identificado</p>
+                <h4 id="alerta-nome" class="text-2xl font-black text-slate-800 mb-4">---</h4>
+
+                <div class="bg-rose-50 p-6 rounded-3xl border border-rose-100 mb-6">
+                    <p class="text-rose-600 text-sm font-bold uppercase mb-2">Débito Pendente</p>
+                    <p id="alerta-valor" class="text-4xl font-black text-rose-700 tracking-tighter">R$ 0,00</p>
+                    <p id="alerta-detalhe" class="text-rose-500 text-xs font-medium mt-2">Vencido desde: --/--/----</p>
+                </div>
+
+                <div class="flex flex-col gap-3">
+                    <button onclick="cobrarInadimplentePeloAlerta()"
+                        class="w-full bg-[#25D366] text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2">
+                        <i data-lucide="message-circle" class="w-5 h-5"></i> COBRAR VIA WHATSAPP
+                    </button>
+                    <button
+                        onclick="document.getElementById('modalAlertaInadimplente').classList.replace('flex', 'hidden')"
+                        class="w-full py-4 text-slate-400 text-xs font-bold uppercase tracking-widest">Fechar
+                        Alerta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAlertaNoPatio"
+        class="fixed inset-0 bg-amber-900/90 backdrop-blur-md z-[300] hidden items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-pulse-amber border-[8px] border-amber-500">
+            <div class="bg-amber-500 p-6 text-white text-center">
+                <i data-lucide="copy" class="w-16 h-16 mx-auto mb-2"></i>
+                <h3 class="text-2xl font-black uppercase tracking-tighter">Veículo já no Pátio</h3>
+            </div>
+            <div class="p-8 text-center">
+                <h4 id="alerta-patio-modelo" class="text-2xl font-black text-slate-800 mb-2">---</h4>
+                <div class="bg-amber-50 p-6 rounded-3xl border border-amber-100 mb-6">
+                    <p class="text-amber-700 text-sm font-bold uppercase">Entrada registrada às:</p>
+                    <p id="alerta-patio-hora" class="text-3xl font-black text-amber-700">00:00</p>
+                </div>
+                <button onclick="document.getElementById('modalAlertaNoPatio').classList.replace('flex', 'hidden')"
+                    class="w-full py-4 bg-amber-500 text-white font-bold rounded-2xl uppercase">Entendido</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalAlertaVip"
+        class="fixed inset-0 bg-emerald-900/90 backdrop-blur-md z-[300] hidden items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-pulse-green-border border-[8px] border-emerald-500">
+            <div class="bg-emerald-500 p-6 text-white text-center">
+                <i data-lucide="crown" class="w-16 h-16 mx-auto mb-2"></i>
+                <h3 class="text-2xl font-black uppercase tracking-tighter">Mensalista VIP</h3>
+            </div>
+            <div class="p-8 text-center">
+                <h4 id="alerta-vip-nome" class="text-2xl font-black text-slate-800 mb-1">---</h4>
+                <p id="alerta-vip-placa" class="text-sm font-bold text-emerald-600 mb-4 font-mono">---</p>
+                <div class="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 mb-6">
+                    <p class="text-emerald-700 text-xs font-bold uppercase">Status do Plano</p>
+                    <p class="text-xl font-black text-emerald-700">PAGAMENTO EM DIA</p>
+                    <p id="alerta-vip-venc" class="text-[10px] text-emerald-600 font-bold mt-1 uppercase">Vence em:
+                        --/--</p>
+                </div>
+                <button onclick="document.getElementById('modalAlertaVip').classList.replace('flex', 'hidden')"
+                    class="w-full py-4 bg-emerald-500 text-white font-bold rounded-2xl">LIBERAR ENTRADA</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalLicenca"
+        class="fixed inset-0 bg-slate-900/95 backdrop-blur-md z-[400] flex items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border-t-8 border-indigo-500 animate-in zoom-in-95 duration-300">
+            <div class="p-8 text-center">
+                <div id="chave-secreta-ativa" class="...">
+                    <i data-lucide="key-round" class="w-10 h-10"></i>
+                </div>
+
+                <h3 class="text-2xl font-black text-slate-800 mb-2 uppercase">Ativação do Sistema</h3>
+
+                <div class="mb-6 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-300">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID desta Máquina</p>
+                    <p id="display-id-modal" class="font-mono font-bold text-indigo-600 tracking-tighter">--------</p>
+                </div>
+
+                <p class="text-slate-500 text-sm mb-8 leading-relaxed">
+                    Envie o ID acima para o desenvolvedor para obter sua chave permanente ou use o modo demo (30 min).
+                </p>
+
+                <div class="space-y-4">
+                    <input type="text" id="input-chave-licenca" placeholder="Sua Chave Aqui"
+                        class="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono text-center font-bold tracking-widest uppercase">
+
+                    <div class="flex gap-3">
+                        <button onclick="ativarLicencaPeloModal()"
+                            class="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all">
+                            ATIVAR AGORA
+                        </button>
+                        <button onclick="iniciarModoDemo()"
+                            class="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all">
+                            MODO DEMO
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalGeradorHayden"
+        class="fixed inset-0 bg-indigo-950/95 backdrop-blur-xl z-[500] hidden items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden border-4 border-indigo-500">
+            <div class="bg-indigo-600 p-6 text-white flex justify-between items-center">
+                <div>
+                    <h3 class="text-xl font-black uppercase tracking-tighter">Gerador de Licenças</h3>
+                    <p class="text-[10px] opacity-80 font-bold uppercase">Acesso Restrito: Hayden Fernandes</p>
+                </div>
+                <button onclick="document.getElementById('modalGeradorHayden').classList.replace('flex', 'hidden')"
+                    class="bg-white/10 p-2 rounded-full hover:bg-white/20">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-8 space-y-6">
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mb-2 block">ID da Máquina do
+                        Cliente</label>
+                    <input type="text" id="gen-id-cliente" placeholder="Cole o ID enviado pelo cliente"
+                        class="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-indigo-500 font-mono text-center font-bold">
+                </div>
+                <div>
+                    <label class="text-[10px] font-bold text-slate-400 uppercase mb-2 block">Chave Gerada</label>
+                    <div class="relative">
+                        <input type="text" id="gen-chave-resultado" readonly
+                            class="w-full p-5 bg-indigo-50 text-indigo-700 border-2 border-indigo-100 rounded-2xl font-mono text-center font-black tracking-widest text-xl">
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="processarGeracao()"
+                        class="flex-1 bg-indigo-600 text-white py-5 rounded-2xl font-black hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">GERAR
+                        LICENÇA</button>
+                    <button onclick="copiarChaveGerada()"
+                        class="bg-slate-900 text-white px-6 rounded-2xl hover:bg-black transition-all">
+                        <i data-lucide="copy" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="modalDecisaoNovaPlaca" onclick="closeOnOutsideClick(event, 'modalDecisaoNovaPlaca')"
+        class="fixed inset-0 bg-indigo-900/60 backdrop-blur-sm z-[200] hidden items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-t-8 border-indigo-500 animate-in zoom-in-95 duration-300">
+            <div class="p-8 text-center">
+                <div
+                    class="w-20 h-20 bg-indigo-50 text-indigo-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <i data-lucide="help-circle" class="w-10 h-10"></i>
+                </div>
+                <h3 class="text-2xl font-black text-slate-800 mb-2">Placa Livre</h3>
+                <p class="text-slate-500 text-sm mb-8">A placa <span id="span-nova-placa"
+                        class="font-mono font-bold text-indigo-600"></span> não possui registros ativos. O que deseja
+                    fazer?</p>
+
+                <div class="space-y-3">
+                    <button onclick="prepararEntradaRapida()"
+                        class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-indigo-700 transition-all">
+                        <i data-lucide="play" class="w-5 h-5"></i> ADICIONAR AO PÁTIO
+                    </button>
+                    <button onclick="prepararAgendamentoRapido()"
+                        class="w-full bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-200 transition-all">
+                        <i data-lucide="calendar" class="w-5 h-5"></i> AGENDAR RESERVA
+                    </button>
+                    <button onclick="toggleModal('modalDecisaoNovaPlaca')"
+                        class="w-full text-slate-400 text-xs font-bold uppercase tracking-widest pt-4">Cancelar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modalDetalhesMensalista" onclick="closeOnOutsideClick(event, 'modalDetalhesMensalista')"
+        class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] hidden items-center justify-center p-4">
+        <div
+            class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+            <div class="bg-indigo-600 p-6 text-white text-center">
+                <i data-lucide="user" class="w-12 h-12 mx-auto mb-2"></i>
+                <h3 class="text-xl font-black uppercase tracking-tighter">Detalhes do Cliente</h3>
+            </div>
+            <div class="p-8">
+                <div class="space-y-4 mb-6">
+                    <div class="flex justify-between border-b pb-2"><span
+                            class="text-slate-400 text-xs font-bold uppercase">Nome:</span> <span id="det-nome"
+                            class="font-bold text-slate-800"></span></div>
+                    <div class="flex justify-between border-b pb-2"><span
+                            class="text-slate-400 text-xs font-bold uppercase">CPF:</span> <span id="det-cpf"
+                            class="font-mono text-slate-800"></span></div>
+                    <div class="flex justify-between border-b pb-2"><span
+                            class="text-slate-400 text-xs font-bold uppercase">Placa Principal:</span> <span
+                            id="det-placa" class="font-bold text-indigo-600"></span></div>
+
+                    <div class="bg-indigo-50 p-6 rounded-3xl text-center mt-6">
+                        <p class="text-indigo-600 text-[10px] font-bold uppercase mb-1">Uso no mês atual</p>
+                        <p id="det-usos-mes" class="text-5xl font-black text-indigo-900 tracking-tighter">0</p>
+                        <p class="text-indigo-400 text-[10px] font-bold uppercase mt-1">Vezes estacionado</p>
+                    </div>
+                </div>
+                <button onclick="toggleModal('modalDetalhesMensalista')"
+                    class="w-full py-4 bg-slate-100 text-slate-600 font-bold rounded-2xl">Fechar Visualização</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="print-section" class="hidden"></div>
+
+</body>
+
+<button onclick="toggleModal('modalBuscaPlaca')"
+    class="fixed bottom-8 right-8 w-16 h-16 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 hover:bg-indigo-600 transition-all z-[100] group">
+    <i data-lucide="search" class="w-7 h-7"></i>
+    <span
+        class="absolute right-20 bg-slate-800 text-white text-[10px] px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity font-bold uppercase tracking-wider whitespace-nowrap pointer-events-none">Busca
+        Rápida</span>
+</button>
+
+<div id="modalBuscaPlaca" onclick="closeOnOutsideClick(event, 'modalBuscaPlaca')"
+    class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] hidden items-center justify-center p-4">
+    <div class="flex flex-col items-center gap-6 w-full max-w-md">
+        <div class="w-full bg-white border-[6px] border-slate-900 rounded-2xl overflow-hidden shadow-2xl">
+            <div class="bg-[#003399] p-3 flex justify-between items-center text-white px-6">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-4 bg-white/20 rounded-sm overflow-hidden flex flex-col">
+                        <div class="h-1/2 bg-blue-600"></div>
+                        <div class="h-1/2 bg-yellow-400"></div>
+                    </div>
+                    <span class="text-xs font-bold tracking-widest uppercase">Brasil</span>
+                </div>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/05/Flag_of_Brazil.svg/2000px-Flag_of_Brazil.svg.png"
+                    class="w-6 h-4 object-cover rounded-sm">
+            </div>
+            <div class="p-8 bg-white flex flex-col items-center">
+                <input type="text" id="input-placa-busca" maxlength="7" placeholder="ABC1D23"
+                    oninput="if(this.value.length === 7) buscarVeiculoPelaPlaca()"
+                    onkeydown="if(event.key === 'Enter') buscarVeiculoPelaPlaca()"
+                    class="w-full text-center text-6xl font-black font-mono uppercase tracking-[0.2em] outline-none border-none placeholder-slate-200 text-slate-900">
+            </div>
+        </div>
+
+        <div id="resultado-busca-placa"
+            class="hidden w-full bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100 flex-col gap-4 animate-in fade-in slide-in-from-bottom-4">
+            <div class="flex justify-between items-center border-b border-slate-50 pb-4">
+                <div>
+                    <h4 id="res-modelo" class="text-xl font-black text-slate-800 uppercase">---</h4>
+                    <p id="res-tempo" class="text-xs font-bold text-indigo-500 uppercase">Tempo: --:--</p>
+                </div>
+                <div class="text-right">
+                    <p id="res-valor" class="text-2xl font-black text-emerald-600 tracking-tighter">R$ 0,00</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                <button id="btn-add-serv-res"
+                    class="flex-1 bg-indigo-50 text-indigo-700 py-4 rounded-2xl font-bold text-sm hover:bg-indigo-600 hover:text-white transition-all">ADICIONAR
+                    SERVIÇO</button>
+                <button id="btn-sair-res"
+                    class="flex-1 bg-rose-600 text-white py-4 rounded-2xl font-bold text-sm shadow-lg shadow-rose-200 hover:bg-rose-700 transition-all">FINALIZAR
+                    (SAIR)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+</html>
