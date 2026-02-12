@@ -556,14 +556,30 @@
 
         // Inicializa o histórico e instruções da IA
         function configurarGemini() {
+            let personaPrompt = "";
+
+            // Define a personalidade baseada na escolha do usuário
+            if (tipoAconselhador === 'carreira') {
+                personaPrompt = `Você é um mentor de carreira e especialista em mercado de trabalho. Ajude o usuário ${usuario.nome} com conselhos sobre entrevistas, currículos, produtividade e transição de carreira. Seja motivador, profissional e estratégico.`;
+            } else if (tipoAconselhador === 'religioso') {
+                personaPrompt = `Você é um conselheiro espiritual acolhedor para ${usuario.nome}. Use palavras de fé, esperança e compaixão. Cite conceitos de paz interior sem ser impositivo.`;
+            } else if (tipoAconselhador === 'direto') {
+                personaPrompt = `Você é um mentor pragmático. Dê conselhos diretos, lógicos e focados em soluções imediatas para ${usuario.nome}. Sem rodeios.`;
+            } else if (tipoAconselhador === 'amigavel') {
+                personaPrompt = `Você é o melhor amigo de ${usuario.nome}. Use linguagem informal, carinhosa e seja um ótimo ouvinte, como se estivessem conversando em um café.`;
+            } else {
+                personaPrompt = `Você é um terapeuta chamado "Coração Acolhido". Paciente: ${usuario.nome}, ${usuario.genero}, ${usuario.status}. Foco em empatia e acolhimento emocional.`;
+            }
+
+            // Atualiza o histórico inicial com as novas instruções
             chatHistory = [{
                 role: "user",
                 parts: [{
-                    text: `Você é um terapeuta chamado "Coração Acolhido". Paciente: ${usuario.nome}, ${usuario.genero}, ${usuario.status}. 
+                    text: `${personaPrompt}
             REGRAS DE RESPOSTA:
-            1. Comece SEMPRE sua resposta com apenas UM emoji e '#'. Exemplo: ❤️#
+            1. Comece SEMPRE sua resposta com apenas UM emoji e '#'. Exemplo: 💼# ou ❤️#
             2. Nunca use tópicos ou listas.
-            3. Responda com no máximo 3 parágrafos curtos usando '|' para separar.`
+            3. Responda com no máximo 3 parágrafos curtos usando o caractere '|' para separar as partes que eu vou animar na tela.`
                 }]
             }];
         }
@@ -925,23 +941,40 @@
         function mudarAconselhador(tipo, elemento, isInitial = false) {
             tipoAconselhador = tipo;
 
-            // Remove todos os temas
-            document.body.classList.remove('tema-religioso', 'tema-direto', 'tema-amigavel', 'tema-carreira');
+            // Limpa absolutamente todos os temas possíveis
+            document.body.classList.remove('tema-religioso', 'tema-direto', 'tema-amigavel', 'tema-carreira', 'tema-homem');
 
-            // Aplica o novo tema
-            if (tipo === 'religioso') document.body.classList.add('tema-religioso');
-            if (tipo === 'direto') document.body.classList.add('tema-direto');
-            if (tipo === 'amigavel') document.body.classList.add('tema-amigavel');
-            if (tipo === 'carreira') document.body.classList.add('tema-carreira');
+            // Aplica o novo tema visual
+            const temas = {
+                'religioso': 'tema-religioso',
+                'direto': 'tema-direto',
+                'amigavel': 'tema-amigavel',
+                'carreira': 'tema-carreira'
+            };
 
-            // Fecha popups e menus
+            if (temas[tipo]) {
+                document.body.classList.add(temas[tipo]);
+            } else if (tipo === 'psicologo' && usuario.genero === 'homem') {
+                document.body.classList.add('tema-homem');
+            }
+
+            // Fecha os menus/popups
             document.getElementById('popup-selecao').style.display = 'none';
-            if (document.getElementById('menuAconselhadores')) document.getElementById('menuAconselhadores').style.display = 'none';
+            const menuLat = document.getElementById('menuAconselhadores');
+            if (menuLat) menuLat.style.display = 'none';
 
+            // Reinicia a IA com a nova instrução
             configurarGemini();
 
+            // Se não for a escolha inicial do login, avisa no chat
             if (!isInitial) {
-                const nomes = { 'psicologo': 'Terapia', 'carreira': 'Carreira', 'religioso': 'Espiritual', 'direto': 'Prático' };
+                const nomes = {
+                    'psicologo': 'Terapia',
+                    'carreira': 'Foco em Carreira',
+                    'religioso': 'Espiritualidade',
+                    'direto': 'Modo Prático',
+                    'amigavel': 'Modo Amigo'
+                };
                 appendMessage(`Abordagem alterada para: ${nomes[tipo]}.`, 'bot');
             }
         }
