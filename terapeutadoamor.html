@@ -431,6 +431,45 @@
             font-weight: bold;
             cursor: pointer;
         }
+
+
+        .grid-humor {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-humor {
+            flex: 1;
+            padding: 10px;
+            border-radius: 15px;
+            border: 1px solid #eee;
+            cursor: pointer;
+            background: #fdfdfd;
+            transition: all 0.3s;
+            font-size: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .btn-humor:hover {
+            background: var(--cor-secundaria);
+            transform: scale(1.1);
+        }
+
+        .btn-humor span {
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .btn-humor.selecionado {
+            border-color: var(--cor-primaria);
+            background: var(--cor-secundaria);
+        }
     </style>
 </head>
 
@@ -467,21 +506,30 @@
 
     <div id="popup-selecao" class="modal-conselheiro">
         <div class="card-selecao">
-            <h2 style="margin-top:0; color: #333;">Como posso te ajudar hoje?</h2>
-            <p style="font-size: 0.9rem; color: #666;">Escolha a abordagem ideal para o seu momento:</p>
+            <div id="etapa-conselheiro">
+                <h2 style="margin-top:0; color: #333;">Como posso te ajudar hoje?</h2>
+                <div class="grid-conselheiros">
+                    <div class="btn-escolha" onclick="proximaEtapaMood('psicologo')">
+                        <span>🌿</span><label>Terapia</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('carreira')">
+                        <span>💼</span><label>Carreira</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('religioso')">
+                        <span>🙏</span><label>Espiritual</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('direto')"><span>⚡</span><label>Prático</label>
+                    </div>
+                </div>
+            </div>
 
-            <div class="grid-conselheiros">
-                <div class="btn-escolha" onclick="mudarAconselhador('psicologo', this, true)">
-                    <span>🌿</span><label>Terapia</label>
-                </div>
-                <div class="btn-escolha" onclick="mudarAconselhador('carreira', this, true)">
-                    <span>💼</span><label>Carreira</label>
-                </div>
-                <div class="btn-escolha" onclick="mudarAconselhador('religioso', this, true)">
-                    <span>🙏</span><label>Espiritual</label>
-                </div>
-                <div class="btn-escolha" onclick="mudarAconselhador('direto', this, true)">
-                    <span>⚡</span><label>Prático</label>
+            <div id="etapa-humor" style="display: none;">
+                <h2 style="margin-top:0; color: #333;">Como você está se sentindo?</h2>
+                <div class="grid-humor">
+                    <div class="btn-humor" onclick="finalizarSelecao('Feliz')">😊<span>Feliz</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Ansioso')">😟<span>Ansioso</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Triste')">😢<span>Triste</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Estressado')">🤯<span>Exausto</span></div>
                 </div>
             </div>
         </div>
@@ -571,15 +619,22 @@
                 personaPrompt = `Você é um terapeuta chamado "Coração Acolhido". Paciente: ${usuario.nome}, ${usuario.genero}, ${usuario.status}. Foco em empatia e acolhimento emocional.`;
             }
 
-            // Atualiza o histórico inicial com as novas instruções
             chatHistory = [{
                 role: "user",
                 parts: [{
                     text: `${personaPrompt}
+            CONTEXTO ADICIONAL:
+            - O usuário relatou estar se sentindo: ${humorAtual}.
+            - Abaixo está o que foi conversado ONTEM (use apenas se o usuário perguntar ou demonstrar que não lembra):
+            --- INÍCIO DO HISTÓRICO DE ONTEM ---
+            ${conteudoOntem}
+            --- FIM DO HISTÓRICO DE ONTEM ---
+
             REGRAS DE RESPOSTA:
-            1. Comece SEMPRE sua resposta com apenas UM emoji e '#'. Exemplo: 💼# ou ❤️#
-            2. Nunca use tópicos ou listas.
-            3. Responda com no máximo 3 parágrafos curtos usando o caractere '|' para separar as partes que eu vou animar na tela.`
+            1. Se o usuário disser que não lembra de ontem ou perguntar "o que falamos?", faça um resumo muito breve e acolhedor em 2 frases no máximo.
+            2. Se ele não mencionar ontem, ignore o histórico acima e foque no agora.
+            3. Comece SEMPRE com UM emoji e '#'.
+            4. Use '|' para separar parágrafos.`
                 }]
             }];
         }
@@ -658,7 +713,7 @@
             }
         }
 
-        function appendMessage(text, side) {
+        function appendMessage(text, side, buttons = []) {
             const wrapper = document.createElement('div');
             wrapper.className = 'message-wrapper';
 
@@ -667,11 +722,43 @@
             div.innerText = text;
 
             wrapper.appendChild(div);
+
+            // Se houver botões, adiciona-os logo abaixo da bolha de texto
+            if (buttons.length > 0) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.display = 'flex';
+                btnContainer.style.gap = '8px';
+                btnContainer.style.marginTop = '10px';
+                btnContainer.style.flexWrap = 'wrap';
+
+                buttons.forEach(btn => {
+                    const button = document.createElement('button');
+                    button.innerText = btn.label;
+                    button.style.cssText = `
+                padding: 8px 16px;
+                border-radius: 20px;
+                border: 1px solid var(--cor-primaria);
+                background: white;
+                color: var(--cor-primaria);
+                cursor: pointer;
+                font-size: 0.85rem;
+                font-weight: bold;
+                transition: all 0.3s;
+            `;
+                    button.onclick = () => {
+                        btnContainer.remove(); // Remove os botões após o clique
+                        btn.action();
+                    };
+                    btnContainer.appendChild(button);
+                });
+                wrapper.appendChild(btnContainer);
+            }
+
             const chatBox = document.getElementById('chatBox');
             chatBox.appendChild(wrapper);
             chatBox.scrollTop = chatBox.scrollHeight;
 
-            return div; // Retorna o elemento para que possamos colar a reação nele
+            return div;
         }
 
 
@@ -1005,6 +1092,167 @@
             3. Responda com no máximo 3 parágrafos curtos usando '|' para separar.`
                 }]
             }];
+        }
+
+
+        let humorAtual = "Neutro"; // Variável global para guardar o humor
+
+        function proximaEtapaMood(tipo) {
+            // Primeiro aplicamos o tipo e o tema (como já fazíamos)
+            tipoAconselhador = tipo;
+            document.body.classList.remove('tema-religioso', 'tema-direto', 'tema-amigavel', 'tema-carreira', 'tema-homem');
+
+            const temas = { 'religioso': 'tema-religioso', 'direto': 'tema-direto', 'amigavel': 'tema-amigavel', 'carreira': 'tema-carreira' };
+            if (temas[tipo]) document.body.classList.add(temas[tipo]);
+            else if (tipo === 'psicologo' && usuario.genero === 'homem') document.body.classList.add('tema-homem');
+
+            // Troca a tela do popup
+            document.getElementById('etapa-conselheiro').style.display = 'none';
+            document.getElementById('etapa-humor').style.display = 'block';
+        }
+
+        async function finalizarSelecao(humor) {
+            humorAtual = humor;
+            document.getElementById('popup-selecao').style.display = 'none';
+
+            configurarGemini();
+
+            const pendencia = await verificarUltimaMensagemPendente();
+            let saudacao = "";
+            let botoes = [];
+
+            const boasVindasHumor = {
+                'Feliz': `Que maravilha te ver feliz, ${usuario.nome}!`,
+                'Ansioso': `Respire fundo, ${usuario.nome}. Estou aqui com você.`,
+                'Triste': `Sinto muito que as coisas estejam difíceis hoje, ${usuario.nome}.`,
+                'Estressado': `Pare um minuto, ${usuario.nome}. Deixe o peso do mundo lá fora.`
+            };
+
+            saudacao = boasVindasHumor[humor] || `Oi ${usuario.nome}, que bom te ver.`;
+
+            if (pendencia && pendencia.foiUsuario) {
+                saudacao += ` | Notei que nossa última conversa parou em: "${pendencia.texto.substring(0, 30)}...". Como prefere seguir?`;
+
+                botoes = [
+                    {
+                        label: "🔄 Continuar de onde paramos",
+                        action: () => {
+                            document.getElementById('userInput').value = "Vamos continuar nossa última conversa?";
+                            sendMessage();
+                        }
+                    },
+                    {
+                        label: "🆕 Iniciar novo assunto",
+                        action: () => {
+                            appendMessage("Entendido! Vamos focar no agora. O que está em sua mente?", 'bot');
+                        }
+                    }
+                ];
+            } else {
+                const teveConversaOntem = await verificarConversaOntem();
+                if (teveConversaOntem) {
+                    saudacao += ` | A nossa conversa de ontem te ajudou de alguma forma?`;
+                } else {
+                    saudacao += ` Como posso te ouvir agora?`;
+                }
+            }
+
+            appendMessage(saudacao, 'bot', botoes);
+        }
+
+        // ATUALIZE sua função configurarGemini para usar o humorAtual:
+        function configurarGemini() {
+            let personaPrompt = "";
+
+            // Personalidades (mantendo o que você já tinha)
+            if (tipoAconselhador === 'carreira') {
+                personaPrompt = `Você é um mentor de carreira.`;
+            } else if (tipoAconselhador === 'religioso') {
+                personaPrompt = `Você é um conselheiro espiritual.`;
+            } // ... (resto das suas personas)
+
+            chatHistory = [{
+                role: "user",
+                parts: [{
+                    text: `${personaPrompt} 
+            IMPORTANTE: O usuário ${usuario.nome} relatou que hoje se sente: ${humorAtual}. 
+            Adapte seu tom de voz a esse sentimento.
+            REGRAS DE RESPOSTA:
+            1. Comece SEMPRE sua resposta com apenas UM emoji e '#'.
+            2. Nunca use tópicos ou listas.
+            3. Responda com no máximo 3 parágrafos curtos usando '|'.`
+                }]
+            }];
+        }
+
+        async function verificarConversaOntem() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            // Calcula a data de ontem (início e fim do dia)
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const dataInicio = new Date(ontem.setHours(0, 0, 0, 0)).toISOString();
+            const dataFim = new Date(ontem.setHours(23, 59, 59, 999)).toISOString();
+
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('id')
+                .eq('user_id', user.id)
+                .gte('created_at', dataInicio)
+                .lte('created_at', dataFim)
+                .limit(1);
+
+            return data && data.length > 0;
+        }
+
+
+        async function buscarResumoOntem() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const dataInicio = new Date(ontem.setHours(0, 0, 0, 0)).toISOString();
+            const dataFim = new Date(ontem.setHours(23, 59, 59, 999)).toISOString();
+
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('content, role')
+                .eq('user_id', user.id)
+                .gte('created_at', dataInicio)
+                .lte('created_at', dataFim)
+                .order('created_at', { ascending: true });
+
+            if (error || !data || data.length === 0) return "Não encontrei registros da nossa conversa de ontem.";
+
+            // Formata as mensagens para a IA entender o contexto
+            return data.map(m => `${m.role === 'user' ? 'Usuário' : 'IA'}: ${m.content}`).join('\n');
+        }
+
+        async function verificarUltimaMensagemPendente() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            // Busca a última mensagem enviada no histórico geral
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('content, role, created_at')
+                .eq('user_id', user.id)
+                .order('created_at', { descending: true })
+                .limit(1);
+
+            if (error || !data || data.length === 0) return null;
+
+            const ultimaMsg = data[0];
+            const agora = new Date();
+            const dataMsg = new Date(ultimaMsg.created_at);
+            const diffMinutos = Math.floor((agora - dataMsg) / (1000 * 60));
+
+            // Se a última mensagem foi do usuário, ele saiu sem resposta
+            // Ou se foi da IA mas faz pouco tempo (ex: menos de 2 horas), pode ser uma continuação
+            return {
+                foiUsuario: ultimaMsg.role === 'user',
+                texto: ultimaMsg.content,
+                tempo: diffMinutos
+            };
         }
 
     </script>
