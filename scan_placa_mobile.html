@@ -78,41 +78,73 @@
         </div>
     </div>
 
+    <div id="alert-security-mobile"
+        class="fixed inset-0 bg-red-600 z-[200] hidden flex-col items-center justify-center p-8 text-center animate-pulse">
+        <div class="bg-white text-red-600 p-6 rounded-full mb-6">
+            <i data-lucide="shield-alert" class="w-16 h-16"></i>
+        </div>
+        <h2 class="text-4xl font-black text-white uppercase mb-2">Placa Suspeita!</h2>
+        <p id="alert-plate-display"
+            class="text-6xl font-mono font-black text-white border-y-4 border-white py-4 my-6 tracking-widest">-------
+        </p>
+        <p class="text-red-100 font-bold mb-10">VEÍCULO COM ALERTA NO SISTEMA.<br>PROCEDA COM CAUTELA.</p>
+        <button onclick="fecharAlertaSeguranca()"
+            class="w-full bg-white text-red-600 py-6 rounded-3xl font-black uppercase text-xl shadow-2xl">Entendido /
+            Voltar</button>
+    </div>
+
     <script>
-        const _supabase = supabase.createClient('SUA_URL', 'SUA_KEY'); // Use suas credenciais do arquivo original
-        // Inicialize explicitamente como null para evitar o ReferenceError
+        // 1. Inicialização segura
         let videoStream = null;
+        const _supabase = supabase.createClient('https://rwrlhccfltspvqwivuem.supabase.co/', 'sb_publishable_ybAZuMlyoJkPC0g4dRWvfg_IGj0Z7MG');
 
         async function abrirCamera() {
             const popup = document.getElementById('camera-popup');
             const video = document.getElementById('video');
+
+            // Reset de estado inicial
             popup.classList.replace('hidden', 'flex');
 
             try {
-                // Atribuindo a stream à variável global já inicializada
-                videoStream = await navigator.mediaDevices.getUserMedia({
+                // 2. Solicitação da stream com restrições ideais para LPR
+                const stream = await navigator.mediaDevices.getUserMedia({
                     video: {
-                        facingMode: "environment",
-                        focusMode: "continuous"
+                        facingMode: "environment", // Câmera traseira
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
                     }
                 });
 
-                video.srcObject = videoStream;
-                iniciarProcessamentoLPR();
+                // 3. Atribuição segura
+                videoStream = stream;
+                video.srcObject = stream;
+
+                // Garante que o vídeo começou a tocar antes de processar
+                video.onloadedmetadata = () => {
+                    video.play();
+                    iniciarProcessamentoLPR();
+                };
+
             } catch (err) {
-                console.error("Erro detalhado:", err);
-                alert("Erro ao acessar câmera: " + err.message);
-                fecharCamera(); // Garante que o popup feche se falhar
+                console.error("Falha na Câmera:", err);
+                alert("Permissão de câmera negada ou erro de inicialização.");
+                fecharCamera();
             }
         }
 
         function fecharCamera() {
-            // Verifica se a variável foi preenchida antes de tentar acessar getTracks
-            if (videoStream && videoStream.getTracks) {
-                videoStream.getTracks().forEach(track => track.stop());
+            // 4. Verificação robusta antes de parar os tracks
+            if (videoStream) {
+                const tracks = videoStream.getTracks();
+                tracks.forEach(track => {
+                    track.stop();
+                    console.log("Track parado:", track.label);
+                });
             }
-            videoStream = null; // Reseta para o estado inicial
+
+            videoStream = null; // Limpa a referência
             document.getElementById('camera-popup').classList.replace('flex', 'hidden');
+            document.getElementById('scan-status').innerHTML = `<p class="text-indigo-400 font-bold animate-pulse uppercase tracking-widest text-xs">Aguardando enquadramento...</p>`;
         }
 
         async function iniciarProcessamentoLPR() {
@@ -157,32 +189,102 @@
         }
 
         async function confirmarEntradaAutomatica(placa) {
+            const status = document.getElementById('scan-status');
             const { data: { user } } = await _supabase.auth.getUser();
 
-            // Verifica se já está no pátio
-            const { data: existente } = await _supabase.from('veiculos_ativos').select('*').eq('placa', placa).single();
+            // 1. CHECAGEM DE SEGURANÇA (Placas Clonadas/Suspeitas)
+            const { data: incidente } = await _supabase
+                .from('log_seguranca')
+                .select('*')
+                .eq('placa', placa)
+                .maybeSingle();
 
-            if (existente) {
-                alert("VEÍCULO JÁ ESTÁ NO PÁTIO!");
+            if (incidente) {
+                dispararAlertaSeguranca(placa);
+                return;
+            }
+
+            // 2. CHECAGEM DE PÁTIO (Já está dentro?)
+            const { data: noPatio } = await _supabase
+                .from('veiculos_ativos')
+                .select('*')
+                .eq('placa', placa)
+                .maybeSingle();
+
+            if (noPatio) {
+                alert(`O veículo ${placa} já está no pátio desde ${new Date(noPatio.entrada).toLocaleTimeString()}.`);
                 fecharCamera();
                 return;
             }
 
-            const novoVeiculo = {
-                modelo: "MOBILE SCAN",
+            // 3. CHECAGEM DE MENSALISTA / INADIMPLÊNCIA
+            const { data: mensalista } = await _supabase
+                .from('mensalistas')
+                .select('*')
+                .eq('placa', placa)
+                .maybeSingle();
+
+            if (mensalista) {
+                const hoje = new Date().toISOString().split('T')[0];
+                const isInadimplente = mensalista.vencimento < hoje;
+
+                if (isInadimplente) {
+                    fecharCamera();
+                    alert(`BLOQUEADO: Mensalista ${mensalista.nome} está INADIMPLENTE (Venceu em ${new Date(mensalista.vencimento).toLocaleDateString()}).`);
+                    return;
+                } else {
+                    // VIP EM DIA: Cadastra com tag de Mensalista
+                    cadastrarFinal(placa, `MENSALISTA: ${mensalista.nome}`, user.id);
+                    return;
+                }
+            }
+
+            // 4. SE TUDO OK: CADASTRO NORMAL
+            cadastrarFinal(placa, "SCAN MOBILE LPR", user.id);
+        }
+
+
+        // Função auxiliar para cadastro no Supabase
+        async function cadastrarFinal(placa, modelo, userId) {
+            const { error } = await _supabase.from('veiculos_ativos').insert([{
+                modelo: modelo,
                 placa: placa,
                 entrada: new Date().toISOString(),
-                user_id: user.id
-            };
-
-            const { error } = await _supabase.from('veiculos_ativos').insert([novoVeiculo]);
+                user_id: userId
+            }]);
 
             if (!error) {
                 fecharCamera();
                 carregarPatioMobile();
-                navigator.vibrate([100, 50, 100]); // Feedback tátil
+                if (navigator.vibrate) navigator.vibrate(150);
+                console.log(`Entrada confirmada: ${placa}`);
+            } else {
+                alert("Erro ao salvar no banco.");
             }
         }
+
+
+
+        function dispararAlertaSeguranca(placa) {
+            fecharCamera();
+            const alertModal = document.getElementById('alert-security-mobile');
+            document.getElementById('alert-plate-display').innerText = placa;
+            alertModal.classList.replace('hidden', 'flex');
+
+            // Vibração agressiva (Padrão de Alerta Crítico)
+            if (navigator.vibrate) {
+                navigator.vibrate([500, 200, 500, 200, 500]);
+            }
+
+            lucide.createIcons();
+        }
+
+        function fecharAlertaSeguranca() {
+            document.getElementById('alert-security-mobile').classList.replace('flex', 'hidden');
+            carregarPatioMobile();
+        }
+
+
 
         async function carregarPatioMobile() {
             const { data } = await _supabase.from('veiculos_ativos').select('*').order('entrada', { ascending: false });
