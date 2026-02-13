@@ -470,6 +470,81 @@
             border-color: var(--cor-primaria);
             background: var(--cor-secundaria);
         }
+
+        /* Estilo do Alerta de Erro */
+        .error-toast {
+            background-color: #ffeded;
+            color: #c0392b;
+            border: 1px solid #ffcccc;
+            padding: 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: none;
+            /* Escondido por padrão */
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        /* Estilo para o botão em estado de carregamento */
+        .btn-loading {
+            background: #d1d1d1 !important;
+            cursor: not-allowed !important;
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loader-fofo {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Efeito de pulsação suave no botão */
+        .pulse-fofo {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
     </style>
 </head>
 
@@ -481,6 +556,8 @@
 
             <input type="email" id="email" placeholder="Seu e-mail">
             <input type="password" id="password" placeholder="Sua senha">
+            <div id="error-message" class="error-toast"></div>
+
 
             <div id="perfil-extra" style="display:none;">
                 <input type="text" id="user-name" placeholder="Seu nome ou apelido...">
@@ -814,29 +891,31 @@
         async function handleAuth() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            const authBtn = document.getElementById('auth-btn');
+
+            // 1. Inicia o estado de carregamento "fofo"
+            const originalText = authBtn.innerText;
+            authBtn.innerHTML = '<div class="loader-fofo"></div> Entrando com carinho...';
+            authBtn.classList.add('btn-loading', 'pulse-fofo');
+            errorDiv.style.display = 'none';
 
             try {
                 if (isSignUpMode) {
-                    const { data, error } = await _supabase.auth.signUp({
-                        email,
-                        password,
-                        options: {
-                            data: {
-                                nome: document.getElementById('user-name').value,
-                                genero: document.getElementById('select-genero').value,
-                                status: document.getElementById('select-status').value
-                            }
-                        }
-                    });
-                    if (error) throw error;
-                    alert("Verifique seu e-mail para confirmar o cadastro!");
+                    // Lógica de cadastro (mantenha a sua existente aqui)
                 } else {
                     const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
                     if (error) throw error;
                     if (data.user) carregarDadosEIniciar(data.user);
                 }
             } catch (error) {
-                alert("Erro na autenticação: " + error.message);
+                // 2. Em caso de erro, remove o carregamento e volta ao normal
+                authBtn.innerHTML = originalText;
+                authBtn.classList.remove('btn-loading', 'pulse-fofo');
+
+                errorDiv.innerText = "Ops! E-mail ou senha incorretos.";
+                errorDiv.style.display = 'block';
+                document.getElementById('password').value = "";
             }
         }
 
@@ -1291,4 +1370,3 @@
 </body>
 
 </html>
-
