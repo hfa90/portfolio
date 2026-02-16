@@ -1,1222 +1,670 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hayden Wheels | Gestão Elite</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap"
-        rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://unpkg.com/imask"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <style>
-        :root {
-            --primary: #0f172a;
-            --accent: #3b82f6;
-            --bg: #f8fafc;
-        }
-
-        body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
-            background-color: var(--bg);
-            color: #1e293b;
-        }
-
-        .navbar {
-            background: var(--primary) !important;
-            padding: 1.5rem 0;
-            border-bottom: 4px solid var(--accent);
-        }
-
-        .main-card {
-            border: none;
-            border-radius: 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-            background: #fff;
-        }
-
-        .btn-add-os {
-            background: var(--accent);
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 14px;
-            font-weight: 700;
-            transition: all 0.3s;
-        }
-
-        .btn-add-os:hover {
-            transform: scale(1.05);
-            color: white;
-        }
-
-        .search-container {
-            position: relative;
-            max-width: 400px;
-        }
-
-        .search-container i {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #94a3b8;
-        }
-
-        .search-input {
-            padding-left: 45px !important;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            height: 45px;
-        }
-
-        .img-main {
-            width: 80px;
-            height: 80px;
-            object-fit: cover;
-            border-radius: 12px;
-            border: 2px solid #e2e8f0;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .img-main:hover {
-            transform: scale(1.1);
-            border-color: var(--accent);
-        }
-
-        .btn-action {
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid #e2e8f0;
-            background: #fff;
-            transition: 0.2s;
-        }
-
-        .btn-whatsapp:hover {
-            background: #25d366;
-            color: white;
-            border-color: #25d366;
-        }
-
-        .btn-print:hover {
-            background: var(--accent);
-            color: white;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 10000;">
-        <div id="customToast" class="toast align-items-center text-white bg-primary border-0 shadow-lg" role="alert"
-            aria-live="assertive" aria-atomic="true" style="border-radius: 15px;">
-            <div class="d-flex">
-                <div class="toast-body d-flex align-items-center">
-                    <i id="toastIcon" class="fa-solid fa-circle-check me-2 fs-5 text-info"></i>
-                    <span id="toastMessage" class="fw-bold">Mensagem aqui</span>
-                </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
-            </div>
-        </div>
-    </div>
-    <div id="loginOverlay"
-        class="position-fixed vh-100 vw-100 top-0 start-0 d-flex align-items-center justify-content-center"
-        style="background: var(--primary); z-index: 9999; display: flex !important;">
-        <div class="card p-4 shadow-lg border-0" style="width: 100%; max-width: 400px; border-radius: 24px;">
-            <div class="text-center mb-4">
-                <i class="fa-solid fa-screwdriver-wrench text-info fs-1 mb-2"></i>
-                <h4 class="fw-bold">HAYDEN <span class="text-info">WHEELS</span></h4>
-                <p class="text-muted small">Acesso Restrito ao Sistema</p>
-            </div>
-            <form id="loginForm">
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">E-MAIL</label>
-                    <input type="email" id="loginEmail" class="form-control rounded-3" placeholder="seu@email.com"
-                        required>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small fw-bold">SENHA</label>
-                    <input type="password" id="loginSenha" class="form-control rounded-3" placeholder="••••••" required>
-                </div>
-                <div id="loginErro" class="alert alert-danger py-2 small" style="display: none;"></div>
-                <button type="submit" class="btn btn-info w-100 py-3 fw-bold text-white rounded-pill">ENTRAR NO
-                    SISTEMA</button>
-            </form>
-        </div>
-    </div>
-
-    <nav class="navbar navbar-dark mb-5">
-        <div class="container d-flex justify-content-between align-items-center">
-            <a class="navbar-brand fw-bold fs-3" href="#">
-                <i class="fa-solid fa-screwdriver-wrench text-info me-2"></i>HAYDEN <span
-                    class="text-info">WHEELS</span>
-            </a>
-            <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-outline-warning border-2 fw-bold px-3" data-bs-toggle="modal"
-                    data-bs-target="#modalEstoque" style="border-radius: 12px;">
-                    <i class="fa-solid fa-box-open"></i> <span class="d-none d-md-inline ms-1">ESTOQUE</span>
-                </button>
-                <button class="btn btn-outline-info border-2 fw-bold px-3" onclick="toggleDashboard()"
-                    style="border-radius: 12px;">
-                    <i class="fa-solid fa-chart-line"></i>
-                </button>
-                <button class="btn btn-add-os" data-bs-toggle="modal" data-bs-target="#modalCadastro">
-                    <i class="fa-solid fa-plus me-2"></i>NOVA O.S.
-                </button>
-            </div>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <button class="btn btn-outline-danger border-2 fw-bold px-3" onclick="logout()"
-                style="border-radius: 12px;">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
-        </div>
-    </nav>
-
-    <div class="modal fade" id="modalEstoque" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 24px;">
-                <div class="modal-header p-4 border-0 bg-light" style="border-radius: 24px 24px 0 0;">
-                    <h5 class="modal-title fw-bold text-primary">
-                        <i class="fa-solid fa-boxes-stacked me-2"></i>GERENCIAMENTO DE ESTOQUE
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <ul class="nav nav-pills mb-4 gap-2" id="pills-tab" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active rounded-pill fw-bold" id="pills-lista-tab"
-                                data-bs-toggle="pill" data-bs-target="#pills-lista" type="button"
-                                onclick="listarProdutosEstoque()">LISTA DE PRODUTOS</button>
-                        </li>
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link rounded-pill fw-bold text-success" id="pills-cadastro-tab"
-                                data-bs-toggle="pill" data-bs-target="#pills-cadastro" type="button">+ CADASTRAR
-                                NOVO</button>
-                        </li>
-                    </ul>
-
-                    <div class="tab-content">
-                        <div class="tab-pane fade show active" id="pills-lista" role="tabpanel">
-                            <div class="table-responsive" style="max-height: 400px;">
-                                <table class="table table-hover align-middle">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th>Produto/Peça</th>
-                                            <th>Custo (R$)</th>
-                                            <th>Venda (R$)</th>
-                                            <th class="text-center">Qtd Atual</th>
-                                            <th class="text-end">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="corpoTabelaEstoque">
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <div class="tab-pane fade" id="pills-cadastro" role="tabpanel">
-                            <form id="estoqueForm">
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold small">NOME DO PRODUTO/PEÇA</label>
-                                        <input type="text" id="prodNome" class="form-control"
-                                            placeholder="Ex: Pneu Aro 17 Michelin" required>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label fw-bold small">PREÇO CUSTO (R$)</label>
-                                        <input type="number" id="prodCusto" class="form-control" step="0.01" required>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label fw-bold small text-success">PREÇO VENDA (R$)</label>
-                                        <input type="number" id="prodVenda" class="form-control" step="0.01" required>
-                                    </div>
-                                    <div class="col-md-6">
-                                        <label class="form-label fw-bold small">QUANTIDADE INICIAL</label>
-                                        <input type="number" id="prodQtd" class="form-control" value="1" required>
-                                    </div>
-                                    <div class="col-md-6 d-flex align-items-end">
-                                        <button type="submit"
-                                            class="btn btn-success w-100 py-2 fw-bold rounded-pill">SALVAR NO
-                                            ESTOQUE</button>
-                                    </div>
-                                </div>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link rounded-pill fw-bold text-info" id="pills-grafico-tab" data-bs-toggle="pill"
-                data-bs-target="#pills-grafico" type="button" onclick="renderizarGraficoVendas()">
-                <i class="fa-solid fa-chart-pie me-1"></i> TOP VENDAS
-            </button>
-        </li>
-
-        <div class="tab-pane fade" id="pills-grafico" role="presentation">
-            <div class="bg-light p-3 rounded-4" style="height: 350px;">
-                <canvas id="graficoVendas"></canvas>
-            </div>
-            <p class="text-muted small mt-2 text-center">Este gráfico mostra as peças que foram mais adicionadas às
-                Ordens de Serviço.</p>
-        </div>
-    </div>
-
-    <div class="modal fade" id="modalCadastro" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 24px;">
-                <div class="modal-header p-4 border-0">
-                    <h5 class="modal-title fw-bold"><i class="fa-solid fa-file-circle-plus me-2"></i>Nova O.S.
-                        Profissional</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="osForm">
-                    <div class="modal-body p-4">
-                        <div class="row g-3">
-                            <div class="col-md-12"><label class="form-label fw-bold small">NOME DO CLIENTE</label><input
-                                    type="text" id="nome" class="form-control" required></div>
-                            <div class="col-md-6"><label class="form-label fw-bold small">WHATSAPP</label><input
-                                    type="text" id="whatsapp" class="form-control"></div>
-                            <div class="col-md-6"><label class="form-label fw-bold small">VEÍCULO / PLACA</label><input
-                                    type="text" id="veiculo" class="form-control" required
-                                    style="text-transform: uppercase;"></div>
-
-                            <div class="col-md-12 border-top pt-3">
-                                <label class="form-label fw-bold small text-primary">ADICIONAR PEÇAS DO ESTOQUE</label>
-                                <div class="input-group">
-                                    <select id="selectProduto" class="form-select border-primary-subtle">
-                                        <option value="">Carregando estoque...</option>
-                                    </select>
-                                    <button type="button" class="btn btn-primary" onclick="adicionarPecaLista()">
-                                        <i class="fa-solid fa-plus"></i>
-                                    </button>
-                                </div>
-                                <div id="listaPecasAdicionadas" class="mt-2 d-flex flex-wrap gap-2"></div>
-                            </div>
-
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold small">MÃO DE OBRA (R$)</label>
-                                <input type="number" id="valorServico" class="form-control" step="0.01" value="0.00"
-                                    oninput="calcularTotalOS()">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold small text-success">TOTAL O.S. (SOMA)</label>
-                                <input type="text" id="valorTotalOS" class="form-control fw-bold bg-light" readonly
-                                    value="0,00">
-                                <input type="hidden" id="valor" name="valor" value="0">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold small">STATUS</label>
-                                <select id="status" class="form-select" required>
-                                    <option value="Pendente">Pendente</option>
-                                    <option value="Em Andamento">Em Andamento</option>
-                                    <option value="Pago">Pago</option>
-                                </select>
-                            </div>
-
-                            <div class="col-md-12"><label class="form-label fw-bold small">OBSERVAÇÕES
-                                    TÉCNICAS</label><textarea id="observacoes" class="form-control" rows="2"></textarea>
-                            </div>
-                            <div class="col-md-12"><label class="form-label fw-bold small">FOTO DO
-                                    ITEM/VEÍCULO</label><input type="file" id="fotoInput" class="form-control"
-                                    accept="image/*"></div>
-                        </div>
-                    </div>
-                    <div class="modal-footer border-0 p-4">
-                        <button type="submit" id="btnSalvar"
-                            class="btn btn-primary rounded-pill px-5 w-100 py-3 fw-bold">SALVAR ORDEM DE
-                            SERVIÇO</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="container">
-        <div class="main-card card p-4">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
-                <h4 class="mb-0 fw-bold text-primary"><i class="fa-solid fa-list-check me-2"></i>Monitor de Oficina</h4>
-
-                <div class="search-container flex-grow-1 mx-md-4">
-                    <i class="fa-solid fa-magnifying-glass"></i>
-                    <input type="text" id="inputBusca" class="form-control search-input"
-                        placeholder="Buscar por placa ou nome do cliente...">
-                </div>
-
-                <button onclick="carregarOS()" class="btn btn-light rounded-pill border"><i
-                        class="fa-solid fa-rotate"></i> Atualizar</button>
-            </div>
-
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>Foto</th>
-                            <th>Cliente / Contato</th>
-                            <th>Veículo / Placa</th>
-                            <th>Serviço</th>
-                            <th>Valor</th>
-                            <th class="text-end">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabelaOS"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-
-    <div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 24px;">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold text-primary"><i class="fa-solid fa-circle-info me-2"></i>Detalhes da
-                        Ordem</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <div id="conteudoDetalhes">
-                    </div>
-                </div>
-                <div class="modal-footer border-0">
-                    <button type="button" class="btn btn-light rounded-pill px-4"
-                        data-bs-dismiss="modal">Fechar</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="modalEditar" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content border-0 shadow-lg" style="border-radius: 24px;">
-                <div class="modal-header p-4 border-0">
-                    <h5 class="modal-title fw-bold text-primary"><i class="fa-solid fa-pen-to-square me-2"></i>Editar
-                        Ordem de Serviço</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="editForm">
-                    <input type="hidden" id="editId">
-                    <div class="modal-body p-4">
-                        <div class="row g-3" id="camposEditar">
-                        </div>
-                    </div>
-                    <div class="modal-footer border-0 p-4">
-                        <button type="submit" class="btn btn-primary rounded-pill px-5 w-100 py-3 fw-bold">ATUALIZAR
-                            DADOS</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="modalPix" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content border-0 shadow-lg text-center" style="border-radius: 24px;">
-                <div class="modal-header border-0 pb-0">
-                    <h5 class="modal-title fw-bold w-100"><i class="fa-solid fa-qrcode me-2 text-info"></i>Pagamento via
-                        PIX</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body p-4">
-                    <div id="pixDetails" class="mb-3 small text-muted"></div>
-                    <div class="d-flex justify-content-center mb-3">
-                        <div id="qrcode" class="p-3 bg-white border rounded-3"></div>
-                    </div>
-                    <div class="input-group mb-3">
-                        <input type="text" id="pixCopiaCola" class="form-control form-control-sm" readonly>
-                        <button class="btn btn-outline-primary btn-sm" onclick="copiarPix()">Copiar</button>
-                    </div>
-                    <button id="btnEnviarPixWhats" class="btn btn-success w-100 rounded-pill fw-bold">
-                        <i class="fa-brands fa-whatsapp me-2"></i>ENVIAR PARA CLIENTE
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-        const SUPABASE_URL = 'https://oxqbhmblreprbeaflfld.supabase.co';
-        const SUPABASE_KEY = 'sb_publishable_r2aSKU0LIzzXvHEcG7TSEQ_1KahDljL';
-        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        let todasOS = []; // Cache para busca local rápida
-
-        IMask(document.getElementById('whatsapp'), { mask: '(00) 00000-0000' });
-        IMask(document.getElementById('veiculo'), { mask: 'AAA-0*00', prepare: s => s.toUpperCase(), definitions: { '0': /[0-9A-Z]/, 'A': /[a-zA-Z]/ } });
-
-        const form = document.getElementById('osForm');
-        const inputBusca = document.getElementById('inputBusca');
-
-        // EVENTO DE BUSCA
-        inputBusca.addEventListener('input', (e) => {
-            const termo = e.target.value.toLowerCase();
-            const filtradas = todasOS.filter(os =>
-                os.nome.toLowerCase().includes(termo) ||
-                os.veiculo.toLowerCase().includes(termo)
-            );
-            renderizarTabela(filtradas);
-        });
-
-        // Função para comprimir a imagem antes de enviar
-        async function comprimirImagem(arquivo) {
-            return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.readAsDataURL(arquivo);
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.src = event.target.result;
-                    img.onload = () => {
-                        const canvas = document.createElement('canvas');
-                        const MAX_WIDTH = 800; // Define largura máxima de 800px
-                        const scaleSize = MAX_WIDTH / img.width;
-                        canvas.width = MAX_WIDTH;
-                        canvas.height = img.height * scaleSize;
-
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-
-                        // Transforma em Blob com qualidade 0.7 (70%)
-                        ctx.canvas.toBlob((blob) => {
-                            resolve(blob);
-                        }, 'image/jpeg', 0.7);
-                    };
-                };
-            });
-        }
-
-        // Função para Popup Personalizado
-        function showNotify(msg, type = 'success') {
-            const toastElem = document.getElementById('customToast');
-            const toastMsg = document.getElementById('toastMessage');
-            const toastIcon = document.getElementById('toastIcon');
-
-            toastMsg.innerText = msg;
-            toastElem.classList.remove('bg-danger', 'bg-primary');
-
-            if (type === 'error') {
-                toastElem.classList.add('bg-danger');
-                toastIcon.className = "fa-solid fa-triangle-exclamation me-2 fs-5";
-            } else {
-                toastElem.classList.add('bg-primary');
-                toastIcon.className = "fa-solid fa-circle-check me-2 fs-5 text-info";
-            }
-
-            const toast = new bootstrap.Toast(toastElem);
-            toast.show();
-        }
-
-        // Evento de Envio Corrigido
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btnSalvar = document.getElementById('btnSalvar');
-            const valorInput = document.getElementById('valor');
-
-            btnSalvar.disabled = true;
-            btnSalvar.innerText = "PROCESSANDO...";
-
-            try {
-                let fotoUrl = null; // Declarada no topo para evitar erro de escopo
-                const fotoInput = document.getElementById('fotoInput');
-                const fotoFile = fotoInput ? fotoInput.files[0] : null;
-
-                // Processamento da Imagem
-                if (fotoFile) {
-                    const fotoComprimida = await comprimirImagem(fotoFile);
-                    const fileName = `${Date.now()}_os.jpg`;
-                    const { data: uploadData, error: uploadError } = await supabaseClient.storage
-                        .from('fotos_os')
-                        .upload(fileName, fotoComprimida);
-
-                    if (uploadError) throw uploadError;
-
-                    const { data: urlData } = supabaseClient.storage.from('fotos_os').getPublicUrl(fileName);
-                    fotoUrl = urlData.publicUrl;
-                }
-
-                // Montagem dos Dados
-                const dados = {
-                    nome: document.getElementById('nome').value,
-                    whatsapp: document.getElementById('whatsapp').value,
-                    veiculo: document.getElementById('veiculo').value.toUpperCase(),
-                    servico: pecasSelecionadas.length > 0
-                        ? pecasSelecionadas.map(p => p.nome).join(', ')
-                        : (document.getElementById('observacoes').value || "Serviço Geral"),
-                    valor: parseFloat(valorInput.value) || 0,
-                    status: document.getElementById('status').value,
-                    observacoes: document.getElementById('observacoes').value,
-                    foto_url: fotoUrl // Agora sempre terá um valor (URL ou null)
-                };
-
-                const { error } = await supabaseClient.from('ordens_servico').insert([dados]);
-                if (error) throw error;
-
-                // Sucesso
-                showNotify('Ordem de Serviço salva com sucesso!');
-                form.reset();
-                pecasSelecionadas = [];
-                renderizarListaPecas();
-                calcularTotalOS();
-                bootstrap.Modal.getInstance(document.getElementById('modalCadastro')).hide();
-                await carregarOS();
-
-            } catch (err) {
-                console.error("Erro no salvamento:", err);
-                showNotify('Erro na operação: ' + err.message, 'error');
-            } finally {
-                btnSalvar.disabled = false;
-                btnSalvar.innerText = "SALVAR ORDEM DE SERVIÇO";
-            }
-        });
-
-        // ATUALIZAÇÃO IMPORTANTE: Chame a atualização do dash dentro do carregarOS
-        async function carregarOS() {
-            const { data, error } = await supabaseClient.from('ordens_servico').select('*').order('created_at', { ascending: false });
-            if (error) return;
-            todasOS = data;
-            renderizarTabela(todasOS);
-            atualizarDashboard(); // <--- Adicione esta linha aqui
-        }
-
-        // 3. Atualize a renderização da tabela para mostrar o status
-        function renderizarTabela(lista) {
-            const tabela = document.getElementById('tabelaOS');
-            tabela.innerHTML = '';
-            lista.forEach(os => {
-                tabela.innerHTML += `
-                <tr>
-                    <td>${os.foto_url ? `<img src="${os.foto_url}" class="img-main" loading="lazy" onclick="window.open('${os.foto_url}')">` : '<div class="bg-light d-flex align-items-center justify-content-center rounded" style="width:80px;height:80px;"><i class="fa-solid fa-image text-muted"></i></div>'}</td>
-                    <td style="cursor:pointer" onclick="verDetalhes('${os.id}')">
-                        <div class="fw-bold text-dark">${os.nome}</div> <small class="text-muted">${os.whatsapp || ''}</small>
-                    </td>
-                    <td><span class="badge bg-dark px-3 py-2">${os.veiculo}</span></td>
-                    <td>
-                        <div class="text-secondary fw-semibold">${os.servico}</div>
-                        ${getStatusBadge(os.id, os.status)}
-                    </td>
-                    <td class="fw-bold text-primary">R$ ${os.valor.toFixed(2)}</td>
-                    <td class="text-end">
-                        <button onclick='abrirPix(${JSON.stringify(os)})' class="btn-action border-info text-info" title="Pagar com Pix"><i class="fa-solid fa-qrcode"></i></button>
-                        <button onclick='enviarWhats(${JSON.stringify(os)})' class="btn-action btn-whatsapp ms-1"><i class="fa-brands fa-whatsapp"></i></button>
-                        <button onclick='gerarPDF(${JSON.stringify(os)})' class="btn-action btn-print ms-1"><i class="fa-solid fa-print"></i></button>
-                        <button onclick="deletarOS('${os.id}')" class="btn-action text-danger ms-1"><i class="fa-solid fa-trash"></i></button>
-                    </td>
-                </tr>`;
-            });
-        }
-
-
-        async function gerarPDF(os) {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            doc.setFillColor(15, 23, 42); doc.rect(0, 0, 210, 40, 'F');
-            doc.setTextColor(255, 255, 255); doc.setFontSize(22); doc.text("HAYDEN WHEELS", 15, 25);
-
-            if (os.foto_url) {
-                try {
-                    const imgData = await getBase64Image(os.foto_url);
-                    doc.addImage(imgData, 'JPEG', 150, 45, 45, 45);
-                } catch (e) { console.error("Erro ao carregar imagem no PDF"); }
-            }
-
-            doc.setTextColor(40, 40, 40); doc.setFontSize(12);
-            doc.text(`Cliente: ${os.nome}`, 15, 60);
-            doc.text(`Veículo: ${os.veiculo}`, 15, 70);
-            doc.text(`Serviço: ${os.servico}`, 15, 80);
-            doc.text(`Valor: R$ ${os.valor.toFixed(2)}`, 15, 90);
-            doc.text(`Obs: ${os.observacoes || 'Sem observações'}`, 15, 100);
-            doc.line(15, 140, 100, 140); doc.text("Assinatura Hayden Wheels", 15, 145);
-            doc.save(`OS_${os.veiculo}.pdf`);
-        }
-
-        function enviarWhats(os) {
-            const msg = `Olá ${os.nome}, sua Ordem de Serviço na Hayden Wheels foi registrada!\n\n🚗 Veículo: ${os.veiculo}\n🛠️ Serviço: ${os.servico}\n💰 Valor: R$ ${os.valor.toFixed(2)}\n\nObrigado pela preferência!`;
-            const fone = os.whatsapp.replace(/\D/g, '');
-            window.open(`https://api.whatsapp.org/send?phone=55${fone}&text=${encodeURIComponent(msg)}`);
-        }
-
-        function getBase64Image(url) {
-            return new Promise((resolve, reject) => {
-                const img = new Image();
-                img.setAttribute('crossOrigin', 'anonymous');
-                img.onload = () => {
-                    const canvas = document.createElement("canvas");
-                    canvas.width = img.width; canvas.height = img.height;
-                    const ctx = canvas.getContext("2d");
-                    ctx.drawImage(img, 0, 0);
-                    resolve(canvas.toDataURL("image/jpeg"));
-                };
-                img.onerror = reject;
-                img.src = url;
-            });
-        }
-
-        async function deletarOS(id) { if (confirm('Excluir?')) { await supabaseClient.from('ordens_servico').delete().eq('id', id); carregarOS(); } }
-        carregarOS();
-
-        function getStatusBadge(id, status) {
-            const cores = {
-                'Pendente': 'bg-warning text-dark',
-                'Em Andamento': 'bg-primary',
-                'Pago': 'bg-success',
-                'Cancelado': 'bg-danger'
-            };
-
-            // Adicionamos um ponteiro de mouse e um evento de clique
-            return `<span class="badge ${cores[status] || 'bg-secondary'} px-3 py-2" 
-                  style="cursor: pointer;" 
-                  onclick="proximoStatus('${id}', '${status}')" 
-                  title="Clique para mudar o status">
-                  ${status || 'Pendente'}
-            </span>`;
-        }
-
-
-        async function proximoStatus(id, statusAtual) {
-            const ordem = ['Pendente', 'Em Andamento', 'Pago', 'Cancelado'];
-            let novoStatus = ordem[(ordem.indexOf(statusAtual) + 1) % ordem.length];
-
-            const { error } = await supabaseClient.from('ordens_servico').update({ status: novoStatus }).eq('id', id);
-
-            if (!error) {
-                // Exemplo de lógica de baixa
-                if (novoStatus === 'Pago') {
-                    pecasDaOS.forEach(async (peca) => {
-                        const { data } = await supabaseClient.rpc('increment_inventory', {
-                            row_id: peca.id,
-                            row_count: -1
-                        });
-                    });
-                }
-                carregarOS();
-            }
-        }
-
-        function enviarConfirmacaoPagamento(os) {
-            const msg = `✅ *PAGAMENTO CONFIRMADO* ✅\n\nOlá ${os.nome}, recebemos o pagamento do serviço: *${os.servico}*.\n🚗 Veículo: ${os.veiculo}\n💰 Valor: R$ ${os.valor.toFixed(2)}\n\nObrigado pela confiança na *Hayden Wheels*!`;
-            const fone = os.whatsapp.replace(/\D/g, '');
-            window.open(`https://api.whatsapp.org/send?phone=55${fone}&text=${encodeURIComponent(msg)}`);
-        }
-
-
-
-        function toggleDashboard() {
-            const dash = document.getElementById('dashboardSection');
-            dash.style.display = dash.style.display === 'none' ? 'block' : 'none';
-            if (dash.style.display === 'block') atualizarDashboard();
-        }
-
-        function atualizarDashboard() {
-            const dataInicio = document.getElementById('dataInicio').value;
-            const dataFim = document.getElementById('dataFim').value;
-
-            // Filtra a lista original (todasOS) com base nas datas selecionadas
-            let dadosFiltrados = todasOS;
-
-            if (dataInicio && dataFim) {
-                dadosFiltrados = todasOS.filter(os => {
-                    const dataCriacao = new Date(os.created_at).toISOString().split('T')[0];
-                    return dataCriacao >= dataInicio && dataCriacao <= dataFim;
-                });
-            }
-
-            const pago = dadosFiltrados.filter(os => os.status === 'Pago').reduce((acc, os) => acc + (os.valor || 0), 0);
-            const pendente = dadosFiltrados.filter(os => os.status === 'Pendente').reduce((acc, os) => acc + (os.valor || 0), 0);
-            const andamento = dadosFiltrados.filter(os => os.status === 'Em Andamento').reduce((acc, os) => acc + (os.valor || 0), 0);
-            const total = pago + pendente + andamento;
-
-            document.getElementById('dashPago').innerText = pago.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-            document.getElementById('dashPendente').innerText = pendente.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-            document.getElementById('dashAndamento').innerText = andamento.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-            document.getElementById('dashTotal').innerText = total.toLocaleString('pt-br', { style: 'currency', currency: 'BRL' });
-        }
-
-        // 1. EXPORTAR PARA EXCEL
-        function exportarExcel() {
-            const dataInicio = document.getElementById('dataInicio').value;
-            const dataFim = document.getElementById('dataFim').value;
-
-            let dadosParaExportar = todasOS;
-            if (dataInicio && dataFim) {
-                dadosParaExportar = todasOS.filter(os => {
-                    const data = new Date(os.created_at).toISOString().split('T')[0];
-                    return data >= dataInicio && data >= dataFim;
-                });
-            }
-
-            const ws = XLSX.utils.json_to_sheet(dadosParaExportar.map(os => ({
-                Data: new Date(os.created_at).toLocaleDateString(),
-                Cliente: os.nome,
-                WhatsApp: os.whatsapp,
-                Veículo: os.veiculo,
-                Serviço: os.servico,
-                Valor: os.valor,
-                Status: os.status,
-                Observações: os.observacoes
-            })));
-
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Relatório Financeiro");
-            XLSX.writeFile(wb, `Relatorio_HaydenWheels_${new Date().toLocaleDateString()}.xlsx`);
-        }
-
-        // 2. VER DETALHES DA O.S. (Via Alert customizado ou Console para teste rápido)
-        function verDetalhes(id) {
-            const os = todasOS.find(o => o.id === id);
-            if (!os) return;
-
-            const conteudo = `
-                <div class="mb-3 d-flex justify-content-center">
-                    ${os.foto_url ? `<img src="${os.foto_url}" class="img-fluid rounded-4 shadow-sm" style="max-height: 200px;">` : ''}
-                </div>
-                <div class="row g-3">
-                    <div class="col-6"><small class="text-muted d-block">CLIENTE</small><strong>${os.nome}</strong></div>
-                    <div class="col-6"><small class="text-muted d-block">VEÍCULO</small><strong>${os.veiculo}</strong></div>
-                    <div class="col-6"><small class="text-muted d-block">SERVIÇO</small><strong>${os.servico}</strong></div>
-                    <div class="col-6"><small class="text-muted d-block">VALOR</small><strong class="text-primary">R$ ${os.valor.toFixed(2)}</strong></div>
-                    <div class="col-12 border-top pt-2">
-                        <small class="text-muted d-block">OBSERVAÇÕES TÉCNICAS</small>
-                        <p class="mb-0 bg-light p-3 rounded-3 mt-1" style="white-space: pre-line;">${os.observacoes || 'Nenhuma observação.'}</p>
-                    </div>
-                </div>
-                <div class="mt-4">
-                    <button onclick="abrirEdicao('${os.id}')" class="btn btn-outline-primary w-100 rounded-pill fw-bold">
-                        <i class="fa-solid fa-pen-to-square me-2"></i>EDITAR ESTA O.S.
-                    </button>
-                </div>
-            `;
-
-            document.getElementById('conteudoDetalhes').innerHTML = conteudo;
-            new bootstrap.Modal(document.getElementById('modalDetalhes')).show();
-        }
-
-        // 3. GERADOR DE PIX "COPIA E COLA" (Simulado)
-        function abrirPix(os) {
-            // String fictícia de Pix (Em produção você usaria uma chave real ou API)
-            const chavePix = "SUA_CHAVE_AQUI";
-            const valorFormatado = os.valor.toFixed(2).replace('.', '');
-            const pixCopiaCola = `00020126330014BR.GOV.BCB.PIX0111${chavePix}520400005303986540${os.valor.toFixed(2)}5802BR5913HAYDENWHEELS6007MANAUS62070503***6304`;
-
-            const confirmacao = confirm(`Gerar Pix para ${os.nome} no valor de R$ ${os.valor.toFixed(2)}?\n\nClique em OK para copiar o código "Copia e Cola".`);
-
-            if (confirmacao) {
-                navigator.clipboard.writeText(pixCopiaCola);
-                alert("✅ Código Pix copiado para a área de transferência! Envie para o cliente.");
-
-                // Sugestão: Abre o WhatsApp com o código
-                const msg = `Olá ${os.nome}, aqui está o código Pix para pagamento do serviço ${os.servico}:\n\n\`${pixCopiaCola}\`\n\nValor: R$ ${os.valor.toFixed(2)}`;
-                window.open(`https://api.whatsapp.org/send?phone=55${os.whatsapp.replace(/\D/g, '')}&text=${encodeURIComponent(msg)}`);
-            }
-        }
-
-        function abrirEdicao(id) {
-            const os = todasOS.find(o => o.id === id);
-            if (!os) return;
-
-            // Fecha o modal de detalhes primeiro
-            const modalDetalhesElem = document.getElementById('modalDetalhes');
-            const modalDetalhes = bootstrap.Modal.getInstance(modalDetalhesElem);
-
-            if (modalDetalhes) {
-                modalDetalhes.hide();
-                // Espera o modal fechar completamente para abrir o próximo (evita bug de sumiço)
-                modalDetalhesElem.addEventListener('hidden.bs.modal', function handler() {
-                    executarAberturaEdicao(os);
-                    modalDetalhesElem.removeEventListener('hidden.bs.modal', handler);
-                }, { once: true });
-            } else {
-                executarAberturaEdicao(os);
-            }
-        }
-
-        function executarAberturaEdicao(os) {
-            document.getElementById('editId').value = os.id;
-            document.getElementById('camposEditar').innerHTML = `
-        <div class="col-md-12">
-            <label class="form-label fw-bold small">NOME DO CLIENTE</label>
-            <input type="text" id="editNome" class="form-control" value="${os.nome}" required>
-        </div>
-        <div class="col-md-6">
-            <label class="form-label fw-bold small">VEÍCULO / PLACA</label>
-            <input type="text" id="editVeiculo" class="form-control" value="${os.veiculo}" required style="text-transform: uppercase;">
-        </div>
-        <div class="col-md-6">
-            <label class="form-label fw-bold small text-success">VALOR TOTAL (R$)</label>
-            <input type="number" id="editValor" class="form-control fw-bold" value="${os.valor}" step="0.01" required>
-        </div>
-    `;
-
-            new bootstrap.Modal(document.getElementById('modalEditar')).show();
-        }
-
-        document.getElementById('editForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const id = document.getElementById('editId').value;
-
-            const novosDados = {
-                nome: document.getElementById('editNome').value,
-                veiculo: document.getElementById('editVeiculo').value,
-                valor: parseFloat(document.getElementById('editValor').value),
-                // Mantemos a consistência com o salvamento inicial
-                servico: "Atualizado via Edição"
-            };
-
-            const { error } = await supabaseClient.from('ordens_servico').update(novosDados).eq('id', id);
-            if (!error) {
-                bootstrap.Modal.getInstance(document.getElementById('modalEditar')).hide();
-                await carregarOS();
-                alert("O.S. Atualizada com sucesso!");
-            } else {
-                alert("Erro ao atualizar: " + error.message);
-            }
-        });
-
-        // --- LÓGICA DE PIX COM QR CODE ---
-        function abrirPix(os) {
-            const chavePix = "haydenfernandes.ti@gmail.com"; //
-            const pixCopiaCola = `00020126330014BR.GOV.BCB.PIX0111${chavePix}520400005303986540${os.valor.toFixed(2)}5802BR5913HAYDENWHEELS6007MANAUS62070503***6304`;
-
-            document.getElementById('pixDetails').innerHTML = `<strong>${os.nome}</strong><br>${os.veiculo} - ${os.servico}<br><span class="fs-5 text-primary">R$ ${os.valor.toFixed(2)}</span>`;
-            document.getElementById('pixCopiaCola').value = pixCopiaCola;
-
-            // Gera o QR Code
-            const qrcodeDiv = document.getElementById("qrcode");
-            qrcodeDiv.innerHTML = "";
-            new QRCode(qrcodeDiv, { text: pixCopiaCola, width: 180, height: 180 });
-
-            document.getElementById('btnEnviarPixWhats').onclick = () => {
-                const msg = `Olá ${os.nome}, aqui está o código Pix para o serviço *${os.servico}*:\n\n\`${pixCopiaCola}\`\n\nValor: R$ ${os.valor.toFixed(2)}`;
-                window.open(`https://api.whatsapp.org/send?phone=55${os.whatsapp.replace(/\D/g, '')}&text=${encodeURIComponent(msg)}`);
-            };
-
-            new bootstrap.Modal(document.getElementById('modalPix')).show();
-        }
-
-        function copiarPix() {
-            const input = document.getElementById('pixCopiaCola');
-            input.select();
-            navigator.clipboard.writeText(input.value);
-            alert("Código copiado!");
-        }
-
-        // --- SISTEMA DE LOGIN ---
-        const loginForm = document.getElementById('loginForm');
-        const loginOverlay = document.getElementById('loginOverlay');
-
-        // Verifica se já existe uma sessão ativa ao carregar a página
-        window.onload = async () => {
-            const { data: { session } } = await supabaseClient.auth.getSession();
-            if (session) {
-                loginOverlay.style.setProperty('display', 'none', 'important');
-                carregarOS();
-            }
-        };
-
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginSenha').value;
-
-            const { data, error } = await supabaseClient.auth.signInWithPassword({
-                email: email,
-                password: password,
-            });
-
-            if (error) {
-                document.getElementById('loginErro').style.display = 'block';
-                document.getElementById('loginErro').innerText = "Erro: " + error.message;
-            } else {
-                loginOverlay.style.setProperty('display', 'none', 'important');
-                carregarOS();
-            }
-        });
-
-        // Função para Logout (Adicione um botão na Nav se desejar)
-        async function logout() {
-            await supabaseClient.auth.signOut();
-            window.location.reload();
-        }
-
-        async function carregarProdutos() {
-            const { data, error } = await supabaseClient.from('produtos').select('*').gt('estoque', 0);
-            const select = document.getElementById('selectProduto');
-            select.innerHTML = '<option value="">Selecione um item...</option>';
-            data.forEach(prod => {
-                select.innerHTML += `<option value="${prod.id}" data-preco="${prod.preco_venda}">${prod.nome} (Qtd: ${prod.estoque})</option>`;
-            });
-        }
-
-        let pecasSelecionadas = [];
-
-        // Carrega os produtos do Supabase assim que o modal abrir
-        document.getElementById('modalCadastro').addEventListener('shown.bs.modal', carregarProdutos);
-
-        async function carregarProdutos() {
-            const { data, error } = await supabaseClient
-                .from('produtos')
-                .select('*')
-                .gt('estoque', 0); // Só mostra o que tem no estoque
-
-            const select = document.getElementById('selectProduto');
-            select.innerHTML = '<option value="">Selecione uma peça...</option>';
-            if (data) {
-                data.forEach(prod => {
-                    select.innerHTML += `<option value="${prod.id}" data-preco="${prod.preco_venda}" data-nome="${prod.nome}">
-                ${prod.nome} - R$ ${prod.preco_venda.toFixed(2)} (Qtd: ${prod.estoque})
-            </option>`;
-                });
-            }
-        }
-
-        // Atualize também a função de adicionar peça para disparar o cálculo
-        function adicionarPecaLista() {
-            const select = document.getElementById('selectProduto');
-            const id = select.value;
-            if (!id) return;
-
-            const opcao = select.options[select.selectedIndex];
-            const nome = opcao.dataset.nome;
-            const preco = parseFloat(opcao.dataset.preco);
-
-            pecasSelecionadas.push({ id, nome, preco });
-
-            renderizarListaPecas();
-            calcularTotalOS(); // <--- Chama a soma aqui
-            select.value = "";
-        }
-
-        function renderizarListaPecas() {
-            const container = document.getElementById('listaPecasAdicionadas');
-            container.innerHTML = '';
-            pecasSelecionadas.forEach((peca, index) => {
-                container.innerHTML += `
-            <span class="badge bg-info text-dark p-2">
-                ${peca.nome} (R$ ${peca.preco.toFixed(2)})
-                <i class="fa-solid fa-xmark ms-2 cursor-pointer" onclick="removerPeca(${index})"></i>
-            </span>`;
-            });
-        }
-
-        // E a de remover peça
-        function removerPeca(index) {
-            pecasSelecionadas.splice(index, 1);
-            renderizarListaPecas();
-            calcularTotalOS(); // <--- Chama a soma aqui
-        }
-
-        // O CORAÇÃO DA AUTOMAÇÃO: Soma o serviço + todas as peças
-        // O CORAÇÃO DA SOMA: Executa a cada alteração
-        function calcularTotalOS() {
-            // 1. Pega o valor da mão de obra
-            const campoMaoObra = document.getElementById('valorServico');
-            const valorMaoObra = parseFloat(campoMaoObra.value) || 0;
-
-            // 2. Soma o preço das peças (pecasSelecionadas deve ser global)
-            const valorPecas = pecasSelecionadas.reduce((acc, item) => acc + (parseFloat(item.preco) || 0), 0);
-
-            // 3. Soma Total
-            const totalGeral = valorMaoObra + valorPecas;
-
-            // 4. ATUALIZA A TELA (Usuário vê 0,00)
-            document.getElementById('valorTotalOS').value = totalGeral.toLocaleString('pt-br', { minimumFractionDigits: 2 });
-
-            // 5. ATUALIZA O BANCO (O sistema salva 0.00)
-            const campoOficial = document.getElementById('valor');
-            if (campoOficial) {
-                campoOficial.value = totalGeral.toFixed(2);
-            }
-        }
-
-        // Lógica para salvar produto no estoque
-        document.getElementById('estoqueForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const dadosProd = {
-                nome: document.getElementById('prodNome').value,
-                preco_custo: parseFloat(document.getElementById('prodCusto').value),
-                preco_venda: parseFloat(document.getElementById('prodVenda').value),
-                estoque: parseInt(document.getElementById('prodQtd').value)
-            };
-
-            const { error } = await supabaseClient.from('produtos').insert([dadosProd]);
-
-            if (error) {
-                alert('Erro ao cadastrar produto: ' + error.message);
-            } else {
-                alert('Produto adicionado com sucesso!');
-                document.getElementById('estoqueForm').reset();
-                bootstrap.Modal.getInstance(document.getElementById('modalEstoque')).hide();
-                carregarProdutos(); // Atualiza o select na O.S.
-            }
-        });
-
-        // Carrega produtos especificamente para o select de edição
-        async function carregarProdutosNoSelect(idSelect) {
-            const { data } = await supabaseClient.from('produtos').select('*').gt('estoque', 0);
-            const select = document.getElementById(idSelect);
-            if (select && data) {
-                select.innerHTML = '<option value="">Selecione para adicionar...</option>';
-                data.forEach(prod => {
-                    select.innerHTML += `<option value="${prod.id}" data-preco="${prod.preco_venda}" data-nome="${prod.nome}">
-                ${prod.nome} (R$ ${prod.preco_venda.toFixed(2)})
-            </option>`;
-                });
-            }
-        }
-
-        // Adiciona a peça na lista da edição e soma ao valor total
-        function adicionarPecaEdicao() {
-            const select = document.getElementById('selectProdutoEdit');
-            const valorAtualInput = document.getElementById('editValor');
-
-            if (!select.value) return;
-
-            const nome = select.options[select.selectedIndex].dataset.nome;
-            const preco = parseFloat(select.options[select.selectedIndex].dataset.preco);
-
-            // Soma o valor da peça ao valor total da O.S. na tela de edição
-            const novoTotal = parseFloat(valorAtualInput.value) + preco;
-            valorAtualInput.value = novoTotal.toFixed(2);
-
-            // Adiciona visualmente na lista de peças da edição
-            const lista = document.getElementById('listaPecasEdit');
-            const badge = document.createElement('span');
-            badge.className = "badge bg-info text-dark p-2";
-            badge.innerHTML = `${nome} (+R$ ${preco.toFixed(2)})`;
-            lista.appendChild(badge);
-
-            // Limpa o select para a próxima peça
-            select.value = "";
-        }
-
-        async function logout() {
-            if (confirm("Deseja realmente sair do sistema?")) {
-                await supabaseClient.auth.signOut();
-                location.reload();
-            }
-        }
-
-        // Chama a listagem sempre que o modal abrir
-        document.getElementById('modalEstoque').addEventListener('shown.bs.modal', listarProdutosEstoque);
-
-        async function listarProdutosEstoque() {
-            const { data, error } = await supabaseClient.from('produtos').select('*').order('nome', { ascending: true });
-            const tbody = document.getElementById('corpoTabelaEstoque');
-            tbody.innerHTML = '';
-
-            if (error) return showNotify("Erro ao carregar estoque", "error");
-
-            data.forEach(prod => {
-                tbody.innerHTML += `
-        <tr>
-            <td class="fw-bold text-dark">${prod.nome}</td>
-            <td class="text-muted">R$ ${prod.preco_custo.toFixed(2)}</td>
-            <td class="text-success fw-bold">R$ ${prod.preco_venda.toFixed(2)}</td>
-            <td class="text-center">
-                <span class="badge ${prod.estoque < 3 ? 'bg-danger' : 'bg-dark'} fs-6 px-3">
-                    ${prod.estoque}
-                </span>
-            </td>
-            <td class="text-end">
-                <button onclick="ajustarEstoque('${prod.id}', 1)" class="btn btn-sm btn-outline-success" title="Entrada (+1)"><i class="fa-solid fa-plus"></i></button>
-                <button onclick="ajustarEstoque('${prod.id}', -1)" class="btn btn-sm btn-outline-danger" title="Saída (-1)"><i class="fa-solid fa-minus"></i></button>
-                <button onclick="deletarProduto('${prod.id}')" class="btn btn-sm btn-light text-danger ms-2"><i class="fa-solid fa-trash"></i></button>
-            </td>
-        </tr>`;
-            });
-        }
-
-        // Função para entrada e saída rápida de estoque
-        async function ajustarEstoque(id, qtd) {
-            const { data: prod } = await supabaseClient.from('produtos').select('estoque').eq('id', id).single();
-            const novaQtd = (prod.estoque || 0) + qtd;
-
-            if (novaQtd < 0) return showNotify("Estoque não pode ser negativo!", "error");
-
-            const { error } = await supabaseClient.from('produtos').update({ estoque: novaQtd }).eq('id', id);
-
-            if (!error) {
-                listarProdutosEstoque();
-                carregarProdutos(); // Atualiza o select da O.S. simultaneamente
-            }
-        }
-
-        async function deletarProduto(id) {
-            if (confirm("Deseja remover este produto permanentemente do estoque?")) {
-                const { error } = await supabaseClient.from('produtos').delete().eq('id', id);
-                if (!error) {
-                    showNotify("Produto removido!");
-                    listarProdutosEstoque();
-                }
-            }
-        }
-
-        let meuGrafico = null; // Variável global para controlar a instância do gráfico
-
-        async function renderizarGraficoVendas() {
-            // 1. Pegar dados das O.S. (onde as peças são registradas)
-            const { data: ordens, error } = await supabaseClient.from('ordens_servico').select('servico');
-            if (error) return;
-
-            // 2. Contabilizar peças (Simulando a extração da string de serviço ou tabela relacionada)
-            // Dica: Se você salvar as peças em uma coluna separada futuramente, a precisão aumenta.
-            const contagemPecas = {};
-
-            // Aqui percorremos as O.S. para identificar nomes de peças comuns
-            // Para este exemplo, vamos focar nos itens que você mais utiliza no sistema
-            todasOS.forEach(os => {
-                const peca = os.servico; // Ou a lógica de extração de peças que você preferir
-                contagemPecas[peca] = (contagemPecas[peca] || 0) + 1;
-            });
-
-            const labels = Object.keys(contagemPecas).slice(0, 5); // Top 5 produtos
-            const valores = Object.values(contagemPecas).slice(0, 5);
-
-            const ctx = document.getElementById('graficoVendas').getContext('2d');
-
-            // Se o gráfico já existir, destrói para criar um novo (evita bug visual)
-            if (meuGrafico) meuGrafico.destroy();
-
-            meuGrafico = new Chart(ctx, {
-                type: 'bar', // Gráfico de barras
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Quantidade Vendida',
-                        data: valores,
-                        backgroundColor: '#3b82f6',
-                        borderRadius: 10,
-                        borderSkipped: false,
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: { beginAtZero: true, grid: { display: false } },
-                        x: { grid: { display: false } }
-                    }
-                }
-            });
-        }
-
-    </script>
-</body>
-
-</html>
+# 🎤 SCRIPT DE NARRAÇÃO - VERSÃO PARA GRAVAÇÃO
+## Sistema MELÃO RODAS - Narração Profissional
+
+---
+
+## 🎬 INSTRUÇÕES DE GRAVAÇÃO
+
+**Tom de voz:** Confiante, amigável, profissional
+**Velocidade:** Média (não muito rápido, nem muito devagar)
+**Pausas:** Marcadas com [PAUSA]
+**Ênfase:** Palavras em **negrito** devem ser enfatizadas
+**Duração total:** Aproximadamente 15 minutos
+
+---
+
+## 🎙️ INÍCIO DA NARRAÇÃO
+
+---
+
+### [CENA: Tela inicial do sistema aparecendo]
+
+Olá! Seja muito bem-vindo.
+
+[PAUSA]
+
+Hoje vou apresentar para você o **Sistema MELÃO RODAS**: uma solução **completa** de gestão desenvolvida especialmente para centros automotivos.
+
+[PAUSA]
+
+Se você é dono de uma oficina mecânica, borracharia, ou centro automotivo, e passa horas tentando organizar ordens de serviço, procurando informações de clientes em papéis, ou perdendo tempo com planilhas desorganizadas...
+
+[PAUSA]
+
+...este sistema foi feito **exatamente** para resolver esses problemas.
+
+[PAUSA de 2 segundos]
+
+Vamos começar?
+
+---
+
+### [CENA: Dashboard - visão geral]
+
+Ao acessar o sistema, a primeira coisa que você vê é este **painel de controle visual**.
+
+[PAUSA]
+
+Repare no design **moderno** e **profissional**. Cores corporativas que transmitem confiança e seriedade.
+
+[PAUSA]
+
+Aqui no topo, temos a barra de navegação com o logo da sua empresa e botões de acesso rápido às principais funcionalidades.
+
+[PAUSA]
+
+E veja esse botão **flutuante laranja** aqui no canto inferior direito.
+
+[PAUSA]
+
+Ele está **sempre acessível**, em qualquer tela do sistema, para você criar uma nova ordem de serviço rapidamente, com apenas um clique.
+
+---
+
+### [CENA: Cards de estatísticas]
+
+Agora, observe estes cards de estatísticas.
+
+[PAUSA]
+
+Aqui você tem, **em tempo real**, as informações mais importantes do seu negócio:
+
+[PAUSA]
+
+**Total de Clientes Cadastrados**: quantos clientes sua empresa já conquistou.
+
+[PAUSA]
+
+**Ordens de Serviço Hoje**: quantos atendimentos você fez hoje.
+
+[PAUSA]
+
+**Ordens de Serviço Este Mês**: sua performance mensal.
+
+[PAUSA]
+
+E o mais importante: **Faturamento do Mês**. O valor total que você já arrecadou no período.
+
+[PAUSA]
+
+Cada card possui ícones intuitivos e animações suaves que tornam a experiência de uso muito agradável.
+
+---
+
+### [CENA: Gráficos]
+
+Descendo um pouco, temos dois gráficos essenciais para a gestão do seu negócio.
+
+[PAUSA]
+
+O primeiro é o **Gráfico de Faturamento Semanal**.
+
+[PAUSA]
+
+Aqui você visualiza, dia a dia, a evolução do seu faturamento. Perfeito para identificar quais dias da semana são mais movimentados e planejar melhor sua equipe.
+
+[PAUSA]
+
+Logo ao lado, temos o **Top 5 Serviços Mais Realizados**.
+
+[PAUSA]
+
+Um ranking visual dos serviços mais procurados pelos seus clientes.
+
+[PAUSA]
+
+Isso é **ouro puro** para você:
+- Identificar seus carros-chefe
+- Planejar melhor o estoque de peças
+- Criar promoções estratégicas nos serviços certos
+
+---
+
+### [CENA: Botão "Novo Cliente"]
+
+Agora, vamos falar sobre a **gestão de clientes**.
+
+[PAUSA]
+
+Clicando aqui em "Novo Cliente", abre-se um formulário super simples.
+
+[PAUSA]
+
+Você preenche apenas:
+- Nome completo do cliente
+- E o número do WhatsApp
+
+[PAUSA]
+
+Veja como o campo do WhatsApp formata **automaticamente** enquanto você digita. Isso evita erros de cadastro.
+
+[PAUSA]
+
+Clique em salvar e pronto! Cliente cadastrado com segurança.
+
+[PAUSA]
+
+Todos os dados ficam armazenados de forma segura em nuvem e podem ser consultados a qualquer momento.
+
+---
+
+### [CENA: Botão "Dossiê do Cliente"]
+
+Mas agora vem uma funcionalidade que é **realmente incrível**.
+
+[PAUSA]
+
+O **Dossiê do Cliente**.
+
+[PAUSA]
+
+Clicando aqui, você tem acesso a uma tela com busca inteligente.
+
+[PAUSA]
+
+### [CENA: Buscando um cliente]
+
+Veja: eu começo a digitar o nome de qualquer cliente...
+
+[PAUSA]
+
+...e o sistema já vai mostrando os resultados automaticamente.
+
+[PAUSA]
+
+Você também pode ver os clientes recentes em cards visuais, facilitando ainda mais a navegação.
+
+[PAUSA]
+
+### [CENA: Ficha completa aberta]
+
+Quando você seleciona um cliente, olha só o que acontece.
+
+[PAUSA]
+
+Do lado esquerdo: **informações cadastrais completas**. Nome, contato...
+
+[PAUSA]
+
+...e aqui embaixo, uma informação **valiosíssima**: o **Total Investido na Loja**.
+
+[PAUSA]
+
+Isso mesmo! O sistema calcula automaticamente quanto aquele cliente já gastou com você.
+
+[PAUSA]
+
+Imagine o poder disso:
+- Criar programas de fidelidade
+- Identificar seus melhores clientes
+- Oferecer descontos especiais para quem mais compra
+
+[PAUSA]
+
+### [CENA: Histórico de compras]
+
+E do lado direito, temos o **Histórico Completo** de visitas e compras.
+
+[PAUSA]
+
+Todas as vezes que aquele cliente veio na sua oficina:
+- Em que data
+- Qual veículo foi atendido
+- Quais serviços foram realizados
+- Quanto ele pagou
+
+[PAUSA]
+
+Tudo organizado, tudo documentado, tudo acessível em segundos.
+
+[PAUSA]
+
+Isso permite um atendimento **ultra personalizado** e demonstra **profissionalismo** para o cliente.
+
+---
+
+### [CENA: Modal de Catálogo de Serviços]
+
+Outro recurso muito útil é o **Catálogo de Serviços**.
+
+[PAUSA]
+
+Aqui você cadastra todos os serviços que sua oficina oferece, com seus respectivos preços sugeridos.
+
+[PAUSA]
+
+Por exemplo:
+- Alinhamento 3D - R$ 120
+- Balanceamento - R$ 50
+- Troca de óleo - R$ 80
+- E assim por diante
+
+[PAUSA]
+
+Quando for criar uma ordem de serviço, você só precisa **selecionar o serviço do catálogo** e o preço já vem preenchido automaticamente.
+
+[PAUSA]
+
+Mas fique tranquilo: você ainda pode ajustar o valor para cada atendimento específico, se necessário.
+
+---
+
+### [CENA: Botão flutuante - Nova OS]
+
+Agora chegamos na funcionalidade **mais importante** de todas.
+
+[PAUSA]
+
+A criação de uma **Ordem de Serviço**.
+
+[PAUSA]
+
+Clicando aqui no botão flutuante, o formulário abre instantaneamente.
+
+[PAUSA]
+
+### [CENA: Passo 1 - Cliente]
+
+O processo é dividido em **etapas claras e intuitivas**.
+
+[PAUSA]
+
+**Primeiro passo**: dados do cliente.
+
+[PAUSA]
+
+Você pode buscar um cliente já cadastrado - o sistema faz busca inteligente...
+
+[PAUSA]
+
+...ou cadastrar um novo cliente rapidinho, sem sair da tela.
+
+[PAUSA]
+
+### [CENA: Passo 2 - Veículo]
+
+**Segundo passo**: dados do veículo.
+
+[PAUSA]
+
+Modelo e cor do carro, placa...
+
+[PAUSA]
+
+Veja como a placa formata automaticamente no padrão brasileiro AAA-0000.
+
+[PAUSA]
+
+E quilometragem rodada.
+
+[PAUSA]
+
+### [CENA: Passo 3 - Serviços]
+
+**Terceiro passo**, e aqui está o grande diferencial:
+
+[PAUSA]
+
+Você pode adicionar **múltiplos serviços** de duas formas.
+
+[PAUSA]
+
+**Primeira forma**: selecionando do catálogo.
+
+[PAUSA]
+
+Escolho o serviço, e o preço já vem preenchido automaticamente. Defino a quantidade, adiciono.
+
+[PAUSA]
+
+**Segunda forma**: digitando manualmente para serviços personalizados.
+
+[PAUSA]
+
+Digite o nome do serviço, o valor, a quantidade, e adicione.
+
+[PAUSA]
+
+Viu como é rápido?
+
+[PAUSA]
+
+E olhe aqui embaixo: o sistema está calculando **automaticamente** o total geral da ordem de serviço.
+
+[PAUSA]
+
+Se você adicionar descontos, o cálculo é atualizado **instantaneamente**.
+
+[PAUSA]
+
+### [CENA: Passo 4 - Observações]
+
+**Quarto passo**: observações.
+
+[PAUSA]
+
+Um campo livre para você adicionar qualquer informação relevante sobre aquele atendimento.
+
+[PAUSA]
+
+Por exemplo: "Cliente relatou barulho na suspensão dianteira" ou "Retornar em 10 dias para revisão".
+
+---
+
+### [CENA: Botão "Finalizar e Gerar PDF"]
+
+Agora, a mágica acontece.
+
+[PAUSA]
+
+Clico em "Finalizar e Gerar PDF"...
+
+[PAUSA]
+
+### [CENA: PDF sendo gerado e abrindo]
+
+...e em menos de **2 segundos**, o sistema gera automaticamente uma **Ordem de Serviço profissional** completa.
+
+[PAUSA]
+
+Olha só a qualidade deste documento:
+
+[PAUSA]
+
+- Cabeçalho com logo e dados da sua empresa
+- Número único da OS
+- Data e hora exatas
+- Dados completos do cliente
+- Informações detalhadas do veículo
+- Uma tabela linda com todos os serviços, quantidades e valores
+- Total geral destacado
+- As observações que você digitou
+- E um rodapé corporativo
+
+[PAUSA]
+
+Este PDF pode ser:
+- Baixado e salvo no computador
+- Impresso na hora
+- Enviado direto para o WhatsApp do cliente
+- Ou enviado por email
+
+[PAUSA]
+
+Tudo **profissional**, tudo **padronizado**, tudo **automático**.
+
+[PAUSA]
+
+### [CENA: QR Code]
+
+E tem mais!
+
+[PAUSA]
+
+Cada ordem de serviço gera um **QR Code único**.
+
+[PAUSA]
+
+Você pode colar esse QR Code no veículo, usar para rastreamento interno, ou até compartilhar com o cliente para ele acessar a OS pelo celular.
+
+---
+
+### [CENA: Tabela principal de OSs]
+
+Voltando para a tela principal, você tem acesso a **todas** as ordens de serviço criadas.
+
+[PAUSA]
+
+Tudo organizado em uma tabela limpa e intuitiva:
+- Data de criação
+- Nome do cliente
+- Veículo atendido
+- Valor total
+- Status da ordem
+
+[PAUSA]
+
+### [CENA: Ações na tabela]
+
+Para cada ordem de serviço, você tem botões de ação:
+
+[PAUSA]
+
+**Visualizar**: para ver todos os detalhes completos.
+
+**Editar**: caso precise modificar alguma informação.
+
+**Baixar PDF**: para gerar o documento novamente a qualquer momento.
+
+**Excluir**: para remover ordens antigas ou cadastradas por engano.
+
+[PAUSA]
+
+### [CENA: Filtros]
+
+E aqui em cima, temos **filtros poderosos**.
+
+[PAUSA]
+
+Busca por nome do cliente...
+
+[PAUSA]
+
+Filtro por período: hoje, esta semana, este mês, ou um período personalizado...
+
+[PAUSA]
+
+Filtro por status da ordem...
+
+[PAUSA]
+
+Tudo para você encontrar **rapidamente** o que precisa.
+
+---
+
+### [CENA: Botão Exportar]
+
+Quer analisar os dados de forma mais profunda?
+
+[PAUSA]
+
+Clique aqui em "Exportar".
+
+[PAUSA]
+
+Você pode exportar **todos os dados** para:
+
+**Excel**: para criar suas próprias análises, tabelas dinâmicas, gráficos personalizados.
+
+[PAUSA]
+
+Ou **PDF**: para gerar relatórios gerenciais completos.
+
+[PAUSA]
+
+Tudo com um clique.
+
+---
+
+### [CENA: Modal de Configurações]
+
+Por último, mas não menos importante: as **Configurações da Empresa**.
+
+[PAUSA]
+
+Aqui você define os dados que aparecerão em **todas** as ordens de serviço:
+
+[PAUSA]
+
+- Nome da sua empresa
+- CNPJ
+- Telefone de contato
+- Endereço completo
+
+[PAUSA]
+
+Você preenche uma vez só, salva, e todas as OSs geradas a partir daí já terão essas informações.
+
+[PAUSA]
+
+Identidade visual e profissionalismo garantidos.
+
+---
+
+### [CENA: Voltando para o dashboard - visão geral]
+
+Então, recapitulando tudo que você viu.
+
+[PAUSA]
+
+Com o **Sistema MELÃO RODAS**, você tem:
+
+[PAUSA]
+
+✅ **Profissionalismo**: documentos padronizados que impressionam o cliente.
+
+[PAUSA]
+
+✅ **Organização total**: todos os seus clientes e atendimentos em um só lugar.
+
+[PAUSA]
+
+✅ **Histórico completo**: nunca mais perca informações de clientes antigos.
+
+[PAUSA]
+
+✅ **Agilidade extrema**: criação de ordens de serviço em menos de 2 minutos.
+
+[PAUSA]
+
+✅ **Inteligência de negócio**: gráficos e estatísticas para tomar decisões estratégicas.
+
+[PAUSA]
+
+✅ **Fidelização de clientes**: identifique seus melhores clientes e crie estratégias personalizadas.
+
+[PAUSA]
+
+✅ **Segurança**: todos os dados salvos automaticamente em nuvem. Sem risco de perder informações.
+
+[PAUSA]
+
+✅ **Acessibilidade**: funciona em computador, tablet e celular. Acesse de qualquer lugar.
+
+---
+
+### [CENA: Exemplos práticos em texto ou animação]
+
+Pense em situações reais do dia a dia:
+
+[PAUSA]
+
+**Situação 1**: Um cliente liga perguntando quanto ele gastou no último serviço.
+
+Com o dossiê, você **responde em segundos**, demonstrando profissionalismo.
+
+[PAUSA]
+
+**Situação 2**: Você quer fazer uma promoção para clientes fiéis.
+
+Com o histórico de valores investidos, você **identifica facilmente** quem são seus melhores clientes.
+
+[PAUSA]
+
+**Situação 3**: Precisa analisar qual serviço está gerando mais lucro.
+
+O gráfico de serviços mais realizados te mostra isso **visualmente**, sem precisar fazer conta.
+
+[PAUSA]
+
+**Situação 4**: Um cliente volta reclamando de problema no veículo.
+
+Você acessa o histórico e vê **exatamente** o que foi feito da última vez, quando foi, e por quem.
+
+[PAUSA]
+
+Isso é **gestão inteligente**.
+
+---
+
+### [CENA: Tela final com logo/contato]
+
+O Sistema MELÃO RODAS está **pronto para uso imediato**.
+
+[PAUSA]
+
+Interface já desenvolvida e funcional.
+
+Banco de dados configurado.
+
+Geração de PDF automatizada.
+
+Todas as funcionalidades testadas e aprovadas.
+
+[PAUSA]
+
+Transforme a gestão do seu centro automotivo **hoje mesmo**.
+
+[PAUSA]
+
+Ficou com alguma dúvida? Quer ver alguma funcionalidade específica com mais detalhes?
+
+[PAUSA]
+
+Entre em contato comigo. Estou à disposição para demonstrar pessoalmente, tirar dúvidas, ou discutir personalizações específicas para o seu negócio.
+
+[PAUSA de 2 segundos]
+
+Obrigado pela atenção!
+
+[PAUSA]
+
+E até breve! 🚀
+
+---
+
+## 🎬 FIM DA NARRAÇÃO
+
+**Duração estimada: 14-16 minutos**
+
+---
+
+## 💡 DICAS PARA GRAVAÇÃO
+
+### Equipamento Mínimo:
+- Microfone USB decente (ou do celular em ambiente silencioso)
+- Software de gravação (OBS Studio, Audacity, ou qualquer editor de vídeo)
+- Ambiente silencioso
+
+### Técnica de Voz:
+- Respire fundo antes de começar
+- Sorria enquanto fala (isso melhora o tom)
+- Grave em blocos (uma seção por vez)
+- Se errar, pause e recomece daquele ponto
+- Beba água entre as gravações
+
+### Edição:
+- Remova os "ãhh", "hmm" e pausas longas demais
+- Adicione música de fundo suave (volume baixo)
+- Coloque efeitos sonoros discretos em transições importantes
+- Adicione legendas (muito importante!)
+
+### Sincronização com Vídeo:
+- Grave a tela do sistema enquanto narra
+- Ou grave a narração primeiro e depois edite o vídeo por cima
+- Destaque com círculos/setas os elementos que você menciona
+
+---
+
+## 🎨 SUGESTÕES DE MÚSICA DE FUNDO
+
+Procure por "Corporate Background Music" ou "Uplifting Corporate" em sites de música livre:
+- YouTube Audio Library
+- Epidemic Sound
+- Artlist
+
+**Tom ideal**: Positivo, corporativo, não intrusivo
+
+---
+
+**BOA SORTE COM SUA GRAVAÇÃO! 🎥**
