@@ -18,6 +18,7 @@
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
     <style>
         :root {
@@ -162,6 +163,674 @@
             100% {
                 box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
             }
+        }
+
+        /* Tela de Bloqueio de Licença */
+        .license-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.95) 0%, rgba(30, 64, 175, 0.98) 100%);
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .license-box {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .license-icon {
+            font-size: 5rem;
+            color: var(--warning);
+            margin-bottom: 1.5rem;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .license-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        .license-message {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+
+        .btn-activate-license {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(30, 58, 138, 0.3);
+        }
+
+        .btn-activate-license:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(30, 58, 138, 0.4);
+        }
+
+        /* Modal de Planos - Z-INDEX MAIOR QUE A TELA DE BLOQUEIO */
+        #modalLicensePlans {
+            z-index: 9999 !important;
+        }
+
+        #modalLicensePlans .modal-backdrop {
+            z-index: 9998 !important;
+        }
+
+        /* Pricing Cards */
+        .pricing-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .pricing-card.featured {
+            border: 3px solid var(--accent);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.2);
+        }
+
+        .pricing-card.featured::before {
+            content: "MAIS VENDIDO";
+            position: absolute;
+            top: 15px;
+            right: -35px;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            padding: 5px 40px;
+            transform: rotate(45deg);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .pricing-period {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price-old {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            text-decoration: line-through;
+            margin-bottom: 1rem;
+        }
+
+        .pricing-economy {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+        }
+
+        .pricing-features {
+            list-style: none;
+            padding: 0;
+            margin: 1.5rem 0;
+            text-align: left;
+        }
+
+        .pricing-features li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pricing-features li:last-child {
+            border-bottom: none;
+        }
+
+        .pricing-features i {
+            color: var(--success);
+            font-size: 1.1rem;
+        }
+
+        .btn-select-plan {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-select-plan.plan-basic {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+        }
+
+        .btn-select-plan.plan-featured {
+            background: linear-gradient(135deg, var(--accent) 0%, #0284c7 100%);
+            color: white;
+        }
+
+        .btn-select-plan.plan-premium {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+        }
+
+        .btn-select-plan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .license-input-section {
+            margin-top: 3rem;
+            padding-top: 3rem;
+            border-top: 2px solid var(--border);
+        }
+
+        .license-input-box {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .license-input {
+            flex: 1;
+            min-width: 250px;
+            padding: 1rem;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+
+        .license-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn-validate-license {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-validate-license:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(5, 150, 105, 0.3);
+        }
+
+        .whatsapp-support {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-whatsapp:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
+        }
+
+        .days-remaining {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
+            font-weight: 600;
+            z-index: 1000;
+            animation: slideInRight 0.5s ease;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .days-remaining i {
+            margin-right: 0.5rem;
+        }
+
+        /* Responsivo */
+        @media (max-width: 768px) {
+            .license-input-box {
+                flex-direction: column;
+            }
+
+            .license-input {
+                min-width: 100%;
+            }
+
+            .btn-validate-license {
+                width: 100%;
+            }
+
+            .whatsapp-support {
+                flex-direction: column;
+            }
+
+            .days-remaining {
+                top: 70px;
+                right: 10px;
+                left: 10px;
+                text-align: center;
+            }
+        }
+
+        /* Tela de Bloqueio de Licença */
+        .license-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.95) 0%, rgba(30, 64, 175, 0.98) 100%);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .license-box {
+            background: white;
+            border-radius: 20px;
+            padding: 3rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            animation: slideDown 0.5s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-50px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .license-icon {
+            font-size: 5rem;
+            color: var(--warning);
+            margin-bottom: 1.5rem;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        .license-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        .license-message {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            font-size: 1rem;
+        }
+
+        .btn-activate-license {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+            border: none;
+            padding: 1rem 2.5rem;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(30, 58, 138, 0.3);
+        }
+
+        .btn-activate-license:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(30, 58, 138, 0.4);
+        }
+
+        /* Modal de Planos */
+        .pricing-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            border: 2px solid var(--border);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .pricing-card.featured {
+            border: 3px solid var(--accent);
+            box-shadow: 0 10px 30px rgba(14, 165, 233, 0.2);
+        }
+
+        .pricing-card.featured::before {
+            content: "MAIS VENDIDO";
+            position: absolute;
+            top: 15px;
+            right: -35px;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: white;
+            padding: 5px 40px;
+            transform: rotate(45deg);
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        .pricing-period {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        .pricing-price {
+            font-size: 3rem;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price-old {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            text-decoration: line-through;
+            margin-bottom: 1rem;
+        }
+
+        .pricing-economy {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+            display: inline-block;
+        }
+
+        .pricing-features {
+            list-style: none;
+            padding: 0;
+            margin: 1.5rem 0;
+            text-align: left;
+        }
+
+        .pricing-features li {
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .pricing-features li:last-child {
+            border-bottom: none;
+        }
+
+        .pricing-features i {
+            color: var(--success);
+            font-size: 1.1rem;
+        }
+
+        .btn-select-plan {
+            width: 100%;
+            padding: 1rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .btn-select-plan.plan-basic {
+            background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+            color: white;
+        }
+
+        .btn-select-plan.plan-featured {
+            background: linear-gradient(135deg, var(--accent) 0%, #0284c7 100%);
+            color: white;
+        }
+
+        .btn-select-plan.plan-premium {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            color: white;
+        }
+
+        .btn-select-plan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .license-input-section {
+            margin-top: 3rem;
+            padding-top: 3rem;
+            border-top: 2px solid var(--border);
+        }
+
+        .license-input-box {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .license-input {
+            flex: 1;
+            padding: 1rem;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+
+        .license-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn-validate-license {
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-validate-license:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(5, 150, 105, 0.3);
+        }
+
+        .whatsapp-support {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-top: 1rem;
+        }
+
+        .btn-whatsapp {
+            background: linear-gradient(135deg, #25d366 0%, #128c7e 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-whatsapp:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 211, 102, 0.3);
+        }
+
+        .days-remaining {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(5, 150, 105, 0.3);
+            font-weight: 600;
+            z-index: 1000;
+            animation: slideInRight 0.5s ease;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .days-remaining i {
+            margin-right: 0.5rem;
         }
 
         /* Botões de Ação na Tabela (Ajuste de Hover) */
@@ -1133,10 +1802,215 @@
                 height: 250px !important;
             }
         }
+
+        #countdown-bar {
+            display: none;
+            background: #212529;
+            color: #fff;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 9999;
+            border-bottom: 2px solid #ffc107;
+        }
+
+        #countdown-timer {
+            color: #ffc107;
+            margin-left: 5px;
+        }
     </style>
 </head>
 
 <body>
+    <div id="countdown-bar">
+        <i class="fa-solid fa-clock-rotate-left me-2"></i>
+        Tempo de Licença Restante: <span id="countdown-timer">--:--:--</span>
+    </div>
+    <!-- Tela de Bloqueio de Licença -->
+    <div id="licenseOverlay" class="license-overlay" style="display: none;">
+        <div class="license-box">
+            <div class="license-icon">
+                <i class="fa-solid fa-lock"></i>
+            </div>
+            <h2 class="license-title">Sistema Bloqueado</h2>
+            <p class="license-message">
+                Para continuar usando o sistema, é necessário ativar uma licença válida.
+                Escolha um de nossos planos ou insira sua chave de licença.
+            </p>
+            <button class="btn-activate-license" onclick="showLicensePlans()">
+                <i class="fa-solid fa-key me-2"></i>Ativar Licença
+            </button>
+        </div>
+    </div>
+
+    <!-- Indicador de Dias Restantes -->
+    <div id="daysRemaining" class="days-remaining" style="display: none;">
+        <i class="fa-solid fa-clock"></i>
+        <span id="daysRemainingText">30 dias restantes</span>
+    </div>
+
+    <!-- Modal de Planos de Licença -->
+    <div class="modal fade" id="modalLicensePlans" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">
+                        <i class="fa-solid fa-crown me-2"></i>Escolha seu Plano de Licença
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        id="closeLicenseModal"></button>
+                </div>
+                <div class="modal-body p-4">
+                    <!-- Planos -->
+                    <div class="row g-4 mb-5">
+                        <!-- Plano 30 Dias -->
+                        <div class="col-md-4">
+                            <div class="pricing-card">
+                                <div class="pricing-period">Plano Mensal</div>
+                                <div class="pricing-price">R$ 39,90</div>
+                                <div class="pricing-price-old">R$ 59,90</div>
+                                <ul class="pricing-features">
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Acesso total por 30 dias</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Todas as funcionalidades</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Suporte via WhatsApp</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Atualizações incluídas</span>
+                                    </li>
+                                </ul>
+                                <button class="btn-select-plan plan-basic" onclick="selectPlan(30, 39.90)">
+                                    Escolher Mensal
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Plano 6 Meses (MAIS VENDIDO) -->
+                        <div class="col-md-4">
+                            <div class="pricing-card featured">
+                                <div class="pricing-period">Plano Semestral</div>
+                                <div class="pricing-price">R$ 179,90</div>
+                                <div class="pricing-price-old">R$ 359,40</div>
+                                <div class="pricing-economy">
+                                    <i class="fa-solid fa-piggy-bank me-1"></i>
+                                    ECONOMIZE 50%
+                                </div>
+                                <ul class="pricing-features">
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Acesso total por 6 meses</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Todas as funcionalidades</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Suporte prioritário</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Atualizações incluídas</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span><strong>R$ 29,98/mês</strong></span>
+                                    </li>
+                                </ul>
+                                <button class="btn-select-plan plan-featured" onclick="selectPlan(180, 179.90)">
+                                    Escolher Semestral
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Plano 1 Ano (MELHOR CUSTO-BENEFÍCIO) -->
+                        <div class="col-md-4">
+                            <div class="pricing-card">
+                                <div class="pricing-period">Plano Anual</div>
+                                <div class="pricing-price">R$ 299,90</div>
+                                <div class="pricing-price-old">R$ 718,80</div>
+                                <div class="pricing-economy">
+                                    <i class="fa-solid fa-star me-1"></i>
+                                    ECONOMIZE 58%
+                                </div>
+                                <ul class="pricing-features">
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Acesso total por 1 ano</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Todas as funcionalidades</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Suporte VIP 24/7</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span>Atualizações incluídas</span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-check-circle"></i>
+                                        <span><strong>R$ 24,99/mês</strong></span>
+                                    </li>
+                                    <li>
+                                        <i class="fa-solid fa-gift"></i>
+                                        <span><strong>2 meses GRÁTIS</strong></span>
+                                    </li>
+                                </ul>
+                                <button class="btn-select-plan plan-premium" onclick="selectPlan(365, 299.90)">
+                                    Escolher Anual
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Seção de Pagamento -->
+                    <div id="paymentSection" style="display: none;">
+                        <div class="alert alert-info">
+                            <i class="fa-solid fa-qrcode me-2"></i>
+                            <strong>Pagamento via PIX</strong><br>
+                            Após escolher seu plano, entre em contato pelo WhatsApp para receber a chave PIX e
+                            instruções de pagamento.
+                        </div>
+                    </div>
+
+                    <!-- Seção de Inserir Licença -->
+                    <div class="license-input-section">
+                        <h6 class="fw-bold mb-3 text-center">Já possui uma licença?</h6>
+                        <div class="license-input-box">
+                            <input type="text" id="licenseKeyInput" class="license-input"
+                                placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" maxlength="500">
+                            <button class="btn-validate-license" onclick="validateLicense()">
+                                <i class="fa-solid fa-check me-2"></i>Ativar
+                            </button>
+                        </div>
+
+                        <div class="whatsapp-support">
+                            <span>Não tem uma licença?</span>
+                            <button class="btn-whatsapp" onclick="contactWhatsApp()">
+                                <i class="fa-brands fa-whatsapp"></i>
+                                Solicitar no WhatsApp
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Mobile Menu Overlay -->
     <div class="mobile-menu-overlay" id="mobileMenuOverlay" onclick="closeMobileMenu()"></div>
 
@@ -1210,7 +2084,7 @@
     <!-- Login Overlay -->
     <div id="loginOverlay"
         class="login-overlay position-fixed vh-100 vw-100 top-0 start-0 d-flex align-items-center justify-content-center"
-        style="z-index: 9999; display: flex !important;">
+        style="z-index: 9999;">
         <div class="login-card p-5" style="width: 100%; max-width: 420px;">
             <div class="text-center mb-4">
                 <i class="fa-solid fa-screwdriver-wrench text-primary fs-1 mb-3"
@@ -1242,7 +2116,7 @@
     <nav class="navbar navbar-custom navbar-dark">
         <div class="container">
             <div class="d-flex align-items-center justify-content-between w-100">
-                <a class="navbar-brand" href="#">
+                <a class="navbar-brand" href="#" id="logoClick" style="cursor: default; user-select: none;">
                     <i class="fa-solid fa-screwdriver-wrench"></i>MELÃO <span class="text-accent">RODAS</span>
                 </a>
                 <div class="d-flex align-items-center gap-2">
@@ -1649,28 +2523,21 @@
         const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im94cWJobWJscmVwcmJlYWZsZmxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5OTUyNDUsImV4cCI6MjA4NjU3MTI0NX0.jZSFtEdXt1h9knqTZLSmKD72hx8x9oRir1Cs8hL65xI';
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        // 2. Função de Verificação de Sessão
         async function verificarSessao() {
-            try {
-                const { data: { session }, error } = await supabaseClient.auth.getSession();
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            const overlay = document.getElementById('loginOverlay');
 
-                if (error) throw error;
+            if (session) {
+                // Esconde a tela de login completamente
+                overlay.style.display = 'none';
+                overlay.classList.remove('d-flex');
 
-                const overlay = document.getElementById('loginOverlay');
-
-                if (session) {
-                    console.log("Sessão ativa encontrada para:", session.user.email);
-                    if (overlay) overlay.style.setProperty('display', 'none', 'important');
-
-                    // Garante que os dados carregam
-                    if (typeof carregarOS === "function") carregarOS();
-                    if (typeof carregarProdutos === "function") carregarProdutos();
-                } else {
-                    console.log("Nenhuma sessão ativa.");
-                    if (overlay) overlay.style.display = 'flex';
-                }
-            } catch (err) {
-                console.error("Erro na verificação de sessão:", err);
+                carregarOS();
+                carregarProdutos();
+            } else {
+                // Se não houver sessão, mantém a tela de login visível
+                overlay.style.display = 'flex';
+                overlay.classList.add('d-flex');
             }
         }
 
@@ -1701,24 +2568,40 @@
             e.preventDefault();
             const email = document.getElementById('loginEmail').value;
             const senha = document.getElementById('loginSenha').value;
+            const btn = e.target.querySelector('button');
 
             try {
-                const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Entrando...';
+
+                const { data, error } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password: senha
+                });
 
                 if (error) {
-                    console.error("Erro de Auth:", error.message);
                     document.getElementById('loginErro').textContent = "Erro: " + error.message;
                     document.getElementById('loginErro').style.display = 'block';
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket me-2"></i>ENTRAR NO SISTEMA';
                 } else {
-                    console.log("Login realizado!", data);
-                    document.getElementById('loginOverlay').style.display = 'none';
-                    carregarOS();
-                    carregarProdutos();
-                    verificarSessao();
+                    // Login deu certo, forçamos a verificação de sessão para remover o bloqueio
+                    await verificarSessao();
+                    showNotify("Login realizado com sucesso!");
+
+                    // Abre a seleção de atendente
+                    setTimeout(() => {
+                        abrirSelecaoAtendente();
+                    }, 500);
+
+                    // Reseta o botão após sucesso
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket me-2"></i>ENTRAR NO SISTEMA';
                 }
             } catch (err) {
                 console.error("Erro inesperado:", err);
-                alert("Erro de conexão. Verifique a URL e a KEY do Supabase no código.");
+                btn.disabled = false;
+                btn.innerHTML = 'ENTRAR NO SISTEMA';
             }
         });
 
@@ -2144,10 +3027,15 @@
             doc.setFontSize(9);
             doc.text(`Data de Emissão: ${new Date(os.created_at).toLocaleDateString('pt-BR')}`, 140, 72);
 
+            // Localize onde você adicionou o texto do atendente e use estas coordenadas:
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.text(`ATENDENTE: ${atendenteLogado || 'SISTEMA'}`, 15, 272); // Y=272 fica logo acima do rodapé final
+
             // Dados do Cliente
             let yPos = 82;
             doc.setFillColor(240, 240, 240);
-            doc.rect(15, yPos - 5, 180, 30, 'F');
+            doc.rect(15, yPos - 5, 180, 37, 'F');
 
             doc.setFontSize(10);
             doc.setFont(undefined, 'bold');
@@ -2166,6 +3054,10 @@
 
             doc.text('Veículo:', 20, yPos);
             doc.text(os.veiculo, 50, yPos);
+            yPos += 7;
+
+            doc.text('Atendente Responsável:', 20, yPos);
+            doc.text(atendenteLogado || 'Sistema', 75, yPos);
 
             // Serviços Realizados
             yPos += 15;
@@ -2269,6 +3161,12 @@
                 yPos += termoLines.length * 3.5;
             });
 
+            // Posicionamento no rodapé, acima da linha de assinatura
+            doc.setFontSize(8);
+            doc.setTextColor(100, 100, 100);
+            doc.setFont(undefined, 'bold');
+            doc.text(`ATENDENTE RESPONSÁVEL: ${atendenteLogado || 'SISTEMA'}`, 15, 265);
+
             // Assinatura
             yPos += 8;
             doc.setDrawColor(100, 100, 100);
@@ -2334,7 +3232,7 @@
             // Dados do Cliente
             let yPos = 82;
             doc.setFillColor(240, 240, 240);
-            doc.rect(15, yPos - 5, 180, 30, 'F');
+            doc.rect(15, yPos - 5, 180, 37, 'F');
 
             doc.setFontSize(10);
             doc.setFont(undefined, 'bold');
@@ -2353,6 +3251,10 @@
 
             doc.text('Veículo:', 20, yPos);
             doc.text(os.veiculo, 50, yPos);
+            yPos += 7;
+
+            doc.text('Atendente Responsável:', 20, yPos);
+            doc.text(atendenteLogado || 'Sistema', 75, yPos);
 
             // Serviços Realizados
             yPos += 15;
@@ -2479,10 +3381,13 @@
             doc.text(`Data: ${new Date().toLocaleDateString('pt-BR')}`, 140, 72);
             doc.text(`Validade: 15 dias`, 140, 78);
 
+            doc.setFontSize(9);
+            doc.text(`CONSULTOR TÉCNICO: ${atendenteLogado || 'SISTEMA'}`, 15, 260);
+
             // Dados do Cliente
             let yPos = 88;
             doc.setFillColor(240, 240, 240);
-            doc.rect(15, yPos - 5, 180, 30, 'F');
+            doc.rect(15, yPos - 5, 180, 37, 'F');
 
             doc.setFontSize(10);
             doc.setFont(undefined, 'bold');
@@ -2501,6 +3406,10 @@
 
             doc.text('Veículo:', 20, yPos);
             doc.text(os.veiculo, 50, yPos);
+            yPos += 7;
+
+            doc.text('Atendente Responsável:', 20, yPos);
+            doc.text(atendenteLogado || 'Sistema', 75, yPos);
 
             // Serviços Orçados
             yPos += 15;
@@ -2603,6 +3512,11 @@
             doc.text('Este é um orçamento sem compromisso. Entre em contato para mais informações.', 105, 285, { align: 'center' });
 
             doc.save(`Orcamento_${os.id.substring(0, 8)}.pdf`);
+            // Posicionamento para Orçamento (Logo abaixo dos termos)
+            doc.setFontSize(8);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Consultor Técnico: ${atendenteLogado || 'Vendedor Padrão'}`, 15, 270);
+
             showNotify('Orçamento gerado com sucesso!', 'success');
         }
 
@@ -2639,6 +3553,7 @@
 
         // Adicionar produto ao cadastro
         // Configura o evento para quando você selecionar um PRODUTO (Estoque)
+        // Localize o evento de change do selectProduto (por volta da linha 1170)
         const selectProd = document.getElementById('selectProduto');
         if (selectProd) {
             selectProd.addEventListener('change', function () {
@@ -2648,24 +3563,28 @@
                 const nomeProduto = selectedOption.dataset.nome;
                 const precoProduto = parseFloat(selectedOption.dataset.preco) || 0;
 
-                // 1. Soma ao Valor Total
+                // 1. Atualiza o valor total
                 const campoValor = document.getElementById('valor');
                 if (campoValor) {
                     const valorAtual = parseFloat(campoValor.value) || 0;
                     campoValor.value = (valorAtual + precoProduto).toFixed(2);
                 }
 
-                // 2. Adiciona ao array interno de peças (usado no salvamento)
-                pecasSelecionadas.push({ nome: nomeProduto, preco: precoProduto });
+                // 2. ADICIONADO: Sincroniza com o campo de Observações
+                const campoObs = document.getElementById('observacoes');
+                if (campoObs) {
+                    const prefixo = campoObs.value ? ", " : "";
+                    campoObs.value += prefixo + nomeProduto;
+                }
 
-                // 3. Adiciona o Badge visual na lista
+                // 3. Cria o badge visual
                 const lista = document.getElementById('listaPecas');
                 if (lista) {
                     const badge = document.createElement('span');
                     badge.className = 'badge badge-modern bg-primary text-white position-relative pe-4 me-2 mb-2';
                     badge.dataset.preco = precoProduto;
                     badge.dataset.nome = nomeProduto;
-                    badge.dataset.tipo = 'produto'; // Identifica que é produto
+                    badge.dataset.tipo = 'produto';
                     badge.innerHTML = `
                         <i class="fa-solid fa-box me-1"></i> ${nomeProduto} (+R$ ${precoProduto.toFixed(2)})
                         <button type="button" class="btn-close btn-close-white position-absolute top-50 end-0 translate-middle-y me-1" 
@@ -3544,19 +4463,21 @@
             const modalElement = document.getElementById('modalBuscaCliente');
             const modalBusca = bootstrap.Modal.getOrCreateInstance(modalElement);
 
-            document.getElementById('inputBuscaFicha').value = '';
+            // Limpeza reforçada para evitar o e-mail automático
+            const inputBusca = document.getElementById('inputBuscaFicha');
+            inputBusca.value = '';
+
             document.getElementById('resultadoFicha').style.display = 'none';
             document.getElementById('fichaVazia').style.display = 'none';
             document.getElementById('listaClientesInicial').style.display = 'block';
 
-            // Carrega lista de clientes
             carregarListaClientes();
-
             modalBusca.show();
 
-            // Garante que o cursor já apareça no campo de busca
+            // Foco automático e limpeza após abertura total
             modalElement.addEventListener('shown.bs.modal', function () {
-                document.getElementById('inputBuscaFicha').focus();
+                inputBusca.value = ''; // Limpa novamente caso o navegador insira após abrir
+                inputBusca.focus();
             }, { once: true });
         }
 
@@ -3734,6 +4655,94 @@
             }
         });
 
+
+        // Atalho Secreto: ALT + L (abre o campo para colar a chave de comando/licença)
+        document.addEventListener('keydown', function (e) {
+            // Verifica se a tecla ALT e L foram pressionadas
+            if (e.altKey && e.key.toLowerCase() === 'l') {
+                e.preventDefault();
+                console.log("Atalho ALT+L detectado. Abrindo planos...");
+
+                // Se o usuário estiver logado, abrimos o modal de planos que contém o campo de input
+                const modalElement = document.getElementById('modalLicensePlans');
+                const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+                modal.show();
+
+                // Dá foco automático no campo de input após o modal abrir
+                setTimeout(() => {
+                    document.getElementById('licenseKeyInput').focus();
+                }, 500);
+            }
+        });
+
+        // Valida e ativa a licença
+        async function validateLicense() {
+            const input = document.getElementById('licenseKeyInput');
+            const licenseKey = input.value.trim();
+
+            if (!licenseKey) return;
+
+            try {
+                // Decodifica a chave de Base64 para String e depois para Objeto
+                const decodedString = atob(licenseKey);
+                const decodedData = JSON.parse(decodedString);
+
+                // --- LÓGICA DE BLOQUEIO TOTAL (KILL SWITCH) ---
+                if (decodedData.tipo === "REVOGAR") {
+                    // Remove a licença local
+                    localStorage.removeItem('melaoRodasLicense');
+
+                    // Pega o motivo enviado pelo gerador ou usa um padrão
+                    const motivo = decodedData.motivo || "Acesso interrompido pelo administrador.";
+
+                    // Desloga do Supabase
+                    if (window.supabaseClient) {
+                        await supabaseClient.auth.signOut();
+                    }
+
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'ACESSO BLOQUEADO',
+                        text: motivo,
+                        confirmButtonText: 'Sair'
+                    }).then(() => {
+                        location.reload();
+                    });
+                    return;
+                }
+
+                // --- LÓGICA DE ATIVAÇÃO NORMAL ---
+                const expirationDate = new Date(decodedData.expira_em);
+
+                if (new Date() > expirationDate) {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Licença Expirada',
+                        text: 'Esta chave não é mais válida.'
+                    });
+                    return;
+                }
+
+                localStorage.setItem('melaoRodasLicense', JSON.stringify(decodedData));
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Sistema Ativado!',
+                    text: `Válido até: ${expirationDate.toLocaleString('pt-BR')}`
+                }).then(() => {
+                    location.reload();
+                });
+
+            } catch (error) {
+                console.error('Erro:', error);
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Chave Inválida',
+                    text: 'Verifique se copiou o código corretamente.'
+                });
+            }
+        }
+
     </script>
 
 
@@ -3837,8 +4846,9 @@
                 <div class="modal-body">
                     <div class="search-box mb-4 mx-auto" style="max-width: 600px;">
                         <i class="fa-solid fa-magnifying-glass"></i>
-                        <input type="text" id="inputBuscaFicha" class="form-control form-control-lg"
-                            placeholder="Digite o nome do cliente para pesquisar...">
+                        <input type="search" id="inputBuscaFicha" class="form-control form-control-lg"
+                            placeholder="Digite o nome do cliente para pesquisar..." autocomplete="chrome-off"
+                            name="campo_pesquisa_aleatorio_99">
                     </div>
 
                     <!-- Lista de Clientes (quando não há busca) -->
@@ -3893,5 +4903,337 @@
             </div>
         </div>
     </div>
+
+    <script>
+        // ========================================
+        // SISTEMA DE LICENCIAMENTO
+        // ========================================
+
+        // Chave secreta para validação (deve ser a mesma do gerador Python)
+        // Esta é a assinatura pública - a chave privada está no servidor Python
+        const LICENSE_PUBLIC_KEY = "MELAO_RODAS_2025";
+
+        // Função para calcular hash SHA-256
+        async function sha256(message) {
+            const msgBuffer = new TextEncoder().encode(message);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        // Verifica se existe uma licença válida
+        let countdownInterval;
+
+        function checkLicense() {
+            const licenseData = JSON.parse(localStorage.getItem('melaoRodasLicense'));
+            const bar = document.getElementById('countdown-bar');
+
+            if (!licenseData || !licenseData.expira_em) {
+                showLicenseBlock();
+                bar.style.display = 'none';
+                return;
+            }
+
+            const expirationDate = new Date(licenseData.expira_em);
+
+            // Iniciar contagem regressiva
+            if (countdownInterval) clearInterval(countdownInterval);
+
+            countdownInterval = setInterval(() => {
+                const agora = new Date().getTime();
+                const distancia = expirationDate.getTime() - agora;
+
+                if (distancia < 0) {
+                    clearInterval(countdownInterval);
+                    localStorage.removeItem('melaoRodasLicense');
+                    location.reload();
+                    return;
+                }
+
+                const dias = Math.floor(distancia / (1000 * 60 * 60 * 24));
+                const horas = Math.floor((distancia % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutos = Math.floor((distancia % (1000 * 60 * 60)) / (1000 * 60));
+                const segundos = Math.floor((distancia % (1000 * 60)) / 1000);
+
+                bar.style.display = 'block';
+                document.getElementById('countdown-timer').innerHTML =
+                    `${dias}d ${horas}h ${minutos}m ${segundos}s`;
+            }, 1000);
+        }
+
+        // Mostra tela de bloqueio
+        function showLicenseBlock() {
+            document.getElementById('licenseOverlay').style.display = 'flex';
+        }
+
+        // Esconde tela de bloqueio
+        function hideLicenseBlock() {
+            document.getElementById('licenseOverlay').style.display = 'none';
+        }
+
+        // Mostra modal de planos
+        function showLicensePlans() {
+            const modalElement = document.getElementById('modalLicensePlans');
+            const modal = new bootstrap.Modal(modalElement, {
+                backdrop: 'static',
+                keyboard: false
+            });
+
+            // Garantir que o modal tenha z-index maior que a tela de bloqueio
+            modalElement.style.zIndex = '9999';
+
+            // Quando o modal abrir, ajustar o backdrop também
+            modalElement.addEventListener('shown.bs.modal', function () {
+                const backdrop = document.querySelector('.modal-backdrop');
+                if (backdrop) {
+                    backdrop.style.zIndex = '9998';
+                }
+            });
+
+            modal.show();
+        }
+
+        // Mostra dias restantes
+        function showDaysRemaining(days) {
+            const element = document.getElementById('daysRemaining');
+            const textElement = document.getElementById('daysRemainingText');
+
+            if (days <= 7) {
+                element.style.background = 'linear-gradient(135deg, #dc2626 0%, #991b1b 100%)';
+            } else if (days <= 30) {
+                element.style.background = 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+            }
+
+            textElement.textContent = days === 1 ? '1 dia restante' : `${days} dias restantes`;
+            element.style.display = 'block';
+        }
+
+        // Seleciona um plano
+        function selectPlan(days, price) {
+            const planName = days === 30 ? 'Mensal' : days === 180 ? 'Semestral' : 'Anual';
+            const message = `Olá! Gostaria de adquirir o plano *${planName}* (${days} dias) por *R$ ${price.toFixed(2)}*.`;
+            const whatsappUrl = `https://wa.me/5592995258724?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+
+        // Contato via WhatsApp
+        function contactWhatsApp() {
+            const message = 'Olá! Gostaria de solicitar uma licença para o sistema MELÃO RODAS.';
+            const whatsappUrl = `https://wa.me/5592995258724?text=${encodeURIComponent(message)}`;
+            window.open(whatsappUrl, '_blank');
+        }
+
+        // Adicionar evento de Enter no campo de licença
+        document.getElementById('licenseKeyInput')?.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                validateLicense();
+            }
+        });
+
+        // Permitir fechar modal apenas se houver licença válida
+        document.getElementById('closeLicenseModal')?.addEventListener('click', function (e) {
+            const licenseData = localStorage.getItem('melaoRodasLicense');
+            if (!licenseData) {
+                e.preventDefault();
+                e.stopPropagation();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Licença Necessária',
+                    text: 'Para usar o sistema, você precisa ativar uma licença.',
+                    confirmButtonText: 'Entendi'
+                });
+            }
+        });
+
+        // Verificar licença ao carregar a página
+        document.addEventListener('DOMContentLoaded', function () {
+            // Aguardar 500ms para garantir que todos os elementos foram carregados
+            setTimeout(() => {
+                checkLicense();
+            }, 500);
+        });
+
+        // Verificar licença periodicamente (a cada 1 hora)
+        setInterval(function () {
+            checkLicense();
+        }, 3600000);
+
+
+        function skipLicense() {
+            const testLicense = {
+                dias: 30,
+                criado_em: new Date().toISOString(),
+                expira_em: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                cliente_id: "TESTE",
+                observacao: "Licença de teste",
+                versao: "1.0",
+                assinatura: "test"
+            };
+            localStorage.setItem('melaoRodasLicense', JSON.stringify(testLicense));
+            location.reload();
+        }
+        // Para usar: abra o console e digite: skipLicense()
+
+        let atendenteLogado = null;
+        let logoClicks = 0;
+
+        // Certifique-se de que o ID 'logoClick' está exatamente na tag <a> da logo
+        document.getElementById('logoClick').addEventListener('click', (e) => {
+            e.preventDefault(); // Evita que a página recarregue ao clicar
+            logoClicks++;
+            console.log("Cliques na logo:", logoClicks); // Para você testar no console (F12)
+            if (logoClicks >= 5) {
+                document.getElementById('adminArea').style.setProperty('display', 'block', 'important');
+                showNotify("Menu de Administrador liberado!", "success");
+            }
+        });
+
+        // Função para abrir seleção de atendente após login bem-sucedido
+        async function abrirSelecaoAtendente() {
+            const { data, error } = await supabaseClient.from('atendentes').select('*');
+            const lista = document.getElementById('listaAtendentesLogin');
+
+            if (data && data.length > 0) {
+                lista.innerHTML = data.map(at => `
+            <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" 
+                onclick="verificarSenhaAtendente('${at.id}', '${at.nome}')">
+                ${at.nome} <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        `).join('');
+                new bootstrap.Modal(document.getElementById('modalSelecaoAtendente')).show();
+            } else {
+                showNotify("Nenhum atendente cadastrado. Use o segredo da logo para cadastrar.", "error");
+            }
+        }
+
+        async function verificarSenhaAtendente(id, nome) {
+            // Fecha o modal de seleção de atendente primeiro
+            const modalElement = document.getElementById('modalSelecaoAtendente');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+
+            // Aguarda o modal fechar completamente antes de abrir o SweetAlert
+            setTimeout(async () => {
+                const { value: senha } = await Swal.fire({
+                    title: `Senha de ${nome}`,
+                    input: 'password',
+                    inputLabel: 'Digite sua senha de 6 dígitos',
+                    inputPlaceholder: '******',
+                    inputAttributes: {
+                        maxlength: 6,
+                        autocomplete: 'off',
+                        inputmode: 'numeric'
+                    },
+                    showCancelButton: true,
+                    confirmButtonText: 'Confirmar',
+                    cancelButtonText: 'Cancelar',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        // Força o foco no input assim que o SweetAlert abrir
+                        setTimeout(() => {
+                            const input = Swal.getInput();
+                            if (input) {
+                                input.focus();
+                                input.click(); // Garante que o input está clicável
+                            }
+                        }, 100);
+                    },
+                    preConfirm: (senha) => {
+                        if (!senha || senha.length !== 6) {
+                            Swal.showValidationMessage('A senha deve ter 6 dígitos');
+                            return false;
+                        }
+                        return senha;
+                    }
+                });
+
+                if (senha) {
+                    const { data } = await supabaseClient.from('atendentes').select('*').eq('id', id).eq('senha_numerica', senha).single();
+                    if (data) {
+                        atendenteLogado = nome;
+                        showNotify(`Bem-vindo, ${nome}!`, "success");
+                    } else {
+                        showNotify("Senha incorreta", "error");
+                        // Reabre o modal de seleção se a senha estiver incorreta
+                        setTimeout(() => {
+                            new bootstrap.Modal(modalElement).show();
+                        }, 300);
+                    }
+                } else {
+                    // Se cancelar, reabre o modal de seleção
+                    setTimeout(() => {
+                        new bootstrap.Modal(modalElement).show();
+                    }, 300);
+                }
+            }, 400);
+        }
+
+        async function salvarAtendente() {
+            const nome = document.getElementById('novoAtendenteNome').value;
+            const senha = document.getElementById('novoAtendenteSenha').value;
+
+            if (nome && senha.length === 6) {
+                const { error } = await supabaseClient.from('atendentes').insert([{ nome, senha_numerica: senha }]);
+                if (!error) {
+                    showNotify("Atendente cadastrado!");
+                    bootstrap.Modal.getInstance(document.getElementById('modalCadastroAtendente')).hide();
+                }
+            } else {
+                showNotify("Preencha o nome e senha de 6 dígitos", "error");
+            }
+        }
+
+        // Chame abrirSelecaoAtendente() dentro da sua função verificarSessao() 
+        // quando detectar que o usuário está logado.
+
+    </script>
+
+    <div id="adminArea" style="display: none;" class="text-center mb-3">
+        <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#modalCadastroAtendente">
+            <i class="fa-solid fa-user-shield me-2"></i>Gerenciar Atendentes
+        </button>
+    </div>
+
+    <div class="modal fade" id="modalSelecaoAtendente" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title">Quem está operando o sistema?</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="list-group" id="listaAtendentesLogin">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modalCadastroAtendente" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Cadastrar Novo Atendente</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Nome do Atendente</label>
+                        <input type="text" id="novoAtendenteNome" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Senha Numérica (6 dígitos)</label>
+                        <input type="password" id="novoAtendenteSenha" class="form-control" maxlength="6">
+                    </div>
+                    <button class="btn btn-primary w-100" onclick="salvarAtendente()">Salvar Atendente</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
 
 </html>
