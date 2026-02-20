@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#fdf6f2">
     <link rel="apple-touch-icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
-    <title>O Compadre</title>
+    <title>Coração Acolhido - IA Amiga</title>
     <style>
         * {
             box-sizing: border-box;
@@ -1201,39 +1201,87 @@ ABORDAGEM:
             }
         }
 
+        // Chama a API Gemini com retry automático em caso de erro 503/429
+        async function chamarGeminiComRetry(body, tentativas = 3) {
+            for (let i = 0; i < tentativas; i++) {
+                try {
+                    const response = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(body)
+                    });
+
+                    // Trata erros HTTP antes de tentar parsear
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        const status = response.status;
+                        const msg = errData?.error?.message || response.statusText;
+
+                        // 429 = cota excedida, 503 = serviço indisponível → tenta de novo
+                        if ((status === 429 || status === 503) && i < tentativas - 1) {
+                            const espera = (i + 1) * 2000; // 2s, 4s...
+                            await new Promise(r => setTimeout(r, espera));
+                            continue;
+                        }
+
+                        // Erros conhecidos da API Gemini
+                        if (status === 400) throw new Error('Conversa muito longa. Tente limpar o chat e começar de novo.');
+                        if (status === 429) throw new Error('Muitas mensagens seguidas. Aguarde um momento e tente novamente.');
+                        if (status === 503) throw new Error('O serviço está temporariamente sobrecarregado. Tente em alguns segundos.');
+                        if (status === 401 || status === 403) throw new Error('Chave de API inválida ou sem permissão.');
+                        throw new Error(`Erro ${status}: ${msg}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Gemini pode retornar sem candidates em casos de bloqueio de conteúdo
+                    if (!data.candidates || data.candidates.length === 0) {
+                        const motivo = data.promptFeedback?.blockReason;
+                        if (motivo) throw new Error('Mensagem bloqueada pela API: ' + motivo);
+                        throw new Error('Resposta vazia da IA. Tente reformular sua mensagem.');
+                    }
+
+                    return data;
+
+                } catch (err) {
+                    // Erro de rede (offline, DNS, CORS)
+                    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                        if (i < tentativas - 1) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            continue;
+                        }
+                        throw new Error('Sem conexão com a internet. Verifique sua rede e tente novamente.');
+                    }
+                    throw err; // outros erros: propaga direto
+                }
+            }
+        }
+
         async function sendMessage() {
             const input = document.getElementById('userInput');
             const message = input.value.trim();
             const typingIndicator = document.getElementById('typing');
+            const sendBtn = document.getElementById('sendBtn');
 
             if (!message) return;
 
-            // 1. Exibe na tela
+            // Bloqueia envio duplo
+            sendBtn.disabled = true;
+
             const userMsgElement = appendMessage(message, 'user');
             input.value = "";
             typingIndicator.style.display = "block";
 
-            // 2. SALVA NO BANCO DE DADOS (Mensagem do Usuário)
             await salvarMensagemNoBanco('user', message);
-
             chatHistory.push({ role: "user", parts: [{ text: message }] });
 
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: chatHistory })
-                });
-
-                const data = await response.json();
+                const data = await chamarGeminiComRetry({ contents: chatHistory });
                 let fullBotReply = data.candidates[0].content.parts[0].text;
 
-                // 3. SALVA NO BANCO DE DADOS (Resposta completa do Bot)
                 await salvarMensagemNoBanco('model', fullBotReply);
-
                 chatHistory.push({ role: "model", parts: [{ text: fullBotReply }] });
 
-                // Extrai o emoji de reação
                 const [reactionEmoji, botText] = fullBotReply.split('#');
 
                 if (reactionEmoji && userMsgElement) {
@@ -1243,7 +1291,7 @@ ABORDAGEM:
                     userMsgElement.appendChild(reactionDiv);
                 }
 
-                const chunks = botText.split(/[|\n]+/).filter(c => c.trim().length > 0);
+                const chunks = (botText || fullBotReply).split(/[|\n]+/).filter(c => c.trim().length > 0);
                 typingIndicator.style.display = "none";
 
                 for (const chunk of chunks) {
@@ -1251,7 +1299,7 @@ ABORDAGEM:
                     await new Promise(r => setTimeout(r, 800 + (chunk.length * 15)));
                     typingIndicator.style.display = "none";
                     appendMessage(chunk.trim(), 'bot');
-                    falarTexto(chunk.trim()); // voz
+                    falarTexto(chunk.trim());
                     if (chunks.length > 1) {
                         await new Promise(r => setTimeout(r, chunk.length * 60 + 600));
                     }
@@ -1259,7 +1307,12 @@ ABORDAGEM:
 
             } catch (error) {
                 typingIndicator.style.display = "none";
-                appendMessage(`Sinto muito, ${usuario.nome}, tive um erro na conexão.`, 'bot');
+                // Mostra a mensagem de erro real, não genérica
+                const msgErro = error.message || 'Erro desconhecido. Tente novamente.';
+                appendMessage(`⚠️ ${msgErro}`, 'bot');
+                console.error('[Gemini Error]', error);
+            } finally {
+                sendBtn.disabled = false;
             }
         }
 
@@ -1451,7 +1504,7 @@ ABORDAGEM:
             }
             const { error } = await _supabase.auth.signInWithOAuth({
                 provider: 'google',
-                options: { redirectTo: window.location.href }
+                options: { redirectTo: window.location.origin + window.location.pathname }
             });
             // Se der erro ANTES do redirect (raro), restaura o botão
             if (error) {
@@ -1989,5 +2042,3 @@ ABORDAGEM: Ouça primeiro. Entenda a situação antes de qualquer citação bíb
 </body>
 
 </html>
-
-
