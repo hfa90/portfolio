@@ -1157,30 +1157,32 @@ ABORDAGEM:
                 personaPrompt = `Você é um terapeuta chamado "Coração Acolhido". Paciente: ${usuario.nome}, ${usuario.genero}, ${usuario.status}. Foco em empatia e acolhimento emocional.`;
             }
 
+            // Monta o contexto com as variáveis disponíveis (sem depender de conteudoOntem)
+            const sonoInfo = dadosCheckin.sono || 'não informado';
+            const ansiedadeInfo = dadosCheckin.ansiedade || 5;
+            const memoriaInfo = memoriaUsuario || 'Sem histórico anterior.';
+            const humorInfo = (typeof humorAtual !== 'undefined' ? humorAtual : 'Neutro');
+
             chatHistory = [{
                 role: "user",
                 parts: [{
                     text: `${personaPrompt}
-            CONTEXTO ADICIONAL:
-            - O usuário relatou estar se sentindo: ${humorAtual}.
-            - Abaixo está o que foi conversado ONTEM (use apenas se o usuário perguntar ou demonstrar que não lembra):
-            --- INÍCIO DO HISTÓRICO DE ONTEM ---
-            ${conteudoOntem}
-            --- FIM DO HISTÓRICO DE ONTEM ---
 
-            CHECK-IN DE HOJE:
-            - Como dormiu: \${dadosCheckin.sono || 'não informado'}
-            - Ansiedade agora (1-10): \${dadosCheckin.ansiedade}
-            Use esses dados com sutileza para calibrar seu tom — não os mencione mecanicamente.
+            CONTEXTO DO USUÁRIO HOJE:
+            - Como está se sentindo: ${humorInfo}
+            - Como dormiu: ${sonoInfo}
+            - Nível de ansiedade (1-10): ${ansiedadeInfo}
+            Use esses dados com sutileza para calibrar seu tom. Não os mencione mecanicamente.
 
-            MEMÓRIA DE SESSOES ANTERIORES (use APENAS se o usuario perguntar ou trouxer o tema):
-            \${memoriaUsuario || 'Sem histórico anterior.'}
+            MEMÓRIA DE SESSÕES ANTERIORES:
+            ${memoriaInfo}
+            (Use apenas se o usuário perguntar ou trouxer o tema — nunca traga espontaneamente)
 
             REGRAS DE RESPOSTA:
-            1. Se o usuário disser que não lembra ou perguntar sobre conversas passadas, faça um resumo acolhedor em até 2 frases.
-            2. Se ele não mencionar sessões anteriores, ignore a memória e foque no agora.
-            3. Comece SEMPRE com UM emoji e '#'.
-            4. Use '|' para separar parágrafos.`
+            1. Comece SEMPRE com UM emoji seguido de '#'. Exemplo: ❤️#
+            2. Nunca use listas ou tópicos.
+            3. Separe parágrafos com '|'.
+            4. Máximo 3 parágrafos curtos por resposta.`
                 }]
             }];
         }
@@ -1489,10 +1491,7 @@ ABORDAGEM:
         //  Login com Google (Supabase OAuth)
         // ═══════════════════════════════════════════════════
         // ═══════════════════════════════════════════════════
-        //  AUTENTICAÇÃO — Google OAuth + Email/Senha
-        //  Solução definitiva: usa apenas onAuthStateChange
-        //  como fonte única de verdade. window.onload não
-        //  chama carregarDadosEIniciar diretamente.
+        //  AUTENTICAÇÃO — versão definitiva
         // ═══════════════════════════════════════════════════
         let _appJaIniciado = false;
 
@@ -1506,35 +1505,32 @@ ABORDAGEM:
                 provider: 'google',
                 options: { redirectTo: window.location.origin + window.location.pathname }
             });
-            // Se der erro ANTES do redirect (raro), restaura o botão
             if (error) {
                 if (btn) {
                     btn.innerHTML = 'Continuar com Google';
                     btn.classList.remove('btn-loading');
                 }
                 const errDiv = document.getElementById('error-message');
-                if (errDiv) { errDiv.innerText = 'Erro ao conectar com Google: ' + error.message; errDiv.style.display = 'block'; }
+                if (errDiv) {
+                    errDiv.innerText = 'Erro ao conectar com Google: ' + error.message;
+                    errDiv.style.display = 'block';
+                }
             }
-            // Se não der erro, o browser vai redirecionar — não precisa fazer nada mais aqui
         }
 
-        // FONTE ÚNICA DE VERDADE: este listener captura TODOS os eventos de auth:
-        // - Login por email/senha
-        // - Retorno do redirect OAuth (Google)
-        // - Sessão já existente ao carregar a página (INITIAL_SESSION)
+        // Listener único que captura TODOS os cenários de auth
         _supabase.auth.onAuthStateChange(async (event, session) => {
-            if (session && !_appJaIniciado) {
+            // SIGNED_IN  → login por email/senha ou retorno do Google OAuth
+            // INITIAL_SESSION → sessão existente ao recarregar a página
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session && !_appJaIniciado) {
                 _appJaIniciado = true;
                 await carregarDadosEIniciar(session.user);
             }
+            // TOKEN_REFRESHED → token renovado automaticamente, não reinicia o app
         });
 
-        // window.onload apenas garante que a UI está pronta
-        // O auth é tratado exclusivamente pelo onAuthStateChange acima
-        window.onload = () => {
-            // Nada aqui — o onAuthStateChange já cuida da sessão existente
-            // via evento INITIAL_SESSION que o Supabase dispara automaticamente
-        };
+        // window.onload vazio — onAuthStateChange dispara INITIAL_SESSION sozinho
+        window.onload = () => { };
 
         async function handleAuth() {
             const email = document.getElementById('email').value;
