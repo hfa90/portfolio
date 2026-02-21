@@ -2561,7 +2561,13 @@
         }
 
         async function loginGoogle() {
-            const { error } = await db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.href } });
+            const redirectTo = location.protocol === 'file:'
+                ? 'http://localhost:8080'
+                : location.origin + location.pathname;
+            const { error } = await db.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo }
+            });
             if (error) showAuthError(error.message);
         }
 
@@ -2572,21 +2578,33 @@
         }
 
         async function handleAuthChange(session) {
-            if (session?.user) {
-                user = session.user;
-                // Carregar/criar perfil
-                let { data: prof } = await db.from('profiles').select('*').eq('id', user.id).single();
-                if (!prof) {
-                    const display_name = user.user_metadata?.display_name || user.user_metadata?.full_name || user.email.split('@')[0];
-                    const avatar_url = user.user_metadata?.avatar_url || null;
-                    const is_admin = ADMIN_EMAILS.includes(user.email);
-                    await db.from('profiles').insert({ id: user.id, display_name, avatar_url, best_score: 0, is_admin });
-                    prof = { id: user.id, display_name, avatar_url, best_score: 0, is_admin };
-                }
-                userProfile = prof;
-                setupHome();
-                showScreen('screen-home');
+            if (!session?.user) return;
+            // Evitar reprocessar o mesmo usuário já carregado
+            if (user?.id === session.user.id && userProfile) return;
+
+            user = session.user;
+            console.log('[Auth] Usuário:', user.email);
+
+            // Buscar perfil
+            let { data: prof, error: profErr } = await db.from('profiles').select('*').eq('id', user.id).single();
+
+            if (!prof) {
+                const display_name = user.user_metadata?.display_name
+                    || user.user_metadata?.full_name
+                    || user.email.split('@')[0];
+                const avatar_url = user.user_metadata?.avatar_url || null;
+                const is_admin = ADMIN_EMAILS.includes(user.email);
+
+                const { data: inserted } = await db.from('profiles')
+                    .upsert({ id: user.id, display_name, avatar_url, best_score: 0, is_admin })
+                    .select().single();
+
+                prof = inserted || { id: user.id, display_name, avatar_url, best_score: 0, is_admin };
             }
+
+            userProfile = prof;
+            setupHome();
+            showScreen('screen-home');
         }
 
         async function logout() {
@@ -3129,8 +3147,18 @@
             });
             document.getElementById('filter-search').addEventListener('input', applyFilters);
 
-            // Auth listener
-            db.auth.onAuthStateChange((_, session) => handleAuthChange(session));
+            // Registrar listener ANTES do getSession para capturar redirect do OAuth
+            db.auth.onAuthStateChange(async (event, session) => {
+                console.log('[Auth]', event, session?.user?.email);
+                if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+                    await handleAuthChange(session);
+                } else if (event === 'SIGNED_OUT') {
+                    user = null; userProfile = null;
+                    showScreen('screen-auth');
+                }
+            });
+
+            // Verificar sessão já existente (página recarregada)
             const { data: { session } } = await db.auth.getSession();
             if (session) { await handleAuthChange(session); }
             else { showScreen('screen-auth'); }
