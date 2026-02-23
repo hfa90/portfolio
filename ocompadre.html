@@ -11,7 +11,7 @@
     <meta name="theme-color" content="#fdf6f2">
     <link rel="apple-touch-icon"
         href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
-    <title>O Compadre</title>
+    <title>Coração Acolhido - IA Amiga</title>
     <style>
         * {
             box-sizing: border-box;
@@ -1581,6 +1581,21 @@
                 Coração Acolhido
             </h1>
 
+            <!-- Indicador de tempo de conversa gratuita -->
+            <div id="session-limit-bar" style="width: 100%; display: none; flex-direction: column; gap: 4px;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--cor-texto); opacity: 0.7;">
+                    <span>⏳ Espaço de conversa</span>
+                    <span id="session-limit-label">100% livre</span>
+                </div>
+                <div
+                    style="width: 100%; height: 5px; background: rgba(0,0,0,0.08); border-radius: 10px; overflow: hidden;">
+                    <div id="session-limit-fill"
+                        style="height: 100%; width: 100%; border-radius: 10px; background: #6cc87a; transition: width 0.5s ease, background 0.5s ease;">
+                    </div>
+                </div>
+            </div>
+
             <div
                 style="display: flex; gap: 20px; align-items: center; background: rgba(255,255,255,0.5); padding: 8px 20px; border-radius: 30px; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3);">
                 <button onclick="toggleHistorico()" title="Histórico"
@@ -1642,7 +1657,7 @@
         // 1. Inicialização única (Remova as duplicatas)
         const SUPABASE_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZnlzbXpyb2h5dnZyeGV5amd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDExMDUsImV4cCI6MjA4NjQ3NzEwNX0.1D9mB2PzbdsqXFSKIC_iZEpUffao9hXWbtc_Hxwbm3Q";
-        const GEMINI_API_KEY = "AIzaSyBQUfLkTN-16yiggO_Gu1k58Nml5pHXYhQ";
+        const GEMINI_API_KEY = "AIzaSyAhTZhraY5QPENG7HXKb-feKCUAUTtOJKU";
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: {
@@ -1650,7 +1665,9 @@
                 storage: window.localStorage,
                 autoRefreshToken: true,
                 persistSession: true,
-                detectSessionInUrl: true
+                detectSessionInUrl: true,
+                // Tolera até 5 minutos de diferença de relógio entre dispositivo e servidor
+                clockSkewInSeconds: 300
             }
         });
 
@@ -1788,6 +1805,67 @@ REGRAS:
             }
         }
 
+        // ── Gerenciamento de limite de contexto ──
+        // Gemini 2.5 Flash: ~1M tokens, mas conversas longas dão erro 400 na prática.
+        // Usamos estimativa simples: 1 token ≈ 4 chars. Limite seguro: ~60.000 tokens (240k chars)
+        const LIMITE_CHARS = 240000;
+        const AVISO_CHARS = 160000; // 67% — começa a mostrar aviso
+
+        function estimarTamanhoHistorico() {
+            return chatHistory.reduce((total, msg) => {
+                return total + (msg.parts?.[0]?.text?.length || 0);
+            }, 0);
+        }
+
+        function atualizarBarraLimite() {
+            const bar = document.getElementById('session-limit-bar');
+            const fill = document.getElementById('session-limit-fill');
+            const label = document.getElementById('session-limit-label');
+            if (!bar || !fill || !label) return;
+
+            const usado = estimarTamanhoHistorico();
+            const pct = Math.min(usado / LIMITE_CHARS, 1);
+            const livre = Math.max(0, Math.round((1 - pct) * 100));
+
+            // Mostra a barra só quando começa a encher
+            if (usado < AVISO_CHARS * 0.5) {
+                bar.style.display = 'none';
+                return;
+            }
+
+            bar.style.display = 'flex';
+            const larguraLivre = (1 - pct) * 100;
+            fill.style.width = larguraLivre + '%';
+
+            if (livre > 40) {
+                fill.style.background = '#6cc87a';
+                label.textContent = livre + '% livre';
+            } else if (livre > 20) {
+                fill.style.background = '#f0b429';
+                label.textContent = `⚠️ ${livre}% livre — chat ficará longo em breve`;
+            } else {
+                fill.style.background = '#e53e3e';
+                label.textContent = `🔴 ${livre}% — renovando conversa em breve...`;
+            }
+        }
+
+        // Remove mensagens antigas mantendo o prompt do sistema (índice 0) e as últimas N mensagens
+        function trimHistoricoSeNecessario() {
+            const usado = estimarTamanhoHistorico();
+            if (usado < LIMITE_CHARS * 0.85) return; // ainda ok
+
+            // Mantém: [0] = system prompt + últimas 8 trocas (16 msgs)
+            const MANTER = 16;
+            if (chatHistory.length <= MANTER + 1) return;
+
+            const systemMsg = chatHistory[0];
+            const recentes = chatHistory.slice(-(MANTER));
+            chatHistory = [systemMsg, ...recentes];
+
+            // Avisa o usuário discretamente no chat
+            appendMessage('💬 (Mensagens mais antigas foram arquivadas para manter a conversa fluindo.)', 'bot');
+        }
+
         // Chama a API Gemini com retry automático em caso de erro 503/429
         async function chamarGeminiComRetry(body, tentativas = 3) {
             for (let i = 0; i < tentativas; i++) {
@@ -1811,8 +1889,19 @@ REGRAS:
                             continue;
                         }
 
-                        // Erros conhecidos da API Gemini
-                        if (status === 400) throw new Error('Conversa muito longa. Tente limpar o chat e começar de novo.');
+                        // Erro 400 geralmente = conversa muito longa → trim e tenta de novo
+                        if (status === 400) {
+                            if (i < tentativas - 1 && chatHistory.length > 4) {
+                                // Remove metade das mensagens do meio e tenta novamente
+                                const systemMsg = chatHistory[0];
+                                const recentes = chatHistory.slice(-8);
+                                chatHistory = [systemMsg, ...recentes];
+                                body.contents = chatHistory;
+                                appendMessage('💬 (Renovei o espaço da conversa para continuar.)', 'bot');
+                                continue;
+                            }
+                            throw new Error('Conversa muito longa. Clique em 🗑️ para limpar o chat e continuar.');
+                        }
                         if (status === 429) throw new Error('Muitas mensagens seguidas. Aguarde um momento e tente novamente.');
                         if (status === 503) throw new Error('O serviço está temporariamente sobrecarregado. Tente em alguns segundos.');
                         if (status === 401 || status === 403) throw new Error('Chave de API inválida ou sem permissão.');
@@ -1862,6 +1951,10 @@ REGRAS:
             await salvarMensagemNoBanco('user', message);
             chatHistory.push({ role: "user", parts: [{ text: message }] });
 
+            // Verifica e limpa histórico se necessário ANTES de enviar
+            trimHistoricoSeNecessario();
+            atualizarBarraLimite();
+
             try {
                 console.log('[Gemini] Enviando mensagem. chatHistory length:', chatHistory.length);
                 console.log('[Gemini] Primeira msg (prompt):', chatHistory[0]?.parts[0]?.text?.substring(0, 100));
@@ -1871,6 +1964,7 @@ REGRAS:
 
                 await salvarMensagemNoBanco('model', fullBotReply);
                 chatHistory.push({ role: "model", parts: [{ text: fullBotReply }] });
+                atualizarBarraLimite();
 
                 const [reactionEmoji, botText] = fullBotReply.split('#');
 
@@ -3174,4 +3268,3 @@ Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como 
 </body>
 
 </html>
-
