@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subordinado do Coração — Pagode</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=DM+Mono:wght@300;400&family=Cormorant+Garamond:ital,wght@0,300;1,400;1,600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --deep: #080d1a;
+            --navy: #0d1528;
+            --blue: #1a2540;
+            --gold: #c9963a;
+            --pearl: #e8e0d0;
+            --rose: #c87060;
+            --dim: rgba(232, 224, 208, 0.6);
+            --muted: rgba(232, 224, 208, 0.28);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--deep);
+            color: var(--pearl);
+            font-family: 'Cormorant Garamond', serif;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.5;
+        }
+
+        .bg-glow {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse 60% 50% at 80% 10%, rgba(201, 150, 58, 0.1) 0%, transparent 55%),
+                radial-gradient(ellipse 80% 60% at 10% 90%, rgba(26, 37, 64, 0.8) 0%, transparent 60%),
+                radial-gradient(ellipse 100% 100% at 50% 50%, #080d1a 30%, #04080f 100%);
+            pointer-events: none;
+        }
+
+        /* floating stars */
+        .stars {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .page {
+            position: relative;
+            z-index: 1;
+            max-width: 740px;
+            margin: 0 auto;
+            padding: 4rem 2rem 6rem;
+        }
+
+        /* HEADER */
+        .header {
+            text-align: center;
+            margin-bottom: 4.5rem;
+            opacity: 0;
+            animation: rise 1.2s 0.2s forwards;
+        }
+
+        .label {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.58rem;
+            letter-spacing: 0.55em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 1.2rem;
+            display: block;
+        }
+
+        .title {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(2.6rem, 8vw, 5.2rem);
+            font-style: italic;
+            line-height: 1.05;
+            color: var(--pearl);
+            margin-bottom: 0.5rem;
+        }
+
+        .title span {
+            color: var(--gold);
+        }
+
+        .subtitle {
+            font-size: 1.05rem;
+            font-style: italic;
+            color: var(--dim);
+            letter-spacing: 0.06em;
+        }
+
+        .ornament {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            margin: 1.8rem auto 0;
+            color: rgba(201, 150, 58, 0.4);
+            font-size: 0.7rem;
+            letter-spacing: 0.4em;
+        }
+
+        .ornament::before,
+        .ornament::after {
+            content: '';
+            width: 60px;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold));
+        }
+
+        .ornament::after {
+            background: linear-gradient(90deg, var(--gold), transparent);
+        }
+
+        /* SECTION TAG */
+        .section-tag {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.52rem;
+            letter-spacing: 0.55em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .section-tag::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(201, 150, 58, 0.18);
+        }
+
+        /* BLOCKS */
+        .block {
+            margin-bottom: 3.2rem;
+            opacity: 0;
+            transform: translateY(22px);
+            transition: opacity 0.85s ease, transform 0.85s ease;
+        }
+
+        .block.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* LYRICS */
+        .lyrics {
+            font-size: clamp(1.15rem, 2.4vw, 1.42rem);
+            line-height: 2.05;
+            color: var(--dim);
+            font-style: italic;
+        }
+
+        .lyrics .dest {
+            color: var(--pearl);
+            font-style: normal;
+            font-weight: 600;
+        }
+
+        .lyrics .gold {
+            color: var(--gold);
+            font-style: italic;
+        }
+
+        .lyrics .rose {
+            color: var(--rose);
+            font-style: italic;
+        }
+
+        /* CHORUS — diferente: centralizado com glow */
+        .chorus-wrap {
+            background: rgba(201, 150, 58, 0.05);
+            border: 1px solid rgba(201, 150, 58, 0.18);
+            border-radius: 4px;
+            padding: 2.2rem 2.8rem;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chorus-wrap::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--gold), transparent);
+        }
+
+        .chorus-wrap::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(201, 150, 58, 0.4), transparent);
+        }
+
+        .chorus-wrap .lyrics {
+            font-size: clamp(1.22rem, 2.7vw, 1.52rem);
+            color: var(--pearl);
+        }
+
+        /* BRIDGE */
+        .bridge-wrap {
+            background: rgba(200, 112, 96, 0.06);
+            border-left: 2px solid var(--rose);
+            padding: 2rem 2.4rem;
+            border-radius: 0 4px 4px 0;
+            position: relative;
+        }
+
+        .bridge-wrap::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, var(--rose), transparent);
+        }
+
+        .bridge-wrap .lyrics {
+            color: var(--pearl);
+            font-size: clamp(1.18rem, 2.5vw, 1.45rem);
+        }
+
+        /* DESTAQUE especial */
+        .highlight-line {
+            font-family: 'Playfair Display', serif;
+            font-size: clamp(1.4rem, 3.5vw, 2rem);
+            font-style: italic;
+            color: var(--gold);
+            text-align: center;
+            padding: 1.5rem 0;
+            letter-spacing: 0.02em;
+            line-height: 1.5;
+        }
+
+        /* NOTES */
+        .notes {
+            margin-top: 5rem;
+            border-top: 1px solid rgba(232, 224, 208, 0.07);
+            padding-top: 3rem;
+            opacity: 0;
+            animation: rise 1s 2s forwards;
+        }
+
+        .notes-title {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.58rem;
+            letter-spacing: 0.5em;
+            text-transform: uppercase;
+            color: var(--gold);
+            margin-bottom: 2rem;
+        }
+
+        .note-item {
+            display: flex;
+            gap: 1.2rem;
+            align-items: flex-start;
+            margin-bottom: 1.4rem;
+            color: var(--dim);
+            font-size: 1rem;
+            line-height: 1.7;
+        }
+
+        .note-item .icon {
+            color: var(--gold);
+            flex-shrink: 0;
+            width: 1.2rem;
+            margin-top: 0.1rem;
+            font-style: normal;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 4rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.52rem;
+            letter-spacing: 0.45em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        @keyframes rise {
+            from {
+                opacity: 0;
+                transform: translateY(26px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .scroll-hint {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--muted);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.48rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            animation: rise 1s 3s forwards;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s;
+        }
+
+        .scroll-line {
+            width: 1px;
+            height: 40px;
+            background: linear-gradient(to bottom, var(--gold), transparent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 0.4;
+                transform: scaleY(1);
+            }
+
+            50% {
+                opacity: 1;
+                transform: scaleY(0.6);
+            }
+        }
+
+        /* ── BOTÃO VOLTAR ── */
+        .fab-back {
+            position: fixed;
+            top: 1.4rem;
+            left: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            padding: 0.6rem 1.1rem 0.6rem 0.8rem;
+            border-radius: 50px;
+            background: rgba(8, 13, 26, 0.75);
+            border: 1px solid rgba(201, 150, 58, 0.3);
+            color: var(--gold);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            text-decoration: none;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            z-index: 500;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            opacity: 0;
+            animation: rise 0.8s 0.5s forwards;
+            transition: background 0.25s, border-color 0.25s, transform 0.2s;
+        }
+
+        .fab-back:hover {
+            background: rgba(201, 150, 58, 0.12);
+            border-color: var(--gold);
+            transform: translateX(-3px);
+        }
+
+        .fab-back .arrow {
+            font-size: 0.9rem;
+            line-height: 1;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="bg-glow"></div>
+    <div class="stars" id="stars"></div>
+
+    <!-- BOTÃO VOLTAR -->
+    <a href="ligia.html" class="fab-back">
+        <span class="arrow">←</span>
+        <span>Voltar</span>
+    </a>
+
+    <div class="scroll-hint" id="scrollHint">
+        <div class="scroll-line"></div>
+        <span>rolar</span>
+    </div>
+
+    <div class="page">
+
+        <!-- HEADER -->
+        <header class="header">
+            <span class="label">Nossa História</span>
+            <h1 class="title">Subordinado<br><span>do Coração</span></h1>
+            <p class="subtitle">a chefe que eu nunca mais esqueci</p>
+            <div class="ornament">✦</div>
+        </header>
+
+        <!-- INTRO / VERSO 1 -->
+        <div class="block">
+            <div class="section-tag">Verso 1</div>
+            <div class="lyrics">
+                Eu era o tal da empresa,<br>
+                <span class="dest">solteiro, galanteador, sem paradeiro</span><br>
+                A festa foi, você passou,<br>
+                fiquei com outra — <span class="rose">e fui embora o mesmo de antes, inteiro</span><br><br>
+
+                Até que uma segunda-feira<br>
+                <span class="dest">você chegou pro meu setor mandar</span><br>
+                E aí meu coração entendeu<br>
+                <span class="gold">que ia virar seu subordinado de verdade, camarada</span>
+            </div>
+        </div>
+
+        <!-- PRÉ-REFRÃO -->
+        <div class="block">
+            <div class="section-tag">Pré-Refrão</div>
+            <div class="lyrics">
+                Tinha várias ao redor — não nego, não —<br>
+                <span class="dest">mas nenhuma fazia o meu olho brilhar assim</span><br>
+                E a gente foi ficando perto, sem planejamento,<br>
+                <span class="gold">os olhos falaram mais que qualquer "oi" pra mim</span><br><br>
+
+                Num dia qualquer, sem aviso nenhum,<br>
+                <span class="rose">durante o expediente o mundo parou</span><br>
+                Sem palavra, sem lugar marcado —<br>
+                <span class="dest">foi um beijo que o silêncio mandou</span>
+            </div>
+        </div>
+
+        <!-- LINHA DESTAQUE -->
+        <div class="block">
+            <div class="highlight-line">
+                "Meu Deus, que boca, que beijo foi esse..."<br>
+                <em style="font-size:0.75em; color:var(--dim);">— e eu nunca mais fui o mesmo depois</em>
+            </div>
+        </div>
+
+        <!-- REFRÃO -->
+        <div class="block">
+            <div class="section-tag">Refrão</div>
+            <div class="chorus-wrap">
+                <div class="lyrics">
+                    <span class="dest">Subordinado do coração,</span><br>
+                    <span class="rose">obedeci sem receber ordem nenhuma</span><br>
+                    Você chegou pra me liderar —<br>
+                    <span class="gold">mas quem tomou o comando fui eu com a nossa história, uma a uma</span><br><br>
+
+                    Três meses, disseram — <span class="dest">haha, que engano</span><br>
+                    Em três semanas eu te apresentei pra família inteira<br>
+                    <span class="gold">E hoje são seis anos, Malu, a Lis —</span><br>
+                    <span class="dest">e cada dia vale mais do que qualquer primavera</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- VERSO 2 -->
+        <div class="block">
+            <div class="section-tag">Verso 2</div>
+            <div class="lyrics">
+                Você me olhou nos olhos e disse:<br>
+                <span class="dest">"Tenho uma filha — isso muda alguma coisa?"</span><br>
+                Falei: <span class="gold">"Muda tudo pra melhor"</span> —<br>
+                ser pai era o sonho que a vida me devia, moça<br><br>
+
+                Saiu da casa dos seus pais com medo,<br>
+                <span class="rose">meu histórico não era lá essas coisas</span><br>
+                Mas você apostou em mim, e eu<br>
+                <span class="dest">passei o resto do tempo provando que a aposta era sólida</span>
+            </div>
+        </div>
+
+        <!-- VERSO 3 — as dificuldades -->
+        <div class="block">
+            <div class="section-tag">Verso 3</div>
+            <div class="lyrics">
+                Alugado, conta, frigorífico vazio —<br>
+                <span class="dest">brigamos, choramos, mas não soltamos a mão</span><br>
+                Cada negócio que eu tentava,<br>
+                <span class="gold">você era o "vamo lá" antes de qualquer decisão</span><br><br>
+
+                Não foi fácil, não foi leve —<br>
+                <span class="rose">mas foi real, foi nosso, foi verdadeiro</span><br>
+                E a cada pedra no caminho<br>
+                <span class="dest">a gente usou pra construir o que somos hoje, companheiro</span>
+            </div>
+        </div>
+
+        <!-- REFRÃO (REPEAT) -->
+        <div class="block">
+            <div class="section-tag">Refrão</div>
+            <div class="chorus-wrap">
+                <div class="lyrics">
+                    <span class="dest">Subordinado do coração,</span><br>
+                    <span class="rose">obedeci sem receber ordem nenhuma</span><br>
+                    Você chegou pra me liderar —<br>
+                    <span class="gold">mas quem tomou o comando fui eu com a nossa história, uma a uma</span><br><br>
+
+                    Três meses, disseram — <span class="dest">haha, que engano</span><br>
+                    Em três semanas eu te apresentei pra família inteira<br>
+                    <span class="gold">E hoje são seis anos, Malu, a Lis —</span><br>
+                    <span class="dest">e cada dia vale mais do que qualquer primavera</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- PONTE -->
+        <div class="block">
+            <div class="section-tag">Ponte</div>
+            <div class="bridge-wrap">
+                <div class="lyrics">
+                    <span class="gold">Quatro anos juntos, você me chamou —</span><br>
+                    a voz diferente, eu senti antes de você falar<br>
+                    <em>"Tô grávida"</em> — e o mundo girou,<br>
+                    <span class="dest">e a Lis veio pra lacrar o nosso lar</span><br><br>
+
+                    Sete anos depois da Malu,<br>
+                    <span class="rose">a família que a gente sonhava se completou</span><br>
+                    E eu que era o tal da empresa —<br>
+                    <span class="gold">virei o cara mais rico que o amor já criou</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- REFRÃO FINAL com variação -->
+        <div class="block">
+            <div class="section-tag">Refrão Final</div>
+            <div class="chorus-wrap">
+                <div class="lyrics">
+                    <span class="dest">Subordinado do coração,</span><br>
+                    <span class="rose">obedeci sem receber ordem nenhuma</span><br>
+                    Você chegou pra me liderar —<br>
+                    <span class="gold">mas quem tomou o comando fui eu com a nossa história, uma a uma</span><br><br>
+
+                    Três meses, disseram — <span class="dest">haha, que engano</span><br>
+                    Em três semanas eu te apresentei pra família inteira<br>
+                    <span class="gold">E hoje são seis anos, Malu, a Lis —</span><br>
+                    <span class="dest">e cada dia vale mais do que qualquer primavera</span><br><br>
+
+                    <em style="color:var(--dim); font-size:0.88em;">
+                        (obedeci, obedeci, obedeci...)<br>
+                        (do coração, do coração...)
+                    </em>
+                </div>
+            </div>
+        </div>
+
+        <!-- CODA -->
+        <div class="block">
+            <div class="section-tag">Coda</div>
+            <div class="lyrics" style="text-align:center; padding:1rem 0;">
+                <span class="gold">Pode me chamar de subordinado —</span><br>
+                <em>mas fui eu que conquistei a chefe. 💍</em>
+            </div>
+        </div>
+
+
+
+        <div class="footer">
+            para Ligia Baía ✦ · feita com amor
+        </div>
+
+    </div>
+
+    <script>
+        // Starfield
+        const starsEl = document.getElementById('stars');
+        for (let i = 0; i < 80; i++) {
+            const s = document.createElement('div');
+            const size = Math.random() < 0.1 ? 2 : 1;
+            const op = 0.1 + Math.random() * 0.4;
+            const dur = 3 + Math.random() * 5;
+            const del = Math.random() * 6;
+            s.style.cssText = `
+      position:absolute;
+      width:${size}px;height:${size}px;
+      background:#fff;border-radius:50%;
+      left:${Math.random() * 100}%;
+      top:${Math.random() * 100}%;
+      opacity:${op};
+      animation:twinkle ${dur}s ${del}s ease-in-out infinite;
+    `;
+            starsEl.appendChild(s);
+        }
+
+        const style = document.createElement('style');
+        style.textContent = `@keyframes twinkle{0%,100%{opacity:0.1}50%{opacity:0.6}}`;
+        document.head.appendChild(style);
+
+        // Intersection Observer
+        const blocks = document.querySelectorAll('.block');
+        const io = new IntersectionObserver(entries => {
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    e.target.classList.add('visible');
+                    io.unobserve(e.target);
+                }
+            });
+        }, { threshold: 0.08 });
+
+        blocks.forEach((b, i) => {
+            b.style.transitionDelay = `${i * 0.03}s`;
+            io.observe(b);
+        });
+
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 80) {
+                document.getElementById('scrollHint').style.opacity = '0';
+            }
+        }, { passive: true });
+    </script>
+</body>
+
+</html>
