@@ -2194,9 +2194,18 @@ REGRAS:
 
         // Função para sair
         async function logout() {
-            const { error } = await _supabase.auth.signOut();
-            if (error) alert("Erro ao sair: " + error.message);
-            window.location.reload(); // Recarrega a página para voltar ao modal de login
+            try {
+                // Tenta signOut mas não bloqueia se demorar
+                const signOutPromise = _supabase.auth.signOut();
+                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 3000));
+                await Promise.race([signOutPromise, timeoutPromise]);
+            } catch (e) {
+                console.warn('[Logout] Erro no signOut (ignorado):', e);
+            }
+            // Limpa tudo localmente e recarrega independente do resultado
+            try { localStorage.clear(); } catch (_) { }
+            try { sessionStorage.clear(); } catch (_) { }
+            window.location.reload();
         }
 
         // Lógica de tempo de sessão (1h 30min)
