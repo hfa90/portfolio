@@ -4827,101 +4827,7 @@
             }
         }
 
-        /* ══════════════════════════════════════════════════════════════
-           MÓDULOS: CARTÕES, GASOLINA, IFOOD — SUPABASE INTEGRADO
-           ══════════════════════════════════════════════════════════════
 
-           SCHEMA SQL — execute no Supabase SQL Editor:
-           ──────────────────────────────────────────────────────────────
-
-           -- 1. CARTÕES DE CRÉDITO
-           CREATE TABLE IF NOT EXISTS credit_cards (
-             id          uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-             user_id     uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-             name        text NOT NULL,
-             brand       text DEFAULT 'Visa',
-             color       text DEFAULT '#7c6df0',
-             limit_amount numeric(12,2) NOT NULL DEFAULT 0,
-             due_day     integer NOT NULL DEFAULT 10,
-             close_day   integer NOT NULL DEFAULT 3,
-             created_at  timestamptz DEFAULT now()
-           );
-           ALTER TABLE credit_cards ENABLE ROW LEVEL SECURITY;
-           CREATE POLICY "cc_own" ON credit_cards
-             USING (auth.uid()=user_id) WITH CHECK (auth.uid()=user_id);
-
-           -- 2. LANÇAMENTOS NO CARTÃO
-           --    Relacionado com credit_cards E com transactions (cada lançamento
-           --    gera automaticamente uma transaction de despesa)
-           CREATE TABLE IF NOT EXISTS card_expenses (
-             id             uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-             user_id        uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-             card_id        uuid REFERENCES credit_cards(id) ON DELETE CASCADE NOT NULL,
-             transaction_id uuid REFERENCES transactions(id) ON DELETE SET NULL,
-             description    text NOT NULL,
-             amount         numeric(12,2) NOT NULL,
-             date           date NOT NULL,
-             installments   integer DEFAULT 1,
-             category_id    uuid REFERENCES categories(id) ON DELETE SET NULL,
-             notes          text DEFAULT '',
-             created_at     timestamptz DEFAULT now()
-           );
-           ALTER TABLE card_expenses ENABLE ROW LEVEL SECURITY;
-           CREATE POLICY "ce_own" ON card_expenses
-             USING (auth.uid()=user_id) WITH CHECK (auth.uid()=user_id);
-
-           -- 3. ABASTECIMENTOS DE GASOLINA
-           --    Relacionado com transactions (gera uma transaction de despesa)
-           CREATE TABLE IF NOT EXISTS gas_entries (
-             id             uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-             user_id        uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-             transaction_id uuid REFERENCES transactions(id) ON DELETE SET NULL,
-             date           date NOT NULL,
-             posto          text DEFAULT '',
-             fuel_type      text DEFAULT 'Gasolina Comum',
-             price_per_l    numeric(8,3) NOT NULL,
-             liters         numeric(8,2) NOT NULL,
-             total          numeric(12,2) NOT NULL,
-             km_current     numeric(10,1) DEFAULT 0,
-             km_previous    numeric(10,1) DEFAULT 0,
-             notes          text DEFAULT '',
-             created_at     timestamptz DEFAULT now()
-           );
-           ALTER TABLE gas_entries ENABLE ROW LEVEL SECURITY;
-           CREATE POLICY "gas_own" ON gas_entries
-             USING (auth.uid()=user_id) WITH CHECK (auth.uid()=user_id);
-
-           -- 4. PEDIDOS DE DELIVERY (iFood/Rappi/etc)
-           --    Relacionado com transactions (gera uma transaction de despesa)
-           CREATE TABLE IF NOT EXISTS delivery_orders (
-             id             uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-             user_id        uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-             transaction_id uuid REFERENCES transactions(id) ON DELETE SET NULL,
-             date           date NOT NULL,
-             app            text DEFAULT 'iFood',
-             restaurant     text NOT NULL,
-             order_value    numeric(12,2) NOT NULL,
-             delivery_fee   numeric(8,2) DEFAULT 0,
-             order_type     text DEFAULT 'Refeição',
-             notes          text DEFAULT '',
-             created_at     timestamptz DEFAULT now()
-           );
-           ALTER TABLE delivery_orders ENABLE ROW LEVEL SECURITY;
-           CREATE POLICY "del_own" ON delivery_orders
-             USING (auth.uid()=user_id) WITH CHECK (auth.uid()=user_id);
-
-           -- 5. PREFERÊNCIAS DO USUÁRIO (inclui limite do iFood)
-           ALTER TABLE profiles
-             ADD COLUMN IF NOT EXISTS ifood_month_limit numeric(10,2) DEFAULT 300;
-
-           ──────────────────────────────────────────────────────────────
-           LÓGICA DE RELACIONAMENTO:
-           • card_expenses.transaction_id → transactions (despesa automática)
-           • gas_entries.transaction_id   → transactions (despesa automática)
-           • delivery_orders.transaction_id → transactions (despesa automática)
-           • Ao deletar o módulo, a transaction vinculada é deletada em cascata
-           • Dashboard, Relatórios e Orçamentos refletem TUDO automaticamente
-           ══════════════════════════════════════════════════════════════ */
 
         // Extend state with new module data
         state.creditCards = [];
@@ -4938,36 +4844,41 @@
             }
             try {
                 const uid = state.user.id;
-                const [cc, ce, gas, del, prof] = await Promise.all([
+                // Schema real: card_expenses.category é TEXT (não FK),
+                // sem transaction_id em nenhuma tabela de módulo,
+                // ifood_month_limit fica em user_preferences (tabela separada)
+                const [cc, ce, gas, del, pref] = await Promise.all([
                     db.from('credit_cards').select('*').eq('user_id', uid).order('created_at'),
-                    db.from('card_expenses').select('*, categories(name,icon,color)').eq('user_id', uid).order('date', { ascending: false }),
+                    db.from('card_expenses').select('*').eq('user_id', uid).order('date', { ascending: false }),
                     db.from('gas_entries').select('*').eq('user_id', uid).order('date', { ascending: false }),
                     db.from('delivery_orders').select('*').eq('user_id', uid).order('date', { ascending: false }),
-                    db.from('profiles').select('ifood_month_limit').eq('user_id', uid).single(),
+                    db.from('user_preferences').select('ifood_month_limit').eq('user_id', uid).maybeSingle(),
                 ]);
                 if (!cc.error && cc.data) state.creditCards = cc.data.map(c => ({
-                    id: c.id, name: c.name, brand: c.brand, color: c.color,
-                    limit: +c.limit_amount, due: c.due_day, close: c.close_day
+                    id: c.id, name: c.name, brand: c.brand || 'Visa', color: c.color || '#7c6df0',
+                    limit: +c.limit_amount, due: c.due_day || 10, close: c.close_day || 3
                 }));
-                if (!ce.error && ce.data) state.cardExpenses = ce.data.map(c => ({
-                    id: c.id, cardId: c.card_id, desc: c.description, amount: +c.amount,
-                    date: c.date, parcelas: c.installments || 1,
-                    cat: c.categories?.name || '', catIcon: c.categories?.icon || '📦',
-                    category_id: c.category_id, transaction_id: c.transaction_id
-                }));
+                if (!ce.error && ce.data) {
+                    const catIconMap = { 'Alimentação': '🍕', 'Vestuário': '👕', 'Eletrônicos': '📱', 'Saúde': '💊', 'Transporte': '🚗', 'Lazer': '🎮', 'Serviços': '🔧', 'Outro': '📦' };
+                    state.cardExpenses = ce.data.map(c => ({
+                        id: c.id, cardId: c.card_id, desc: c.description, amount: +c.amount,
+                        date: c.date, parcelas: c.installments || 1,
+                        cat: c.category || 'Outro', catIcon: catIconMap[c.category] || '📦',
+                    }));
+                }
                 if (!gas.error && gas.data) state.gasEntries = gas.data.map(g => ({
-                    id: g.id, date: g.date, posto: g.posto, tipo: g.fuel_type,
+                    id: g.id, date: g.date, posto: g.posto || '', tipo: g.fuel_type || 'Gasolina Comum',
                     precoL: +g.price_per_l, litros: +g.liters, total: +g.total,
-                    kmAtual: +g.km_current, kmAnterior: +g.km_previous,
-                    nota: g.notes, transaction_id: g.transaction_id
+                    kmAtual: +g.km_current, kmAnterior: +(g.km_previous || 0),
+                    nota: g.notes || '',
                 }));
                 if (!del.error && del.data) state.ifoodEntries = del.data.map(d => ({
-                    id: d.id, date: d.date, app: d.app, rest: d.restaurant,
-                    valor: +d.order_value, taxa: +d.delivery_fee,
-                    tipo: d.order_type, nota: d.notes, transaction_id: d.transaction_id
+                    id: d.id, date: d.date, app: d.app || 'iFood', rest: d.restaurant,
+                    valor: +d.order_value, taxa: +(d.delivery_fee || 0),
+                    tipo: d.order_type || 'Refeição', nota: d.notes || '',
                 }));
-                if (!prof.error && prof.data?.ifood_month_limit) {
-                    state.ifoodMonthLimit = +prof.data.ifood_month_limit;
+                if (!pref.error && pref.data?.ifood_month_limit) {
+                    state.ifoodMonthLimit = +pref.data.ifood_month_limit;
                 }
             } catch (err) {
                 console.error('loadModuleData error:', err);
@@ -5138,52 +5049,54 @@
                 const existingId = document.getElementById('ceId').value;
                 const cardId = document.getElementById('ceCardSel').value;
                 const card = state.creditCards.find(c => c.id === cardId);
-                const catId = document.getElementById('ceCatSel')?.value || null;
+                // Pegar nome da categoria do select (ceCatSel usa UUID como value)
+                const catSel = document.getElementById('ceCatSel');
+                let catName = 'Outro';
+                let catUUID = null;
+                if (catSel && catSel.value) {
+                    catUUID = catSel.value;
+                    const cat = state.categories.find(c => c.id === catUUID);
+                    catName = cat?.name || 'Outro';
+                }
+                const catIconMap = { 'Alimentação': '🍕', 'Vestuário': '👕', 'Eletrônicos': '📱', 'Saúde': '💊', 'Transporte': '🚗', 'Lazer': '🎮', 'Serviços': '🔧', 'Outro': '📦' };
                 const expData = {
                     cardId,
                     desc: document.getElementById('ceDesc').value.trim(),
                     amount: parseFloat(document.getElementById('ceAmount').value),
                     date: document.getElementById('ceDate').value,
                     parcelas: parseInt(document.getElementById('ceParcelas').value) || 1,
-                    cat: document.getElementById('ceCatSel')?.options[document.getElementById('ceCatSel').selectedIndex]?.text.replace(/^.\s/, '') || '',
-                    category_id: catId || null,
+                    cat: catName,
+                    catIcon: catIconMap[catName] || '📦',
                 };
 
                 if (state.isDemoMode) {
                     const id = existingId || 'ce_' + Date.now();
                     const idx = state.cardExpenses.findIndex(c => c.id === id);
-                    if (idx >= 0) state.cardExpenses[idx] = { ...expData, id }; else state.cardExpenses.push({ ...expData, id });
+                    if (idx >= 0) state.cardExpenses[idx] = { ...expData, id }; else state.cardExpenses.unshift({ ...expData, id });
                 } else {
-                    // Criar transaction vinculada
-                    const txDesc = `${card?.name || 'Cartão'} · ${expData.desc}${expData.parcelas > 1 ? ` (${expData.parcelas}x)` : ''}`;
-                    let txId = null;
-                    if (!existingId) {
-                        txId = await createLinkedTransaction({ description: txDesc, amount: expData.amount, date: expData.date, category_id: expData.category_id, note: `Cartão: ${card?.name}` });
-                    } else {
-                        const existing = state.cardExpenses.find(c => c.id === existingId);
-                        txId = existing?.transaction_id || null;
-                        // Update linked transaction too
-                        if (txId) {
-                            await db.from('transactions').update({ description: txDesc, amount: expData.amount, date: expData.date, category_id: expData.category_id }).eq('id', txId);
-                            const tidx = state.transactions.findIndex(t => t.id === txId);
-                            if (tidx >= 0) state.transactions[tidx] = { ...state.transactions[tidx], description: txDesc, amount: expData.amount };
-                        }
-                    }
-
+                    // Schema real: card_expenses tem (user_id, card_id, description, amount, date, installments, category TEXT)
+                    // Sem transaction_id, sem category_id UUID nesta tabela
                     const dbPayload = {
-                        user_id: state.user.id, card_id: cardId, transaction_id: txId,
-                        description: expData.desc, amount: expData.amount, date: expData.date,
-                        installments: expData.parcelas, category_id: expData.category_id || null, notes: '',
+                        user_id: state.user.id,
+                        card_id: cardId,
+                        description: expData.desc,
+                        amount: expData.amount,
+                        date: expData.date,
+                        installments: expData.parcelas,
+                        category: catName, // TEXT no schema real
                     };
                     if (existingId) {
                         const { error } = await db.from('card_expenses').update(dbPayload).eq('id', existingId).eq('user_id', state.user.id);
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
                         const idx = state.cardExpenses.findIndex(c => c.id === existingId);
-                        if (idx >= 0) state.cardExpenses[idx] = { ...expData, id: existingId, transaction_id: txId };
+                        if (idx >= 0) state.cardExpenses[idx] = { ...expData, id: existingId };
                     } else {
                         const { data, error } = await db.from('card_expenses').insert(dbPayload).select().single();
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-                        state.cardExpenses.unshift({ ...expData, id: data.id, transaction_id: txId });
+                        state.cardExpenses.unshift({ ...expData, id: data.id });
+                        // Criar transação vinculada em transactions (não armazenada na card_expenses)
+                        const txDesc = `${card?.name || 'Cartão'} · ${expData.desc}${expData.parcelas > 1 ? ` (${expData.parcelas}x)` : ''}`;
+                        createLinkedTransaction({ description: txDesc, amount: expData.amount, date: expData.date, category_id: catUUID, note: `Cartão: ${card?.name}` });
                     }
                 }
                 closeModal('cardExpenseModal');
@@ -5201,9 +5114,7 @@
                 state.creditCards = state.creditCards.filter(c => c.id !== id);
                 state.cardExpenses = state.cardExpenses.filter(e => e.cardId !== id);
             } else {
-                // Delete linked transactions first
-                const exps = state.cardExpenses.filter(e => e.cardId === id);
-                for (const exp of exps) { if (exp.transaction_id) await deleteLinkedTransaction(exp.transaction_id); }
+                // card_expenses são deletados em CASCADE pelo banco
                 await db.from('credit_cards').delete().eq('id', id).eq('user_id', state.user.id);
                 state.creditCards = state.creditCards.filter(c => c.id !== id);
                 state.cardExpenses = state.cardExpenses.filter(e => e.cardId !== id);
@@ -5213,10 +5124,10 @@
         }
 
         async function deleteCardExpense(id) {
-            const exp = state.cardExpenses.find(e => e.id === id);
+            if (!confirm('Excluir este lançamento?')) return;
             if (!state.isDemoMode) {
-                if (exp?.transaction_id) await deleteLinkedTransaction(exp.transaction_id);
-                await db.from('card_expenses').delete().eq('id', id).eq('user_id', state.user.id);
+                const { error } = await db.from('card_expenses').delete().eq('id', id).eq('user_id', state.user.id);
+                if (error) { showToast('Erro: ' + error.message, 'error'); return; }
             }
             state.cardExpenses = state.cardExpenses.filter(e => e.id !== id);
             showToast('Lançamento excluído', 'success');
@@ -5363,26 +5274,9 @@
                     const idx = state.gasEntries.findIndex(g => g.id === id);
                     if (idx >= 0) state.gasEntries[idx] = { ...entryData, id }; else state.gasEntries.unshift({ ...entryData, id });
                 } else {
-                    // Categoria padrão para combustível: Transporte
-                    const transCat = state.categories.find(c => c.name === 'Transporte' || c.name === 'Gasolina') ||
-                        state.categories.find(c => c.type === 'expense');
-                    const txDesc = `Abastecimento · ${entryData.posto || entryData.tipo} · ${entryData.litros}L`;
-
-                    let txId = null;
-                    if (!existingId) {
-                        txId = await createLinkedTransaction({ description: txDesc, amount: entryData.total, date: entryData.date, category_id: transCat?.id, note: `${entryData.kmAtual} km` });
-                    } else {
-                        const existing = state.gasEntries.find(g => g.id === existingId);
-                        txId = existing?.transaction_id || null;
-                        if (txId) {
-                            await db.from('transactions').update({ description: txDesc, amount: entryData.total, date: entryData.date }).eq('id', txId);
-                            const tidx = state.transactions.findIndex(t => t.id === txId);
-                            if (tidx >= 0) state.transactions[tidx] = { ...state.transactions[tidx], description: txDesc, amount: entryData.total };
-                        }
-                    }
-
+                    // Schema real: gas_entries sem transaction_id
                     const dbPayload = {
-                        user_id: state.user.id, transaction_id: txId,
+                        user_id: state.user.id,
                         date: entryData.date, posto: entryData.posto, fuel_type: entryData.tipo,
                         price_per_l: entryData.precoL, liters: entryData.litros, total: entryData.total,
                         km_current: entryData.kmAtual, km_previous: entryData.kmAnterior, notes: entryData.nota,
@@ -5391,11 +5285,15 @@
                         const { error } = await db.from('gas_entries').update(dbPayload).eq('id', existingId).eq('user_id', state.user.id);
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
                         const idx = state.gasEntries.findIndex(g => g.id === existingId);
-                        if (idx >= 0) state.gasEntries[idx] = { ...entryData, id: existingId, transaction_id: txId };
+                        if (idx >= 0) state.gasEntries[idx] = { ...entryData, id: existingId };
                     } else {
                         const { data, error } = await db.from('gas_entries').insert(dbPayload).select().single();
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-                        state.gasEntries.unshift({ ...entryData, id: data.id, transaction_id: txId });
+                        state.gasEntries.unshift({ ...entryData, id: data.id });
+                        // Criar transação de despesa vinculada em transactions
+                        const transCat = state.categories.find(c => c.name === 'Transporte' || c.name === 'Gasolina') || state.categories.find(c => c.type === 'expense');
+                        const txDesc = `Abastecimento · ${entryData.posto || entryData.tipo} · ${entryData.litros}L`;
+                        createLinkedTransaction({ description: txDesc, amount: entryData.total, date: entryData.date, category_id: transCat?.id, note: `${entryData.kmAtual} km` });
                     }
                 }
                 closeModal('gasModal');
@@ -5409,10 +5307,9 @@
 
         async function deleteGas(id) {
             if (!confirm('Excluir este abastecimento?')) return;
-            const entry = state.gasEntries.find(g => g.id === id);
             if (!state.isDemoMode) {
-                if (entry?.transaction_id) await deleteLinkedTransaction(entry.transaction_id);
-                await db.from('gas_entries').delete().eq('id', id).eq('user_id', state.user.id);
+                const { error } = await db.from('gas_entries').delete().eq('id', id).eq('user_id', state.user.id);
+                if (error) { showToast('Erro: ' + error.message, 'error'); return; }
             }
             state.gasEntries = state.gasEntries.filter(g => g.id !== id);
             showToast('Abastecimento excluído', 'success');
@@ -5539,25 +5436,9 @@
                     const idx = state.ifoodEntries.findIndex(i => i.id === id);
                     if (idx >= 0) state.ifoodEntries[idx] = { ...entryData, id }; else state.ifoodEntries.unshift({ ...entryData, id });
                 } else {
-                    const alimentCat = state.categories.find(c => c.name === 'Alimentação') ||
-                        state.categories.find(c => c.type === 'expense');
-                    const txDesc = `${entryData.app} · ${entryData.rest}${entryData.taxa > 0 ? ` (+taxa R$${entryData.taxa.toFixed(2)})` : ''}`;
-
-                    let txId = null;
-                    if (!existingId) {
-                        txId = await createLinkedTransaction({ description: txDesc, amount: totalAmount, date: entryData.date, category_id: alimentCat?.id, note: entryData.nota });
-                    } else {
-                        const existing = state.ifoodEntries.find(i => i.id === existingId);
-                        txId = existing?.transaction_id || null;
-                        if (txId) {
-                            await db.from('transactions').update({ description: txDesc, amount: totalAmount, date: entryData.date }).eq('id', txId);
-                            const tidx = state.transactions.findIndex(t => t.id === txId);
-                            if (tidx >= 0) state.transactions[tidx] = { ...state.transactions[tidx], description: txDesc, amount: totalAmount };
-                        }
-                    }
-
+                    // Schema real: delivery_orders sem transaction_id
                     const dbPayload = {
-                        user_id: state.user.id, transaction_id: txId,
+                        user_id: state.user.id,
                         date: entryData.date, app: entryData.app, restaurant: entryData.rest,
                         order_value: entryData.valor, delivery_fee: entryData.taxa,
                         order_type: entryData.tipo, notes: entryData.nota,
@@ -5566,11 +5447,15 @@
                         const { error } = await db.from('delivery_orders').update(dbPayload).eq('id', existingId).eq('user_id', state.user.id);
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
                         const idx = state.ifoodEntries.findIndex(i => i.id === existingId);
-                        if (idx >= 0) state.ifoodEntries[idx] = { ...entryData, id: existingId, transaction_id: txId };
+                        if (idx >= 0) state.ifoodEntries[idx] = { ...entryData, id: existingId };
                     } else {
                         const { data, error } = await db.from('delivery_orders').insert(dbPayload).select().single();
                         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-                        state.ifoodEntries.unshift({ ...entryData, id: data.id, transaction_id: txId });
+                        state.ifoodEntries.unshift({ ...entryData, id: data.id });
+                        // Criar transação de despesa vinculada em transactions
+                        const alimentCat = state.categories.find(c => c.name === 'Alimentação') || state.categories.find(c => c.type === 'expense');
+                        const txDesc = `${entryData.app} · ${entryData.rest}${entryData.taxa > 0 ? ` (+taxa R$${entryData.taxa.toFixed(2)})` : ''}`;
+                        createLinkedTransaction({ description: txDesc, amount: totalAmount, date: entryData.date, category_id: alimentCat?.id, note: entryData.nota });
                     }
                 }
                 closeModal('ifoodModal');
@@ -5584,10 +5469,9 @@
 
         async function deleteIfood(id) {
             if (!confirm('Excluir este pedido?')) return;
-            const entry = state.ifoodEntries.find(i => i.id === id);
             if (!state.isDemoMode) {
-                if (entry?.transaction_id) await deleteLinkedTransaction(entry.transaction_id);
-                await db.from('delivery_orders').delete().eq('id', id).eq('user_id', state.user.id);
+                const { error } = await db.from('delivery_orders').delete().eq('id', id).eq('user_id', state.user.id);
+                if (error) { showToast('Erro: ' + error.message, 'error'); return; }
             }
             state.ifoodEntries = state.ifoodEntries.filter(i => i.id !== id);
             showToast('Pedido excluído', 'success');
@@ -5692,64 +5576,38 @@
             if (!isNaN(novoLimite) && novoLimite > 0) {
                 state.ifoodMonthLimit = novoLimite;
                 if (!state.isDemoMode) {
-                    await db.from('profiles').upsert({ user_id: state.user.id, ifood_month_limit: novoLimite, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+                    // user_preferences é a tabela correta no schema real (não profiles)
+                    await db.from('user_preferences').upsert(
+                        { user_id: state.user.id, ifood_month_limit: novoLimite, updated_at: new Date().toISOString() },
+                        { onConflict: 'user_id' }
+                    );
                 }
                 renderIfood();
                 showToast('Limite atualizado!', 'success');
             }
         }
 
-        // Hook into initApp to load module data
-        const _origInitApp = initApp;
-        // We patch loadModuleData into the init via DOMContentLoaded override below
-
         /* ══════════════════════════════════════════════════════════════
-           EXPOSE ALL FUNCTIONS GLOBALLY (fix onclick handlers on first load)
+           EXPOSE ALL FUNCTIONS GLOBALLY
+           Usando Object.assign numa IIFE para garantir execução
+           atômica e imediata — corrije botões que só funcionavam
+           após reload (causado por conflito com scripts Cloudflare).
            ══════════════════════════════════════════════════════════════ */
-        window.loginWithGoogle = loginWithGoogle;
-        window.loginDemo = loginDemo;
-        window.logout = logout;
-        window.showSection = showSection;
-        window.toggleSidebar = toggleSidebar;
-        window.changeMonth = changeMonth;
-        window.openModal = openModal;
-        window.closeModal = closeModal;
-        window.closeModalOutside = closeModalOutside;
-        window.setTxType = setTxType;
-        window.saveTransaction = saveTransaction;
-        window.editTransaction = editTransaction;
-        window.deleteTransaction = deleteTransaction;
-        window.saveCategory = saveCategory;
-        window.deleteCategory = deleteCategory;
-        window.renderCategories = renderCategories;
-        window.saveGoal = saveGoal;
-        window.editGoal = editGoal;
-        window.deleteGoal = deleteGoal;
-        window.openDepositModal = openDepositModal;
-        window.depositGoal = depositGoal;
-        window.openBudgetModal = openBudgetModal;
-        window.saveBudget = saveBudget;
-        window.deleteBudget = deleteBudget;
-        window.filterTransactions = filterTransactions;
-        window.exportCSV = exportCSV;
-        window.toggleTheme = toggleTheme;
-        window.openProfileModal = openProfileModal;
-        window.saveProfile = saveProfile;
-        window.phoneMask = phoneMask;
-        window.setActiveTab = setActiveTab;
-        window.openMoreMenu = openMoreMenu;
-        window.saveCard = saveCard;
-        window.editCard = editCard;
-        window.deleteCard = deleteCard;
-        window.openCardExpenseModal = openCardExpenseModal;
-        window.saveCardExpense = saveCardExpense;
-        window.deleteCardExpense = deleteCardExpense;
-        window.saveGas = saveGas;
-        window.deleteGas = deleteGas;
-        window.calcGasTotal = calcGasTotal;
-        window.saveIfood = saveIfood;
-        window.deleteIfood = deleteIfood;
-        window.setIfoodLimit = setIfoodLimit;
+        Object.assign(window, {
+            loginWithGoogle, loginDemo, logout, showSection, toggleSidebar,
+            changeMonth, openModal, closeModal, closeModalOutside,
+            setTxType, saveTransaction, editTransaction, deleteTransaction,
+            saveCategory, deleteCategory, renderCategories,
+            saveGoal, editGoal, deleteGoal, openDepositModal, depositGoal,
+            openBudgetModal, saveBudget, deleteBudget,
+            filterTransactions, exportCSV, toggleTheme,
+            openProfileModal, saveProfile, phoneMask,
+            setActiveTab, openMoreMenu,
+            saveCard, editCard, deleteCard,
+            openCardExpenseModal, saveCardExpense, deleteCardExpense,
+            saveGas, deleteGas, calcGasTotal,
+            saveIfood, deleteIfood, setIfoodLimit,
+        });
 
         /* ══════════════════════════════════════════════════════════════
            TOPBAR SHORTCUT HINT BUTTON (injected after load)
