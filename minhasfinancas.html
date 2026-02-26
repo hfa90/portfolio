@@ -4313,6 +4313,65 @@
                     <button type="submit" id="profileSubmitBtn" class="btn-primary">Salvar Perfil</button>
                 </div>
             </form>
+            <!-- Zona de perigo -->
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,93,122,.2);">
+                <div
+                    style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--expense);font-weight:700;margin-bottom:10px;">
+                    ⚠️ Zona de Perigo</div>
+                <button id="deleteAllDataBtn" onclick="confirmDeleteAllData()"
+                    style="width:100%;background:rgba(255,93,122,.1);border:1.5px solid rgba(255,93,122,.35);color:var(--expense);border-radius:10px;padding:12px 16px;font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px;"
+                    onmouseenter="this.style.background='rgba(255,93,122,.2)'"
+                    onmouseleave="this.style.background='rgba(255,93,122,.1)'">
+                    🗑️ Apagar todos os meus dados
+                </button>
+                <div style="font-size:11px;color:var(--text3);margin-top:6px;text-align:center;">Remove transações,
+                    cartões, metas, categorias e orçamentos. Irreversível.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete All Data Confirmation Modal -->
+    <div id="deleteDataModal" class="modal-overlay" onclick="closeModalOutside(event,'deleteDataModal')">
+        <div class="modal" style="max-width:420px;">
+            <div class="modal-header">
+                <span style="color:var(--expense);">🗑️ Apagar todos os dados</span>
+                <button onclick="closeModal('deleteDataModal')">✕</button>
+            </div>
+            <div style="padding:4px 0 20px;">
+                <div
+                    style="background:rgba(255,93,122,.08);border:1.5px solid rgba(255,93,122,.25);border-radius:12px;padding:16px;margin-bottom:20px;">
+                    <div style="font-size:14px;font-weight:700;color:var(--expense);margin-bottom:6px;">⚠️ Esta ação é
+                        irreversível!</div>
+                    <div style="font-size:13px;color:var(--text2);line-height:1.6;">Todos os seus dados serão apagados
+                        permanentemente, incluindo:</div>
+                    <ul style="font-size:13px;color:var(--text2);margin:10px 0 0 16px;line-height:2;">
+                        <li>Transações e histórico financeiro</li>
+                        <li>Cartões de crédito e lançamentos</li>
+                        <li>Metas e orçamentos</li>
+                        <li>Categorias personalizadas</li>
+                        <li>Dados de gasolina e delivery</li>
+                    </ul>
+                </div>
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label style="color:var(--text2);font-size:13px;">Digite <strong
+                            style="color:var(--expense);">APAGAR</strong> para confirmar:</label>
+                    <input type="text" id="deleteConfirmInput" placeholder="APAGAR" autocomplete="off"
+                        oninput="const b=document.getElementById('confirmDeleteBtn');const ok=this.value==='APAGAR';b.disabled=!ok;b.style.opacity=ok?'.95':'.5';"
+                        style="border-color:rgba(255,93,122,.35);">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary"
+                        onclick="closeModal('deleteDataModal')">Cancelar</button>
+                    <button id="confirmDeleteBtn" onclick="executeDeleteAllData()" disabled
+                        style="background:var(--expense);color:#fff;border:none;border-radius:10px;padding:10px 20px;font-family:var(--font-body);font-size:14px;font-weight:700;cursor:pointer;opacity:.5;transition:opacity .2s;"
+                        onmouseenter="if(!this.disabled)this.style.opacity='1'"
+                        onmouseleave="if(!this.disabled)this.style.opacity='.9'">
+                        Apagar tudo
+                    </button>
+                </div>
+                <div id="deleteDataProgress"
+                    style="display:none;text-align:center;margin-top:14px;font-size:13px;color:var(--text3);"></div>
+            </div>
         </div>
     </div>
 
@@ -4760,6 +4819,89 @@
         }
         // Also expose globally immediately
         window.logout = logout;
+
+        /* ══════════════════════════════════════════════════════════════
+           APAGAR TODOS OS DADOS DO USUÁRIO
+           ══════════════════════════════════════════════════════════════ */
+        function confirmDeleteAllData() {
+            document.getElementById('deleteConfirmInput').value = '';
+            document.getElementById('confirmDeleteBtn').disabled = true;
+            document.getElementById('confirmDeleteBtn').style.opacity = '.5';
+            document.getElementById('deleteDataProgress').style.display = 'none';
+            closeModal('profileModal');
+            openModal('deleteDataModal');
+        }
+        window.confirmDeleteAllData = confirmDeleteAllData;
+
+        async function executeDeleteAllData() {
+            const confirmInput = document.getElementById('deleteConfirmInput').value;
+            if (confirmInput !== 'APAGAR') return;
+
+            const btn = document.getElementById('confirmDeleteBtn');
+            const progress = document.getElementById('deleteDataProgress');
+            btn.disabled = true;
+            btn.textContent = 'Apagando…';
+            progress.style.display = 'block';
+
+            if (state.isDemoMode) {
+                // Demo mode: limpa o state local
+                progress.textContent = '🔄 Limpando dados de demonstração…';
+                await new Promise(r => setTimeout(r, 600));
+                state.transactions = [];
+                state.categories = [];
+                state.goals = [];
+                state.budgets = [];
+                state.creditCards = [];
+                state.cardExpenses = [];
+                state.gasEntries = [];
+                state.ifoodEntries = [];
+                closeModal('deleteDataModal');
+                showToast('Todos os dados foram apagados.', 'success');
+                renderAll();
+                return;
+            }
+
+            try {
+                const uid = state.user.id;
+                const tables = [
+                    'transactions',
+                    'card_expenses',
+                    'credit_cards',
+                    'goals',
+                    'budgets',
+                    'gas_entries',
+                    'delivery_orders',
+                    'user_preferences',
+                    'categories',
+                    'profiles',
+                ];
+
+                for (const table of tables) {
+                    progress.textContent = `🔄 Apagando ${table.replace(/_/g, ' ')}…`;
+                    const { error } = await db.from(table).delete().eq('user_id', uid);
+                    if (error) {
+                        // Ignora erros de tabela que não existe ou coluna diferente — tenta continuar
+                        console.warn(`Erro ao apagar ${table}:`, error.message);
+                    }
+                    await new Promise(r => setTimeout(r, 120));
+                }
+
+                progress.textContent = '✅ Concluído! Saindo…';
+                await new Promise(r => setTimeout(r, 800));
+                closeModal('deleteDataModal');
+                showToast('Todos os dados foram apagados com sucesso.', 'success');
+                await new Promise(r => setTimeout(r, 1200));
+                // Desloga o usuário
+                await db.auth.signOut();
+                location.reload();
+            } catch (err) {
+                progress.textContent = '❌ Erro: ' + (err.message || 'Tente novamente.');
+                btn.textContent = 'Apagar tudo';
+                btn.disabled = false;
+                btn.style.opacity = '.9';
+            }
+        }
+        window.executeDeleteAllData = executeDeleteAllData;
 
         /* ══════════════════════════════════════════════════════════════
            INIT
@@ -7189,9 +7331,18 @@ Regras:
 - Se o texto não contiver informação financeira clara, retorne {"error": "Não foi possível identificar uma transação financeira neste texto."}`;
 
             try {
-                const resp = await fetch('https://api.anthropic.com/v1/messages', {
+                // A API da Anthropic não permite chamadas diretas do browser (CORS).
+                // Usamos um proxy CORS como solução client-side.
+                // Para produção, substitua por um endpoint próprio (ex: Cloudflare Worker, Vercel Function).
+                const ANTHROPIC_PROXY = 'https://corsproxy.io/?' + encodeURIComponent('https://api.anthropic.com/v1/messages');
+
+                const resp = await fetch(ANTHROPIC_PROXY, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'anthropic-version': '2023-06-01',
+                        'anthropic-dangerous-direct-browser-access': 'true',
+                    },
                     body: JSON.stringify({
                         model: 'claude-sonnet-4-20250514',
                         max_tokens: 500,
@@ -7322,6 +7473,8 @@ Regras:
             saveIfood, deleteIfood, setIfoodLimit,
             renderSubscriptions, setSubsFilter,
             smsLoadExample, smsOnInput, smsReset, smsUpdateBadge, smsAnalyze, smsConfirmAndOpen,
+            confirmDeleteAllData, executeDeleteAllData,
+            renderInstallmentsPanel, selectInstallmentMonth,
         });
 
         /* ══════════════════════════════════════════════════════════════
