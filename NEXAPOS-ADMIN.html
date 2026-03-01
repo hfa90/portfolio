@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexaPOS — Admin</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --bg2: #111118;
+            --bg3: #1a1a24;
+            --border: rgba(255, 255, 255, 0.07);
+            --border2: rgba(255, 255, 255, 0.12);
+            --accent: #7c5cfc;
+            --accent2: #a78bfa;
+            --accent3: #4ade80;
+            --danger: #f87171;
+            --warn: #fbbf24;
+            --text: #f0f0f8;
+            --text2: #9090b0;
+            --text3: #5a5a7a;
+            --radius: 12px;
+            --radius2: 8px;
+            --shadow: 0 4px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* LOGIN */
+        #login-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg);
+        }
+
+        .login-box {
+            width: 400px;
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: var(--shadow), 0 0 40px rgba(124, 92, 252, 0.1);
+        }
+
+        .logo {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #7c5cfc, #a78bfa, #4ade80);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .logo-sub {
+            color: var(--text3);
+            font-size: 12px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            margin-bottom: 32px;
+        }
+
+        .field-label {
+            font-size: 11px;
+            color: var(--text2);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 8px;
+        }
+
+        .field-input {
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius2);
+            color: var(--text);
+            font-family: 'DM Mono', monospace;
+            font-size: 14px;
+            outline: none;
+            transition: border .2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--accent);
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 13px;
+            border: none;
+            border-radius: var(--radius2);
+            background: linear-gradient(135deg, var(--accent), #9b59f5);
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-login:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 24px rgba(124, 92, 252, .3);
+        }
+
+        .login-err {
+            color: var(--danger);
+            font-size: 13px;
+            margin-top: 12px;
+            text-align: center;
+            display: none;
+        }
+
+        /* APP */
+        #app {
+            display: none;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 32px;
+            height: 62px;
+            background: var(--bg2);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .topbar-logo {
+            font-size: 20px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #7c5cfc, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .topbar-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(124, 92, 252, .15);
+            border: 1px solid rgba(124, 92, 252, .3);
+            font-size: 11px;
+            color: var(--accent2);
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            border-radius: var(--radius2);
+            border: 1px solid var(--border2);
+            background: transparent;
+            color: var(--text2);
+            font-family: 'Syne', sans-serif;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .btn-logout:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+        }
+
+        .main {
+            padding: 32px;
+            max-width: 1100px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* STATS ROW */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 10px;
+        }
+
+        .stat-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 32px;
+            font-weight: 500;
+        }
+
+        .stat-val.green {
+            color: var(--accent3);
+        }
+
+        .stat-val.purple {
+            color: var(--accent2);
+        }
+
+        /* CREATE CLIENT */
+        .section-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .new-client-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 32px;
+        }
+
+        .new-client-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .form-label {
+            font-size: 11px;
+            color: var(--text2);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+        }
+
+        .form-input {
+            padding: 11px 16px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius2);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            outline: none;
+            transition: border .2s;
+        }
+
+        .form-input:focus {
+            border-color: var(--accent);
+        }
+
+        .btn-create {
+            padding: 11px 24px;
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius2);
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+            white-space: nowrap;
+        }
+
+        .btn-create:hover {
+            background: #9b59f5;
+            transform: translateY(-1px);
+        }
+
+        /* CLIENTS TABLE */
+        .clients-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .clients-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            padding: 10px 20px;
+            text-align: left;
+            font-size: 11px;
+            color: var(--text3);
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+            background: rgba(255, 255, 255, .02);
+        }
+
+        td {
+            padding: 14px 20px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: var(--bg3);
+        }
+
+        .mono {
+            font-family: 'DM Mono', monospace;
+        }
+
+        /* CODE BADGE */
+        .code-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius2);
+            padding: 6px 12px;
+        }
+
+        .code-text {
+            font-family: 'DM Mono', monospace;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: .1em;
+            color: var(--accent2);
+        }
+
+        .copy-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text3);
+            font-size: 14px;
+            padding: 2px;
+            transition: color .15s;
+        }
+
+        .copy-btn:hover {
+            color: var(--accent2);
+        }
+
+        /* LINK BADGE */
+        .link-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .link-text {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--text3);
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* STATUS */
+        .pill {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .pill-green {
+            background: rgba(74, 222, 128, .12);
+            color: var(--accent3);
+        }
+
+        .pill-red {
+            background: rgba(248, 113, 113, .12);
+            color: var(--danger);
+        }
+
+        /* ACTIONS */
+        .action-btns {
+            display: flex;
+            gap: 6px;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: var(--radius2);
+            border: 1px solid var(--border2);
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .15s;
+        }
+
+        .icon-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(124, 92, 252, .08);
+        }
+
+        .icon-btn.danger:hover {
+            border-color: var(--danger);
+            color: var(--danger);
+            background: rgba(248, 113, 113, .08);
+        }
+
+        /* MODAL */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, .7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal {
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            border-radius: 16px;
+            padding: 32px;
+            width: 480px;
+            box-shadow: var(--shadow);
+            animation: slideUp .2s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 24px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            padding: 11px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius2);
+            color: var(--text2);
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .btn-cancel:hover {
+            color: var(--text);
+        }
+
+        .btn-save {
+            flex: 1;
+            padding: 11px;
+            background: var(--accent);
+            border: none;
+            border-radius: var(--radius2);
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+        }
+
+        .btn-save:hover {
+            background: #9b59f5;
+        }
+
+        /* LINK MODAL */
+        .link-modal-box {
+            background: var(--bg3);
+            border-radius: var(--radius2);
+            padding: 20px;
+            margin-top: 8px;
+        }
+
+        .link-modal-code {
+            font-family: 'DM Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--accent2);
+            letter-spacing: .15em;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .link-modal-url {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: var(--text2);
+            word-break: break-all;
+            text-align: center;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: var(--radius2);
+            border: 1px solid var(--border);
+        }
+
+        .btn-copy-big {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: var(--radius2);
+            background: rgba(124, 92, 252, .15);
+            border: 1px solid rgba(124, 92, 252, .3);
+            color: var(--accent2);
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .btn-copy-big:hover {
+            background: rgba(124, 92, 252, .25);
+        }
+
+        /* TOAST */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 20px;
+            border-radius: var(--radius2);
+            background: var(--bg2);
+            border: 1px solid var(--border2);
+            font-size: 14px;
+            box-shadow: var(--shadow);
+            animation: toastIn .3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        @keyframes toastIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .toast.success {
+            border-color: var(--accent3);
+        }
+
+        .toast.error {
+            border-color: var(--danger);
+        }
+
+        .empty-row td {
+            text-align: center;
+            color: var(--text3);
+            padding: 48px;
+        }
+
+        /* TABS */
+        .page-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 28px;
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px;
+            width: fit-content;
+        }
+
+        .page-tab {
+            padding: 8px 20px;
+            border-radius: var(--radius2);
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            font-family: 'Syne', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .page-tab.active {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .page-tab:hover:not(.active) {
+            background: var(--bg3);
+            color: var(--text);
+        }
+
+        /* ATTENDANT PANEL */
+        .atend-section {
+            display: none;
+        }
+
+        .atend-section.active {
+            display: block;
+        }
+
+        /* Client selector for attendants */
+        .client-selector {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .client-select-input {
+            flex: 1;
+            max-width: 360px;
+            padding: 10px 14px;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius2);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .client-select-input:focus {
+            border-color: var(--accent);
+        }
+
+        /* Attendant list */
+        .atend-card {
+            background: var(--bg2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+
+        .atend-card-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .atend-item-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 24px;
+            border-bottom: 1px solid var(--border);
+            transition: background .15s;
+        }
+
+        .atend-item-row:last-child {
+            border-bottom: none;
+        }
+
+        .atend-item-row:hover {
+            background: var(--bg3);
+        }
+
+        .atend-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(124, 92, 252, .15);
+            border: 1px solid rgba(124, 92, 252, .3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .atend-info {
+            flex: 1;
+        }
+
+        .atend-name-text {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .atend-sub {
+            font-size: 11px;
+            color: var(--text3);
+            margin-top: 2px;
+        }
+
+        .atend-empty {
+            padding: 48px;
+            text-align: center;
+            color: var(--text3);
+            font-size: 13px;
+        }
+
+        /* PIN dots display */
+        .pin-dots-display {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .pin-dot-sm {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent2);
+            opacity: 0.6;
+        }
+
+        /* Modal for attendant */
+        .modal-atend {
+            width: 440px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border2);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- LOGIN -->
+    <div id="login-screen">
+        <div class="login-box">
+            <div class="logo">⚡ NexaPOS</div>
+            <div class="logo-sub">Painel Administrativo</div>
+            <div class="field-label">Senha de Administrador</div>
+            <input class="field-input" id="admin-pass" type="password" placeholder="••••••••"
+                onkeydown="if(event.key==='Enter')doLogin()">
+            <button class="btn-login" onclick="doLogin()">Entrar como Admin →</button>
+            <div class="login-err" id="login-err">Senha incorreta. Tente novamente.</div>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast-container" id="toasts"></div>
+
+    <!-- APP -->
+    <div id="app">
+        <div class="topbar">
+            <div class="topbar-logo">⚡ NexaPOS</div>
+            <div class="topbar-badge">Admin</div>
+            <div class="topbar-right">
+                <div id="topbar-time" style="font-family:'DM Mono',monospace;font-size:13px;color:var(--text2)"></div>
+                <button class="btn-logout" onclick="logout()">Sair</button>
+            </div>
+        </div>
+
+        <div class="main">
+            <!-- TABS -->
+            <div class="page-tabs">
+                <button class="page-tab active" onclick="switchTab('clientes',this)">👥 Clientes</button>
+                <button class="page-tab" onclick="switchTab('atendentes',this)">🧑‍💼 Atendentes</button>
+            </div>
+
+            <!-- ═══ TAB: CLIENTES ═══ -->
+            <div id="tab-clientes">
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-label">Total de Clientes</div>
+                        <div class="stat-val purple" id="stat-total">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Clientes Ativos</div>
+                        <div class="stat-val green" id="stat-active">—</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Clientes Inativos</div>
+                        <div class="stat-val" style="color:var(--danger)" id="stat-inactive">—</div>
+                    </div>
+                </div>
+
+                <!-- NEW CLIENT -->
+                <div class="new-client-card">
+                    <div class="section-title">➕ Novo Cliente</div>
+                    <div class="new-client-row">
+                        <div class="form-group">
+                            <div class="form-label">Nome do Cliente / Empresa</div>
+                            <input class="form-input" id="new-name" placeholder="Ex: Loja da Maria, Mercado Central..."
+                                onkeydown="if(event.key==='Enter')createClient()">
+                        </div>
+                        <div class="form-group" style="max-width:180px">
+                            <div class="form-label">Código (opcional)</div>
+                            <input class="form-input" id="new-code" placeholder="Auto-gerado" maxlength="12"
+                                style="text-transform:uppercase"
+                                oninput="this.value=this.value.toUpperCase().replace(/[^A-Z0-9]/g,'')">
+                        </div>
+                        <button class="btn-create" onclick="createClient()">Criar Cliente</button>
+                    </div>
+                </div>
+
+                <!-- CLIENTS LIST -->
+                <div class="clients-card">
+                    <div class="clients-header">
+                        <div class="section-title" style="margin-bottom:0">👥 Clientes Cadastrados</div>
+                        <button onclick="loadClients()"
+                            style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px"
+                            title="Atualizar">↻</button>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Cliente</th>
+                                <th>Código de Acesso</th>
+                                <th>Link do PDV</th>
+                                <th>Status</th>
+                                <th>Criado em</th>
+                                <th style="text-align:right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-tbody">
+                            <tr>
+                                <td colspan="6" style="text-align:center;padding:40px">
+                                    <div class="spinner"></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ═══ TAB: ATENDENTES ═══ -->
+            <div id="tab-atendentes" style="display:none">
+                <!-- Client selector -->
+                <div class="client-selector">
+                    <label style="font-size:13px;color:var(--text2);white-space:nowrap">Selecionar cliente:</label>
+                    <select class="client-select-input" id="atend-client-select" onchange="loadAtendentesAdmin()">
+                        <option value="">— Selecione um cliente —</option>
+                    </select>
+                    <button class="btn-create" onclick="openAtendModalAdmin()" id="btn-add-atend" style="display:none">+
+                        Nova Atendente</button>
+                </div>
+
+                <!-- Attendants list -->
+                <div class="atend-card" id="atend-card-admin" style="display:none">
+                    <div class="atend-card-header">
+                        <div class="section-title" style="margin-bottom:0">🧑‍💼 Atendentes Cadastradas</div>
+                        <button onclick="loadAtendentesAdmin()"
+                            style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:20px"
+                            title="Atualizar">↻</button>
+                    </div>
+                    <div id="atend-list-admin">
+                        <div class="atend-empty">Selecione um cliente para ver as atendentes.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="atend-modal-admin" style="display:none"
+        onclick="if(event.target===this)document.getElementById('atend-modal-admin').style.display='none'">
+        <div class="modal modal-atend">
+            <div class="modal-title" id="atend-modal-admin-title">🧑‍💼 Nova Atendente</div>
+            <input type="hidden" id="atend-edit-id-admin">
+            <div class="form-group" style="margin-bottom:16px">
+                <div class="form-label">Nome da Atendente *</div>
+                <input class="form-input" id="atend-name-admin" placeholder="Ex: Maria Silva">
+            </div>
+            <div class="form-group" style="margin-bottom:20px">
+                <div class="form-label">Senha (6 dígitos numéricos) *</div>
+                <input class="form-input" id="atend-pin-admin" type="password" inputmode="numeric" maxlength="6"
+                    placeholder="••••••"
+                    style="letter-spacing:.3em;font-size:20px;text-align:center;font-family:'DM Mono',monospace">
+                <div style="font-size:11px;color:var(--text3);margin-top:4px">A atendente usará essa senha para abrir o
+                    caixa no PDV.</div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel"
+                    onclick="document.getElementById('atend-modal-admin').style.display='none'">Cancelar</button>
+                <button class="btn-save" onclick="saveAtendAdmin()">Salvar</button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
+        <div class="modal">
+            <div class="modal-title">✏️ Editar Cliente</div>
+            <input type="hidden" id="edit-id">
+            <div class="form-group" style="margin-bottom:16px">
+                <div class="form-label">Nome</div>
+                <input class="form-input" id="edit-name" placeholder="Nome do cliente">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" onclick="closeEditModal()">Cancelar</button>
+                <button class="btn-save" onclick="saveEdit()">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: LINK -->
+    <div class="modal-overlay" id="link-modal" style="display:none"
+        onclick="if(event.target===this)document.getElementById('link-modal').style.display='none'">
+        <div class="modal">
+            <div class="modal-title">🔗 Código de Acesso do Cliente</div>
+            <p style="color:var(--text2);font-size:13px;margin-bottom:20px">Compartilhe este código ou link com o
+                cliente. Apenas com ele o PDV pode ser acessado.</p>
+            <div class="link-modal-box">
+                <div class="link-modal-code" id="link-code">XXXX</div>
+                <div class="link-modal-url" id="link-url">pdv.html?codigo=XXXX</div>
+                <button class="btn-copy-big" onclick="copyLink()">📋 Copiar Link Completo</button>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-save" style="flex:none;padding:11px 32px"
+                    onclick="document.getElementById('link-modal').style.display='none'">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════
+        //  CONFIG — HARDCODED
+        // ═══════════════════════════
+        const SB_URL = 'https://bloxvjupkttmtvhdhcgt.supabase.co';
+        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJsb3h2anVwa3R0bXR2aGRoY2d0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMzM1MjEsImV4cCI6MjA4NzgwOTUyMX0.JfWJ8aLYJJvOnqlletzHeHeJX2zLonRzeDtPqxogaW0';
+        const ADMIN_PASSWORD = 'nexaadmin2024'; // ← TROQUE ESTA SENHA
+
+        const sb = window.supabase.createClient(SB_URL, SB_KEY);
+
+        // ═══════════════════════════
+        //  LOGIN
+        // ═══════════════════════════
+        function doLogin() {
+            const pass = document.getElementById('admin-pass').value;
+            if (pass === ADMIN_PASSWORD) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app').style.display = 'flex';
+                document.getElementById('app').style.flexDirection = 'column';
+                startClock();
+                loadClients();
+            } else {
+                document.getElementById('login-err').style.display = 'block';
+                document.getElementById('admin-pass').value = '';
+            }
+        }
+        function logout() {
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('app').style.display = 'none';
+            document.getElementById('admin-pass').value = '';
+            document.getElementById('login-err').style.display = 'none';
+        }
+
+        // ═══════════════════════════
+        //  CLIENTS
+        // ═══════════════════════════
+        let clients = [];
+
+        async function loadClients() {
+            const { data, error } = await sb.from('tenants').select('*').order('created_at', { ascending: false });
+            if (error) { showToast('Erro ao carregar clientes: ' + error.message, 'error'); return; }
+            clients = data || [];
+            renderClients();
+            updateStats();
+        }
+
+        function updateStats() {
+            const active = clients.filter(c => c.active).length;
+            document.getElementById('stat-total').textContent = clients.length;
+            document.getElementById('stat-active').textContent = active;
+            document.getElementById('stat-inactive').textContent = clients.length - active;
+        }
+
+        function renderClients() {
+            const tbody = document.getElementById('clients-tbody');
+            if (!clients.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-row" style="text-align:center;color:var(--text3);padding:48px">Nenhum cliente cadastrado ainda. Crie o primeiro acima!</td></tr>';
+                return;
+            }
+            const base = getPDVBase();
+            tbody.innerHTML = clients.map(c => {
+                const link = `${base}?codigo=${c.code}`;
+                return `<tr>
+      <td><div style="font-weight:600">${c.name}</div></td>
+      <td>
+        <div class="code-badge">
+          <span class="code-text">${c.code}</span>
+          <button class="copy-btn" title="Copiar código" onclick="copyText('${c.code}','Código copiado!')">📋</button>
+        </div>
+      </td>
+      <td>
+        <div class="link-wrap">
+          <span class="link-text" title="${link}">${link}</span>
+          <button class="copy-btn" title="Copiar link" onclick="copyText('${link}','Link copiado!')">🔗</button>
+        </div>
+      </td>
+      <td><span class="pill ${c.active ? 'pill-green' : 'pill-red'}">${c.active ? 'Ativo' : 'Inativo'}</span></td>
+      <td style="color:var(--text2);font-size:13px">${new Date(c.created_at).toLocaleDateString('pt-BR')}</td>
+      <td>
+        <div class="action-btns" style="justify-content:flex-end">
+          <button class="icon-btn" title="Ver link" onclick="showLink('${c.code}')">🔗</button>
+          <button class="icon-btn" title="Editar" onclick="openEditModal('${c.id}')">✏️</button>
+          <button class="icon-btn" title="${c.active ? 'Desativar' : 'Ativar'}" onclick="toggleClient('${c.id}',${c.active})">
+            ${c.active ? '🔴' : '🟢'}
+          </button>
+          <button class="icon-btn danger" title="Excluir" onclick="deleteClient('${c.id}')">🗑️</button>
+        </div>
+      </td>
+    </tr>`;
+            }).join('');
+        }
+
+        function getPDVBase() {
+            const path = window.location.href.replace('admin.html', '').replace(/\?.*$/, '');
+            return path + 'pdv.html';
+        }
+
+        async function createClient() {
+            const name = document.getElementById('new-name').value.trim();
+            if (!name) { showToast('Informe o nome do cliente', 'error'); return; }
+            let code = document.getElementById('new-code').value.trim().toUpperCase();
+            if (!code) code = generateCode();
+
+            // Check unique
+            const exists = clients.find(c => c.code === code);
+            if (exists) { showToast('Código já existe, use outro', 'error'); return; }
+
+            const { data, error } = await sb.from('tenants').insert({ name, code, active: true }).select().single();
+            if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-code').value = '';
+            showToast(`Cliente "${name}" criado!`, 'success');
+            await loadClients();
+            showLink(code);
+        }
+
+        function generateCode() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+            return code;
+        }
+
+        async function toggleClient(id, currentActive) {
+            const { error } = await sb.from('tenants').update({ active: !currentActive }).eq('id', id);
+            if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+            showToast(currentActive ? 'Cliente desativado' : 'Cliente ativado!', 'success');
+            await loadClients();
+        }
+
+        async function deleteClient(id) {
+            const c = clients.find(x => x.id === id);
+            if (!confirm(`Excluir o cliente "${c?.name}"?\n\nIsso NÃO apaga os produtos e vendas do cliente.`)) return;
+            const { error } = await sb.from('tenants').delete().eq('id', id);
+            if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+            showToast('Cliente excluído', 'success');
+            await loadClients();
+        }
+
+        function openEditModal(id) {
+            const c = clients.find(x => x.id === id);
+            document.getElementById('edit-id').value = c.id;
+            document.getElementById('edit-name').value = c.name;
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+        function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; }
+
+        async function saveEdit() {
+            const id = document.getElementById('edit-id').value;
+            const name = document.getElementById('edit-name').value.trim();
+            if (!name) { showToast('Informe o nome', 'error'); return; }
+            const { error } = await sb.from('tenants').update({ name }).eq('id', id);
+            if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+            showToast('Cliente atualizado!', 'success');
+            closeEditModal();
+            await loadClients();
+        }
+
+        function showLink(code) {
+            const base = getPDVBase();
+            const link = `${base}?codigo=${code}`;
+            document.getElementById('link-code').textContent = code;
+            document.getElementById('link-url').textContent = link;
+            document.getElementById('link-modal').style.display = 'flex';
+        }
+
+        function copyLink() {
+            const url = document.getElementById('link-url').textContent;
+            copyText(url, 'Link copiado!');
+        }
+
+        function copyText(text, msg) {
+            navigator.clipboard.writeText(text).then(() => showToast(msg || 'Copiado!', 'success'));
+        }
+
+        // ═══════════════════════════
+        //  UTILS
+        // ═══════════════════════════
+        function showToast(msg, type = 'success') {
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            el.innerHTML = `<span>${type === 'success' ? '✓' : '✕'}</span>${msg}`;
+            document.getElementById('toasts').appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '.3s'; setTimeout(() => el.remove(), 300); }, 3000);
+        }
+
+        function startClock() {
+            const el = document.getElementById('topbar-time');
+            const t = () => el.textContent = new Date().toLocaleTimeString('pt-BR');
+            t(); setInterval(t, 1000);
+        }
+
+        // Auto-focus
+        document.getElementById('admin-pass').focus();
+
+        // ═══════════════════════════
+        //  TAB SWITCHING
+        // ═══════════════════════════
+        function switchTab(tab, btn) {
+            document.querySelectorAll('.page-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById('tab-clientes').style.display = tab === 'clientes' ? 'block' : 'none';
+            document.getElementById('tab-atendentes').style.display = tab === 'atendentes' ? 'block' : 'none';
+            if (tab === 'atendentes') populateAtendClientSelect();
+        }
+
+        // ═══════════════════════════
+        //  ATTENDANTS (Admin)
+        // ═══════════════════════════
+        let atendentesAdmin = [];
+
+        function populateAtendClientSelect() {
+            const sel = document.getElementById('atend-client-select');
+            const prev = sel.value;
+            sel.innerHTML = '<option value="">— Selecione um cliente —</option>' +
+                clients.map(c => `<option value="${c.id}" data-tid="${c.id}">${c.name} (${c.code})</option>`).join('');
+            if (prev) sel.value = prev;
+            if (sel.value) loadAtendentesAdmin();
+        }
+
+        async function loadAtendentesAdmin() {
+            const tenantId = document.getElementById('atend-client-select').value;
+            const card = document.getElementById('atend-card-admin');
+            const addBtn = document.getElementById('btn-add-atend');
+            const list = document.getElementById('atend-list-admin');
+            if (!tenantId) {
+                card.style.display = 'none';
+                addBtn.style.display = 'none';
+                return;
+            }
+            card.style.display = 'block';
+            addBtn.style.display = 'inline-block';
+            list.innerHTML = '<div class="atend-empty"><div class="spinner"></div></div>';
+            try {
+                const { data, error } = await sb.from('attendants')
+                    .select('id,name,pin,active')
+                    .eq('tenant_id', tenantId)
+                    .eq('active', true)
+                    .order('name');
+                if (error) throw error;
+                atendentesAdmin = data || [];
+                renderAtendListAdmin();
+            } catch (e) {
+                list.innerHTML = `<div class="atend-empty" style="color:var(--danger)">Erro: ${e.message}<br><small>Certifique-se que a tabela 'attendants' existe no Supabase.</small></div>`;
+            }
+        }
+
+        function renderAtendListAdmin() {
+            const list = document.getElementById('atend-list-admin');
+            if (!atendentesAdmin.length) {
+                list.innerHTML = '<div class="atend-empty">Nenhuma atendente cadastrada para este cliente.</div>';
+                return;
+            }
+            list.innerHTML = atendentesAdmin.map(a => `
+                <div class="atend-item-row">
+                    <div class="atend-avatar">👤</div>
+                    <div class="atend-info">
+                        <div class="atend-name-text">${a.name}</div>
+                        <div class="atend-sub">Senha: <span style="letter-spacing:.15em;font-family:'DM Mono',monospace">••••••</span></div>
+                    </div>
+                    <div class="pin-dots-display">
+                        ${[...Array(6)].map(() => '<div class="pin-dot-sm"></div>').join('')}
+                    </div>
+                    <div class="action-btns">
+                        <button class="icon-btn" title="Editar" onclick="openAtendModalAdmin('${a.id}')">✏️</button>
+                        <button class="icon-btn danger" title="Remover" onclick="delAtendAdmin('${a.id}')">🗑️</button>
+                    </div>
+                </div>`).join('');
+        }
+
+        function openAtendModalAdmin(id = null) {
+            const tenantId = document.getElementById('atend-client-select').value;
+            if (!tenantId) { showToast('Selecione um cliente primeiro', 'error'); return; }
+            document.getElementById('atend-name-admin').value = '';
+            document.getElementById('atend-pin-admin').value = '';
+            document.getElementById('atend-edit-id-admin').value = '';
+            document.getElementById('atend-modal-admin-title').textContent = '🧑‍💼 Nova Atendente';
+            if (id) {
+                const a = atendentesAdmin.find(x => x.id === id);
+                if (a) {
+                    document.getElementById('atend-edit-id-admin').value = a.id;
+                    document.getElementById('atend-name-admin').value = a.name;
+                    document.getElementById('atend-modal-admin-title').textContent = '✏️ Editar Atendente';
+                }
+            }
+            document.getElementById('atend-modal-admin').style.display = 'flex';
+            setTimeout(() => document.getElementById('atend-name-admin').focus(), 150);
+        }
+
+        async function saveAtendAdmin() {
+            const tenantId = document.getElementById('atend-client-select').value;
+            const name = document.getElementById('atend-name-admin').value.trim();
+            const pin = document.getElementById('atend-pin-admin').value.trim();
+            const id = document.getElementById('atend-edit-id-admin').value;
+            if (!name) { showToast('Informe o nome da atendente', 'error'); return; }
+            if (!id && !/^[0-9]{6}$/.test(pin)) { showToast('A senha deve ter exatamente 6 dígitos numéricos', 'error'); return; }
+            if (pin && !/^[0-9]{6}$/.test(pin)) { showToast('A senha deve ter exatamente 6 dígitos numéricos', 'error'); return; }
+            try {
+                if (id) {
+                    const payload = { name };
+                    if (pin) payload.pin = pin;
+                    const { error } = await sb.from('attendants').update(payload).eq('id', id).eq('tenant_id', tenantId);
+                    if (error) throw error;
+                } else {
+                    const { error } = await sb.from('attendants').insert({ tenant_id: tenantId, name, pin, active: true });
+                    if (error) throw error;
+                }
+                showToast(id ? '✓ Atendente atualizada' : '✓ Atendente criada com sucesso!', 'success');
+                document.getElementById('atend-modal-admin').style.display = 'none';
+                await loadAtendentesAdmin();
+            } catch (e) {
+                showToast('Erro: ' + e.message, 'error');
+            }
+        }
+
+        async function delAtendAdmin(id) {
+            const a = atendentesAdmin.find(x => x.id === id);
+            if (!confirm(`Remover a atendente "${a?.name}"?`)) return;
+            const tenantId = document.getElementById('atend-client-select').value;
+            try {
+                const { error } = await sb.from('attendants').update({ active: false }).eq('id', id).eq('tenant_id', tenantId);
+                if (error) throw error;
+                showToast('Atendente removida', 'success');
+                await loadAtendentesAdmin();
+            } catch (e) {
+                showToast('Erro: ' + e.message, 'error');
+            }
+        }
+    </script>
+</body>
+
+</html>
