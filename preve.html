@@ -1,0 +1,2202 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prevê — Mercado de Previsões</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@300;400;500;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg: #05080f;
+            --surface: #0b1120;
+            --surface2: #101829;
+            --surface3: #16202e;
+            --border: #1c2d42;
+            --border2: #243549;
+            --yes: #00d68f;
+            --no: #ff3d5a;
+            --gold: #f5c518;
+            --blue: #3b82f6;
+            --text: #dde8f5;
+            --muted: #4a6580;
+            --dim: #7a9ab5;
+            --r: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        html {
+            scroll-behavior: smooth
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Cabinet Grotesk', sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(ellipse 70% 50% at 15% 5%, rgba(0, 214, 143, .05) 0, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 85% 90%, rgba(255, 61, 90, .04) 0, transparent 55%)
+        }
+
+        /* ── SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 4px
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface)
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px
+        }
+
+        /* ── HEADER */
+        header {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            height: 64px;
+            background: rgba(5, 8, 15, .88);
+            backdrop-filter: blur(24px);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 clamp(12px, 3vw, 40px);
+            gap: 12px
+        }
+
+        .logo {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1.4rem;
+            letter-spacing: -.04em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-shrink: 0
+        }
+
+        .logo-pulse {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--yes);
+            box-shadow: 0 0 0 0 rgba(0, 214, 143, .5);
+            animation: ring 2s ease infinite
+        }
+
+        @keyframes ring {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(0, 214, 143, .5)
+            }
+
+            60% {
+                box-shadow: 0 0 0 8px transparent
+            }
+        }
+
+        .logo em {
+            font-style: normal;
+            color: var(--yes)
+        }
+
+        .header-mid {
+            display: flex;
+            gap: 24px
+        }
+
+        .hstat {
+            text-align: center
+        }
+
+        .hstat-v {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .95rem;
+            color: var(--gold)
+        }
+
+        .hstat-l {
+            font-size: .65rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .08em
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px
+        }
+
+        .btn {
+            border: none;
+            cursor: pointer;
+            font-family: 'Cabinet Grotesk', sans-serif;
+            transition: all .2s
+        }
+
+        .btn-ghost {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: .85rem;
+            font-weight: 500
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--yes);
+            color: var(--yes)
+        }
+
+        .btn-primary {
+            background: var(--yes);
+            color: #03140d;
+            font-weight: 800;
+            font-size: .85rem;
+            padding: 9px 18px;
+            border-radius: 50px
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 214, 143, .35)
+        }
+
+        .avatar-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--yes), var(--blue));
+            border: none;
+            cursor: pointer;
+            font-weight: 800;
+            font-size: .85rem;
+            color: #03140d;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center
+        }
+
+        .notif-btn {
+            width: 36px;
+            height: 36px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            cursor: pointer;
+            color: var(--dim);
+            font-size: .95rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all .2s
+        }
+
+        .notif-btn:hover {
+            border-color: var(--yes);
+            color: var(--yes)
+        }
+
+        .notif-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            width: 14px;
+            height: 14px;
+            background: var(--no);
+            border-radius: 50%;
+            font-size: .55rem;
+            font-weight: 800;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            display: none
+        }
+
+        /* ── LAYOUT */
+        main {
+            position: relative;
+            z-index: 1;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: clamp(20px, 3vw, 44px) clamp(12px, 3vw, 40px)
+        }
+
+        /* ── HERO */
+        .hero {
+            text-align: center;
+            margin-bottom: 44px;
+            padding-top: 8px
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            color: var(--gold);
+            font-size: .72rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            padding: 5px 14px;
+            border-radius: 50px;
+            margin-bottom: 18px
+        }
+
+        .hero h1 {
+            font-family: 'Clash Display', sans-serif;
+            font-size: clamp(2rem, 5vw, 3.6rem);
+            font-weight: 700;
+            line-height: 1.08;
+            letter-spacing: -.04em;
+            margin-bottom: 14px
+        }
+
+        .hero h1 span {
+            color: var(--yes)
+        }
+
+        .hero p {
+            color: var(--dim);
+            font-size: .95rem;
+            max-width: 420px;
+            margin: 0 auto;
+            line-height: 1.65
+        }
+
+        .hero-stats {
+            display: flex;
+            justify-content: center;
+            gap: 32px;
+            margin-top: 28px;
+            flex-wrap: wrap
+        }
+
+        .hero-stat {
+            text-align: center
+        }
+
+        .hero-stat-v {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1.6rem;
+            color: var(--text)
+        }
+
+        .hero-stat-l {
+            font-size: .72rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-top: 2px
+        }
+
+        /* ── TOOLBAR */
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 28px;
+            flex-wrap: wrap
+        }
+
+        .filters {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap
+        }
+
+        .filter {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--dim);
+            padding: 7px 16px;
+            border-radius: 50px;
+            font-size: .8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all .2s;
+            font-family: inherit
+        }
+
+        .filter.active,
+        .filter:hover {
+            border-color: var(--yes);
+            color: var(--yes);
+            background: rgba(0, 214, 143, .06)
+        }
+
+        .btn-create {
+            background: linear-gradient(135deg, var(--yes), #00b87a);
+            color: #03140d;
+            font-weight: 800;
+            font-size: .85rem;
+            padding: 9px 20px;
+            border-radius: 50px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap
+        }
+
+        .btn-create:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(0, 214, 143, .3)
+        }
+
+        /* ── GRID */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+            gap: 18px
+        }
+
+        /* ── CARD */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--r);
+            padding: 22px;
+            position: relative;
+            overflow: hidden;
+            transition: all .3s;
+            animation: up .4s ease both
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--yes), var(--no));
+            opacity: 0;
+            transition: opacity .3s
+        }
+
+        .card:hover {
+            border-color: rgba(0, 214, 143, .25);
+            transform: translateY(-4px);
+            box-shadow: 0 24px 48px rgba(0, 0, 0, .35)
+        }
+
+        .card:hover::before {
+            opacity: 1
+        }
+
+        @keyframes up {
+            from {
+                opacity: 0;
+                transform: translateY(18px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 14px
+        }
+
+        .cat {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .68rem;
+            font-weight: 600;
+            letter-spacing: .09em;
+            text-transform: uppercase;
+            color: var(--muted)
+        }
+
+        .cat-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--gold)
+        }
+
+        .status-pill {
+            font-size: .62rem;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+            padding: 3px 9px;
+            border-radius: 50px
+        }
+
+        .sp-active {
+            background: rgba(0, 214, 143, .1);
+            color: var(--yes);
+            border: 1px solid rgba(0, 214, 143, .2)
+        }
+
+        .sp-resolved {
+            background: rgba(245, 197, 24, .1);
+            color: var(--gold);
+            border: 1px solid rgba(245, 197, 24, .2)
+        }
+
+        .sp-closed {
+            background: rgba(74, 101, 128, .1);
+            color: var(--muted);
+            border: 1px solid var(--border)
+        }
+
+        .card-title {
+            font-family: 'Clash Display', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 600;
+            line-height: 1.3;
+            margin-bottom: 18px;
+            color: var(--text)
+        }
+
+        /* BAR */
+        .bar-wrap {
+            margin-bottom: 10px
+        }
+
+        .bar {
+            height: 7px;
+            background: var(--surface2);
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex
+        }
+
+        .by {
+            height: 100%;
+            background: var(--yes);
+            transition: width .7s cubic-bezier(.25, 1, .5, 1)
+        }
+
+        .bn {
+            height: 100%;
+            background: var(--no);
+            transition: width .7s cubic-bezier(.25, 1, .5, 1)
+        }
+
+        .bar-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 9px
+        }
+
+        .bl {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: .82rem
+        }
+
+        .bl-yes {
+            color: var(--yes)
+        }
+
+        .bl-no {
+            color: var(--no)
+        }
+
+        .bl-pct {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .95rem
+        }
+
+        .bl-count {
+            color: var(--muted);
+            font-size: .72rem
+        }
+
+        /* META */
+        .meta {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin: 16px 0
+        }
+
+        .meta-box {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center
+        }
+
+        .meta-v {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .9rem;
+            color: var(--gold)
+        }
+
+        .meta-l {
+            font-size: .62rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            margin-top: 2px
+        }
+
+        /* ACTIONS */
+        .vote-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 9px
+        }
+
+        .bv {
+            padding: 11px;
+            border-radius: 10px;
+            border: 1px solid;
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .9rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            transition: all .2s
+        }
+
+        .bv-yes {
+            background: rgba(0, 214, 143, .07);
+            border-color: rgba(0, 214, 143, .25);
+            color: var(--yes)
+        }
+
+        .bv-yes:hover:not(:disabled) {
+            background: rgba(0, 214, 143, .14);
+            border-color: var(--yes);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(0, 214, 143, .2)
+        }
+
+        .bv-no {
+            background: rgba(255, 61, 90, .07);
+            border-color: rgba(255, 61, 90, .25);
+            color: var(--no)
+        }
+
+        .bv-no:hover:not(:disabled) {
+            background: rgba(255, 61, 90, .14);
+            border-color: var(--no);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(255, 61, 90, .2)
+        }
+
+        .bv:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important
+        }
+
+        .voted-chip {
+            grid-column: span 2;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            font-size: .78rem;
+            color: var(--dim)
+        }
+
+        .voted-chip strong {
+            color: var(--gold)
+        }
+
+        .prize-chip {
+            grid-column: span 2;
+            background: rgba(245, 197, 24, .07);
+            border: 1px solid rgba(245, 197, 24, .2);
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            font-size: .78rem;
+            color: var(--gold)
+        }
+
+        /* ── MODALS */
+        .overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: rgba(0, 0, 0, .72);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity .25s
+        }
+
+        .overlay.open {
+            opacity: 1;
+            pointer-events: all
+        }
+
+        .modal {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 460px;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 28px;
+            transform: translateY(16px);
+            transition: transform .3s;
+            scrollbar-width: thin
+        }
+
+        .overlay.open .modal {
+            transform: translateY(0)
+        }
+
+        .mh {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 22px
+        }
+
+        .mh h2 {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1.25rem
+        }
+
+        .mcl {
+            width: 30px;
+            height: 30px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--dim);
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .2s
+        }
+
+        .mcl:hover {
+            border-color: var(--no);
+            color: var(--no)
+        }
+
+        .form-group {
+            margin-bottom: 18px
+        }
+
+        .label {
+            display: block;
+            font-size: .75rem;
+            font-weight: 600;
+            letter-spacing: .07em;
+            text-transform: uppercase;
+            color: var(--dim);
+            margin-bottom: 7px
+        }
+
+        .input,
+        .textarea,
+        .select {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 14px;
+            color: var(--text);
+            font-family: inherit;
+            font-size: .92rem;
+            outline: none;
+            transition: border-color .2s
+        }
+
+        .input:focus,
+        .textarea:focus,
+        .select:focus {
+            border-color: var(--yes);
+            box-shadow: 0 0 0 3px rgba(0, 214, 143, .07)
+        }
+
+        .textarea {
+            resize: vertical;
+            min-height: 80px
+        }
+
+        .select option {
+            background: var(--surface2)
+        }
+
+        .input-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        /* AUTH TABS */
+        .auth-tabs {
+            display: flex;
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 24px
+        }
+
+        .auth-tab {
+            flex: 1;
+            padding: 9px;
+            border-radius: 8px;
+            border: none;
+            font-family: inherit;
+            font-size: .85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .2s;
+            color: var(--muted);
+            background: transparent
+        }
+
+        .auth-tab.active {
+            background: var(--surface);
+            color: var(--text);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .3)
+        }
+
+        /* PIX BOX */
+        .pix-block {
+            background: var(--surface2);
+            border: 1px solid rgba(245, 197, 24, .2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 18px
+        }
+
+        .pix-title {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .85rem;
+            color: var(--gold);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px
+        }
+
+        .pix-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: .8rem;
+            color: var(--dim);
+            padding: 4px 0
+        }
+
+        .pix-row strong {
+            color: var(--text)
+        }
+
+        .pix-row.total {
+            border-top: 1px solid var(--border);
+            margin-top: 6px;
+            padding-top: 10px;
+            font-weight: 700;
+            color: var(--text)
+        }
+
+        .pix-key {
+            background: var(--bg);
+            border: 1px dashed var(--border2);
+            border-radius: 8px;
+            padding: 9px 12px;
+            margin-top: 10px;
+            font-family: monospace;
+            font-size: .78rem;
+            color: var(--yes);
+            cursor: pointer;
+            word-break: break-all;
+            transition: border-color .2s
+        }
+
+        .pix-key:hover {
+            border-color: var(--yes)
+        }
+
+        .pix-qr {
+            text-align: center;
+            margin-top: 10px;
+            font-size: 3rem;
+            line-height: 1
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: var(--yes);
+            color: #03140d;
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1rem;
+            padding: 13px;
+            border-radius: 12px;
+            border: none;
+            cursor: pointer;
+            transition: all .2s;
+            letter-spacing: -.01em
+        }
+
+        .btn-submit:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 30px rgba(0, 214, 143, .3)
+        }
+
+        .btn-submit:disabled {
+            opacity: .4;
+            cursor: not-allowed;
+            transform: none
+        }
+
+        .btn-danger {
+            background: rgba(255, 61, 90, .1);
+            border: 1px solid rgba(255, 61, 90, .25);
+            color: var(--no);
+            border-radius: 10px
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 61, 90, .2)
+        }
+
+        .form-hint {
+            font-size: .72rem;
+            color: var(--muted);
+            margin-top: 7px;
+            line-height: 1.4
+        }
+
+        /* PROFILE PANEL */
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 24px
+        }
+
+        .prof-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 22px
+        }
+
+        .prof-av {
+            width: 54px;
+            height: 54px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--yes), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.3rem;
+            color: #03140d
+        }
+
+        .prof-info h3 {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1.1rem
+        }
+
+        .prof-info p {
+            font-size: .8rem;
+            color: var(--muted);
+            margin-top: 2px
+        }
+
+        .wallet-box {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 18px
+        }
+
+        .wallet-bal {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: 1.8rem;
+            color: var(--gold)
+        }
+
+        .wallet-label {
+            font-size: .7rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-top: 2px
+        }
+
+        .wallet-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 14px
+        }
+
+        .ws {
+            text-align: center
+        }
+
+        .ws-v {
+            font-family: 'Clash Display', sans-serif;
+            font-weight: 700;
+            font-size: .95rem
+        }
+
+        .ws-l {
+            font-size: .65rem;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            margin-top: 2px
+        }
+
+        .my-votes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 240px;
+            overflow-y: auto
+        }
+
+        .mv-item {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px
+        }
+
+        .mv-title {
+            font-size: .8rem;
+            color: var(--text);
+            line-height: 1.3;
+            flex: 1
+        }
+
+        .mv-meta {
+            text-align: right;
+            flex-shrink: 0
+        }
+
+        .mv-choice {
+            font-size: .72rem;
+            font-weight: 700
+        }
+
+        .mv-status {
+            font-size: .68rem;
+            color: var(--muted)
+        }
+
+        /* NOTIF PANEL */
+        .notif-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 320px;
+            overflow-y: auto
+        }
+
+        .notif-item {
+            background: var(--surface2);
+            border-radius: 10px;
+            padding: 12px;
+            border-left: 3px solid var(--border);
+            transition: all .2s
+        }
+
+        .notif-item.unread {
+            border-left-color: var(--yes);
+            background: rgba(0, 214, 143, .04)
+        }
+
+        .notif-item.success {
+            border-left-color: var(--gold)
+        }
+
+        .notif-title {
+            font-size: .85rem;
+            font-weight: 600;
+            margin-bottom: 3px
+        }
+
+        .notif-msg {
+            font-size: .78rem;
+            color: var(--dim);
+            line-height: 1.4
+        }
+
+        .notif-time {
+            font-size: .68rem;
+            color: var(--muted);
+            margin-top: 5px
+        }
+
+        /* TOAST */
+        .toasts {
+            position: fixed;
+            top: 72px;
+            right: 16px;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            gap: 9px
+        }
+
+        .toast {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: .83rem;
+            max-width: 290px;
+            animation: tin .3s ease;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .4)
+        }
+
+        .toast.s {
+            border-color: rgba(0, 214, 143, .3)
+        }
+
+        .toast.e {
+            border-color: rgba(255, 61, 90, .3)
+        }
+
+        .toast.w {
+            border-color: rgba(245, 197, 24, .3)
+        }
+
+        @keyframes tin {
+            from {
+                opacity: 0;
+                transform: translateX(16px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0)
+            }
+        }
+
+        /* EMPTY */
+        .empty {
+            text-align: center;
+            padding: 70px 20px;
+            grid-column: 1/-1;
+            color: var(--muted)
+        }
+
+        .empty-i {
+            font-size: 2.8rem;
+            margin-bottom: 14px;
+            opacity: .3
+        }
+
+        .empty h3 {
+            font-family: 'Clash Display', sans-serif;
+            font-size: 1.1rem;
+            color: var(--dim);
+            margin-bottom: 8px
+        }
+
+        .empty p {
+            font-size: .85rem;
+            line-height: 1.5
+        }
+
+        /* LOADING */
+        .spin {
+            width: 36px;
+            height: 36px;
+            border: 2px solid var(--border);
+            border-top-color: var(--yes);
+            border-radius: 50%;
+            animation: sp .65s linear infinite;
+            margin: 60px auto;
+            display: block
+        }
+
+        @keyframes sp {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+
+        @keyframes pulse2 {
+
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(0, 214, 143, .4);
+            }
+
+            50% {
+                opacity: .6;
+                box-shadow: 0 0 0 4px rgba(0, 214, 143, 0);
+            }
+        }
+
+        /* TABS MODAL */
+        .tab-content {
+            display: none
+        }
+
+        .tab-content.active {
+            display: block
+        }
+
+        /* DIVIDER */
+        .divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 16px 0;
+            color: var(--muted);
+            font-size: .78rem
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border)
+        }
+
+        @media(max-width:620px) {
+            .header-mid {
+                display: none
+            }
+
+            .grid {
+                grid-template-columns: 1fr
+            }
+
+            .hero h1 {
+                font-size: 1.9rem
+            }
+
+            .hero-stats {
+                gap: 18px
+            }
+
+            .input-row {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="toasts" id="toasts"></div>
+
+    <!-- HEADER -->
+    <header>
+        <div class="logo">
+            <div class="logo-pulse"></div>Prev<em>ê</em>
+        </div>
+        <div class="header-mid">
+            <div class="hstat">
+                <div class="hstat-v" id="hs-pool">R$ 0</div>
+                <div class="hstat-l">Pool total</div>
+            </div>
+            <div class="hstat">
+                <div class="hstat-v" id="hs-votes">0</div>
+                <div class="hstat-l">Votos</div>
+            </div>
+            <div class="hstat">
+                <div class="hstat-v" id="hs-events">0</div>
+                <div class="hstat-l">Eventos</div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div id="guest-btns">
+                <button class="btn btn-ghost" onclick="openAuth('login')">Entrar</button>
+                <button class="btn btn-primary" style="margin-left:6px" onclick="openAuth('register')">Criar
+                    conta</button>
+            </div>
+            <div id="user-btns" style="display:none;align-items:center;gap:8px">
+                <button class="notif-btn" id="notifBtn" onclick="openModal('notifModal')">🔔<span class="notif-badge"
+                        id="notifBadge">0</span></button>
+                <button class="avatar-btn" id="avatarBtn" onclick="openModal('profileModal')">?</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="hero">
+            <div class="hero-badge">🔮 Mercado de Previsões ao Vivo</div>
+            <h1>Vote. Ganhe.<br><span>Prove que estava certo.</span></h1>
+            <p>Aposte R$5,00 em eventos reais. Quem acertar divide o pool. Taxa da plataforma: R$1,90.</p>
+            <div class="hero-stats">
+                <div class="hero-stat">
+                    <div class="hero-stat-v" id="hv-events">0</div>
+                    <div class="hero-stat-l">Eventos ativos</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat-v" id="hv-pool">R$0</div>
+                    <div class="hero-stat-l">Em jogo agora</div>
+                </div>
+                <div class="hero-stat">
+                    <div class="hero-stat-v" id="hv-users">0</div>
+                    <div class="hero-stat-l">Participantes</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="filters" id="filters">
+                <button class="filter active" onclick="setFilter('all',this)">Todos</button>
+                <button class="filter" onclick="setFilter('Política',this)">🏛 Política</button>
+                <button class="filter" onclick="setFilter('Esportes',this)">⚽ Esportes</button>
+                <button class="filter" onclick="setFilter('Economia',this)">📈 Economia</button>
+                <button class="filter" onclick="setFilter('Entretenimento',this)">🎬 Entretenimento</button>
+            </div>
+            <div id="create-btn-wrap" style="display:none">
+                <button class="btn btn-create" onclick="openModal('createModal')">＋ Criar Evento</button>
+            </div>
+        </div>
+
+        <div class="grid" id="grid">
+            <div class="spin"></div>
+        </div>
+    </main>
+
+    <!-- ════════════════════ AUTH MODAL ════════════════════ -->
+    <div class="overlay" id="authModal" onclick="bgClose(event,'authModal')">
+        <div class="modal">
+            <div class="mh">
+                <h2 id="authTitle">Entrar</h2>
+                <button class="mcl" onclick="closeModal('authModal')">✕</button>
+            </div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Entrar</button>
+                <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Criar conta</button>
+            </div>
+
+            <!-- LOGIN -->
+            <div class="tab-content active" id="tc-login">
+                <div class="form-group">
+                    <label class="label">E-mail</label>
+                    <input class="input" id="l-email" type="email" placeholder="seu@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="label">Senha</label>
+                    <input class="input" id="l-pass" type="password" placeholder="••••••••">
+                </div>
+                <button class="btn-submit" id="btn-login" onclick="doLogin()">Entrar</button>
+                <p class="form-hint" style="text-align:center;margin-top:12px">
+                    <a href="#" style="color:var(--yes);text-decoration:none" onclick="switchAuthTab('register')">Não
+                        tem conta? Cadastre-se</a>
+                </p>
+            </div>
+
+            <!-- REGISTER -->
+            <div class="tab-content" id="tc-register">
+                <div class="form-group">
+                    <label class="label">Nome completo</label>
+                    <input class="input" id="r-name" type="text" placeholder="Seu nome">
+                </div>
+                <div class="form-group">
+                    <label class="label">Usuário</label>
+                    <input class="input" id="r-user" type="text" placeholder="@usuario"
+                        oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'').toLowerCase()">
+                </div>
+                <div class="form-group">
+                    <label class="label">E-mail</label>
+                    <input class="input" id="r-email" type="email" placeholder="seu@email.com">
+                </div>
+                <div class="form-group">
+                    <label class="label">Telefone (opcional)</label>
+                    <input class="input" id="r-phone" type="tel" placeholder="(92) 99999-9999">
+                </div>
+                <div class="form-group">
+                    <label class="label">Sua chave PIX (para receber prêmios)</label>
+                    <input class="input" id="r-pix" type="text" placeholder="CPF, e-mail ou chave aleatória">
+                </div>
+                <div class="form-group">
+                    <label class="label">Senha (mínimo 6 caracteres)</label>
+                    <input class="input" id="r-pass" type="password" placeholder="••••••••">
+                </div>
+                <button class="btn-submit" id="btn-register" onclick="doRegister()">Criar conta</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════ CREATE EVENT MODAL ════════════════════ -->
+    <div class="overlay" id="createModal" onclick="bgClose(event,'createModal')">
+        <div class="modal">
+            <div class="mh">
+                <h2>Criar Evento</h2><button class="mcl" onclick="closeModal('createModal')">✕</button>
+            </div>
+            <div class="form-group">
+                <label class="label">Título / Pergunta *</label>
+                <textarea class="textarea" id="c-title"
+                    placeholder="Ex: O prefeito de Manaus vai se candidatar ao governo?"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="label">Descrição</label>
+                <textarea class="textarea" id="c-desc" placeholder="Contexto sobre o evento..."
+                    style="min-height:60px"></textarea>
+            </div>
+            <div class="input-row">
+                <div class="form-group">
+                    <label class="label">Categoria</label>
+                    <select class="select" id="c-cat">
+                        <option value="Política">🏛 Política</option>
+                        <option value="Esportes">⚽ Esportes</option>
+                        <option value="Economia">📈 Economia</option>
+                        <option value="Entretenimento">🎬 Entretenimento</option>
+                        <option value="Tecnologia">💻 Tecnologia</option>
+                        <option value="Outros">🔮 Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="label">Encerramento</label>
+                    <input class="input" id="c-dead" type="datetime-local">
+                </div>
+            </div>
+            <button class="btn-submit" id="btn-create" onclick="publishEvent()">Publicar Evento</button>
+        </div>
+    </div>
+
+    <!-- ════════════════════ VOTE MODAL ════════════════════ -->
+    <div class="overlay" id="voteModal" onclick="bgClose(event,'voteModal')">
+        <div class="modal">
+            <div class="mh">
+                <h2>Confirmar Voto</h2><button class="mcl" onclick="closeModal('voteModal')">✕</button>
+            </div>
+            <p id="vm-question" style="color:var(--dim);font-size:.9rem;line-height:1.6;margin-bottom:6px"></p>
+            <p style="margin-bottom:20px;font-size:.9rem">Sua escolha: <strong id="vm-choice"
+                    style="color:var(--yes)"></strong></p>
+
+            <div class="pix-block">
+                <div class="pix-title">💳 Pagamento via PIX</div>
+                <div class="pix-row"><span>Valor do voto</span><strong>R$ 5,00</strong></div>
+                <div class="pix-row"><span>Taxa da plataforma</span><strong>R$ 1,90</strong></div>
+                <div class="pix-row"><span>Sua participação no pool</span><strong>R$ 3,10</strong></div>
+                <div class="pix-row total"><span>Total a transferir</span><strong>R$ 5,00</strong></div>
+                <div class="pix-key" id="pixKeyDisplay" onclick="copyPix()"><a href="/cdn-cgi/l/email-protection"
+                        class="__cf_email__"
+                        data-cfemail="d9a9b0a199a9abbcafbcf7bab6b4f7bbab">[email&#160;protected]</a><br><span
+                        style="font-size:.68rem;color:var(--muted)">clique para copiar</span></div>
+                <div class="pix-qr">📷</div>
+                <p class="form-hint" style="margin-top:8px">Faça o PIX de exatamente <strong
+                        style="color:var(--gold)">R$5,00</strong> e cole o comprovante abaixo.</p>
+            </div>
+
+            <div class="form-group">
+                <label class="label">Comprovante PIX (ID/chave da transação) *</label>
+                <input class="input" id="vm-proof" type="text" placeholder="Cole aqui o comprovante...">
+            </div>
+            <button class="btn-submit" id="btn-vote-confirm" onclick="confirmVote()">✅ Registrar Voto</button>
+            <p class="form-hint" style="text-align:center;margin-top:10px">
+                Seu voto ficará como <em>pendente</em> até a confirmação manual do pagamento pelo admin.
+            </p>
+        </div>
+    </div>
+
+    <!-- ════════════════════ PROFILE MODAL ════════════════════ -->
+    <div class="overlay" id="profileModal" onclick="bgClose(event,'profileModal')">
+        <div class="modal" style="max-width:560px">
+            <div class="mh">
+                <h2>Meu Perfil</h2><button class="mcl" onclick="closeModal('profileModal')">✕</button>
+            </div>
+            <div id="profile-content">
+                <div class="spin"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════ MY BETS STATS MODAL ════════════════════ -->
+    <div class="overlay" id="myBetsModal" onclick="bgClose(event,'myBetsModal')">
+        <div class="modal" style="max-width:640px;max-height:92vh">
+            <div class="mh">
+                <h2>📊 Minhas Apostas</h2><button class="mcl" onclick="closeModal('myBetsModal')">✕</button>
+            </div>
+            <div id="mybets-content" style="overflow-y:auto;max-height:calc(92vh - 80px)">
+                <div class="spin"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════ NOTIF MODAL ════════════════════ -->
+    <div class="overlay" id="notifModal" onclick="bgClose(event,'notifModal')">
+        <div class="modal">
+            <div class="mh">
+                <h2>Notificações</h2><button class="mcl" onclick="closeModal('notifModal')">✕</button>
+            </div>
+            <div id="notif-content">
+                <div class="spin"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ════════════════════ ADMIN RESOLVE MODAL ════════════════════ -->
+    <div class="overlay" id="resolveModal" onclick="bgClose(event,'resolveModal')">
+        <div class="modal">
+            <div class="mh">
+                <h2>⚖️ Resolver Evento</h2><button class="mcl" onclick="closeModal('resolveModal')">✕</button>
+            </div>
+            <p id="rm-title" style="color:var(--dim);font-size:.9rem;line-height:1.6;margin-bottom:24px"></p>
+            <div style="display:grid;gap:10px;margin-bottom:24px">
+                <button class="bv bv-yes" style="padding:14px;font-size:1rem" onclick="resolveEvent('yes')">✅ SIM
+                    venceu</button>
+                <button class="bv bv-no" style="padding:14px;font-size:1rem" onclick="resolveEvent('no')">❌ NÃO
+                    venceu</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
+    <script>
+        // ════════════════════════════════════════════════════════════
+        // CONFIG — substitua com suas credenciais do Supabase
+        // ════════════════════════════════════════════════════════════
+        const SB_URL = 'https://bjaabqeqhkfoukmleldr.supabase.co';
+        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqYWFicWVxaGtmb3VrbWxlbGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MDQwMTEsImV4cCI6MjA4ODA4MDAxMX0.-hqHxchqQWYHFeSYS1ofz3X7YCV2C1Zlxv1QTZbdiuM';
+        const PIX_KEY_STR = 'pix@preve.com.br';
+        const VOTE_AMT = 5.00;
+        const FEE_AMT = 1.90;
+        const POOL_AMT = 3.10;
+
+        // ════════════════════════════════════════════════════════════
+        // STATE
+        // ════════════════════════════════════════════════════════════
+        let sb = null, user = null, profile = null;
+        let events = [], myVotes = [];
+        let currentFilter = 'all', pendingVote = null, resolvingEventId = null;
+
+        // ════════════════════════════════════════════════════════════
+        // INIT
+        // ════════════════════════════════════════════════════════════
+        async function init() {
+            if (SB_URL === 'YOUR_SUPABASE_URL') {
+                toast('⚙️ Configure as credenciais do Supabase no script.', 'w', 8000);
+                loadDemo(); return;
+            }
+            sb = window.supabase.createClient(SB_URL, SB_KEY);
+
+            // Auth state
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) await onLogin(session.user);
+
+            sb.auth.onAuthStateChange(async (_evt, sess) => {
+                if (sess) await onLogin(sess.user);
+                else onLogout();
+            });
+
+            await loadEvents();
+            subscribeRealtime();
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // AUTH
+        // ════════════════════════════════════════════════════════════
+        async function onLogin(u) {
+            user = u;
+            const { data } = await sb.from('profiles').select('*').eq('id', u.id).single();
+            profile = data;
+            document.getElementById('guest-btns').style.display = 'none';
+            document.getElementById('user-btns').style.display = 'flex';
+            document.getElementById('avatarBtn').textContent = (profile?.username || 'U')[0].toUpperCase();
+            if (profile?.is_admin) document.getElementById('create-btn-wrap').style.display = 'block';
+            await loadMyVotes();
+            await loadNotifs();
+            renderEvents();
+        }
+
+        function onLogout() {
+            user = null; profile = null; myVotes = [];
+            document.getElementById('guest-btns').style.display = 'flex';
+            document.getElementById('user-btns').style.display = 'none';
+            document.getElementById('create-btn-wrap').style.display = 'none';
+            renderEvents();
+        }
+
+        function openAuth(tab) {
+            switchAuthTab(tab);
+            openModal('authModal');
+        }
+
+        function switchAuthTab(tab) {
+            ['login', 'register'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.toggle('active', t === tab);
+                document.getElementById(`tc-${t}`).classList.toggle('active', t === tab);
+            });
+            document.getElementById('authTitle').textContent = tab === 'login' ? 'Entrar' : 'Criar conta';
+        }
+
+        async function doLogin() {
+            const email = document.getElementById('l-email').value.trim();
+            const pass = document.getElementById('l-pass').value;
+            if (!email || !pass) { toast('Preencha todos os campos.', 'e'); return; }
+            setLoading('btn-login', true, 'Entrando...');
+            const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+            setLoading('btn-login', false, 'Entrar');
+            if (error) toast('Erro: ' + error.message, 'e');
+            else { toast('Bem-vindo de volta! 👋', 's'); closeModal('authModal'); }
+        }
+
+        async function doRegister() {
+            const name = document.getElementById('r-name').value.trim();
+            const uname = document.getElementById('r-user').value.trim();
+            const email = document.getElementById('r-email').value.trim();
+            const phone = document.getElementById('r-phone').value.trim();
+            const pix = document.getElementById('r-pix').value.trim();
+            const pass = document.getElementById('r-pass').value;
+            if (!name || !uname || !email || !pass) { toast('Preencha os campos obrigatórios.', 'e'); return; }
+            if (pass.length < 6) { toast('Senha deve ter ao menos 6 caracteres.', 'e'); return; }
+            if (uname.length < 3) { toast('Usuário deve ter ao menos 3 caracteres.', 'e'); return; }
+
+            setLoading('btn-register', true, 'Criando conta...');
+            const { data, error } = await sb.auth.signUp({
+                email, password: pass,
+                options: { data: { full_name: name, username: uname } }
+            });
+            if (!error && data.user) {
+                // Update profile with extra fields
+                await sb.from('profiles').update({ phone, pix_key: pix, full_name: name }).eq('id', data.user.id);
+            }
+            setLoading('btn-register', false, 'Criar conta');
+            if (error) toast('Erro: ' + error.message, 'e');
+            else { toast('Conta criada! Verifique seu e-mail. ✅', 's'); closeModal('authModal'); }
+        }
+
+        async function doLogout() {
+            await sb.auth.signOut();
+            closeModal('profileModal');
+            toast('Até logo! 👋', 's');
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // EVENTS
+        // ════════════════════════════════════════════════════════════
+        async function loadEvents() {
+            if (!sb) return;
+            const { data, error } = await sb.from('events_public').select('*').order('created_at', { ascending: false });
+            if (error) { console.error(error); return; }
+            events = data || [];
+            renderEvents();
+            updateStats();
+        }
+
+        async function loadMyVotes() {
+            if (!sb || !user) return;
+            const { data } = await sb.from('votes').select('*,events(title)').eq('user_id', user.id);
+            myVotes = data || [];
+        }
+
+        function getUserVote(eventId) {
+            return myVotes.find(v => v.event_id === eventId);
+        }
+
+        function renderEvents() {
+            const grid = document.getElementById('grid');
+            const filtered = currentFilter === 'all' ? events : events.filter(e => e.category === currentFilter);
+            if (!filtered.length) {
+                grid.innerHTML = `<div class="empty"><div class="empty-i">🔮</div><h3>Nenhum evento encontrado</h3><p>Nenhum evento nessa categoria ainda.</p></div>`;
+                return;
+            }
+            grid.innerHTML = filtered.map((ev, i) => cardHTML(ev, i)).join('');
+        }
+
+        function cardHTML(ev, i) {
+            const total = ev.votes_yes + ev.votes_no;
+            const pY = total ? Math.round((ev.votes_yes / total) * 100) : 50;
+            const pN = 100 - pY;
+            const pool = parseFloat(ev.total_pool || 0);
+            const dead = ev.deadline ? new Date(ev.deadline).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) : '—';
+
+            const spMap = { active: 'sp-active', resolved: 'sp-resolved', closed: 'sp-closed', cancelled: 'sp-closed' };
+            const spTxt = { active: 'Aberto', resolved: 'Resolvido', closed: 'Encerrado', cancelled: 'Cancelado' };
+
+            const myVote = getUserVote(ev.id);
+            let actions = '';
+
+            if (ev.status === 'active') {
+                if (!user) {
+                    actions = `<div class="vote-area"><button class="bv bv-yes" onclick="needLogin()">✅ SIM</button><button class="bv bv-no" onclick="needLogin()">❌ NÃO</button></div>`;
+                } else if (myVote) {
+                    const isPending = myVote.payment_status === 'pending';
+                    actions = `<div class="vote-area"><div class="voted-chip">Você votou <strong>${myVote.choice === 'yes' ? '✅ SIM' : '❌ NÃO'}</strong> ${isPending ? '— <span style="color:var(--gold)">aguardando confirmação do PIX</span>' : '— <span style="color:var(--yes)">confirmado ✓</span>'}</div></div>`;
+                } else {
+                    actions = `<div class="vote-area"><button class="bv bv-yes" onclick="openVote('${ev.id}','yes')">✅ SIM</button><button class="bv bv-no" onclick="openVote('${ev.id}','no')">❌ NÃO</button></div>`;
+                }
+            } else if (ev.status === 'resolved') {
+                const wCount = ev.result === 'yes' ? ev.votes_yes : ev.votes_no;
+                const prize = wCount > 0 ? (pool / wCount).toFixed(2).replace('.', ',') : '0,00';
+                if (myVote && myVote.choice === ev.result && myVote.payment_status === 'confirmed') {
+                    actions = `<div class="vote-area"><div class="prize-chip">🏆 Você ganhou! Prêmio: <strong>R$ ${myVote.prize_amount?.toFixed(2).replace('.', ',') || prize}</strong></div></div>`;
+                } else {
+                    const resW = ev.result === 'yes' ? '✅ SIM venceu' : '❌ NÃO venceu';
+                    actions = `<div class="vote-area"><div class="voted-chip"><strong style="color:var(--gold)">${resW}</strong> — R$ ${prize} por vencedor</div></div>`;
+                }
+            } else {
+                actions = `<div class="vote-area"><div class="voted-chip" style="color:var(--muted)">Votação encerrada</div></div>`;
+            }
+
+            const adminBtns = (profile?.is_admin && ev.status === 'active') ?
+                `<div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-ghost" style="flex:1;font-size:.75rem;padding:7px" onclick="openResolve('${ev.id}')">⚖️ Resolver</button>
+      <button class="btn btn-ghost" style="flex:1;font-size:.75rem;padding:7px;color:var(--no);border-color:rgba(255,61,90,.2)" onclick="closeEvent('${ev.id}')">🔒 Encerrar</button>
+    </div>` : '';
+
+            return `
+  <div class="card" style="animation-delay:${i * .06}s">
+    <div class="card-top">
+      <div class="cat"><div class="cat-dot"></div>${ev.category}</div>
+      <span class="status-pill ${spMap[ev.status] || 'sp-closed'}">${spTxt[ev.status] || ev.status}</span>
+    </div>
+    <div class="card-title">${ev.title}</div>
+    <div class="bar-wrap">
+      <div class="bar"><div class="by" style="width:${pY}%"></div><div class="bn" style="width:${pN}%"></div></div>
+      <div class="bar-labels">
+        <div class="bl bl-yes"><span class="bl-pct">${pY}%</span><span class="bl-count">${ev.votes_yes} SIM</span></div>
+        <div class="bl bl-no"><span class="bl-count">${ev.votes_no} NÃO</span><span class="bl-pct">${pN}%</span></div>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="meta-box"><div class="meta-v">R$${pool.toFixed(0)}</div><div class="meta-l">Pool</div></div>
+      <div class="meta-box"><div class="meta-v">${total}</div><div class="meta-l">Votos</div></div>
+      <div class="meta-box"><div class="meta-v">${dead}</div><div class="meta-l">Prazo</div></div>
+    </div>
+    ${actions}
+    ${adminBtns}
+  </div>`;
+        }
+
+        function updateStats() {
+            const active = events.filter(e => e.status === 'active').length;
+            const totalVotes = events.reduce((a, e) => a + (e.total_votes || 0), 0);
+            const totalPool = events.reduce((a, e) => a + parseFloat(e.total_pool || 0), 0);
+
+            document.getElementById('hs-pool').textContent = 'R$' + totalPool.toFixed(0);
+            document.getElementById('hs-votes').textContent = totalVotes;
+            document.getElementById('hs-events').textContent = events.length;
+            document.getElementById('hv-events').textContent = active;
+            document.getElementById('hv-pool').textContent = 'R$' + totalPool.toFixed(0);
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // VOTE
+        // ════════════════════════════════════════════════════════════
+        function openVote(eventId, choice) {
+            if (!user) { needLogin(); return; }
+            const ev = events.find(e => e.id === eventId);
+            if (!ev) return;
+            pendingVote = { eventId, choice };
+            document.getElementById('vm-question').textContent = ev.title;
+            const cl = document.getElementById('vm-choice');
+            cl.textContent = choice === 'yes' ? '✅ SIM' : '❌ NÃO';
+            cl.style.color = choice === 'yes' ? 'var(--yes)' : 'var(--no)';
+            document.getElementById('vm-proof').value = '';
+            document.getElementById('pixKeyDisplay').innerHTML = `${PIX_KEY_STR}<br><span style="font-size:.68rem;color:var(--muted)">clique para copiar</span>`;
+            openModal('voteModal');
+        }
+
+        async function confirmVote() {
+            if (!pendingVote || !user) return;
+            const proof = document.getElementById('vm-proof').value.trim();
+            if (!proof) { toast('Informe o comprovante PIX.', 'e'); return; }
+
+            setLoading('btn-vote-confirm', true, 'Registrando...');
+            const { error } = await sb.from('votes').insert({
+                event_id: pendingVote.eventId,
+                user_id: user.id,
+                choice: pendingVote.choice,
+                amount_paid: VOTE_AMT,
+                platform_fee: FEE_AMT,
+                pool_amount: POOL_AMT,
+                pix_proof: proof,
+                payment_status: 'pending'
+            });
+            setLoading('btn-vote-confirm', false, '✅ Registrar Voto');
+
+            if (error) {
+                if (error.code === '23505') toast('Você já votou neste evento!', 'e');
+                else toast('Erro: ' + error.message, 'e');
+            } else {
+                toast('Voto registrado! Aguardando confirmação do PIX. 🕐', 's');
+                closeModal('voteModal');
+                await loadMyVotes();
+                await loadEvents();
+                pendingVote = null;
+            }
+        }
+
+        function copyPix() {
+            navigator.clipboard.writeText(PIX_KEY_STR)
+                .then(() => toast('Chave PIX copiada! ✅', 's'));
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // CREATE EVENT (admin)
+        // ════════════════════════════════════════════════════════════
+        async function publishEvent() {
+            console.log("Iniciando publicação...");
+            const title = document.getElementById('c-title').value.trim();
+            const dead = document.getElementById('c-dead').value;
+
+            if (!title || !dead) {
+                console.error("Campos obrigatórios vazios");
+                toast('Preencha Título e Data.', 'e');
+                return;
+            }
+
+            setLoading('btn-create', true, 'Publicando...');
+
+            try {
+                const { data, error } = await sb.from('events').insert({
+                    title: title,
+                    description: document.getElementById('c-desc').value.trim(),
+                    category: document.getElementById('c-cat').value,
+                    deadline: new Date(dead).toISOString(),
+                    created_by: user.id
+                }).select(); // O .select() ajuda a confirmar se o dado foi criado
+
+                if (error) {
+                    console.error("Erro do Supabase:", error);
+                    toast('Erro: ' + error.message, 'e');
+                } else {
+                    console.log("Sucesso:", data);
+                    toast('Evento publicado! 🎯', 's');
+                    closeModal('createModal');
+                    await loadEvents();
+                }
+            } catch (err) {
+                console.error("Erro inesperado:", err);
+                toast('Erro crítico no script', 'e');
+            } finally {
+                setLoading('btn-create', false, 'Publicar Evento');
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // ADMIN — Resolve / Close
+        // ════════════════════════════════════════════════════════════
+        function openResolve(eventId) {
+            const ev = events.find(e => e.id === eventId);
+            if (!ev) return;
+            resolvingEventId = eventId;
+            document.getElementById('rm-title').textContent = ev.title;
+            openModal('resolveModal');
+        }
+
+        async function resolveEvent(result) {
+            if (!resolvingEventId) return;
+            setLoading('btn-vote-confirm', true);
+            const { data, error } = await sb.rpc('resolve_event', {
+                p_event_id: resolvingEventId,
+                p_result: result
+            });
+            if (error) { toast('Erro: ' + error.message, 'e'); }
+            else {
+                const res = data;
+                toast(`Evento resolvido! ${res.winner_count} vencedores × R$${parseFloat(res.prize_each || 0).toFixed(2)}`, 's', 6000);
+                closeModal('resolveModal');
+                await loadEvents();
+            }
+            resolvingEventId = null;
+        }
+
+        async function closeEvent(eventId) {
+            if (!confirm('Encerrar votações deste evento?')) return;
+            const { error } = await sb.from('events').update({ status: 'closed' }).eq('id', eventId);
+            if (error) toast('Erro: ' + error.message, 'e');
+            else { toast('Evento encerrado.', 's'); await loadEvents(); }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // PROFILE MODAL
+        // ════════════════════════════════════════════════════════════
+        async function openProfileModal() {
+            document.getElementById('profile-content').innerHTML = '<div class="spin"></div>';
+            if (!user || !profile) return;
+
+            const initials = (profile.username || 'U')[0].toUpperCase();
+            const wins = profile.total_wins || 0;
+            const votes = profile.total_votes || 0;
+            const earned = parseFloat(profile.total_earned || 0);
+            const bal = parseFloat(profile.balance || 0);
+            const rate = votes > 0 ? Math.round((wins / votes) * 100) : 0;
+            const confirmed = myVotes.filter(v => v.payment_status === 'confirmed').length;
+            const totalInvested = confirmed * 5.00;
+            const netResult = earned - totalInvested;
+
+            document.getElementById('profile-content').innerHTML = `
+    <div class="prof-header">
+      <div class="prof-av">${initials}</div>
+      <div class="prof-info"><h3>@${profile.username}</h3><p>${profile.full_name || ''} • ${user.email}</p></div>
+    </div>
+    <div class="wallet-box">
+      <div class="wallet-label">Saldo em carteira</div>
+      <div class="wallet-bal">R$ ${bal.toFixed(2).replace('.', ',')}</div>
+      <div class="wallet-stats">
+        <div class="ws"><div class="ws-v">${votes}</div><div class="ws-l">Votos</div></div>
+        <div class="ws"><div class="ws-v" style="color:var(--yes)">${wins}</div><div class="ws-l">Vitórias</div></div>
+        <div class="ws"><div class="ws-v" style="color:var(--gold)">${rate}%</div><div class="ws-l">Acerto</div></div>
+      </div>
+    </div>
+    ${profile.pix_key ? '<p style="font-size:.78rem;color:var(--muted);margin-bottom:12px">🏦 Chave PIX: <strong style="color:var(--dim)">' + profile.pix_key + '</strong></p>' : ''}
+    <button onclick="openMyBetsModal()" style="width:100%;padding:13px;border-radius:10px;background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.25);color:#4f8cff;font-family:inherit;font-weight:700;font-size:.88rem;cursor:pointer;margin-bottom:14px;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px">
+      <span>📊</span> Ver estatísticas detalhadas das minhas apostas
+    </button>
+    ${profile.is_admin ? '<div class="divider">Admin</div><a href="admin.html" class="btn-submit" style="display:block;text-align:center;text-decoration:none;margin-bottom:10px">🛡 Painel Admin</a>' : ''}
+    <div class="divider">Conta</div>
+    <button class="btn btn-ghost btn-danger" style="width:100%;padding:11px;margin-top:0;border-radius:10px" onclick="doLogout()">Sair da conta</button>
+  `;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // MY BETS DETAILED STATS MODAL
+        // ════════════════════════════════════════════════════════════
+        async function openMyBetsModal() {
+            closeModal('profileModal');
+            document.getElementById('myBetsModal').classList.add('open');
+            document.getElementById('mybets-content').innerHTML = '<div class="spin"></div>';
+            if (!user || !profile) return;
+
+            let votes = myVotes;
+            if (sb) {
+                const { data } = await sb.from('votes')
+                    .select('*,events(title,category,status,result,pool_yes,pool_no,votes_yes,votes_no,total_pool)')
+                    .eq('user_id', user.id).order('created_at', { ascending: false });
+                if (data) votes = data;
+            }
+
+            const confirmed = votes.filter(v => v.payment_status === 'confirmed');
+            const pending = votes.filter(v => v.payment_status === 'pending');
+            const rejected = votes.filter(v => v.payment_status === 'rejected');
+
+            const wins = confirmed.filter(v => v.events?.status === 'resolved' && v.choice === v.events?.result);
+            const losses = confirmed.filter(v => v.events?.status === 'resolved' && v.choice !== v.events?.result);
+            const ongoing = confirmed.filter(v => v.events?.status === 'active' || v.events?.status === 'closed');
+
+            const totalInvested = confirmed.length * 5.00;
+            const totalEarned = parseFloat(profile.total_earned || 0);
+            const netResult = totalEarned - totalInvested;
+            const resolved = confirmed.filter(v => v.events?.status === 'resolved').length;
+            const winRate = resolved > 0 ? Math.round((wins.length / resolved) * 100) : 0;
+
+            let potentialGain = 0, potentialLoss = 0;
+
+            const ongoingRows = ongoing.map(v => {
+                const ev = v.events || {};
+                const pool = parseFloat(ev.total_pool || 0);
+                const myChoice = v.choice;
+                const myCount = myChoice === 'yes' ? (ev.votes_yes || 0) : (ev.votes_no || 0);
+                const prizeIfWin = myCount > 0 ? pool / myCount : 0;
+                const atRisk = parseFloat(v.pool_amount || 3.10);
+                const gain = Math.max(0, prizeIfWin - atRisk);
+                potentialGain += gain;
+                potentialLoss += atRisk;
+                const totalVotes = (ev.votes_yes || 0) + (ev.votes_no || 0);
+                const pctMy = totalVotes > 0 ? Math.round(((myChoice === 'yes' ? ev.votes_yes : ev.votes_no) / totalVotes) * 100) : 50;
+                const pctOpp = 100 - pctMy;
+                const choiceColor = myChoice === 'yes' ? 'var(--yes)' : 'var(--no)';
+                const choiceLbl = myChoice === 'yes' ? '✅ SIM' : '❌ NÃO';
+                const statusBadge = ev.status === 'active'
+                    ? '<span style="background:rgba(0,214,143,.1);color:var(--yes);border:1px solid rgba(0,214,143,.2);padding:2px 8px;border-radius:50px;font-size:.62rem;font-weight:700">ABERTO</span>'
+                    : '<span style="background:rgba(63,90,118,.1);color:var(--muted);border:1px solid var(--border);padding:2px 8px;border-radius:50px;font-size:.62rem;font-weight:700">ENCERRADO</span>';
+                return '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:10px">'
+                    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px">'
+                    + '<div style="font-size:.82rem;font-weight:600;line-height:1.4;flex:1">' + (ev.title || 'Evento') + '</div>'
+                    + statusBadge
+                    + '</div>'
+                    + '<div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">'
+                    + '<span style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:.7rem;color:var(--dim)">' + (ev.category || '—') + '</span>'
+                    + '<span style="border:1px solid ' + choiceColor + '40;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;color:' + choiceColor + '">Meu voto: ' + choiceLbl + '</span>'
+                    + '</div>'
+                    + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">'
+                    + '<div style="background:rgba(0,214,143,.06);border:1px solid rgba(0,214,143,.15);border-radius:8px;padding:10px;text-align:center">'
+                    + '<div style="font-size:.58rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Se acertar 🏆</div>'
+                    + '<div style="font-family:Clash Display,sans-serif;font-weight:700;color:var(--yes);font-size:.9rem">+R$ ' + (prizeIfWin > 0 ? prizeIfWin.toFixed(2).replace('.', ',') : '—') + '</div>'
+                    + '</div>'
+                    + '<div style="background:rgba(255,61,90,.06);border:1px solid rgba(255,61,90,.15);border-radius:8px;padding:10px;text-align:center">'
+                    + '<div style="font-size:.58rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Se errar ❌</div>'
+                    + '<div style="font-family:Clash Display,sans-serif;font-weight:700;color:var(--no);font-size:.9rem">-R$ ' + atRisk.toFixed(2).replace('.', ',') + '</div>'
+                    + '</div>'
+                    + '<div style="background:rgba(245,197,24,.06);border:1px solid rgba(245,197,24,.15);border-radius:8px;padding:10px;text-align:center">'
+                    + '<div style="font-size:.58rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Pool total 💰</div>'
+                    + '<div style="font-family:Clash Display,sans-serif;font-weight:700;color:var(--gold);font-size:.9rem">R$ ' + pool.toFixed(0) + '</div>'
+                    + '</div>'
+                    + '</div>'
+                    + '<div style="font-size:.7rem;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:4px"><span>SIM ' + pctMy + '%</span><span>NÃO ' + pctOpp + '%</span></div>'
+                    + '<div style="height:6px;background:rgba(255,61,90,.25);border-radius:50px;overflow:hidden;margin-bottom:4px">'
+                    + '<div style="width:' + pctMy + '%;height:100%;background:var(--yes);border-radius:50px"></div>'
+                    + '</div>'
+                    + '<div style="font-size:.68rem;color:var(--muted)">' + (ev.votes_yes || 0) + ' votos SIM · ' + (ev.votes_no || 0) + ' votos NÃO</div>'
+                    + '</div>';
+            }).join('');
+
+            const resolvedRows = [...wins, ...losses].map(v => {
+                const ev = v.events || {};
+                const isWin = v.choice === ev.result;
+                const prize = parseFloat(v.prize_amount || 0);
+                const choiceLbl = v.choice === 'yes' ? '✅ SIM' : '❌ NÃO';
+                const resultLbl = ev.result === 'yes' ? '✅ SIM venceu' : '❌ NÃO venceu';
+                const date = v.created_at ? new Date(v.created_at).toLocaleDateString('pt-BR') : '—';
+                return '<div style="background:var(--surface2);border:1px solid ' + (isWin ? 'rgba(0,214,143,.2)' : 'rgba(255,61,90,.15)') + ';border-left:3px solid ' + (isWin ? 'var(--yes)' : 'var(--no)') + ';border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
+                    + '<div style="flex:1;min-width:0">'
+                    + '<div style="font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.title || 'Evento') + '</div>'
+                    + '<div style="font-size:.7rem;color:var(--muted);margin-top:3px">Votei ' + choiceLbl + ' · ' + resultLbl + ' · ' + date + '</div>'
+                    + '</div>'
+                    + '<div style="text-align:right;flex-shrink:0">'
+                    + '<div style="font-family:Clash Display,sans-serif;font-weight:700;font-size:.92rem;color:' + (isWin ? 'var(--yes)' : 'var(--no)') + '">' + (isWin ? '+R$ ' + prize.toFixed(2).replace('.', ',') : '-R$ 3,10') + '</div>'
+                    + '<div style="font-size:.65rem;color:var(--muted)">' + (isWin ? '🏆 Acertou' : '❌ Errou') + '</div>'
+                    + '</div>'
+                    + '</div>';
+            }).join('');
+
+            const pendingRows = pending.map(v => {
+                const ev = v.events || {};
+                const choiceLbl = v.choice === 'yes' ? '✅ SIM' : '❌ NÃO';
+                return '<div style="background:var(--surface2);border:1px solid rgba(245,197,24,.2);border-left:3px solid var(--gold);border-radius:10px;padding:12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px">'
+                    + '<div style="flex:1;min-width:0">'
+                    + '<div style="font-size:.8rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (ev.title || 'Evento') + '</div>'
+                    + '<div style="font-size:.7rem;color:var(--muted);margin-top:3px">Votei ' + choiceLbl + ' · aguardando confirmação do PIX</div>'
+                    + '</div>'
+                    + '<span style="background:rgba(245,197,24,.1);color:var(--gold);border:1px solid rgba(245,197,24,.2);padding:3px 8px;border-radius:50px;font-size:.65rem;font-weight:700;flex-shrink:0">⏳ PENDENTE</span>'
+                    + '</div>';
+            }).join('');
+
+            document.getElementById('mybets-content').innerHTML =
+                // ── Summary cards
+                '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">'
+                + '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center">'
+                + '<div style="font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Investido</div>'
+                + '<div style="font-family:Clash Display,sans-serif;font-weight:700;font-size:1.15rem;color:var(--gold)">R$ ' + totalInvested.toFixed(2).replace('.', ',') + '</div>'
+                + '<div style="font-size:.68rem;color:var(--muted);margin-top:2px">' + confirmed.length + ' apostas</div>'
+                + '</div>'
+                + '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center">'
+                + '<div style="font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Ganhou</div>'
+                + '<div style="font-family:Clash Display,sans-serif;font-weight:700;font-size:1.15rem;color:var(--yes)">R$ ' + totalEarned.toFixed(2).replace('.', ',') + '</div>'
+                + '<div style="font-size:.68rem;color:var(--muted);margin-top:2px">' + wins.length + ' vitórias</div>'
+                + '</div>'
+                + '<div style="background:var(--surface2);border:1px solid ' + (netResult >= 0 ? 'rgba(0,214,143,.2)' : 'rgba(255,61,90,.2)') + ';border-radius:12px;padding:14px;text-align:center">'
+                + '<div style="font-size:.58rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:6px">Resultado</div>'
+                + '<div style="font-family:Clash Display,sans-serif;font-weight:700;font-size:1.15rem;color:' + (netResult >= 0 ? 'var(--yes)' : 'var(--no)') + '">' + (netResult >= 0 ? '+' : '') + 'R$ ' + netResult.toFixed(2).replace('.', ',') + '</div>'
+                + '<div style="font-size:.68rem;color:var(--muted);margin-top:2px">Líquido</div>'
+                + '</div>'
+                + '</div>'
+                // ── Win rate bar
+                + '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:16px">'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+                + '<span style="font-weight:700;font-size:.85rem">📈 Taxa de acerto</span>'
+                + '<span style="font-family:Clash Display,sans-serif;font-weight:700;color:var(--gold);font-size:1rem">' + winRate + '%</span>'
+                + '</div>'
+                + '<div style="height:8px;background:rgba(255,61,90,.2);border-radius:50px;overflow:hidden;margin-bottom:8px">'
+                + '<div style="width:' + winRate + '%;height:100%;background:linear-gradient(90deg,var(--yes),#00b878);border-radius:50px;transition:width .6s ease"></div>'
+                + '</div>'
+                + '<div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted)">'
+                + '<span>🏆 ' + wins.length + ' acertos</span>'
+                + '<span>📊 ' + resolved + ' resolvidos</span>'
+                + '<span>❌ ' + losses.length + ' erros</span>'
+                + '</div>'
+                + '</div>'
+                // ── Status pills
+                + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">'
+                + (pending.length > 0 ? '<div style="background:rgba(245,197,24,.08);border:1px solid rgba(245,197,24,.2);border-radius:8px;padding:7px 11px;font-size:.74rem"><span style="color:var(--gold);font-weight:700">⏳ ' + pending.length + '</span> <span style="color:var(--muted)">aguardando PIX</span></div>' : '')
+                + (ongoing.length > 0 ? '<div style="background:rgba(0,214,143,.08);border:1px solid rgba(0,214,143,.2);border-radius:8px;padding:7px 11px;font-size:.74rem"><span style="color:var(--yes);font-weight:700">🎯 ' + ongoing.length + '</span> <span style="color:var(--muted)">em andamento</span></div>' : '')
+                + (ongoing.length > 0 ? '<div style="background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.2);border-radius:8px;padding:7px 11px;font-size:.74rem"><span style="color:#4f8cff;font-weight:700">+R$ ' + potentialGain.toFixed(2).replace('.', ',') + '</span> <span style="color:var(--muted)">potencial de ganho</span></div>' : '')
+                + (ongoing.length > 0 ? '<div style="background:rgba(255,61,90,.08);border:1px solid rgba(255,61,90,.2);border-radius:8px;padding:7px 11px;font-size:.74rem"><span style="color:var(--no);font-weight:700">⚠️ R$ ' + potentialLoss.toFixed(2).replace('.', ',') + '</span> <span style="color:var(--muted)">em risco</span></div>' : '')
+                + '</div>'
+                // ── Pending bets
+                + (pending.length > 0 ? '<div style="font-weight:700;font-size:.85rem;margin-bottom:8px">⏳ Aguardando confirmação (' + pending.length + ')</div>' + pendingRows : '')
+                // ── Ongoing bets
+                + (ongoing.length > 0 ? '<div style="font-weight:700;font-size:.85rem;margin-bottom:8px' + (pending.length > 0 ? ';margin-top:16px' : '') + '"><span style="display:inline-block;width:8px;height:8px;background:var(--yes);border-radius:50%;margin-right:6px;vertical-align:middle;animation:pulse2 2s infinite"></span>Apostas em andamento (' + ongoing.length + ')</div>' + ongoingRows : '')
+                // ── Resolved bets
+                + ((wins.length + losses.length) > 0 ? '<div style="font-weight:700;font-size:.85rem;margin-bottom:8px;margin-top:' + (ongoing.length > 0 || pending.length > 0 ? '16px' : '0') + '">📋 Histórico de resolvidas</div>' + resolvedRows : '')
+                // ── Empty state
+                + (votes.length === 0 ? '<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:2.5rem;margin-bottom:12px">🔮</div><p>Você ainda não tem apostas.</p></div>' : '')
+                // ── Back button
+                + '<div style="margin-top:18px"><button onclick="document.getElementById(\'myBetsModal\').classList.remove(\'open\');openModal(\'profileModal\')" style="width:100%;padding:11px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);color:var(--dim);font-family:inherit;font-weight:600;cursor:pointer;font-size:.85rem;transition:all .2s">← Voltar ao perfil</button></div>';
+        }
+
+        // Override openModal for profile
+        const _openModal = openModal;
+        function openModal(id) {
+            document.getElementById(id).classList.add('open');
+            if (id === 'profileModal') openProfileModal();
+            if (id === 'notifModal') openNotifModal();
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // NOTIFICATIONS
+        // ════════════════════════════════════════════════════════════
+        async function loadNotifs() {
+            if (!sb || !user) return;
+            const { data } = await sb.from('notifications').select('*')
+                .eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
+            const unread = (data || []).filter(n => !n.read).length;
+            const badge = document.getElementById('notifBadge');
+            badge.textContent = unread;
+            badge.style.display = unread > 0 ? 'flex' : 'none';
+        }
+
+        async function openNotifModal() {
+            document.getElementById('notif-content').innerHTML = '<div class="spin"></div>';
+            if (!sb || !user) return;
+            const { data } = await sb.from('notifications').select('*')
+                .eq('user_id', user.id).order('created_at', { ascending: false }).limit(30);
+            const notifs = data || [];
+
+            // Mark all as read
+            await sb.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
+            document.getElementById('notifBadge').style.display = 'none';
+
+            if (!notifs.length) {
+                document.getElementById('notif-content').innerHTML = '<p style="color:var(--muted);text-align:center;padding:40px;font-size:.85rem">Nenhuma notificação ainda</p>';
+                return;
+            }
+
+            const typeClass = { success: 'success', error: '', warning: '', info: '' };
+            document.getElementById('notif-content').innerHTML = `
+    <div class="notif-list">
+      ${notifs.map(n => `
+        <div class="notif-item ${n.read ? '' : 'unread'} ${typeClass[n.type] || ''}">
+          <div class="notif-title">${n.title}</div>
+          <div class="notif-msg">${n.message}</div>
+          <div class="notif-time">${timeAgo(n.created_at)}</div>
+        </div>`).join('')}
+    </div>`;
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // REALTIME
+        // ════════════════════════════════════════════════════════════
+        function subscribeRealtime() {
+            if (!sb) return;
+            sb.channel('events-channel')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'events' }, () => loadEvents())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'votes' }, () => { loadMyVotes(); loadEvents(); })
+                .subscribe();
+
+            if (user) {
+                sb.channel(`notif-${user.id}`)
+                    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (p) => {
+                        toast(`${p.new.title}: ${p.new.message}`, 's', 5000);
+                        loadNotifs();
+                    })
+                    .subscribe();
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // DEMO MODE
+        // ════════════════════════════════════════════════════════════
+        function loadDemo() {
+            events = [
+                { id: '1', title: 'O prefeito de Manaus vai se candidatar ao governo do estado?', category: 'Política', deadline: '2025-10-01T00:00:00Z', status: 'active', votes_yes: 34, votes_no: 18, total_votes: 52, pool_yes: 34 * 3.10, pool_no: 18 * 3.10, total_pool: 52 * 3.10, pct_yes: 65, pct_no: 35 },
+                { id: '2', title: 'O Flamengo vai ser campeão do Brasileirão 2025?', category: 'Esportes', deadline: '2025-12-07T00:00:00Z', status: 'active', votes_yes: 89, votes_no: 42, total_votes: 131, pool_yes: 89 * 3.10, pool_no: 42 * 3.10, total_pool: 131 * 3.10, pct_yes: 68, pct_no: 32 },
+                { id: '3', title: 'O dólar vai passar de R$6,00 até o fim de 2025?', category: 'Economia', deadline: '2025-12-31T00:00:00Z', status: 'active', votes_yes: 55, votes_no: 71, total_votes: 126, pool_yes: 55 * 3.10, pool_no: 71 * 3.10, total_pool: 126 * 3.10, pct_yes: 44, pct_no: 56 },
+                { id: '4', title: 'Kendrick Lamar vai lançar álbum em 2025?', category: 'Entretenimento', deadline: '2025-06-01T00:00:00Z', status: 'resolved', result: 'yes', votes_yes: 103, votes_no: 22, total_votes: 125, pool_yes: 103 * 3.10, pool_no: 22 * 3.10, total_pool: 125 * 3.10, pct_yes: 82, pct_no: 18 },
+            ];
+            renderEvents();
+            updateStats();
+            document.getElementById('hv-users').textContent = '247';
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // UTILS
+        // ════════════════════════════════════════════════════════════
+        function needLogin() { toast('Faça login para votar! 👆', 'w'); openAuth('login'); }
+        function setFilter(cat, el) {
+            currentFilter = cat;
+            document.querySelectorAll('.filter').forEach(b => b.classList.remove('active'));
+            el.classList.add('active');
+            renderEvents();
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        function bgClose(e, id) { if (e.target.id === id) closeModal(id); }
+        function setLoading(id, state, txt) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.disabled = state;
+            if (txt) el.textContent = txt;
+        }
+        function toast(msg, type = 's', dur = 3500) {
+            const c = document.getElementById('toasts');
+            const el = document.createElement('div');
+            el.className = `toast ${type}`;
+            const icon = { s: '✅', e: '⚠️', w: '🔔' }[type] || 'ℹ️';
+            el.innerHTML = `${icon} ${msg}`;
+            c.appendChild(el);
+            setTimeout(() => el.remove(), dur);
+        }
+        function timeAgo(ts) {
+            const d = Math.floor((Date.now() - new Date(ts)) / 1000);
+            if (d < 60) return 'agora';
+            if (d < 3600) return `${Math.floor(d / 60)}min atrás`;
+            if (d < 86400) return `${Math.floor(d / 3600)}h atrás`;
+            if (d < 2592000) return `${Math.floor(d / 86400)}d atrás`;
+            return new Date(ts).toLocaleDateString('pt-BR');
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
