@@ -6436,6 +6436,27 @@
         const SUPABASE_URL = 'https://pefqcpzfnbrwbckoxtoq.supabase.co';
         const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBlZnFjcHpmbmJyd2Jja294dG9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwNDIxMTQsImV4cCI6MjA4NzYxODExNH0.mY4ad7mpzrVtuAymEZa9WEh_DGuRvOKkP6Cs9eXuio8';
 
+        // Proxy seguro — chave Anthropic fica no Supabase Secrets, nunca exposta aqui
+        const ANTHROPIC_EDGE_FN = `${SUPABASE_URL}/functions/v1/anthropic-proxy`;
+
+        // Helper centralizado para chamar a IA com segurança
+        async function callAnthropicAPI(payload) {
+            const resp = await fetch(ANTHROPIC_EDGE_FN, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_ANON}`,
+                    'apikey': SUPABASE_ANON,
+                },
+                body: JSON.stringify(payload),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err?.message || err?.error?.message || `HTTP ${resp.status}`);
+            }
+            return resp.json();
+        }
+
         const { createClient } = supabase;
         const db = createClient(SUPABASE_URL, SUPABASE_ANON);
 
@@ -9074,32 +9095,13 @@ Regras:
 - Se o texto não contiver informação financeira clara, retorne {"error": "Não foi possível identificar uma transação financeira neste texto."}`;
 
             try {
-                // A API da Anthropic não permite chamadas diretas do browser (CORS).
-                // Usamos um proxy CORS como solução client-side.
-                // Para produção, substitua por um endpoint próprio (ex: Cloudflare Worker, Vercel Function).
-                const ANTHROPIC_PROXY = 'https://corsproxy.io/?' + encodeURIComponent('https://api.anthropic.com/v1/messages');
-
-                const resp = await fetch(ANTHROPIC_PROXY, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'anthropic-version': '2023-06-01',
-                        'anthropic-dangerous-direct-browser-access': 'true',
-                    },
-                    body: JSON.stringify({
-                        model: 'claude-sonnet-4-20250514',
-                        max_tokens: 500,
-                        system: systemPrompt,
-                        messages: [{ role: 'user', content: text }],
-                    }),
+                const data = await callAnthropicAPI({
+                    model: 'claude-sonnet-4-20250514',
+                    max_tokens: 500,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: text }],
                 });
 
-                if (!resp.ok) {
-                    const errData = await resp.json().catch(() => ({}));
-                    throw new Error(errData?.error?.message || `HTTP ${resp.status}`);
-                }
-
-                const data = await resp.json();
                 const rawText = data.content?.map(b => b.text || '').join('').trim();
 
                 // Strip possible markdown fences
@@ -10012,32 +10014,17 @@ Regras:
 
         // Fallback IA
         async function importAnalyzeWithAI(content, bankHint) {
-            const apiKey = typeof ANTHROPIC_API_KEY !== 'undefined' ? ANTHROPIC_API_KEY : '';
-            if (!apiKey || apiKey === 'SUA_CHAVE_AQUI') {
-                throw new Error('Formato não reconhecido automaticamente. Configure a chave da API Anthropic para analisar este tipo de arquivo.');
-            }
             const catsJson = JSON.stringify(state.categories.map(c => ({ id: c.id, name: c.name, type: c.type })));
             const today = new Date().toISOString().split('T')[0];
             const sys = `Analise o extrato e retorne APENAS JSON: {"bank":"nome","period":"período","transactions":[{"id":"id","date":"YYYY-MM-DD","description":"desc","amount":numero,"type":"expense|income","category_id":null,"note":"nota"}]}. Categorias: ${catsJson}. Hoje: ${today}.`;
-            const proxies = [
-                'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://api.anthropic.com/v1/messages'),
-                'https://corsproxy.io/?' + encodeURIComponent('https://api.anthropic.com/v1/messages'),
-            ];
-            let lastErr;
-            for (const proxy of proxies) {
-                try {
-                    const resp = await fetch(proxy, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': apiKey },
-                        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4000, system: sys, messages: [{ role: 'user', content: content.slice(0, 12000) }] }),
-                    });
-                    if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e?.error?.message || 'HTTP ' + resp.status); }
-                    const data = await resp.json();
-                    const raw = data.content?.map(b => b.text || '').join('').trim();
-                    return JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim());
-                } catch (e) { lastErr = e; }
-            }
-            throw lastErr;
+            const data = await callAnthropicAPI({
+                model: 'claude-sonnet-4-20250514',
+                max_tokens: 4000,
+                system: sys,
+                messages: [{ role: 'user', content: content.slice(0, 12000) }],
+            });
+            const raw = data.content?.map(b => b.text || '').join('').trim();
+            return JSON.parse(raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim());
         }
 
 
