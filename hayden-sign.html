@@ -1361,27 +1361,43 @@
             display: flex;
             flex-direction: column;
             justify-content: center;
-            padding: 5px 10px;
-            min-width: 200px;
-            min-height: 42px;
+            padding: 5px 10px 6px;
+            min-width: 220px;
+            min-height: 56px;
             border-radius: 4px;
+            gap: 1px;
         }
 
         .cpf-el .cpf-name {
             font-family: 'DM Mono', monospace;
-            font-size: 9px;
-            color: #6B6B7A;
+            font-size: 8px;
+            color: #8A8070;
             text-transform: uppercase;
-            letter-spacing: .06em;
+            letter-spacing: .07em;
             pointer-events: none;
+            line-height: 1.3;
         }
 
-        .cpf-el .cpf-value {
+        .cpf-el .cpf-number {
             font-family: 'DM Mono', monospace;
-            font-size: 12px;
+            font-size: 13px;
             color: #1A1A2E;
-            font-weight: 600;
+            font-weight: 700;
             pointer-events: none;
+            line-height: 1.3;
+        }
+
+        .cpf-el .cpf-fullname {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 10px;
+            color: #5A5A7A;
+            font-weight: 500;
+            pointer-events: none;
+            line-height: 1.3;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
         }
 
         .cpf-el .anno-toolbar {
@@ -2526,6 +2542,7 @@
             const el = createAnnoEl('date', pageNum, 200, 30);
             el.classList.add('date-el');
             const sp = document.createElement('span');
+            sp.className = 'date-value';   // ← class dedicada para seleção precisa
             sp.textContent = fullStr;
             el.appendChild(sp);
             el.style.display = 'flex';
@@ -2997,11 +3014,12 @@
             const pageNum = parseInt(document.getElementById('field-page-sel').value);
             if (!pageNum) return showToast('Selecione uma página');
 
-            const el = createAnnoEl('cpf', pageNum, 220, 48);
+            const el = createAnnoEl('cpf', pageNum, 240, 56);
             el.classList.add('cpf-el');
             el.innerHTML += `
-                <div class="cpf-name">CPF do Signatário</div>
-                <div class="cpf-value">${signerData.cpf} · ${signerData.name}</div>
+                <div class="cpf-name">CPF do Signatario</div>
+                <div class="cpf-value cpf-number">${signerData.cpf}</div>
+                <div class="cpf-value cpf-fullname">${signerData.name}</div>
             `;
             el.style.display = 'flex';
             el.style.left = '24px';
@@ -3098,17 +3116,30 @@
                         const val = safe(anno.el.querySelector('input')?.value || '');
                         if (val) page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .65, 14), font, color: rgb(.1, .1, .15) });
                     } else if (anno.type === 'date') {
-                        const val = safe(anno.el.querySelector('span')?.textContent || '');
+                        const val = safe(anno.el.querySelector('.date-value')?.textContent || '');
                         page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .55, 11), font: fontB, color: rgb(.1, .3, .15) });
                     } else if (anno.type === 'cpf' && signerData) {
+                        // Background rect
                         page.drawRectangle({
                             x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh,
                             color: rgb(1, 1, .93), borderColor: rgb(.79, .66, .3), borderWidth: .8, opacity: .9
                         });
-                        page.drawText('CPF DO SIGNATARIO', { x: Math.max(0, ex + 6), y: Math.max(0, ey + eh - 14), size: 6, font: fontBold, color: rgb(.5, .42, .18) });
-                        page.drawText(safe(signerData.cpf), { x: Math.max(0, ex + 6), y: Math.max(0, ey + 4), size: Math.min(eh * .4, 11), font: fontBold, color: rgb(.1, .1, .2) });
-                        const nameX = Math.max(0, ex + 6) + 80;
-                        page.drawText(safe(signerData.name), { x: nameX, y: Math.max(0, ey + 4), size: Math.min(eh * .32, 9), font: fontB, color: rgb(.3, .3, .4), maxWidth: ew - 90 });
+                        // Line 1: label "CPF DO SIGNATARIO" — top
+                        page.drawText('CPF DO SIGNATARIO', {
+                            x: Math.max(0, ex + 6), y: Math.max(4, ey + eh - 11),
+                            size: 5.5, font: fontBold, color: rgb(.55, .44, .18)
+                        });
+                        // Line 2: CPF number — middle
+                        page.drawText(safe(signerData.cpf), {
+                            x: Math.max(0, ex + 6), y: Math.max(4, ey + eh * .42),
+                            size: Math.min(eh * .28, 11), font: fontBold, color: rgb(.1, .1, .2)
+                        });
+                        // Line 3: Full name — bottom, smaller, truncated to box width
+                        page.drawText(safe(signerData.name), {
+                            x: Math.max(0, ex + 6), y: Math.max(4, ey + 5),
+                            size: Math.min(eh * .20, 8), font: fontB, color: rgb(.35, .35, .55),
+                            maxWidth: ew - 12
+                        });
                     }
                 }
 
