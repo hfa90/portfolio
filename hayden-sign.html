@@ -628,6 +628,118 @@
             pointer-events: none;
         }
 
+        /* Auth block draggable element */
+        .auth-el {
+            border: 1.5px dashed rgba(201,168,76,.7);
+            border-radius: 5px;
+            overflow: hidden;
+            background: #FAFAF2;
+            min-width: 260px;
+            min-height: 80px;
+            display: flex;
+            flex-direction: column;
+            font-family: 'DM Mono', monospace;
+        }
+
+        .auth-el .auth-bar {
+            background: linear-gradient(90deg, #C9A84C, #E8C97A);
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            pointer-events: none;
+        }
+
+        .auth-el .auth-bar-title {
+            font-size: 8px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: #1A1A2E;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .auth-el .auth-code-badge {
+            background: #1A1A2E;
+            color: #E8C97A;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-left: 6px;
+        }
+
+        .auth-el .auth-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0;
+            flex: 1;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .auth-el .auth-col {
+            padding: 5px 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            overflow: hidden;
+        }
+
+        .auth-el .auth-col:first-child {
+            border-right: 1px solid rgba(201,168,76,.3);
+        }
+
+        .auth-el .auth-field-label {
+            font-size: 6.5px;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #9B7D30;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .auth-el .auth-field-val {
+            font-size: 9px;
+            color: #1A1A2E;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            line-height: 1.3;
+        }
+
+        .auth-el .auth-field-val.auth-code-val {
+            color: #1E6B3A;
+            font-size: 8px;
+        }
+
+        .auth-el .auth-sig-strip {
+            position: absolute;
+            top: 22px;
+            left: 0; right: 0;
+            height: 26px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            opacity: .12;
+        }
+
+        .auth-el .auth-sig-strip img {
+            max-height: 22px;
+            max-width: 90%;
+            object-fit: contain;
+        }
+
+        .auth-el .anno-toolbar { border-color: var(--gold); }
+        .auth-el .resize-handle { background: var(--gold-d); }
+
         /* ── SIDEBAR / PANEL ── */
         #side-panel {
             background: var(--panel);
@@ -2979,29 +3091,88 @@
         // ── Confirm identity ──
         async function confirmSignerIdentity() {
             const name = document.getElementById('signer-name').value.trim();
-            const cpf = document.getElementById('signer-cpf').value.trim();
+            const cpf  = document.getElementById('signer-cpf').value.trim();
             const role = document.getElementById('signer-role').value.trim();
 
-            if (!name) return showToast('⚠️ Informe o nome do signatário');
-            if (!validateCPF(cpf)) return showToast('❌ CPF inválido — verifique os dígitos');
+            if (!name) return showToast('Informe o nome do signatario');
+            if (!validateCPF(cpf)) return showToast('CPF invalido - verifique os digitos');
 
-            const ts = new Date().toISOString();
+            const ts       = new Date().toISOString();
             const authCode = await generateAuthCode(name, cpf, ts);
 
             signerData = { name, cpf, role, authCode, timestamp: ts };
 
             // Update sidebar badge
             document.getElementById('signer-badge').style.display = 'flex';
-            document.getElementById('btn-identify').style.display = 'none';
+            document.getElementById('btn-identify').style.display  = 'none';
             document.getElementById('badge-name').textContent = name;
-            document.getElementById('badge-cpf').textContent = cpf + (role ? ` · ${role}` : '');
+            document.getElementById('badge-cpf').textContent  = cpf + (role ? ' - ' + role : '');
 
-            // Show auth code
-            document.getElementById('authcode-box').style.display = 'block';
+            // Show auth code in sidebar
+            document.getElementById('authcode-box').style.display   = 'block';
             document.getElementById('authcode-display').textContent = authCode;
 
             closeSignerModal();
-            showToast('🔐 Identidade verificada — ' + authCode);
+
+            // Remove old auth block if re-confirming
+            const oldAuth = annotations.find(a => a.type === 'auth');
+            if (oldAuth) deleteAnno(oldAuth.id);
+
+            // Place draggable auth block on last page
+            if (totalPages > 0) placeAuthBlock();
+
+            showToast('Bloco de autenticidade posicionado na ultima pagina');
+        }
+
+        // Build & place draggable auth block on last page
+        function placeAuthBlock() {
+            if (!signerData || totalPages === 0) return;
+            const pageNum  = totalPages;
+            const now      = new Date();
+            const signedAt = now.toLocaleDateString('pt-BR') + ' as ' + now.toLocaleTimeString('pt-BR');
+
+            const el = createAnnoEl('auth', pageNum, 340, 112);
+            el.classList.add('auth-el');
+
+            const sigURL = getSignatureDataURL();
+            const sigImgTag = sigURL ? `<img src="${sigURL}" style="max-height:22px;max-width:90%;object-fit:contain;opacity:.12;position:absolute;top:26px;left:0;right:0;margin:auto;pointer-events:none;">` : '';
+
+            el.innerHTML += `
+                <div class="auth-bar">
+                    <span class="auth-bar-title">BLOCO DE AUTENTICIDADE - Hayden Sign 3.0</span>
+                    <span class="auth-code-badge">${signerData.authCode}</span>
+                </div>
+                ${sigImgTag}
+                <div class="auth-body">
+                    <div class="auth-col">
+                        <div class="auth-field-label">Signatario</div>
+                        <div class="auth-field-val">${signerData.name}</div>
+                        <div class="auth-field-label" style="margin-top:4px;">CPF</div>
+                        <div class="auth-field-val">${signerData.cpf}</div>
+                        ${signerData.role ? '<div class="auth-field-label" style="margin-top:4px;">Qualificacao</div><div class="auth-field-val">' + signerData.role + '</div>' : ''}
+                    </div>
+                    <div class="auth-col">
+                        <div class="auth-field-label">Data e hora da assinatura</div>
+                        <div class="auth-field-val">${signedAt}</div>
+                        <div class="auth-field-label" style="margin-top:4px;">Codigo de autenticidade</div>
+                        <div class="auth-field-val auth-code-val">${signerData.authCode}</div>
+                        <div class="auth-field-label" style="margin-top:4px;">Plataforma</div>
+                        <div class="auth-field-val" style="font-size:7.5px;">Hayden Sign 3.0</div>
+                    </div>
+                </div>
+            `;
+
+            // Position near bottom of last page
+            const wrapper = document.getElementById('pw-' + pageNum);
+            if (wrapper) {
+                el.style.left    = '20px';
+                el.style.top     = Math.max(20, wrapper.offsetHeight - 135) + 'px';
+                el.style.display = 'flex';
+            }
+
+            placeElOnPage(el, pageNum);
+            scrollToPage(pageNum);
+            updateAnnotList();
         }
 
         // ── Place CPF draggable field on PDF ──
@@ -3174,88 +3345,104 @@
 
                 showProgress(78);
 
-                // ── Authentication block on LAST PAGE ──
-                if (signerData) {
-                    const lastPage = pages[pages.length - 1];
-                    const { width: pw, height: ph } = lastPage.getSize();
-                    const now = new Date();
-                    const signedAt = safe(now.toLocaleDateString('pt-BR') + ' as ' + now.toLocaleTimeString('pt-BR'));
-                    const blockH = 110;
-                    const blockY = 20;
-                    const blockX = 28;
-                    const blockW = pw - 56;
+                // ── Authentication block — uses position/size of draggable element ──
+                const authAnno = annotations.find(a => a.type === 'auth');
+                if (signerData && authAnno) {
+                    const page = pages[authAnno.pageNum - 1];
+                    if (page) {
+                        const { width: pdfW, height: pdfH } = page.getSize();
+                        const canvasInfo = pageCanvases.find(p => p.pageNum === authAnno.pageNum);
+                        if (canvasInfo) {
+                            const cvRect  = canvasInfo.canvas.getBoundingClientRect();
+                            const elRect  = authAnno.el.getBoundingClientRect();
+                            const scaleX  = pdfW / cvRect.width;
+                            const scaleY  = pdfH / cvRect.height;
+                            const bx = (elRect.left - cvRect.left) * scaleX;
+                            const by = pdfH - ((elRect.top - cvRect.top + elRect.height) * scaleY);
+                            const bw = elRect.width  * scaleX;
+                            const bh = elRect.height * scaleY;
 
-                    // Background rect
-                    lastPage.drawRectangle({
-                        x: blockX, y: blockY, width: blockW, height: blockH,
-                        color: rgb(.98, .97, .93), borderColor: rgb(.79, .66, .3),
-                        borderWidth: .8, opacity: .95
-                    });
+                            const now      = new Date();
+                            const signedAt = safe(now.toLocaleDateString('pt-BR') + ' as ' + now.toLocaleTimeString('pt-BR'));
+                            const barH     = bh * 0.16;
+                            const bodyY    = by;
+                            const col1X    = bx + bw * 0.02 + 4;
+                            const col2X    = bx + bw * 0.52;
+                            const halfW    = bw * 0.46;
+                            const lh       = bh * 0.155;  // line height ratio
+                            const fs       = Math.min(bh * 0.085, 7);    // field label size
+                            const fv       = Math.min(bh * 0.115, 9.5);  // field value size
+                            const topY     = by + bh - barH - lh * 0.3;
 
-                    // Gold top bar
-                    lastPage.drawRectangle({
-                        x: blockX, y: blockY + blockH - 18, width: blockW, height: 18,
-                        color: rgb(.79, .66, .3), opacity: 1
-                    });
+                            // Background
+                            page.drawRectangle({ x: bx, y: by, width: bw, height: bh,
+                                color: rgb(.98,.97,.93), borderColor: rgb(.79,.66,.3), borderWidth: .8 });
 
-                    // Title — all uppercase ASCII
-                    lastPage.drawText('BLOCO DE AUTENTICIDADE DIGITAL - Hayden Sign 3.0', {
-                        x: blockX + 8, y: blockY + blockH - 13,
-                        size: 8, font: fontBold, color: rgb(1, 1, 1)
-                    });
+                            // Gold bar
+                            page.drawRectangle({ x: bx, y: by + bh - barH, width: bw, height: barH,
+                                color: rgb(.79,.66,.3) });
 
-                    // Auth code badge
-                    lastPage.drawRectangle({
-                        x: pw - blockX - 130, y: blockY + blockH - 36,
-                        width: 120, height: 14,
-                        color: rgb(.1, .1, .1), opacity: .85
-                    });
-                    lastPage.drawText(safe(signerData.authCode), {
-                        x: pw - blockX - 128, y: blockY + blockH - 34,
-                        size: 7.5, font: fontBold, color: rgb(1, .88, .35)
-                    });
+                            // Title in bar
+                            page.drawText('BLOCO DE AUTENTICIDADE - Hayden Sign 3.0', {
+                                x: bx + 6, y: by + bh - barH * 0.72,
+                                size: Math.min(barH * 0.55, 7), font: fontBold, color: rgb(1,1,1)
+                            });
 
-                    const col1X = blockX + 8;
-                    const col2X = blockX + blockW / 2 + 6;
-                    const lineH = 14;
-                    const topY = blockY + blockH - 38;
+                            // Auth code badge in bar
+                            const badgeW = Math.min(bw * 0.38, 115);
+                            page.drawRectangle({ x: bx + bw - badgeW - 4, y: by + bh - barH + 2,
+                                width: badgeW, height: barH - 4, color: rgb(.1,.1,.1), opacity:.9 });
+                            page.drawText(safe(signerData.authCode), {
+                                x: bx + bw - badgeW - 2, y: by + bh - barH * 0.72,
+                                size: Math.min(barH * 0.48, 6.5), font: fontBold, color: rgb(1,.88,.35)
+                            });
 
-                    // Col 1
-                    lastPage.drawText('Signatario', { x: col1X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(safe(signerData.name), { x: col1X, y: topY - lineH + 2, size: 8.5, font: fontBold, color: rgb(.1, .1, .2), maxWidth: blockW / 2 - 16 });
+                            // Divider
+                            page.drawLine({
+                                start: { x: bx + bw * 0.5, y: bodyY + 4 },
+                                end:   { x: bx + bw * 0.5, y: by + bh - barH - 2 },
+                                thickness: .4, color: rgb(.79,.66,.3), opacity: .5
+                            });
 
-                    lastPage.drawText('CPF', { x: col1X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(safe(signerData.cpf), { x: col1X, y: topY - lineH * 3 + 4, size: 9, font: fontBold, color: rgb(.1, .1, .2) });
+                            // Col 1 — stacked rows from top
+                            const rows1 = [
+                                { label: 'Signatario', val: safe(signerData.name), valColor: rgb(.05,.05,.15) },
+                                { label: 'CPF',        val: safe(signerData.cpf),  valColor: rgb(.05,.05,.15) },
+                            ];
+                            if (signerData.role) rows1.push({ label: 'Qualificacao', val: safe(signerData.role), valColor: rgb(.2,.2,.3) });
 
-                    if (signerData.role) {
-                        lastPage.drawText('Qualificacao', { x: col1X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                        lastPage.drawText(safe(signerData.role), { x: col1X, y: topY - lineH * 5 + 6, size: 8, font: fontB, color: rgb(.2, .2, .3), maxWidth: blockW / 2 - 16 });
-                    }
+                            let rowY1 = topY;
+                            for (const r of rows1) {
+                                page.drawText(r.label, { x: col1X, y: rowY1, size: fs, font: fontBold, color: rgb(.45,.36,.12) });
+                                rowY1 -= lh * 0.7;
+                                page.drawText(r.val, { x: col1X, y: rowY1, size: fv, font: fontBold, color: r.valColor, maxWidth: halfW });
+                                rowY1 -= lh * 1.1;
+                            }
 
-                    // Col 2
-                    lastPage.drawText('Data e hora da assinatura', { x: col2X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(signedAt, { x: col2X, y: topY - lineH + 2, size: 8.5, font: fontB, color: rgb(.1, .1, .2) });
+                            // Col 2
+                            const rows2 = [
+                                { label: 'Data e hora da assinatura', val: signedAt,                      valColor: rgb(.05,.05,.15) },
+                                { label: 'Codigo de autenticidade',   val: safe(signerData.authCode),     valColor: rgb(.1,.4,.1)    },
+                                { label: 'Plataforma',                val: 'Hayden Sign 3.0',             valColor: rgb(.3,.3,.4)    },
+                            ];
 
-                    lastPage.drawText('Codigo de autenticidade', { x: col2X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(safe(signerData.authCode), { x: col2X, y: topY - lineH * 3 + 4, size: 8, font: fontBold, color: rgb(.1, .4, .1) });
+                            let rowY2 = topY;
+                            for (const r of rows2) {
+                                page.drawText(r.label, { x: col2X, y: rowY2, size: fs, font: fontBold, color: rgb(.45,.36,.12) });
+                                rowY2 -= lh * 0.7;
+                                page.drawText(r.val, { x: col2X, y: rowY2, size: fv * (r.label === 'Plataforma' ? 0.8 : 1), font: fontB, color: r.valColor, maxWidth: halfW });
+                                rowY2 -= lh * 1.1;
+                            }
 
-                    lastPage.drawText('Plataforma', { x: col2X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText('Hayden Sign 3.0 - Assinatura Digital Profissional', { x: col2X, y: topY - lineH * 5 + 6, size: 7, font: fontB, color: rgb(.3, .3, .4) });
-
-                    // Divider line
-                    lastPage.drawLine({
-                        start: { x: blockX + blockW / 2, y: blockY + 8 },
-                        end: { x: blockX + blockW / 2, y: blockY + blockH - 22 },
-                        thickness: .4, color: rgb(.79, .66, .3), opacity: .5
-                    });
-
-                    // Sig image next to auth block if exists
-                    if (pngImage) {
-                        const sigW = 90, sigH = 28;
-                        lastPage.drawImage(pngImage, {
-                            x: col1X, y: blockY + 10,
-                            width: sigW, height: sigH, opacity: .85
-                        });
+                            // Sig watermark
+                            if (pngImage) {
+                                page.drawImage(pngImage, {
+                                    x: col1X, y: bodyY + 4,
+                                    width: Math.min(bw * 0.28, 80), height: Math.min(bh * 0.22, 22),
+                                    opacity: .15
+                                });
+                            }
+                        }
                     }
                 }
 
@@ -3293,8 +3480,8 @@
                 return;
             }
             annotations.forEach(a => {
-                const iconMap = { sig: '✍️', text: '📝', date: '📅', cpf: '🪪' };
-                const labelMap = { sig: 'Assinatura', text: 'Campo de texto', date: 'Data / hora', cpf: 'CPF do signatário' };
+                const iconMap  = { sig: '✍️', text: '📝', date: '📅', cpf: '🪪', auth: '🔐' };
+                const labelMap = { sig: 'Assinatura', text: 'Campo de texto', date: 'Data / hora', cpf: 'CPF do signatário', auth: 'Bloco de autenticidade' };
                 const div = document.createElement('div');
                 div.className = 'anno-list-item';
                 div.id = `ali-${a.id}`;
