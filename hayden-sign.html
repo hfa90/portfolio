@@ -1,0 +1,3270 @@
+<!DOCTYPE html>
+<html lang="pt-br" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hayden Sign 3.0 — Assinatura Digital Profissional</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ═══════════════════════════════════════════
+   TOKENS
+═══════════════════════════════════════════ */
+        :root {
+            --gold: #C9A84C;
+            --gold-l: #E8C97A;
+            --gold-d: #9B7D30;
+            --success: #4CAF7D;
+            --danger: #E05C5C;
+            --info: #5B9CF6;
+            --r: 12px;
+            --rs: 8px;
+            --nav-h: 60px;
+            --thumb-w: 200px;
+            --panel-w: 360px;
+            --trans: .18s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        [data-theme="dark"] {
+            --bg: #12121A;
+            --surface: #1C1C28;
+            --panel: #0E0E16;
+            --border: rgba(255, 255, 255, .08);
+            --border2: rgba(255, 255, 255, .14);
+            --text: #F0EFE8;
+            --text2: #8A8A9A;
+            --text3: #4A4A5A;
+            --viewer-bg: #1A1A26;
+            --drag-bg: rgba(255, 255, 255, .04);
+            --thumb-bg: #16161F;
+            --input-bg: rgba(255, 255, 255, .06);
+            --shadow: 0 8px 40px rgba(0, 0, 0, .5);
+        }
+
+        [data-theme="light"] {
+            --bg: #ECEAE3;
+            --surface: #FAFAF7;
+            --panel: #F2F0E8;
+            --border: rgba(0, 0, 0, .1);
+            --border2: rgba(0, 0, 0, .18);
+            --text: #1A1A2E;
+            --text2: #6B6B7A;
+            --text3: #BBBBCC;
+            --viewer-bg: #D8D6CE;
+            --drag-bg: rgba(0, 0, 0, .02);
+            --thumb-bg: #E8E6DE;
+            --input-bg: rgba(0, 0, 0, .05);
+            --shadow: 0 8px 40px rgba(0, 0, 0, .2);
+        }
+
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            transition: background var(--trans), color var(--trans);
+        }
+
+        /* ═══════════════════════════════════════════
+   LAYOUT SHELL
+═══════════════════════════════════════════ */
+        #app {
+            display: grid;
+            grid-template-rows: var(--nav-h) 3px 1fr;
+            grid-template-columns: var(--thumb-w) 1fr var(--panel-w);
+            height: 100dvh;
+        }
+
+        /* ── NAV ── */
+        nav {
+            grid-column: 1 / -1;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 200;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-family: 'DM Serif Display', serif;
+            font-size: 20px;
+            color: var(--text);
+        }
+
+        .logo-mark {
+            width: 30px;
+            height: 30px;
+            background: var(--gold);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-mark svg {
+            width: 15px;
+            height: 15px;
+            stroke: #1A1A2E;
+            fill: none;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .logo-name {
+            background: linear-gradient(90deg, var(--gold-l), var(--text), var(--gold));
+            background-size: 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: shimmer 4s linear infinite;
+        }
+
+        @keyframes shimmer {
+            to {
+                background-position: 200%;
+            }
+        }
+
+        .nav-center {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--text2);
+        }
+
+        .zoom-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            color: var(--text2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            transition: all var(--trans);
+        }
+
+        .zoom-btn:hover {
+            background: var(--border2);
+            color: var(--text);
+        }
+
+        #zoom-label {
+            min-width: 44px;
+            text-align: center;
+            color: var(--text);
+            font-size: 12px;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            height: 32px;
+            padding: 0 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text2);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all var(--trans);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .nav-btn svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .nav-btn:hover {
+            background: var(--border2);
+            color: var(--text);
+        }
+
+        .nav-btn.primary {
+            background: var(--gold);
+            color: #1A1A2E;
+            border-color: var(--gold);
+            font-weight: 700;
+        }
+
+        .nav-btn.primary:hover {
+            background: var(--gold-l);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(201, 168, 76, .3);
+        }
+
+        .nav-btn.primary svg {
+            stroke: #1A1A2E;
+        }
+
+        .nav-btn:disabled {
+            opacity: .35;
+            pointer-events: none;
+        }
+
+        /* ── PROGRESS ── */
+        #progress-bar {
+            grid-column: 1 / -1;
+            background: var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--gold-d), var(--gold), var(--gold-l));
+            width: 0%;
+            transition: width .3s;
+        }
+
+        /* ── THUMBNAILS ── */
+        #thumb-panel {
+            background: var(--thumb-bg);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px 10px;
+            gap: 10px;
+            transition: background var(--trans);
+        }
+
+        #thumb-panel::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        #thumb-panel::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px;
+        }
+
+        .thumb-item {
+            width: 100%;
+            cursor: pointer;
+            border-radius: 6px;
+            overflow: hidden;
+            border: 2px solid transparent;
+            transition: all var(--trans);
+            position: relative;
+            background: var(--surface);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+        }
+
+        .thumb-item:hover {
+            border-color: rgba(201, 168, 76, .4);
+            transform: translateY(-1px);
+        }
+
+        .thumb-item.active {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, .15);
+        }
+
+        .thumb-item canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .thumb-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(transparent, rgba(0, 0, 0, .7));
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            color: rgba(255, 255, 255, .8);
+            padding: 6px 6px 4px;
+            text-align: center;
+        }
+
+        .thumb-sig-dot {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--gold);
+            display: none;
+            box-shadow: 0 0 6px var(--gold);
+        }
+
+        .thumb-empty {
+            width: 100%;
+            text-align: center;
+            color: var(--text3);
+            font-size: 12px;
+            padding: 30px 10px;
+            line-height: 1.6;
+        }
+
+        /* ── PDF VIEWER ── */
+        #pdf-viewer {
+            background: var(--viewer-bg);
+            overflow-y: auto;
+            overflow-x: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 32px 24px;
+            gap: 20px;
+            position: relative;
+            transition: background var(--trans);
+        }
+
+        #pdf-viewer::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        #pdf-viewer::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #pdf-viewer::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 4px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            text-align: center;
+            padding: 60px 40px;
+            flex: 1;
+            pointer-events: none;
+            user-select: none;
+            animation: fadeUp .4s ease;
+        }
+
+        @keyframes fadeUp {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+        }
+
+        .empty-ring {
+            width: 90px;
+            height: 90px;
+            border: 2px dashed rgba(201, 168, 76, .25);
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                border-color: rgba(201, 168, 76, .2);
+            }
+
+            50% {
+                border-color: rgba(201, 168, 76, .5);
+            }
+        }
+
+        .empty-ring svg {
+            width: 36px;
+            height: 36px;
+            stroke: rgba(201, 168, 76, .4);
+            fill: none;
+            stroke-width: 1.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .empty-state h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 22px;
+            color: var(--text2);
+        }
+
+        .empty-state p {
+            font-size: 13px;
+            color: var(--text3);
+            max-width: 220px;
+            line-height: 1.7;
+        }
+
+        /* Page wrapper */
+        .page-wrapper {
+            position: relative;
+            background: white;
+            box-shadow: var(--shadow);
+            border-radius: 3px;
+            flex-shrink: 0;
+            transition: box-shadow var(--trans);
+            transform-origin: top center;
+        }
+
+        .page-wrapper:hover {
+            box-shadow: 0 16px 56px rgba(0, 0, 0, .55);
+        }
+
+        .page-meta {
+            position: absolute;
+            top: -24px;
+            left: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .page-meta-num {
+            font-family: 'DM Mono', monospace;
+            font-size: 10px;
+            letter-spacing: .07em;
+            color: var(--text2);
+            text-transform: uppercase;
+        }
+
+        /* ── DRAGGABLE ELEMENTS ── */
+        .anno-el {
+            position: absolute;
+            z-index: 200;
+            cursor: grab;
+            touch-action: none;
+            border-radius: 4px;
+            display: none;
+            transition: box-shadow .15s;
+        }
+
+        .anno-el:active {
+            cursor: grabbing;
+        }
+
+        .anno-el.selected {
+            outline: 2px solid var(--gold);
+            outline-offset: 1px;
+        }
+
+        .anno-el .anno-toolbar {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            background: var(--panel);
+            border: 1px solid var(--border2);
+            border-radius: 6px;
+            padding: 3px 5px;
+            opacity: 0;
+            transition: opacity .15s;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        .anno-el.selected .anno-toolbar {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .anno-tool-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            cursor: pointer;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .1s;
+        }
+
+        .anno-tool-btn:hover {
+            background: var(--border2);
+            color: var(--text);
+        }
+
+        .anno-tool-btn.del {
+            color: var(--danger);
+        }
+
+        .anno-tool-btn.del:hover {
+            background: rgba(224, 92, 92, .15);
+        }
+
+        .anno-el .resize-handle {
+            position: absolute;
+            bottom: -5px;
+            right: -5px;
+            width: 13px;
+            height: 13px;
+            background: var(--gold);
+            border-radius: 3px;
+            cursor: se-resize;
+            touch-action: none;
+            z-index: 201;
+        }
+
+        /* Signature specific */
+        .sig-el {
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-color: var(--drag-bg);
+            border: 1.5px dashed var(--gold);
+        }
+
+        .sig-el:active {
+            box-shadow: 0 6px 24px rgba(201, 168, 76, .25);
+        }
+
+        /* Text field specific */
+        .text-el {
+            border: 1.5px dashed var(--info);
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            min-width: 120px;
+            min-height: 32px;
+        }
+
+        .text-el input {
+            background: transparent;
+            border: none;
+            outline: none;
+            color: #1A1A2E;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: 13px;
+            width: 100%;
+            cursor: text;
+        }
+
+        .text-el .anno-toolbar {
+            border-color: var(--info);
+        }
+
+        .text-el .resize-handle {
+            background: var(--info);
+        }
+
+        /* Date field */
+        .date-el {
+            border: 1.5px dashed var(--success);
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            white-space: nowrap;
+        }
+
+        .date-el span {
+            color: #1A1A2E;
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            pointer-events: none;
+        }
+
+        .date-el .anno-toolbar {
+            border-color: var(--success);
+        }
+
+        .date-el .resize-handle {
+            background: var(--success);
+        }
+
+        /* Rubric stamp (small sig on every page) */
+        .rubric-el {
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            border: 1px solid rgba(201, 168, 76, .35);
+            opacity: .7;
+            pointer-events: none;
+        }
+
+        /* ── SIDEBAR / PANEL ── */
+        #side-panel {
+            background: var(--panel);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: background var(--trans);
+        }
+
+        .panel-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 12px 8px;
+            border: none;
+            background: transparent;
+            color: var(--text2);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            cursor: pointer;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            border-bottom: 2px solid transparent;
+            transition: all var(--trans);
+        }
+
+        .tab-btn:hover {
+            color: var(--text);
+        }
+
+        .tab-btn.active {
+            color: var(--gold);
+            border-bottom-color: var(--gold);
+        }
+
+        .tab-pane {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            flex-direction: column;
+        }
+
+        .tab-pane.active {
+            display: flex;
+        }
+
+        .tab-pane::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .tab-pane::-webkit-scrollbar-thumb {
+            background: var(--border2);
+            border-radius: 2px;
+        }
+
+        /* ── PANEL SECTIONS ── */
+        .p-section {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            animation: fadeIn .2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+        }
+
+        .p-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--text2);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .p-label::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* Upload area */
+        .upload-zone {
+            border: 2px dashed rgba(201, 168, 76, .2);
+            border-radius: var(--r);
+            padding: 20px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all var(--trans);
+            background: rgba(201, 168, 76, .02);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover,
+        .upload-zone.drag-over {
+            border-color: rgba(201, 168, 76, .55);
+            background: rgba(201, 168, 76, .07);
+        }
+
+        .upload-zone input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+        }
+
+        .upload-zone .uz-icon {
+            font-size: 24px;
+            margin-bottom: 6px;
+        }
+
+        .upload-zone p {
+            font-size: 12px;
+            color: var(--text2);
+            line-height: 1.5;
+        }
+
+        .upload-zone p strong {
+            color: var(--gold-l);
+        }
+
+        .file-chip {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(76, 175, 125, .08);
+            border: 1px solid rgba(76, 175, 125, .2);
+            border-radius: var(--rs);
+            font-size: 12px;
+            color: var(--success);
+        }
+
+        .file-chip svg {
+            flex-shrink: 0;
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .file-chip span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+        }
+
+        /* Signature pad */
+        .sig-wrap {
+            border-radius: var(--r);
+            overflow: hidden;
+            border: 1px solid var(--border2);
+        }
+
+        .sig-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: rgba(255, 255, 255, .03);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sig-header span {
+            font-size: 11px;
+            color: var(--text2);
+            font-family: 'DM Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+        }
+
+        .sig-canvas-wrap {
+            position: relative;
+            background: #FAFAF5;
+        }
+
+        canvas#sig-pad {
+            display: block;
+            width: 100%;
+            height: 180px;
+            touch-action: none;
+            cursor: crosshair;
+        }
+
+        .sig-placeholder {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            transition: opacity .2s;
+        }
+
+        .sig-placeholder .sig-line {
+            width: 180px;
+            height: 1px;
+            background: #D8D5CC;
+            margin-bottom: 8px;
+        }
+
+        .sig-placeholder p {
+            font-size: 12px;
+            color: #C0BDB5;
+        }
+
+        /* Preview strip */
+        .sig-preview {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #FAFAF5;
+            height: 60px;
+            border-top: 1px solid var(--border);
+            padding: 6px;
+        }
+
+        .sig-preview img {
+            max-height: 48px;
+            max-width: 100%;
+            object-fit: contain;
+        }
+
+        /* Color swatches */
+        .swatches {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .swatch {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2.5px solid transparent;
+            transition: transform .15s, border-color .15s;
+            flex-shrink: 0;
+        }
+
+        .swatch:hover {
+            transform: scale(1.2);
+        }
+
+        .swatch.active {
+            border-color: var(--gold);
+            transform: scale(1.1);
+        }
+
+        /* Stroke width */
+        .stroke-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .stroke-row label {
+            font-size: 11px;
+            color: var(--text2);
+            flex-shrink: 0;
+        }
+
+        .stroke-row input[type=range] {
+            flex: 1;
+            accent-color: var(--gold);
+        }
+
+        #stroke-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--text2);
+            width: 20px;
+            text-align: right;
+        }
+
+        /* Buttons */
+        .btn-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pbtn {
+            flex: 1;
+            height: 36px;
+            border-radius: var(--rs);
+            border: 1px solid var(--border);
+            background: var(--input-bg);
+            color: var(--text2);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all var(--trans);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        .pbtn svg {
+            width: 13px;
+            height: 13px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .pbtn:hover {
+            background: var(--border2);
+            color: var(--text);
+        }
+
+        .pbtn.gold {
+            background: var(--gold);
+            color: #1A1A2E;
+            border-color: var(--gold);
+            font-weight: 700;
+        }
+
+        .pbtn.gold:hover {
+            background: var(--gold-l);
+        }
+
+        .pbtn.full {
+            width: 100%;
+            flex: none;
+        }
+
+        .pbtn.danger {
+            color: var(--danger);
+        }
+
+        .pbtn.danger:hover {
+            background: rgba(224, 92, 92, .12);
+        }
+
+        /* Page select row */
+        .page-sel-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .page-sel-row label {
+            font-size: 11px;
+            color: var(--text2);
+            flex-shrink: 0;
+        }
+
+        .pselect {
+            flex: 1;
+            height: 32px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--rs);
+            color: var(--text);
+            font-size: 12px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            padding: 0 10px;
+            outline: none;
+            cursor: pointer;
+            transition: border-color var(--trans);
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .pselect:focus {
+            border-color: var(--gold);
+        }
+
+        .pselect option {
+            background: var(--panel);
+        }
+
+        /* Annotations list */
+        .anno-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .anno-list-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: var(--rs);
+            background: var(--input-bg);
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all var(--trans);
+        }
+
+        .anno-list-item:hover {
+            border-color: var(--border2);
+        }
+
+        .anno-list-item.active {
+            border-color: var(--gold);
+            background: rgba(201, 168, 76, .06);
+        }
+
+        .anno-list-icon {
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .anno-list-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .anno-list-info p {
+            font-size: 12px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .anno-list-info span {
+            font-size: 10px;
+            font-family: 'DM Mono', monospace;
+            color: var(--text2);
+        }
+
+        .anno-list-del {
+            width: 22px;
+            height: 22px;
+            border-radius: 5px;
+            border: none;
+            background: transparent;
+            color: var(--text3);
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .1s;
+        }
+
+        .anno-list-del:hover {
+            color: var(--danger);
+            background: rgba(224, 92, 92, .1);
+        }
+
+        .empty-list {
+            padding: 20px;
+            text-align: center;
+            color: var(--text3);
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        /* Extra tab */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 0;
+        }
+
+        .toggle-row label {
+            font-size: 13px;
+            color: var(--text);
+        }
+
+        .toggle-row small {
+            font-size: 11px;
+            color: var(--text2);
+            display: block;
+            margin-top: 1px;
+        }
+
+        .toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            flex-shrink: 0;
+        }
+
+        .toggle input {
+            display: none;
+        }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: var(--input-bg);
+            border-radius: 11px;
+            border: 1px solid var(--border2);
+            cursor: pointer;
+            transition: background .2s;
+        }
+
+        .toggle input:checked+.toggle-track {
+            background: var(--gold);
+            border-color: var(--gold);
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 14px;
+            height: 14px;
+            background: white;
+            border-radius: 50%;
+            transition: left .2s;
+            pointer-events: none;
+        }
+
+        .toggle input:checked~.toggle-thumb {
+            left: 21px;
+        }
+
+        .text-input {
+            width: 100%;
+            height: 36px;
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--rs);
+            color: var(--text);
+            font-size: 13px;
+            padding: 0 12px;
+            outline: none;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            transition: border-color var(--trans);
+        }
+
+        .text-input:focus {
+            border-color: var(--gold);
+        }
+
+        .text-input::placeholder {
+            color: var(--text3);
+        }
+
+        /* ── MODALS ── */
+        .modal-bg {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .65);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(6px);
+            animation: fadeBg .2s;
+        }
+
+        .modal-bg.open {
+            display: flex;
+        }
+
+        @keyframes fadeBg {
+            from {
+                opacity: 0;
+            }
+        }
+
+        .modal-card {
+            background: var(--panel);
+            border: 1px solid var(--border2);
+            border-radius: 18px;
+            padding: 28px;
+            width: 380px;
+            max-width: 90vw;
+            animation: slideUp .25s cubic-bezier(.34, 1.56, .64, 1);
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(.97);
+            }
+        }
+
+        .modal-card h3 {
+            font-family: 'DM Serif Display', serif;
+            font-size: 20px;
+            margin-bottom: 6px;
+        }
+
+        .modal-card p {
+            font-size: 13px;
+            color: var(--text2);
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .modal-btns {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Type modal font options */
+        .font-opts {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 4px;
+        }
+
+        .font-opt {
+            padding: 12px 16px;
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all var(--trans);
+            text-align: center;
+            color: #1A1A2E;
+            background: #FAFAF5;
+        }
+
+        .font-opt:hover {
+            border-color: var(--gold);
+        }
+
+        .font-opt.selected {
+            border-color: var(--gold);
+            background: rgba(201, 168, 76, .08);
+        }
+
+        .font-opt[data-font="serif"] {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-style: italic;
+            font-size: 20px;
+        }
+
+        .font-opt[data-font="script"] {
+            font-family: 'Brush Script MT', cursive;
+            font-size: 22px;
+        }
+
+        .font-opt[data-font="mono"] {
+            font-family: 'DM Mono', monospace;
+            font-size: 15px;
+            letter-spacing: .02em;
+        }
+
+        /* Confirm modal */
+        .confirm-info {
+            background: var(--input-bg);
+            border-radius: var(--r);
+            padding: 14px;
+            margin-bottom: 4px;
+        }
+
+        .confirm-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .confirm-row:last-child {
+            border: none;
+        }
+
+        .confirm-row span {
+            color: var(--text2);
+        }
+
+        .confirm-row strong {
+            color: var(--text);
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+        }
+
+        /* ── TOAST ── */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(16px);
+            background: var(--panel);
+            border: 1px solid var(--border2);
+            color: var(--text);
+            padding: 10px 18px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+            z-index: 9999;
+            opacity: 0;
+            transition: all .3s cubic-bezier(.34, 1.56, .64, 1);
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .35);
+            max-width: 90vw;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* CPF draggable element */
+        .cpf-el {
+            border: 1.5px dashed var(--gold);
+            background: rgba(201, 168, 76, .06);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 5px 10px;
+            min-width: 200px;
+            min-height: 42px;
+            border-radius: 4px;
+        }
+
+        .cpf-el .cpf-name {
+            font-family: 'DM Mono', monospace;
+            font-size: 9px;
+            color: #6B6B7A;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            pointer-events: none;
+        }
+
+        .cpf-el .cpf-value {
+            font-family: 'DM Mono', monospace;
+            font-size: 12px;
+            color: #1A1A2E;
+            font-weight: 600;
+            pointer-events: none;
+        }
+
+        .cpf-el .anno-toolbar {
+            border-color: var(--gold);
+        }
+
+        .cpf-el .resize-handle {
+            background: var(--gold-d);
+        }
+
+        /* Signer verified badge in sidebar */
+        .signer-badge {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(76, 175, 125, .07);
+            border: 1px solid rgba(76, 175, 125, .2);
+            border-radius: var(--rs);
+            animation: fadeIn .3s ease;
+        }
+
+        .signer-badge .sb-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .signer-badge .sb-info p {
+            font-size: 12px;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .signer-badge .sb-info span {
+            font-size: 11px;
+            font-family: 'DM Mono', monospace;
+            color: var(--text2);
+        }
+
+        .signer-badge .sb-edit {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--gold);
+            cursor: pointer;
+            text-decoration: underline;
+            flex-shrink: 0;
+        }
+
+        /* Auth code display */
+        .authcode-box {
+            background: var(--input-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--rs);
+            padding: 10px 12px;
+            font-family: 'DM Mono', monospace;
+            font-size: 11px;
+            color: var(--text2);
+            word-break: break-all;
+            line-height: 1.6;
+            display: none;
+        }
+
+        .authcode-box strong {
+            color: var(--gold);
+            display: block;
+            font-size: 10px;
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+        }
+
+        @media (max-width: 900px) {
+            :root {
+                --thumb-w: 0px;
+                --panel-w: 300px;
+            }
+
+            #thumb-panel {
+                display: none;
+            }
+        }
+
+        @media (max-width: 640px) {
+            #app {
+                grid-template-columns: 1fr;
+                grid-template-rows: var(--nav-h) 3px 1fr 340px;
+            }
+
+            #side-panel {
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+
+            .nav-center {
+                display: none;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="app">
+
+        <!-- ═══ NAV ═══ -->
+        <nav>
+            <div class="logo">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                </div>
+                <span class="logo-name">Hayden Sign</span>
+            </div>
+
+            <div class="nav-center">
+                <button class="zoom-btn" onclick="changeZoom(-0.15)" title="Diminuir zoom">−</button>
+                <span id="zoom-label">100%</span>
+                <button class="zoom-btn" onclick="changeZoom(+0.15)" title="Aumentar zoom">+</button>
+                <button class="zoom-btn" onclick="resetZoom()" title="Ajustar à tela"
+                    style="font-size:11px;width:38px;letter-spacing:-.5px;">⊡ fit</button>
+            </div>
+
+            <div class="nav-right">
+                <button class="nav-btn" onclick="toggleTheme()" id="theme-btn" title="Alternar tema">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                    Tema
+                </button>
+                <button class="nav-btn primary" id="btn-save" onclick="openConfirmModal()" disabled>
+                    <svg viewBox="0 0 24 24">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Baixar PDF
+                </button>
+            </div>
+        </nav>
+
+        <!-- Progress -->
+        <div id="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+
+        <!-- ═══ THUMBNAILS ═══ -->
+        <div id="thumb-panel">
+            <div class="thumb-empty" id="thumb-empty">
+                <p>As páginas do<br>documento<br>aparecem aqui</p>
+            </div>
+        </div>
+
+        <!-- ═══ PDF VIEWER ═══ -->
+        <div id="pdf-viewer">
+            <div class="empty-state" id="empty-state">
+                <div class="empty-ring">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                </div>
+                <h3>Nenhum documento</h3>
+                <p>Carregue um PDF pelo painel lateral para começar</p>
+            </div>
+        </div>
+
+        <!-- ═══ SIDE PANEL ═══ -->
+        <div id="side-panel">
+
+            <!-- Tabs -->
+            <div class="panel-tabs">
+                <button class="tab-btn active" onclick="switchTab('doc')">Documento</button>
+                <button class="tab-btn" onclick="switchTab('sig')">Assinatura</button>
+                <button class="tab-btn" onclick="switchTab('annot')">Campos</button>
+                <button class="tab-btn" onclick="switchTab('opts')">Opções</button>
+            </div>
+
+            <!-- ── TAB: DOCUMENTO ── -->
+            <div class="tab-pane active" id="tab-doc">
+                <div class="p-section">
+                    <div class="p-label">Arquivo PDF</div>
+                    <div class="upload-zone" id="upload-zone">
+                        <input type="file" id="file-input" accept="application/pdf">
+                        <div class="uz-icon">📄</div>
+                        <p><strong>Clique para selecionar</strong><br>ou arraste o PDF aqui</p>
+                    </div>
+                    <div class="file-chip" id="file-chip">
+                        <svg viewBox="0 0 24 24">
+                            <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <span id="file-name-text">—</span>
+                    </div>
+                </div>
+
+                <div class="p-section" id="doc-info-section" style="display:none;">
+                    <div class="p-label">Informações</div>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <div
+                            style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">
+                            <span style="color:var(--text2)">Páginas</span>
+                            <strong id="info-pages"
+                                style="font-family:'DM Mono',monospace;color:var(--text);font-size:11px;">—</strong>
+                        </div>
+                        <div
+                            style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border);">
+                            <span style="color:var(--text2)">Anotações</span>
+                            <strong id="info-annots"
+                                style="font-family:'DM Mono',monospace;color:var(--text);font-size:11px;">0</strong>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;">
+                            <span style="color:var(--text2)">Status</span>
+                            <strong id="info-status"
+                                style="font-family:'DM Mono',monospace;color:var(--text2);font-size:11px;">Aguardando</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── TAB: ASSINATURA ── -->
+            <div class="tab-pane" id="tab-sig">
+                <div class="p-section">
+                    <div class="p-label">Desenhar assinatura</div>
+                    <div class="sig-wrap">
+                        <div class="sig-header">
+                            <span>Área de assinatura</span>
+                            <div class="swatches">
+                                <div class="swatch active" style="background:#1A1A2E" data-color="#1A1A2E"
+                                    onclick="setColor(this)"></div>
+                                <div class="swatch" style="background:#1B3A6B" data-color="#1B3A6B"
+                                    onclick="setColor(this)"></div>
+                                <div class="swatch" style="background:#1E4D34" data-color="#1E4D34"
+                                    onclick="setColor(this)"></div>
+                                <div class="swatch" style="background:#8B1A1A" data-color="#8B1A1A"
+                                    onclick="setColor(this)"></div>
+                                <div class="swatch" style="background:#8B6914" data-color="#8B6914"
+                                    onclick="setColor(this)"></div>
+                            </div>
+                        </div>
+                        <div class="sig-canvas-wrap">
+                            <canvas id="sig-pad"></canvas>
+                            <div class="sig-placeholder" id="sig-placeholder">
+                                <div class="sig-line"></div>
+                                <p>Assine aqui com o mouse ou dedo</p>
+                            </div>
+                        </div>
+                        <div class="sig-preview" id="sig-preview">
+                            <img id="sig-preview-img" src="" alt="">
+                        </div>
+                    </div>
+
+                    <div class="stroke-row">
+                        <label>Espessura</label>
+                        <input type="range" id="stroke-range" min="1" max="6" step="0.5" value="2.5"
+                            oninput="updateStroke(this.value)">
+                        <span id="stroke-val">2.5</span>
+                    </div>
+
+                    <div class="btn-row">
+                        <button class="pbtn" onclick="clearSig()">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="1 4 1 10 7 10" />
+                                <path d="M3.51 15a9 9 0 102.13-9.36L1 10" />
+                            </svg>
+                            Limpar
+                        </button>
+                        <button class="pbtn" onclick="openTypeModal()">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="4 7 4 4 20 4 20 7" />
+                                <line x1="9" y1="20" x2="15" y2="20" />
+                                <line x1="12" y1="4" x2="12" y2="20" />
+                            </svg>
+                            Digitar
+                        </button>
+                        <button class="pbtn" id="btn-preview-sig" onclick="toggleSigPreview()">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            Preview
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-section">
+                    <div class="p-label">Identidade do signatário</div>
+                    <div class="signer-badge" id="signer-badge">
+                        <div class="sb-icon">✅</div>
+                        <div class="sb-info">
+                            <p id="badge-name">—</p>
+                            <span id="badge-cpf">—</span>
+                        </div>
+                        <span class="sb-edit" onclick="openSignerModal()">Editar</span>
+                    </div>
+                    <button class="pbtn full" id="btn-identify" onclick="openSignerModal()"
+                        style="border-color:rgba(201,168,76,.3);color:var(--gold);">
+                        <svg viewBox="0 0 24 24">
+                            <rect x="2" y="5" width="20" height="14" rx="2" />
+                            <line x1="2" y1="10" x2="22" y2="10" />
+                        </svg>
+                        Identificar signatário (CPF)
+                    </button>
+                    <div class="authcode-box" id="authcode-box">
+                        <strong>🔐 Código de autenticidade</strong>
+                        <span id="authcode-display">—</span>
+                    </div>
+                </div>
+
+                <div class="p-section">
+                    <div class="p-label">Inserir no documento</div>
+                    <div class="page-sel-row">
+                        <label>Página</label>
+                        <select class="pselect" id="sig-page-sel">
+                            <option value="">— Selecione —</option>
+                        </select>
+                    </div>
+                    <button class="pbtn gold full" onclick="placeSignature()">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                        Posicionar Assinatura
+                    </button>
+                    <p style="font-size:11px;color:var(--text2);text-align:center;line-height:1.6;">
+                        Arraste e redimensione pelo canto inferior direito. Clique na assinatura para ver opções.
+                    </p>
+                </div>
+            </div>
+
+            <!-- ── TAB: CAMPOS ── -->
+            <div class="tab-pane" id="tab-annot">
+                <div class="p-section">
+                    <div class="p-label">Adicionar campo</div>
+                    <div class="page-sel-row">
+                        <label>Página</label>
+                        <select class="pselect" id="field-page-sel">
+                            <option value="">— Selecione —</option>
+                        </select>
+                    </div>
+                    <div class="btn-row">
+                        <button class="pbtn" onclick="placeTextField()">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M17 10H3" />
+                                <path d="M21 6H3" />
+                                <path d="M21 14H3" />
+                                <path d="M17 18H3" />
+                            </svg>
+                            Texto
+                        </button>
+                        <button class="pbtn" onclick="placeDateField()">
+                            <svg viewBox="0 0 24 24">
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                            </svg>
+                            Data/Hora
+                        </button>
+                        <button class="pbtn" onclick="placeCpfField()"
+                            style="border-color:rgba(201,168,76,.3);color:var(--gold);">
+                            <svg viewBox="0 0 24 24">
+                                <rect x="2" y="5" width="20" height="14" rx="2" />
+                                <line x1="2" y1="10" x2="22" y2="10" />
+                            </svg>
+                            CPF
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-section" style="flex:1;">
+                    <div class="p-label">Elementos no documento</div>
+                    <div class="anno-list" id="anno-list">
+                        <div class="empty-list" id="anno-list-empty">
+                            Nenhum elemento<br>adicionado ainda.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── TAB: OPÇÕES ── -->
+            <div class="tab-pane" id="tab-opts">
+                <div class="p-section">
+                    <div class="p-label">Carimbo de tempo</div>
+                    <div class="toggle-row">
+                        <div>
+                            <label>Incluir data e hora</label>
+                            <small>Adiciona timestamp no rodapé</small>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="opt-timestamp" checked>
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="p-section">
+                    <div class="p-label">Rubrica automática</div>
+                    <div class="toggle-row">
+                        <div>
+                            <label>Rubricar todas as páginas</label>
+                            <small>Insere assinatura pequena no rodapé de cada página</small>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="opt-rubric">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                    <div id="rubric-pos-row" style="display:none;">
+                        <div class="page-sel-row" style="margin-top:4px;">
+                            <label>Posição</label>
+                            <select class="pselect" id="rubric-pos">
+                                <option value="br">Direito inferior</option>
+                                <option value="bl">Esquerdo inferior</option>
+                                <option value="tr">Direito superior</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-section">
+                    <div class="p-label">Proteção (opcional)</div>
+                    <div class="toggle-row">
+                        <div>
+                            <label>Proteger com senha</label>
+                            <small>Solicita senha ao abrir o PDF</small>
+                        </div>
+                        <label class="toggle">
+                            <input type="checkbox" id="opt-password" onchange="togglePasswordField()">
+                            <div class="toggle-track"></div>
+                            <div class="toggle-thumb"></div>
+                        </label>
+                    </div>
+                    <div id="password-field" style="display:none;">
+                        <input type="password" class="text-input" id="pdf-password"
+                            placeholder="Digite a senha do PDF…">
+                    </div>
+                </div>
+
+                <div class="p-section">
+                    <div class="p-label">Nome do arquivo</div>
+                    <input type="text" class="text-input" id="output-filename" value="documento_assinado"
+                        placeholder="Nome do arquivo">
+                </div>
+            </div>
+
+        </div><!-- /side-panel -->
+
+    </div><!-- /app -->
+
+    <!-- ═══ MODAL: DIGITAR ASSINATURA ═══ -->
+    <div class="modal-bg" id="type-modal">
+        <div class="modal-card">
+            <h3>Digitar assinatura</h3>
+            <p>Digite seu nome, escolha o estilo e a cor</p>
+            <input type="text" class="text-input" id="type-input" placeholder="Seu nome completo"
+                style="margin-bottom:12px;" oninput="updateTypedPreview()"
+                onkeydown="if(event.key==='Enter')applyTypedSignature()">
+
+            <!-- Live preview canvas -->
+            <div
+                style="background:#FAFAF5;border-radius:10px;border:1px solid rgba(0,0,0,.08);margin-bottom:12px;overflow:hidden;">
+                <div style="padding:4px 10px;background:rgba(0,0,0,.04);border-bottom:1px solid rgba(0,0,0,.07);">
+                    <span
+                        style="font-size:10px;font-family:'DM Mono',monospace;color:#9A9890;text-transform:uppercase;letter-spacing:.06em;">Preview</span>
+                </div>
+                <canvas id="type-preview-canvas" style="display:block;width:100%;height:80px;"></canvas>
+            </div>
+
+            <!-- Color row -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+                <span style="font-size:11px;color:var(--text2);flex-shrink:0;">Cor:</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap;">
+                    <div class="swatch type-swatch active" style="background:#1A1A2E" data-color="#1A1A2E"
+                        onclick="setTypeColor(this)"></div>
+                    <div class="swatch type-swatch" style="background:#1B3A6B" data-color="#1B3A6B"
+                        onclick="setTypeColor(this)"></div>
+                    <div class="swatch type-swatch" style="background:#1E4D34" data-color="#1E4D34"
+                        onclick="setTypeColor(this)"></div>
+                    <div class="swatch type-swatch" style="background:#8B1A1A" data-color="#8B1A1A"
+                        onclick="setTypeColor(this)"></div>
+                    <div class="swatch type-swatch" style="background:#8B6914" data-color="#8B6914"
+                        onclick="setTypeColor(this)"></div>
+                    <div class="swatch type-swatch" style="background:#4A0E7A" data-color="#4A0E7A"
+                        onclick="setTypeColor(this)"></div>
+                    <label class="swatch"
+                        style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red);cursor:pointer;position:relative;overflow:hidden;"
+                        title="Cor personalizada">
+                        <input type="color" id="type-color-picker" value="#1A1A2E"
+                            style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;"
+                            oninput="setTypeColorCustom(this.value)">
+                    </label>
+                </div>
+            </div>
+
+            <div class="font-opts">
+                <div class="font-opt selected" data-font="serif" onclick="selectFont(this)">Hayden em Itálico</div>
+                <div class="font-opt" data-font="script" onclick="selectFont(this)">Hayden Cursiva</div>
+                <div class="font-opt" data-font="mono" onclick="selectFont(this)">HAYDEN FORMAL</div>
+            </div>
+            <div class="modal-btns">
+                <button class="pbtn" style="flex:1;" onclick="closeTypeModal()">Cancelar</button>
+                <button class="pbtn gold" style="flex:1;" onclick="applyTypedSignature()">Aplicar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ MODAL: IDENTIDADE DO SIGNATÁRIO ═══ -->
+    <div class="modal-bg" id="signer-modal">
+        <div class="modal-card" style="max-width:420px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
+                <div
+                    style="width:38px;height:38px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">
+                    🪪</div>
+                <div>
+                    <h3 style="margin-bottom:2px;">Identificação do Signatário</h3>
+                    <p style="margin:0;font-size:12px;">Preencha para autenticar o documento</p>
+                </div>
+            </div>
+
+            <div
+                style="background:rgba(201,168,76,.06);border:1px solid rgba(201,168,76,.18);border-radius:10px;padding:12px 14px;margin:16px 0 14px;font-size:12px;color:var(--text2);line-height:1.6;">
+                Estas informações serão incorporadas ao PDF e gerarão um <strong style="color:var(--gold);">código único
+                    de autenticidade</strong> verificável, tornando o documento rastreável.
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+                <div>
+                    <label
+                        style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);display:block;margin-bottom:5px;">Nome
+                        completo *</label>
+                    <input type="text" class="text-input" id="signer-name"
+                        placeholder="Ex: Hayden Fernandes de Andrade">
+                </div>
+                <div>
+                    <label
+                        style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);display:block;margin-bottom:5px;">CPF
+                        *</label>
+                    <div style="position:relative;">
+                        <input type="text" class="text-input" id="signer-cpf" placeholder="000.000.000-00"
+                            maxlength="14" oninput="maskCPF(this)" style="padding-right:36px;">
+                        <div id="cpf-status"
+                            style="position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:16px;pointer-events:none;">
+                        </div>
+                    </div>
+                    <div id="cpf-error" style="font-size:11px;color:var(--danger);margin-top:4px;display:none;">CPF
+                        inválido. Verifique os dígitos.</div>
+                </div>
+                <div>
+                    <label
+                        style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text2);display:block;margin-bottom:5px;">Cargo
+                        / Qualificação <span style="opacity:.5;font-weight:400;">(opcional)</span></label>
+                    <input type="text" class="text-input" id="signer-role" placeholder="Ex: Diretor Comercial, CPF/MF">
+                </div>
+            </div>
+
+            <div
+                style="background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+                <div
+                    style="font-size:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:8px;">
+                    Pré-visualização do bloco de autenticidade</div>
+                <div id="auth-preview"
+                    style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text2);line-height:1.8;white-space:pre-wrap;">
+                </div>
+            </div>
+
+            <div class="modal-btns">
+                <button class="pbtn" style="flex:1;" onclick="closeSignerModal()">Cancelar</button>
+                <button class="pbtn gold" style="flex:1;" onclick="confirmSignerIdentity()">
+                    Confirmar identidade
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ MODAL: CONFIRMAR DOWNLOAD ═══ -->
+    <div class="modal-bg" id="confirm-modal">
+        <div class="modal-card">
+            <h3>Confirmar documento</h3>
+            <p>Revise as informações antes de gerar o PDF final.</p>
+            <div class="confirm-info">
+                <div class="confirm-row">
+                    <span>Arquivo</span>
+                    <strong id="conf-filename">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Páginas</span>
+                    <strong id="conf-pages">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Assinaturas</span>
+                    <strong id="conf-sigs">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Campos de texto</span>
+                    <strong id="conf-texts">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Rubrica automática</span>
+                    <strong id="conf-rubric">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Carimbo de tempo</span>
+                    <strong id="conf-ts">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Proteção por senha</span>
+                    <strong id="conf-pwd">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>CPF do signatário</span>
+                    <strong id="conf-cpf" style="color:var(--gold);">—</strong>
+                </div>
+                <div class="confirm-row">
+                    <span>Cód. de autenticidade</span>
+                    <strong id="conf-authcode"
+                        style="font-size:10px;color:var(--success);letter-spacing:.04em;">—</strong>
+                </div>
+            </div>
+            <div class="modal-btns">
+                <button class="pbtn" style="flex:1;" onclick="closeConfirmModal()">Cancelar</button>
+                <button class="pbtn gold" style="flex:1;" onclick="generateFinalPDF()">
+                    <svg viewBox="0 0 24 24"
+                        style="width:13px;height:13px;stroke:#1A1A2E;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    Gerar e Baixar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <!-- ═══════════════════════════════════════════
+   JAVASCRIPT
+═══════════════════════════════════════════ -->
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+
+        /* ── STATE ── */
+        let pdfBytes = null;   // Uint8Array — source of truth, never mutated
+        let pdfDoc_pdfjs = null;
+        let totalPages = 0;
+        let pageCanvases = [];     // [{pageNum, canvas, wrapper, vp}]
+        let annotations = [];     // [{id, type, pageNum, el, ...}]
+        let zoomLevel = 1.0;
+        let currentColor = '#1A1A2E';
+        let hasTypedSig = false;
+        let selectedFont = 'serif';
+        let annoIdCounter = 0;
+        let originalFileName = 'documento';
+
+        /* ── SIG PAD ── */
+        const sigCanvas = document.getElementById('sig-pad');
+        const signaturePad = new SignaturePad(sigCanvas, {
+            penColor: currentColor, minWidth: 1.2, maxWidth: 3.0,
+            velocityFilterWeight: 0.7
+        });
+
+        function resizeSigCanvas() {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            sigCanvas.width = sigCanvas.offsetWidth * ratio;
+            sigCanvas.height = sigCanvas.offsetHeight * ratio;
+            sigCanvas.getContext('2d').scale(ratio, ratio);
+            signaturePad.clear();
+            hasTypedSig = false;
+        }
+
+        window.addEventListener('resize', () => { resizeSigCanvas(); });
+        setTimeout(resizeSigCanvas, 120);
+
+        signaturePad.addEventListener('beginStroke', () => {
+            document.getElementById('sig-placeholder').style.opacity = '0';
+        });
+
+        signaturePad.addEventListener('afterUpdateStroke', () => {
+            updateSigPreviewImg();
+        });
+
+        /* ── THEME ── */
+        function toggleTheme() {
+            const html = document.documentElement;
+            html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+            document.getElementById('theme-btn').innerHTML = html.dataset.theme === 'dark'
+                ? '<svg viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>Tema'
+                : '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>Tema';
+        }
+
+        /* ── TABS ── */
+        function switchTab(name) {
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + name).classList.add('active');
+            event.currentTarget.classList.add('active');
+        }
+
+        /* ── ZOOM ── */
+        function changeZoom(delta) {
+            zoomLevel = Math.max(0.4, Math.min(2.5, zoomLevel + delta));
+            applyZoom();
+        }
+
+        function resetZoom() {
+            if (!pageCanvases.length) return;
+            const viewer = document.getElementById('pdf-viewer');
+            const vw = viewer.clientWidth - 48;
+            const firstVp = pageCanvases[0].vp;
+            zoomLevel = vw / firstVp.width;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            document.getElementById('zoom-label').textContent = Math.round(zoomLevel * 100) + '%';
+            pageCanvases.forEach(({ wrapper, vp }) => {
+                const w = Math.round(vp.width * zoomLevel);
+                const h = Math.round(vp.height * zoomLevel);
+                wrapper.style.width = w + 'px';
+                wrapper.style.height = h + 'px';
+                const cv = wrapper.querySelector('canvas.page-canvas');
+                if (cv) { cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
+            });
+        }
+
+        /* ── FILE UPLOAD ── */
+        document.getElementById('file-input').onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) await loadFile(file);
+        };
+
+        const uz = document.getElementById('upload-zone');
+        uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('drag-over'); });
+        uz.addEventListener('dragleave', () => uz.classList.remove('drag-over'));
+        uz.addEventListener('drop', async e => {
+            e.preventDefault(); uz.classList.remove('drag-over');
+            const file = e.dataTransfer.files[0];
+            if (!file || file.type !== 'application/pdf') return showToast('⚠️ Apenas arquivos PDF são aceitos');
+            await loadFile(file);
+        });
+
+        async function loadFile(file) {
+            showProgress(0);
+            pdfBytes = new Uint8Array(await file.arrayBuffer());
+            originalFileName = file.name.replace(/\.pdf$/i, '');
+            document.getElementById('output-filename').value = originalFileName + '_assinado';
+            document.getElementById('file-name-text').textContent = file.name;
+            document.getElementById('file-chip').style.display = 'flex';
+            await renderAllPages();
+            document.getElementById('btn-save').disabled = false;
+            document.getElementById('doc-info-section').style.display = '';
+            hideProgress();
+            switchTab('sig'); document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.querySelectorAll('.tab-btn')[0].classList.remove('active');
+        }
+
+        /* ── RENDER ALL PAGES ── */
+        async function renderAllPages() {
+            const viewer = document.getElementById('pdf-viewer');
+            const thumbPanel = document.getElementById('thumb-panel');
+            viewer.innerHTML = '';
+            thumbPanel.innerHTML = '';
+            pageCanvases = [];
+            annotations = [];
+            updateAnnotList();
+
+            pdfDoc_pdfjs = await pdfjsLib.getDocument({ data: pdfBytes.slice() }).promise;
+            totalPages = pdfDoc_pdfjs.numPages;
+            document.getElementById('info-pages').textContent = totalPages;
+
+            // Build page selects
+            ['sig-page-sel', 'field-page-sel'].forEach(id => {
+                const sel = document.getElementById(id);
+                sel.innerHTML = '<option value="">— Selecione —</option>';
+                for (let i = 1; i <= totalPages; i++) {
+                    const o = document.createElement('option');
+                    o.value = i; o.textContent = `Página ${i}`;
+                    sel.appendChild(o);
+                }
+            });
+
+            document.getElementById('thumb-empty') && (document.getElementById('thumb-empty').remove());
+
+            const viewerWidth = viewer.clientWidth - 48;
+
+            for (let pn = 1; pn <= totalPages; pn++) {
+                showProgress(Math.round((pn / totalPages) * 80));
+
+                const page = await pdfDoc_pdfjs.getPage(pn);
+                const vpBase = page.getViewport({ scale: 1 });
+                const scale = Math.min(viewerWidth / vpBase.width, 1.6);
+                const vp = page.getViewport({ scale });
+
+                // ── Main page wrapper ──
+                const wrapper = document.createElement('div');
+                wrapper.className = 'page-wrapper';
+                wrapper.id = `pw-${pn}`;
+                wrapper.style.cssText = `width:${vp.width}px;height:${vp.height}px;`;
+
+                const meta = document.createElement('div');
+                meta.className = 'page-meta';
+                meta.innerHTML = `<span class="page-meta-num">Pág ${pn} / ${totalPages}</span>`;
+                wrapper.appendChild(meta);
+
+                const cv = document.createElement('canvas');
+                cv.className = 'page-canvas';
+                cv.width = vp.width;
+                cv.height = vp.height;
+                cv.style.cssText = 'display:block;width:100%;height:100%;';
+                wrapper.appendChild(cv);
+
+                viewer.appendChild(wrapper);
+                pageCanvases.push({ pageNum: pn, canvas: cv, wrapper, vp, scale });
+
+                await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+
+                // ── Thumbnail ──
+                const THUMB_W = 160;
+                const tScale = THUMB_W / vpBase.width;
+                const tVp = page.getViewport({ scale: tScale });
+                const tItem = document.createElement('div');
+                tItem.className = 'thumb-item';
+                tItem.id = `thumb-${pn}`;
+                tItem.onclick = () => scrollToPage(pn);
+
+                const tCv = document.createElement('canvas');
+                tCv.width = tVp.width; tCv.height = tVp.height;
+                tCv.style.cssText = 'display:block;width:100%;height:auto;';
+                tItem.appendChild(tCv);
+
+                const tLabel = document.createElement('div');
+                tLabel.className = 'thumb-label';
+                tLabel.textContent = `${pn}`;
+                tItem.appendChild(tLabel);
+
+                const tDot = document.createElement('div');
+                tDot.className = 'thumb-sig-dot';
+                tDot.id = `thumb-dot-${pn}`;
+                tItem.appendChild(tDot);
+
+                thumbPanel.appendChild(tItem);
+                await page.render({ canvasContext: tCv.getContext('2d'), viewport: tVp }).promise;
+            }
+
+            zoomLevel = 1.0;
+            document.getElementById('zoom-label').textContent = '100%';
+            showProgress(100);
+            setTimeout(() => { document.getElementById('progress-bar').style.opacity = '0'; setTimeout(() => { document.getElementById('progress-bar').style.opacity = '1'; showProgress(0); }, 300); }, 500);
+        }
+
+        function scrollToPage(pn) {
+            const wrapper = document.getElementById(`pw-${pn}`);
+            if (wrapper) {
+                wrapper.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+                document.getElementById(`thumb-${pn}`) && document.getElementById(`thumb-${pn}`).classList.add('active');
+            }
+        }
+
+        // IntersectionObserver to highlight active thumb
+        const io = new IntersectionObserver(entries => {
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    const id = e.target.id.replace('pw-', '');
+                    document.querySelectorAll('.thumb-item').forEach(t => t.classList.remove('active'));
+                    document.getElementById(`thumb-${id}`) && document.getElementById(`thumb-${id}`).classList.add('active');
+                }
+            });
+        }, { root: document.getElementById('pdf-viewer'), threshold: 0.3 });
+
+        /* ── SIGNATURE PAD CONTROLS ── */
+        function setColor(el) {
+            document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+            currentColor = el.dataset.color;
+            signaturePad.penColor = currentColor;
+        }
+
+        function updateStroke(val) {
+            signaturePad.minWidth = val * 0.5;
+            signaturePad.maxWidth = val * 1.2;
+            document.getElementById('stroke-val').textContent = val;
+        }
+
+        function clearSig() {
+            signaturePad.clear();
+            hasTypedSig = false;
+            document.getElementById('sig-placeholder').style.opacity = '1';
+            document.getElementById('sig-preview').style.display = 'none';
+        }
+
+        function toggleSigPreview() {
+            const url = getSignatureDataURL();
+            if (!url) return showToast('✏️ Crie uma assinatura primeiro');
+            const prev = document.getElementById('sig-preview');
+            const img = document.getElementById('sig-preview-img');
+            img.src = url;
+            prev.style.display = prev.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function updateSigPreviewImg() {
+            const img = document.getElementById('sig-preview-img');
+            if (document.getElementById('sig-preview').style.display === 'flex' && !signaturePad.isEmpty()) {
+                img.src = signaturePad.toDataURL();
+            }
+        }
+
+        function getSignatureDataURL() {
+            if (!signaturePad.isEmpty()) return signaturePad.toDataURL();
+            if (hasTypedSig) return sigCanvas.toDataURL();
+            return null;
+        }
+
+        /* ── TYPE SIGNATURE ── */
+        function openTypeModal() {
+            document.getElementById('type-modal').classList.add('open');
+            // Reset typed color swatches to current color
+            document.querySelectorAll('.type-swatch').forEach(s => {
+                s.classList.toggle('active', s.dataset.color === typedColor);
+            });
+            setTimeout(() => {
+                document.getElementById('type-input').focus();
+                updateTypedPreview();
+            }, 150);
+        }
+
+        function closeTypeModal() {
+            document.getElementById('type-modal').classList.remove('open');
+        }
+
+        function selectFont(el) {
+            document.querySelectorAll('.font-opt').forEach(f => f.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedFont = el.dataset.font;
+            updateTypedPreview();
+        }
+
+        let typedColor = '#1A1A2E'; // separate color for typed sig
+
+        function setTypeColor(el) {
+            document.querySelectorAll('.type-swatch').forEach(s => s.classList.remove('active'));
+            el.classList.add('active');
+            typedColor = el.dataset.color;
+            updateTypedPreview();
+        }
+
+        function setTypeColorCustom(val) {
+            document.querySelectorAll('.type-swatch').forEach(s => s.classList.remove('active'));
+            typedColor = val;
+            updateTypedPreview();
+        }
+
+        // Shared helper: renders name into any canvas context, fitting text perfectly
+        function renderTextToCtx(ctx, name, canvasW, canvasH, fontFamily, maxFontSize, color) {
+            ctx.clearRect(0, 0, canvasW, canvasH);
+            if (!name) return;
+
+            const padding = canvasW * 0.06; // 6% padding each side
+            const maxW = canvasW - padding * 2;
+
+            // Start at desired size, shrink until it fits
+            let fontSize = maxFontSize;
+            let fontStr;
+            for (let tries = 0; tries < 30; tries++) {
+                fontStr = buildFontStr(fontFamily, fontSize);
+                ctx.font = fontStr;
+                const measured = ctx.measureText(name).width;
+                if (measured <= maxW || fontSize < 10) break;
+                fontSize -= 1.5;
+            }
+
+            ctx.font = fontStr;
+            ctx.fillStyle = color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(name, canvasW / 2, canvasH / 2);
+        }
+
+        function buildFontStr(family, size) {
+            if (family === 'serif') return `italic ${size}px 'DM Serif Display', Georgia, serif`;
+            if (family === 'script') return `${size}px 'Brush Script MT', cursive`;
+            if (family === 'mono') return `600 ${size}px 'DM Mono', monospace`;
+            return `italic ${size}px 'DM Serif Display', Georgia, serif`;
+        }
+
+        function updateTypedPreview() {
+            const name = document.getElementById('type-input').value.trim();
+            const pv = document.getElementById('type-preview-canvas');
+            if (!pv) return;
+
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            const w = pv.offsetWidth || 300;
+            const h = pv.offsetHeight || 80;
+            pv.width = w * ratio;
+            pv.height = h * ratio;
+            const ctx = pv.getContext('2d');
+            ctx.scale(ratio, ratio);
+
+            if (!name) {
+                ctx.clearRect(0, 0, w, h);
+                ctx.fillStyle = 'rgba(0,0,0,.12)';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('Seu nome aparece aqui', w / 2, h / 2);
+                return;
+            }
+
+            const maxSize = (selectedFont === 'mono') ? Math.min(h * 0.38, 30) :
+                (selectedFont === 'script') ? Math.min(h * 0.55, 46) :
+                    Math.min(h * 0.5, 42);
+            renderTextToCtx(ctx, name, w, h, selectedFont, maxSize, typedColor);
+        }
+
+        function applyTypedSignature() {
+            const name = document.getElementById('type-input').value.trim();
+            if (!name) return showToast('Digite seu nome');
+
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            const displayW = sigCanvas.offsetWidth || 280;
+            const displayH = sigCanvas.offsetHeight || 180;
+
+            // Determine ideal font size based on display height
+            const maxSize = (selectedFont === 'mono') ? Math.min(displayH * 0.34, 42) :
+                (selectedFont === 'script') ? Math.min(displayH * 0.48, 60) :
+                    Math.min(displayH * 0.44, 56);
+
+            // Measure text at ideal size with a temp canvas to get true width
+            const measure = document.createElement('canvas');
+            measure.width = 2000;
+            measure.height = 200;
+            const mCtx = measure.getContext('2d');
+            let fontSize = maxSize;
+            let fontStr = buildFontStr(selectedFont, fontSize);
+            mCtx.font = fontStr;
+            let textW = mCtx.measureText(name).width;
+
+            // If text wider than display, shrink font until it fits (with padding)
+            const maxTextW = displayW - 24;
+            while (textW > maxTextW && fontSize > 10) {
+                fontSize -= 1;
+                fontStr = buildFontStr(selectedFont, fontSize);
+                mCtx.font = fontStr;
+                textW = mCtx.measureText(name).width;
+            }
+
+            // Final canvas dimensions: width = text + padding, height = display height
+            const finalW = Math.max(displayW, Math.ceil(textW) + 32);
+            const finalH = displayH;
+
+            // Draw on offscreen canvas
+            const off = document.createElement('canvas');
+            off.width = finalW * ratio;
+            off.height = finalH * ratio;
+            const ctx = off.getContext('2d');
+            ctx.scale(ratio, ratio);
+            renderTextToCtx(ctx, name, finalW, finalH, selectedFont, fontSize, typedColor);
+
+            // Paint to sigCanvas (SignaturePad paused during resize)
+            signaturePad.off();
+            sigCanvas.width = off.width;
+            sigCanvas.height = off.height;
+            sigCanvas.style.width = finalW + 'px';
+            sigCanvas.style.height = finalH + 'px';
+            sigCanvas.getContext('2d').drawImage(off, 0, 0);
+            signaturePad.on();
+
+            document.getElementById('sig-placeholder').style.opacity = '0';
+            hasTypedSig = true;
+            currentColor = typedColor;
+            signaturePad.penColor = currentColor;
+            document.querySelectorAll('.swatch:not(.type-swatch)').forEach(s => {
+                s.classList.toggle('active', s.dataset.color === currentColor);
+            });
+
+            closeTypeModal();
+            showToast('✅ Assinatura aplicada com sucesso');
+        }
+
+        /* ── PLACE SIGNATURE ── */
+        function placeSignature() {
+            const sigURL = getSignatureDataURL();
+            if (!sigURL) return showToast('✏️ Crie uma assinatura primeiro');
+            const pageNum = parseInt(document.getElementById('sig-page-sel').value);
+            if (!pageNum) return showToast('Selecione uma página');
+
+            const el = createAnnoEl('sig', pageNum, 160, 72, sigURL);
+            el.style.backgroundImage = `url(${sigURL})`;
+            el.style.left = '24px';
+            el.style.top = '24px';
+            el.style.display = 'block';
+
+            placeElOnPage(el, pageNum);
+            showToast('📌 Assinatura posicionada — arraste para o local desejado');
+            switchTab('annot');
+            document.querySelectorAll('.tab-btn').forEach((b, i) => b.classList.toggle('active', i === 2));
+            scrollToPage(pageNum);
+            updateAnnotList();
+        }
+
+        /* ── PLACE TEXT FIELD ── */
+        function placeTextField() {
+            const pageNum = parseInt(document.getElementById('field-page-sel').value);
+            if (!pageNum) return showToast('Selecione uma página');
+
+            const el = createAnnoEl('text', pageNum, 180, 34);
+            el.classList.add('text-el');
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.placeholder = 'Digite aqui…';
+            el.querySelector('.anno-toolbar').after(inp);
+            el.style.display = 'flex';
+            el.style.left = '24px';
+            el.style.top = '80px';
+
+            placeElOnPage(el, pageNum);
+            showToast('📝 Campo de texto adicionado');
+            scrollToPage(pageNum);
+            updateAnnotList();
+        }
+
+        /* ── PLACE DATE FIELD ── */
+        function placeDateField() {
+            const pageNum = parseInt(document.getElementById('field-page-sel').value);
+            if (!pageNum) return showToast('Selecione uma página');
+
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+            const fullStr = `${dateStr}  ${timeStr}`;
+
+            const el = createAnnoEl('date', pageNum, 200, 30);
+            el.classList.add('date-el');
+            const sp = document.createElement('span');
+            sp.textContent = fullStr;
+            el.appendChild(sp);
+            el.style.display = 'flex';
+            el.style.left = '24px';
+            el.style.top = '130px';
+
+            placeElOnPage(el, pageNum);
+            showToast('📅 Campo de data adicionado');
+            scrollToPage(pageNum);
+            updateAnnotList();
+        }
+
+        /* ── CREATE ANNO ELEMENT ── */
+        function createAnnoEl(type, pageNum, w, h, dataURL = null) {
+            const id = ++annoIdCounter;
+            const el = document.createElement('div');
+            el.className = `anno-el sig-el`;
+            if (type === 'sig') el.classList.add('sig-el');
+            el.id = `anno-${id}`;
+            el.style.width = w + 'px';
+            el.style.height = h + 'px';
+
+            // Toolbar
+            const tb = document.createElement('div');
+            tb.className = 'anno-toolbar';
+            tb.innerHTML = `
+    <span style="font-size:10px;color:var(--text2);padding:0 4px;font-family:'DM Mono',monospace;">${type === 'sig' ? '✍' : type === 'text' ? '🔤' : '📅'} pág ${pageNum}</span>
+    <button class="anno-tool-btn del" onclick="deleteAnno(${id})" title="Remover">✕</button>
+  `;
+            el.prepend(tb);
+
+            // Resize handle
+            const rh = document.createElement('div');
+            rh.className = 'resize-handle';
+            el.appendChild(rh);
+
+            setupInteraction(el, rh, id, type, pageNum);
+
+            annotations.push({ id, type, pageNum, el });
+            return el;
+        }
+
+        function placeElOnPage(el, pageNum) {
+            const wrapper = document.getElementById(`pw-${pageNum}`);
+            if (wrapper) { wrapper.appendChild(el); io.observe(wrapper); }
+            const dot = document.getElementById(`thumb-dot-${pageNum}`);
+            if (dot) dot.style.display = 'block';
+            document.getElementById('info-annots').textContent = annotations.length;
+            document.getElementById('info-status').textContent = 'Editando';
+            document.getElementById('info-status').style.color = 'var(--gold)';
+        }
+
+        function deleteAnno(id) {
+            const idx = annotations.findIndex(a => a.id === id);
+            if (idx === -1) return;
+            const { el, pageNum } = annotations[idx];
+            el.remove();
+            annotations.splice(idx, 1);
+            document.getElementById('info-annots').textContent = annotations.length;
+            // check if page still has annotations
+            const stillHas = annotations.some(a => a.pageNum === pageNum);
+            if (!stillHas) {
+                const dot = document.getElementById(`thumb-dot-${pageNum}`);
+                if (dot) dot.style.display = 'none';
+            }
+            updateAnnotList();
+        }
+
+        /* ── INTERACTION (drag + resize + select) ── */
+        function setupInteraction(el, resizeHandle, id, type, pageNum) {
+            let mode = null, startX, startY, startL, startT, startW, startH;
+
+            function gp(e) { return e.touches ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : { x: e.clientX, y: e.clientY }; }
+
+            el.addEventListener('mousedown', onDown);
+            el.addEventListener('touchstart', onDown, { passive: false });
+
+            function onDown(e) {
+                // Select
+                document.querySelectorAll('.anno-el').forEach(a => a.classList.remove('selected'));
+                el.classList.add('selected');
+                highlightAnnoListItem(id);
+
+                if (e.target === resizeHandle) {
+                    mode = 'resize';
+                    const p = gp(e);
+                    startX = p.x; startY = p.y;
+                    startW = el.offsetWidth; startH = el.offsetHeight;
+                } else {
+                    mode = 'drag';
+                    const p = gp(e);
+                    startX = p.x - el.offsetLeft;
+                    startY = p.y - el.offsetTop;
+                }
+                e.preventDefault(); e.stopPropagation();
+            }
+
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('touchmove', onMove, { passive: false });
+            document.addEventListener('mouseup', onUp);
+            document.addEventListener('touchend', onUp);
+
+            function onMove(e) {
+                if (!mode) return;
+                e.preventDefault();
+                const p = gp(e);
+                const container = el.parentElement;
+                if (!container) return;
+                const cw = container.offsetWidth, ch = container.offsetHeight;
+
+                if (mode === 'drag') {
+                    let nx = Math.max(0, Math.min(p.x - startX, cw - el.offsetWidth));
+                    let ny = Math.max(0, Math.min(p.y - startY, ch - el.offsetHeight));
+                    el.style.left = nx + 'px';
+                    el.style.top = ny + 'px';
+                } else {
+                    const nw = Math.max(60, Math.min(startW + (p.x - startX), cw - el.offsetLeft));
+                    const nh = Math.max(28, Math.min(startH + (p.y - startY), ch - el.offsetTop));
+                    el.style.width = nw + 'px';
+                    el.style.height = nh + 'px';
+                }
+            }
+
+            function onUp() { mode = null; }
+        }
+
+        /* ── ANNO LIST ── */
+        function updateAnnotList() {
+            const list = document.getElementById('anno-list');
+            const empty = document.getElementById('anno-list-empty');
+            list.innerHTML = '';
+            if (annotations.length === 0) {
+                list.appendChild(Object.assign(document.createElement('div'), { className: 'empty-list', innerHTML: 'Nenhum elemento<br>adicionado ainda.', id: 'anno-list-empty' }));
+                return;
+            }
+            annotations.forEach(a => {
+                const icon = a.type === 'sig' ? '✍️' : a.type === 'text' ? '📝' : '📅';
+                const label = a.type === 'sig' ? 'Assinatura' : a.type === 'text' ? 'Campo de texto' : 'Data / hora';
+                const div = document.createElement('div');
+                div.className = 'anno-list-item';
+                div.id = `ali-${a.id}`;
+                div.onclick = () => { scrollToPage(a.pageNum); selectAnno(a.id); };
+                div.innerHTML = `
+      <div class="anno-list-icon">${icon}</div>
+      <div class="anno-list-info">
+        <p>${label}</p>
+        <span>Página ${a.pageNum}</span>
+      </div>
+      <button class="anno-list-del" onclick="event.stopPropagation();deleteAnno(${a.id})">✕</button>
+    `;
+                list.appendChild(div);
+            });
+        }
+
+        function selectAnno(id) {
+            document.querySelectorAll('.anno-el').forEach(e => e.classList.remove('selected'));
+            const a = annotations.find(x => x.id === id);
+            if (a) a.el.classList.add('selected');
+            highlightAnnoListItem(id);
+        }
+
+        function highlightAnnoListItem(id) {
+            document.querySelectorAll('.anno-list-item').forEach(i => i.classList.remove('active'));
+            const item = document.getElementById(`ali-${id}`);
+            if (item) item.classList.add('active');
+        }
+
+        /* ── OPT TOGGLES ── */
+        document.getElementById('opt-rubric').addEventListener('change', function () {
+            document.getElementById('rubric-pos-row').style.display = this.checked ? '' : 'none';
+        });
+
+        function togglePasswordField() {
+            const chk = document.getElementById('opt-password');
+            document.getElementById('password-field').style.display = chk.checked ? '' : 'none';
+        }
+
+        /* ── CONFIRM MODAL ── */
+        function openConfirmModal() {
+            if (!pdfBytes) return showToast('📄 Nenhum documento carregado');
+            const sigURL = getSignatureDataURL();
+            const sigs = annotations.filter(a => a.type === 'sig').length;
+            const texts = annotations.filter(a => a.type === 'text' || a.type === 'date').length;
+            const rubric = document.getElementById('opt-rubric').checked;
+            const ts = document.getElementById('opt-timestamp').checked;
+            const pwd = document.getElementById('opt-password').checked;
+            const fname = document.getElementById('output-filename').value || 'documento_assinado';
+
+            document.getElementById('conf-filename').textContent = fname + '.pdf';
+            document.getElementById('conf-pages').textContent = totalPages;
+            document.getElementById('conf-sigs').textContent = sigs;
+            document.getElementById('conf-texts').textContent = texts;
+            document.getElementById('conf-rubric').textContent = rubric ? 'Sim' : 'Não';
+            document.getElementById('conf-ts').textContent = ts ? 'Sim' : 'Não';
+            document.getElementById('conf-pwd').textContent = pwd ? 'Sim' : 'Não';
+
+            document.getElementById('confirm-modal').classList.add('open');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirm-modal').classList.remove('open');
+        }
+
+        /* ── GENERATE PDF ── */
+        async function generateFinalPDF() {
+            closeConfirmModal();
+            if (!pdfBytes) return;
+
+            const sigURL = getSignatureDataURL();
+            const rubric = document.getElementById('opt-rubric').checked;
+            const ts = document.getElementById('opt-timestamp').checked;
+            const fname = (document.getElementById('output-filename').value || 'documento_assinado').trim();
+
+            showToast('⏳ Gerando documento…');
+            showProgress(10);
+
+            try {
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                const doc = await PDFDocument.load(pdfBytes.slice());
+                const pages = doc.getPages();
+                const font = await doc.embedFont(StandardFonts.HelveticaOblique);
+
+                let pngImage = null;
+                if (sigURL) pngImage = await doc.embedPng(sigURL);
+
+                showProgress(30);
+
+                // ── Process each page annotation ──
+                for (const anno of annotations) {
+                    const page = pages[anno.pageNum - 1];
+                    if (!page) continue;
+
+                    const { width: pdfW, height: pdfH } = page.getSize();
+                    const canvasInfo = pageCanvases.find(p => p.pageNum === anno.pageNum);
+                    if (!canvasInfo) continue;
+
+                    const cvRect = canvasInfo.canvas.getBoundingClientRect();
+                    const elRect = anno.el.getBoundingClientRect();
+
+                    const scaleX = pdfW / cvRect.width;
+                    const scaleY = pdfH / cvRect.height;
+
+                    const ex = (elRect.left - cvRect.left) * scaleX;
+                    const ey = pdfH - ((elRect.top - cvRect.top + elRect.height) * scaleY);
+                    const ew = elRect.width * scaleX;
+                    const eh = elRect.height * scaleY;
+
+                    if (anno.type === 'sig' && pngImage) {
+                        page.drawImage(pngImage, {
+                            x: Math.max(0, ex), y: Math.max(0, ey),
+                            width: ew, height: eh,
+                            opacity: 1
+                        });
+                    } else if (anno.type === 'text') {
+                        const inp = anno.el.querySelector('input');
+                        const val = inp ? inp.value : '';
+                        if (val) {
+                            const fs = Math.min(eh * 0.65, 14);
+                            page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: fs, font, color: rgb(0.1, 0.1, 0.15) });
+                        }
+                        page.drawRectangle({ x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh, borderColor: rgb(0.35, 0.6, 0.96), borderWidth: 0.5, opacity: 0 });
+                    } else if (anno.type === 'date') {
+                        const sp = anno.el.querySelector('span');
+                        const val = sp ? sp.textContent : '';
+                        const fs = Math.min(eh * 0.55, 11);
+                        page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: fs, font, color: rgb(0.1, 0.3, 0.15) });
+                    }
+                }
+
+                showProgress(55);
+
+                // ── Rubric ──
+                if (rubric && pngImage) {
+                    const pos = document.getElementById('rubric-pos').value;
+                    for (const page of pages) {
+                        const { width: pw, height: ph } = page.getSize();
+                        const rw = 60, rh = 22;
+                        let rx, ry;
+                        if (pos === 'br') { rx = pw - rw - 14; ry = 12; }
+                        else if (pos === 'bl') { rx = 14; ry = 12; }
+                        else { rx = pw - rw - 14; ry = ph - rh - 12; }
+                        page.drawImage(pngImage, { x: rx, y: ry, width: rw, height: rh, opacity: 0.6 });
+                    }
+                }
+
+                showProgress(70);
+
+                // ── Timestamp ──
+                if (ts) {
+                    const tsFont = await doc.embedFont(StandardFonts.Helvetica);
+                    const now = new Date();
+                    const tsStr = `Assinado digitalmente em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')} | SignFlow 3.0`;
+                    for (const page of pages) {
+                        const { width: pw } = page.getSize();
+                        page.drawText(tsStr, {
+                            x: 14, y: 7,
+                            size: 6.5,
+                            font: tsFont,
+                            color: rgb(0.5, 0.5, 0.5),
+                            maxWidth: pw - 28,
+                            opacity: 0.7
+                        });
+                    }
+                }
+
+                showProgress(85);
+
+                // ── Save ──
+                const resultBytes = await doc.save();
+                showProgress(100);
+
+                const blob = new Blob([resultBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fname + '.pdf';
+                link.click();
+
+                document.getElementById('info-status').textContent = 'Assinado ✓';
+                document.getElementById('info-status').style.color = 'var(--success)';
+                showToast('✅ PDF gerado e baixado com sucesso!');
+
+            } catch (err) {
+                console.error(err);
+                showToast('❌ Erro ao gerar PDF: ' + err.message);
+            }
+
+            setTimeout(() => showProgress(0), 600);
+        }
+
+        /* ════════════════════════════════════════
+           CPF + AUTENTICAÇÃO
+        ════════════════════════════════════════ */
+
+        let signerData = null; // { name, cpf, role, authCode, timestamp }
+
+        // ── CPF Mask ──
+        function maskCPF(input) {
+            let v = input.value.replace(/\D/g, '').slice(0, 11);
+            if (v.length > 9) v = v.replace(/^(\d{3})(\d{3})(\d{3})(\d{0,2})/, '$1.$2.$3-$4');
+            else if (v.length > 6) v = v.replace(/^(\d{3})(\d{3})(\d{0,3})/, '$1.$2.$3');
+            else if (v.length > 3) v = v.replace(/^(\d{3})(\d{0,3})/, '$1.$2');
+            input.value = v;
+            updateCPFStatus(v);
+            updateAuthPreview();
+        }
+
+        // ── CPF Validation (dígito verificador) ──
+        function validateCPF(cpf) {
+            const digits = cpf.replace(/\D/g, '');
+            if (digits.length !== 11) return false;
+            if (/^(\d)\1{10}$/.test(digits)) return false; // all same digits
+            let sum = 0;
+            for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i);
+            let r = (sum * 10) % 11;
+            if (r === 10 || r === 11) r = 0;
+            if (r !== parseInt(digits[9])) return false;
+            sum = 0;
+            for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i);
+            r = (sum * 10) % 11;
+            if (r === 10 || r === 11) r = 0;
+            return r === parseInt(digits[10]);
+        }
+
+        function updateCPFStatus(cpfFormatted) {
+            const statusEl = document.getElementById('cpf-status');
+            const errorEl = document.getElementById('cpf-error');
+            const raw = cpfFormatted.replace(/\D/g, '');
+            if (raw.length < 11) { statusEl.textContent = ''; errorEl.style.display = 'none'; return; }
+            const valid = validateCPF(cpfFormatted);
+            statusEl.textContent = valid ? '✅' : '❌';
+            errorEl.style.display = valid ? 'none' : 'block';
+        }
+
+        // ── Generate unique auth code (SHA-256-like hash via Web Crypto) ──
+        async function generateAuthCode(name, cpf, timestamp) {
+            const data = `${name}|${cpf}|${timestamp}|SignFlow3`;
+            const buf = new TextEncoder().encode(data);
+            const digest = await crypto.subtle.digest('SHA-256', buf);
+            const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+            // Format: SF-XXXX-XXXX-XXXX-XXXX
+            return 'SF-' + hex.slice(0, 4).toUpperCase() + '-' +
+                hex.slice(4, 8).toUpperCase() + '-' +
+                hex.slice(8, 12).toUpperCase() + '-' +
+                hex.slice(12, 16).toUpperCase();
+        }
+
+        // ── Auth block preview ──
+        function updateAuthPreview() {
+            const name = document.getElementById('signer-name').value.trim();
+            const cpf = document.getElementById('signer-cpf').value.trim();
+            const role = document.getElementById('signer-role').value.trim();
+            const now = new Date();
+            const dateStr = now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR');
+
+            const preview = document.getElementById('auth-preview');
+            preview.textContent =
+                `Signatário : ${name || '—'}\n` +
+                `CPF        : ${cpf || '—'}\n` +
+                (role ? `Qualificação: ${role}\n` : '') +
+                `Data/Hora  : ${dateStr}\n` +
+                `Plataforma : SignFlow 3.0\n` +
+                `Auth. Code : (gerado ao confirmar)`;
+        }
+
+        // ── Open / Close ──
+        function openSignerModal() {
+            document.getElementById('signer-modal').classList.add('open');
+            updateAuthPreview();
+            setTimeout(() => document.getElementById('signer-name').focus(), 150);
+        }
+
+        function closeSignerModal() {
+            document.getElementById('signer-modal').classList.remove('open');
+        }
+
+        // ── Confirm identity ──
+        async function confirmSignerIdentity() {
+            const name = document.getElementById('signer-name').value.trim();
+            const cpf = document.getElementById('signer-cpf').value.trim();
+            const role = document.getElementById('signer-role').value.trim();
+
+            if (!name) return showToast('⚠️ Informe o nome do signatário');
+            if (!validateCPF(cpf)) return showToast('❌ CPF inválido — verifique os dígitos');
+
+            const ts = new Date().toISOString();
+            const authCode = await generateAuthCode(name, cpf, ts);
+
+            signerData = { name, cpf, role, authCode, timestamp: ts };
+
+            // Update sidebar badge
+            document.getElementById('signer-badge').style.display = 'flex';
+            document.getElementById('btn-identify').style.display = 'none';
+            document.getElementById('badge-name').textContent = name;
+            document.getElementById('badge-cpf').textContent = cpf + (role ? ` · ${role}` : '');
+
+            // Show auth code
+            document.getElementById('authcode-box').style.display = 'block';
+            document.getElementById('authcode-display').textContent = authCode;
+
+            closeSignerModal();
+            showToast('🔐 Identidade verificada — ' + authCode);
+        }
+
+        // ── Place CPF draggable field on PDF ──
+        function placeCpfField() {
+            if (!signerData) {
+                openSignerModal();
+                showToast('👆 Preencha a identidade do signatário primeiro');
+                return;
+            }
+            const pageNum = parseInt(document.getElementById('field-page-sel').value);
+            if (!pageNum) return showToast('Selecione uma página');
+
+            const el = createAnnoEl('cpf', pageNum, 220, 48);
+            el.classList.add('cpf-el');
+            el.innerHTML += `
+                <div class="cpf-name">CPF do Signatário</div>
+                <div class="cpf-value">${signerData.cpf} · ${signerData.name}</div>
+            `;
+            el.style.display = 'flex';
+            el.style.left = '24px';
+            el.style.top = '160px';
+
+            placeElOnPage(el, pageNum);
+            showToast('🪪 Campo CPF inserido — arraste para posicionar');
+            scrollToPage(pageNum);
+            updateAnnotList();
+        }
+
+        /* ── Override openConfirmModal to include CPF/auth data ── */
+        const _origOpenConfirm = openConfirmModal;
+        openConfirmModal = function () {
+            if (!pdfBytes) return showToast('📄 Nenhum documento carregado');
+            const sigs = annotations.filter(a => a.type === 'sig').length;
+            const texts = annotations.filter(a => a.type === 'text' || a.type === 'date' || a.type === 'cpf').length;
+            const rubric = document.getElementById('opt-rubric').checked;
+            const ts = document.getElementById('opt-timestamp').checked;
+            const pwd = document.getElementById('opt-password').checked;
+            const fname = document.getElementById('output-filename').value || 'documento_assinado';
+
+            document.getElementById('conf-filename').textContent = fname + '.pdf';
+            document.getElementById('conf-pages').textContent = totalPages;
+            document.getElementById('conf-sigs').textContent = sigs;
+            document.getElementById('conf-texts').textContent = texts;
+            document.getElementById('conf-rubric').textContent = rubric ? 'Sim' : 'Não';
+            document.getElementById('conf-ts').textContent = ts ? 'Sim' : 'Não';
+            document.getElementById('conf-pwd').textContent = pwd ? 'Sim' : 'Não';
+            document.getElementById('conf-cpf').textContent = signerData ? signerData.cpf : 'Não informado';
+            document.getElementById('conf-authcode').textContent = signerData ? signerData.authCode : '—';
+
+            document.getElementById('confirm-modal').classList.add('open');
+        };
+
+        /* ── Override generateFinalPDF to embed auth block on last page ── */
+        const _origGenerate = generateFinalPDF;
+        generateFinalPDF = async function () {
+            closeConfirmModal();
+            if (!pdfBytes) return;
+
+            const sigURL = getSignatureDataURL();
+            const rubric = document.getElementById('opt-rubric').checked;
+            const addTs = document.getElementById('opt-timestamp').checked;
+            const fname = (document.getElementById('output-filename').value || 'documento_assinado').trim();
+
+            showToast('⏳ Gerando documento…');
+            showProgress(10);
+
+            try {
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                const doc = await PDFDocument.load(pdfBytes.slice());
+                const pages = doc.getPages();
+                const font = await doc.embedFont(StandardFonts.HelveticaOblique);
+                const fontB = await doc.embedFont(StandardFonts.Helvetica);
+                const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+                let pngImage = null;
+                if (sigURL) pngImage = await doc.embedPng(sigURL);
+
+                showProgress(30);
+
+                // ── Annotations ──
+                for (const anno of annotations) {
+                    const page = pages[anno.pageNum - 1];
+                    if (!page) continue;
+                    const { width: pdfW, height: pdfH } = page.getSize();
+                    const canvasInfo = pageCanvases.find(p => p.pageNum === anno.pageNum);
+                    if (!canvasInfo) continue;
+                    const cvRect = canvasInfo.canvas.getBoundingClientRect();
+                    const elRect = anno.el.getBoundingClientRect();
+                    const scaleX = pdfW / cvRect.width;
+                    const scaleY = pdfH / cvRect.height;
+                    const ex = (elRect.left - cvRect.left) * scaleX;
+                    const ey = pdfH - ((elRect.top - cvRect.top + elRect.height) * scaleY);
+                    const ew = elRect.width * scaleX;
+                    const eh = elRect.height * scaleY;
+
+                    if (anno.type === 'sig' && pngImage) {
+                        page.drawImage(pngImage, { x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh });
+                    } else if (anno.type === 'text') {
+                        const val = anno.el.querySelector('input')?.value || '';
+                        if (val) page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .65, 14), font, color: rgb(.1, .1, .15) });
+                    } else if (anno.type === 'date') {
+                        const val = anno.el.querySelector('span')?.textContent || '';
+                        page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .55, 11), font: fontB, color: rgb(.1, .3, .15) });
+                    } else if (anno.type === 'cpf' && signerData) {
+                        // Draw CPF block: label + value
+                        page.drawRectangle({
+                            x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh,
+                            color: rgb(1, 1, .93), borderColor: rgb(.79, .66, .3), borderWidth: .8, opacity: .9
+                        });
+                        page.drawText('CPF DO SIGNATÁRIO', { x: Math.max(0, ex + 6), y: Math.max(0, ey + eh - 14), size: 6, font: fontBold, color: rgb(.5, .42, .18) });
+                        page.drawText(signerData.cpf, { x: Math.max(0, ex + 6), y: Math.max(0, ey + 4), size: Math.min(eh * .4, 11), font: fontBold, color: rgb(.1, .1, .2) });
+                        const nameX = Math.max(0, ex + 6) + 80;
+                        page.drawText(signerData.name, { x: nameX, y: Math.max(0, ey + 4), size: Math.min(eh * .32, 9), font: fontB, color: rgb(.3, .3, .4), maxWidth: ew - 90 });
+                    }
+                }
+
+                showProgress(50);
+
+                // ── Rubric ──
+                if (rubric && pngImage) {
+                    const pos = document.getElementById('rubric-pos').value;
+                    for (const page of pages) {
+                        const { width: pw, height: ph } = page.getSize();
+                        const rw = 60, rh = 22;
+                        let rx = (pos === 'bl') ? 14 : pw - rw - 14;
+                        let ry = (pos === 'tr') ? ph - rh - 12 : 12;
+                        page.drawImage(pngImage, { x: rx, y: ry, width: rw, height: rh, opacity: .6 });
+                    }
+                }
+
+                showProgress(65);
+
+                // ── Timestamp footer ──
+                if (addTs) {
+                    const now = new Date();
+                    const tsStr = `Assinado digitalmente em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')} | SignFlow 3.0` +
+                        (signerData ? ` | Auth: ${signerData.authCode}` : '');
+                    for (const page of pages) {
+                        const { width: pw } = page.getSize();
+                        page.drawText(tsStr, { x: 14, y: 7, size: 6, font: fontB, color: rgb(.5, .5, .5), maxWidth: pw - 28, opacity: .7 });
+                    }
+                }
+
+                showProgress(78);
+
+                // ── Authentication block on LAST PAGE ──
+                if (signerData) {
+                    const lastPage = pages[pages.length - 1];
+                    const { width: pw, height: ph } = lastPage.getSize();
+                    const now = new Date();
+                    const signedAt = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR');
+                    const blockH = 110;
+                    const blockY = 20;
+                    const blockX = 28;
+                    const blockW = pw - 56;
+
+                    // Background rect
+                    lastPage.drawRectangle({
+                        x: blockX, y: blockY, width: blockW, height: blockH,
+                        color: rgb(.98, .97, .93),
+                        borderColor: rgb(.79, .66, .3),
+                        borderWidth: .8,
+                        opacity: .95
+                    });
+
+                    // Gold top bar
+                    lastPage.drawRectangle({
+                        x: blockX, y: blockY + blockH - 18, width: blockW, height: 18,
+                        color: rgb(.79, .66, .3),
+                        opacity: 1
+                    });
+
+                    // Title
+                    lastPage.drawText('BLOCO DE AUTENTICIDADE DIGITAL — SignFlow 3.0', {
+                        x: blockX + 8, y: blockY + blockH - 13,
+                        size: 8, font: fontBold, color: rgb(1, 1, 1)
+                    });
+
+                    // Auth code badge
+                    lastPage.drawRectangle({
+                        x: pw - blockX - 130, y: blockY + blockH - 36,
+                        width: 120, height: 14,
+                        color: rgb(.1, .1, .1), opacity: .85
+                    });
+                    lastPage.drawText(signerData.authCode, {
+                        x: pw - blockX - 128, y: blockY + blockH - 34,
+                        size: 7.5, font: fontBold, color: rgb(1, .88, .35)
+                    });
+
+                    const col1X = blockX + 8;
+                    const col2X = blockX + blockW / 2 + 6;
+                    const lineH = 14;
+                    const topY = blockY + blockH - 38;
+
+                    // Col 1
+                    lastPage.drawText('Signatário', { x: col1X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(signerData.name, { x: col1X, y: topY - lineH + 2, size: 8.5, font: fontBold, color: rgb(.1, .1, .2), maxWidth: blockW / 2 - 16 });
+
+                    lastPage.drawText('CPF', { x: col1X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(signerData.cpf, { x: col1X, y: topY - lineH * 3 + 4, size: 9, font: fontBold, color: rgb(.1, .1, .2) });
+
+                    if (signerData.role) {
+                        lastPage.drawText('Qualificação', { x: col1X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                        lastPage.drawText(signerData.role, { x: col1X, y: topY - lineH * 5 + 6, size: 8, font: fontB, color: rgb(.2, .2, .3), maxWidth: blockW / 2 - 16 });
+                    }
+
+                    // Col 2
+                    lastPage.drawText('Data e hora da assinatura', { x: col2X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(signedAt, { x: col2X, y: topY - lineH + 2, size: 8.5, font: fontB, color: rgb(.1, .1, .2) });
+
+                    lastPage.drawText('Código de autenticidade', { x: col2X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(signerData.authCode, { x: col2X, y: topY - lineH * 3 + 4, size: 8, font: fontBold, color: rgb(.1, .4, .1) });
+
+                    lastPage.drawText('Plataforma', { x: col2X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText('SignFlow 3.0 — Assinatura Digital Profissional', { x: col2X, y: topY - lineH * 5 + 6, size: 7, font: fontB, color: rgb(.3, .3, .4) });
+
+                    // Divider line between cols
+                    lastPage.drawLine({
+                        start: { x: blockX + blockW / 2, y: blockY + 8 },
+                        end: { x: blockX + blockW / 2, y: blockY + blockH - 22 },
+                        thickness: .4, color: rgb(.79, .66, .3), opacity: .5
+                    });
+
+                    // Sig image next to auth block if exists
+                    if (pngImage) {
+                        const sigW = 90, sigH = 28;
+                        lastPage.drawImage(pngImage, {
+                            x: col1X, y: blockY + 10,
+                            width: sigW, height: sigH, opacity: .85
+                        });
+                    }
+                }
+
+                showProgress(92);
+
+                const resultBytes = await doc.save();
+                showProgress(100);
+                const blob = new Blob([resultBytes], { type: 'application/pdf' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = fname + '.pdf';
+                link.click();
+
+                document.getElementById('info-status').textContent = 'Assinado ✓';
+                document.getElementById('info-status').style.color = 'var(--success)';
+                showToast('✅ PDF gerado e autenticado com sucesso!');
+
+            } catch (err) {
+                console.error(err);
+                showToast('❌ Erro ao gerar PDF: ' + err.message);
+            }
+
+            setTimeout(() => showProgress(0), 600);
+        };
+
+        // Also update anno list icon/label for cpf type
+        const _origUpdateAnnotList = updateAnnotList;
+        updateAnnotList = function () {
+            const list = document.getElementById('anno-list');
+            list.innerHTML = '';
+            if (annotations.length === 0) {
+                list.appendChild(Object.assign(document.createElement('div'), {
+                    className: 'empty-list', innerHTML: 'Nenhum elemento<br>adicionado ainda.', id: 'anno-list-empty'
+                }));
+                return;
+            }
+            annotations.forEach(a => {
+                const iconMap = { sig: '✍️', text: '📝', date: '📅', cpf: '🪪' };
+                const labelMap = { sig: 'Assinatura', text: 'Campo de texto', date: 'Data / hora', cpf: 'CPF do signatário' };
+                const div = document.createElement('div');
+                div.className = 'anno-list-item';
+                div.id = `ali-${a.id}`;
+                div.onclick = () => { scrollToPage(a.pageNum); selectAnno(a.id); };
+                div.innerHTML = `
+                    <div class="anno-list-icon">${iconMap[a.type] || '📌'}</div>
+                    <div class="anno-list-info">
+                        <p>${labelMap[a.type] || a.type}</p>
+                        <span>Página ${a.pageNum}</span>
+                    </div>
+                    <button class="anno-list-del" onclick="event.stopPropagation();deleteAnno(${a.id})">✕</button>
+                `;
+                list.appendChild(div);
+            });
+        };
+        function showToast(msg, dur = 3500) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            clearTimeout(t._to);
+            t._to = setTimeout(() => t.classList.remove('show'), dur);
+        }
+
+        function showProgress(pct) {
+            const bar = document.getElementById('progress-bar');
+            const fill = document.getElementById('progress-fill');
+            if (pct === 0) { fill.style.width = '0%'; return; }
+            bar.style.display = 'block';
+            fill.style.width = pct + '%';
+        }
+
+        function hideProgress() {
+            showProgress(100);
+            setTimeout(() => showProgress(0), 500);
+        }
+    </script>
+</body>
+
+</html>
