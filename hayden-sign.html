@@ -1555,10 +1555,10 @@
 
             <!-- Tabs -->
             <div class="panel-tabs">
-                <button class="tab-btn active" onclick="switchTab('doc')">Documento</button>
-                <button class="tab-btn" onclick="switchTab('sig')">Assinatura</button>
-                <button class="tab-btn" onclick="switchTab('annot')">Campos</button>
-                <button class="tab-btn" onclick="switchTab('opts')">Opções</button>
+                <button class="tab-btn active" onclick="switchTab('doc',this)">Documento</button>
+                <button class="tab-btn" onclick="switchTab('sig',this)">Assinatura</button>
+                <button class="tab-btn" onclick="switchTab('annot',this)">Campos</button>
+                <button class="tab-btn" onclick="switchTab('opts',this)">Opções</button>
             </div>
 
             <!-- ── TAB: DOCUMENTO ── -->
@@ -2076,11 +2076,18 @@
         }
 
         /* ── TABS ── */
-        function switchTab(name) {
+        function switchTab(name, callerEl) {
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('tab-' + name).classList.add('active');
-            event.currentTarget.classList.add('active');
+            // If called from a click, callerEl is the button; otherwise find by matching tab name
+            if (callerEl) {
+                callerEl.classList.add('active');
+            } else {
+                const tabs = ['doc', 'sig', 'annot', 'opts'];
+                const idx = tabs.indexOf(name);
+                if (idx !== -1) document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
+            }
         }
 
         /* ── ZOOM ── */
@@ -2137,7 +2144,7 @@
             document.getElementById('btn-save').disabled = false;
             document.getElementById('doc-info-section').style.display = '';
             hideProgress();
-            switchTab('sig'); document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            switchTab('sig');
             document.querySelectorAll('.tab-btn')[0].classList.remove('active');
         }
 
@@ -2810,16 +2817,14 @@
                 if (ts) {
                     const tsFont = await doc.embedFont(StandardFonts.Helvetica);
                     const now = new Date();
-                    const tsStr = `Assinado digitalmente em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')} | SignFlow 3.0`;
+                    const d = now.toLocaleDateString('pt-BR');
+                    const t = now.toLocaleTimeString('pt-BR');
+                    const tsStr = `Assinado em ${d} as ${t} | Hayden Sign 3.0`;
                     for (const page of pages) {
                         const { width: pw } = page.getSize();
                         page.drawText(tsStr, {
-                            x: 14, y: 7,
-                            size: 6.5,
-                            font: tsFont,
-                            color: rgb(0.5, 0.5, 0.5),
-                            maxWidth: pw - 28,
-                            opacity: 0.7
+                            x: 14, y: 7, size: 6.5, font: tsFont,
+                            color: rgb(0.5, 0.5, 0.5), maxWidth: pw - 28, opacity: 0.7
                         });
                     }
                 }
@@ -2895,14 +2900,34 @@
         // ── Generate unique auth code (SHA-256-like hash via Web Crypto) ──
         async function generateAuthCode(name, cpf, timestamp) {
             const data = `${name}|${cpf}|${timestamp}|SignFlow3`;
-            const buf = new TextEncoder().encode(data);
-            const digest = await crypto.subtle.digest('SHA-256', buf);
-            const hex = Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
-            // Format: SF-XXXX-XXXX-XXXX-XXXX
-            return 'SF-' + hex.slice(0, 4).toUpperCase() + '-' +
-                hex.slice(4, 8).toUpperCase() + '-' +
-                hex.slice(8, 12).toUpperCase() + '-' +
-                hex.slice(12, 16).toUpperCase();
+
+            // Use Web Crypto API if available (requires HTTPS or localhost)
+            if (window.crypto && window.crypto.subtle) {
+                const buf = new TextEncoder().encode(data);
+                const digest = await window.crypto.subtle.digest('SHA-256', buf);
+                const hex = Array.from(new Uint8Array(digest))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                return 'SF-' + hex.slice(0, 4).toUpperCase() + '-' +
+                    hex.slice(4, 8).toUpperCase() + '-' +
+                    hex.slice(8, 12).toUpperCase() + '-' +
+                    hex.slice(12, 16).toUpperCase();
+            }
+
+            // Fallback for plain HTTP (VS Code server without HTTPS):
+            // pure-JS djb2 variant — deterministic, unique per input
+            function djb2(str, seed) {
+                let h = seed >>> 0;
+                for (let i = 0; i < str.length; i++)
+                    h = Math.imul(h ^ str.charCodeAt(i), 0x9e3779b9) >>> 0;
+                h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b) >>> 0;
+                h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35) >>> 0;
+                return (h ^ (h >>> 16)) >>> 0;
+            }
+            const toHex4 = n => (n & 0xFFFF).toString(16).padStart(4, '0').toUpperCase();
+            return 'SF-' + toHex4(djb2(data, 0x1A2B3C4D)) + '-' +
+                toHex4(djb2(data, 0xDEADBEEF)) + '-' +
+                toHex4(djb2(data, 0xCAFEBABE)) + '-' +
+                toHex4(djb2(data, 0xF00DCAFE));
         }
 
         // ── Auth block preview ──
@@ -3034,6 +3059,18 @@
                 const fontB = await doc.embedFont(StandardFonts.Helvetica);
                 const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
 
+                // WinAnsi only supports Latin-1 range — strip anything outside it
+                function safe(str) {
+                    if (!str) return '';
+                    return String(str)
+                        .normalize('NFD')                        // decompose accents
+                        .replace(/[\u0300-\u036f]/g, '')         // strip combining diacritics
+                        .replace(/[^\x00-\xFF]/g, '?')           // replace anything outside Latin-1
+                        .replace(/—/g, '-').replace(/–/g, '-')   // em/en dash -> hyphen
+                        .replace(/\u2019|\u2018/g, "'")          // smart quotes
+                        .replace(/\u201C|\u201D/g, '"');
+                }
+
                 let pngImage = null;
                 if (sigURL) pngImage = await doc.embedPng(sigURL);
 
@@ -3058,21 +3095,20 @@
                     if (anno.type === 'sig' && pngImage) {
                         page.drawImage(pngImage, { x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh });
                     } else if (anno.type === 'text') {
-                        const val = anno.el.querySelector('input')?.value || '';
+                        const val = safe(anno.el.querySelector('input')?.value || '');
                         if (val) page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .65, 14), font, color: rgb(.1, .1, .15) });
                     } else if (anno.type === 'date') {
-                        const val = anno.el.querySelector('span')?.textContent || '';
+                        const val = safe(anno.el.querySelector('span')?.textContent || '');
                         page.drawText(val, { x: Math.max(0, ex + 4), y: Math.max(0, ey + 4), size: Math.min(eh * .55, 11), font: fontB, color: rgb(.1, .3, .15) });
                     } else if (anno.type === 'cpf' && signerData) {
-                        // Draw CPF block: label + value
                         page.drawRectangle({
                             x: Math.max(0, ex), y: Math.max(0, ey), width: ew, height: eh,
                             color: rgb(1, 1, .93), borderColor: rgb(.79, .66, .3), borderWidth: .8, opacity: .9
                         });
-                        page.drawText('CPF DO SIGNATÁRIO', { x: Math.max(0, ex + 6), y: Math.max(0, ey + eh - 14), size: 6, font: fontBold, color: rgb(.5, .42, .18) });
-                        page.drawText(signerData.cpf, { x: Math.max(0, ex + 6), y: Math.max(0, ey + 4), size: Math.min(eh * .4, 11), font: fontBold, color: rgb(.1, .1, .2) });
+                        page.drawText('CPF DO SIGNATARIO', { x: Math.max(0, ex + 6), y: Math.max(0, ey + eh - 14), size: 6, font: fontBold, color: rgb(.5, .42, .18) });
+                        page.drawText(safe(signerData.cpf), { x: Math.max(0, ex + 6), y: Math.max(0, ey + 4), size: Math.min(eh * .4, 11), font: fontBold, color: rgb(.1, .1, .2) });
                         const nameX = Math.max(0, ex + 6) + 80;
-                        page.drawText(signerData.name, { x: nameX, y: Math.max(0, ey + 4), size: Math.min(eh * .32, 9), font: fontB, color: rgb(.3, .3, .4), maxWidth: ew - 90 });
+                        page.drawText(safe(signerData.name), { x: nameX, y: Math.max(0, ey + 4), size: Math.min(eh * .32, 9), font: fontB, color: rgb(.3, .3, .4), maxWidth: ew - 90 });
                     }
                 }
 
@@ -3095,8 +3131,10 @@
                 // ── Timestamp footer ──
                 if (addTs) {
                     const now = new Date();
-                    const tsStr = `Assinado digitalmente em ${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR')} | SignFlow 3.0` +
-                        (signerData ? ` | Auth: ${signerData.authCode}` : '');
+                    const d = now.toLocaleDateString('pt-BR');
+                    const t = now.toLocaleTimeString('pt-BR');
+                    const tsStr = safe(`Assinado em ${d} as ${t} | SignFlow 3.0` +
+                        (signerData ? ` | Auth: ${signerData.authCode}` : ''));
                     for (const page of pages) {
                         const { width: pw } = page.getSize();
                         page.drawText(tsStr, { x: 14, y: 7, size: 6, font: fontB, color: rgb(.5, .5, .5), maxWidth: pw - 28, opacity: .7 });
@@ -3110,7 +3148,7 @@
                     const lastPage = pages[pages.length - 1];
                     const { width: pw, height: ph } = lastPage.getSize();
                     const now = new Date();
-                    const signedAt = now.toLocaleDateString('pt-BR') + ' às ' + now.toLocaleTimeString('pt-BR');
+                    const signedAt = safe(now.toLocaleDateString('pt-BR') + ' as ' + now.toLocaleTimeString('pt-BR'));
                     const blockH = 110;
                     const blockY = 20;
                     const blockX = 28;
@@ -3119,21 +3157,18 @@
                     // Background rect
                     lastPage.drawRectangle({
                         x: blockX, y: blockY, width: blockW, height: blockH,
-                        color: rgb(.98, .97, .93),
-                        borderColor: rgb(.79, .66, .3),
-                        borderWidth: .8,
-                        opacity: .95
+                        color: rgb(.98, .97, .93), borderColor: rgb(.79, .66, .3),
+                        borderWidth: .8, opacity: .95
                     });
 
                     // Gold top bar
                     lastPage.drawRectangle({
                         x: blockX, y: blockY + blockH - 18, width: blockW, height: 18,
-                        color: rgb(.79, .66, .3),
-                        opacity: 1
+                        color: rgb(.79, .66, .3), opacity: 1
                     });
 
-                    // Title
-                    lastPage.drawText('BLOCO DE AUTENTICIDADE DIGITAL — SignFlow 3.0', {
+                    // Title — all uppercase ASCII
+                    lastPage.drawText('BLOCO DE AUTENTICIDADE DIGITAL - Hayden Sign 3.0', {
                         x: blockX + 8, y: blockY + blockH - 13,
                         size: 8, font: fontBold, color: rgb(1, 1, 1)
                     });
@@ -3144,7 +3179,7 @@
                         width: 120, height: 14,
                         color: rgb(.1, .1, .1), opacity: .85
                     });
-                    lastPage.drawText(signerData.authCode, {
+                    lastPage.drawText(safe(signerData.authCode), {
                         x: pw - blockX - 128, y: blockY + blockH - 34,
                         size: 7.5, font: fontBold, color: rgb(1, .88, .35)
                     });
@@ -3155,28 +3190,28 @@
                     const topY = blockY + blockH - 38;
 
                     // Col 1
-                    lastPage.drawText('Signatário', { x: col1X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(signerData.name, { x: col1X, y: topY - lineH + 2, size: 8.5, font: fontBold, color: rgb(.1, .1, .2), maxWidth: blockW / 2 - 16 });
+                    lastPage.drawText('Signatario', { x: col1X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(safe(signerData.name), { x: col1X, y: topY - lineH + 2, size: 8.5, font: fontBold, color: rgb(.1, .1, .2), maxWidth: blockW / 2 - 16 });
 
                     lastPage.drawText('CPF', { x: col1X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(signerData.cpf, { x: col1X, y: topY - lineH * 3 + 4, size: 9, font: fontBold, color: rgb(.1, .1, .2) });
+                    lastPage.drawText(safe(signerData.cpf), { x: col1X, y: topY - lineH * 3 + 4, size: 9, font: fontBold, color: rgb(.1, .1, .2) });
 
                     if (signerData.role) {
-                        lastPage.drawText('Qualificação', { x: col1X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                        lastPage.drawText(signerData.role, { x: col1X, y: topY - lineH * 5 + 6, size: 8, font: fontB, color: rgb(.2, .2, .3), maxWidth: blockW / 2 - 16 });
+                        lastPage.drawText('Qualificacao', { x: col1X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                        lastPage.drawText(safe(signerData.role), { x: col1X, y: topY - lineH * 5 + 6, size: 8, font: fontB, color: rgb(.2, .2, .3), maxWidth: blockW / 2 - 16 });
                     }
 
                     // Col 2
                     lastPage.drawText('Data e hora da assinatura', { x: col2X, y: topY, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
                     lastPage.drawText(signedAt, { x: col2X, y: topY - lineH + 2, size: 8.5, font: fontB, color: rgb(.1, .1, .2) });
 
-                    lastPage.drawText('Código de autenticidade', { x: col2X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText(signerData.authCode, { x: col2X, y: topY - lineH * 3 + 4, size: 8, font: fontBold, color: rgb(.1, .4, .1) });
+                    lastPage.drawText('Codigo de autenticidade', { x: col2X, y: topY - lineH * 2 + 2, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
+                    lastPage.drawText(safe(signerData.authCode), { x: col2X, y: topY - lineH * 3 + 4, size: 8, font: fontBold, color: rgb(.1, .4, .1) });
 
                     lastPage.drawText('Plataforma', { x: col2X, y: topY - lineH * 4 + 4, size: 6.5, font: fontBold, color: rgb(.45, .36, .12) });
-                    lastPage.drawText('SignFlow 3.0 — Assinatura Digital Profissional', { x: col2X, y: topY - lineH * 5 + 6, size: 7, font: fontB, color: rgb(.3, .3, .4) });
+                    lastPage.drawText('Hayden Sign 3.0 - Assinatura Digital Profissional', { x: col2X, y: topY - lineH * 5 + 6, size: 7, font: fontB, color: rgb(.3, .3, .4) });
 
-                    // Divider line between cols
+                    // Divider line
                     lastPage.drawLine({
                         start: { x: blockX + blockW / 2, y: blockY + 8 },
                         end: { x: blockX + blockW / 2, y: blockY + blockH - 22 },
