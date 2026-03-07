@@ -1,0 +1,45 @@
+name: Deploy para GitHub Pages
+
+on:
+  push:
+    branches:
+      - main   # dispara sempre que você fizer push na branch main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      # Injeta as credenciais do Supabase no HTML
+      # Os valores vêm de Settings > Secrets and variables > Actions
+      - name: Injetar credenciais Supabase
+        run: |
+          sed -i "s|__SB_URL__|${{ secrets.SB_URL }}|g" inventario-quallit.html
+          sed -i "s|__SB_KEY__|${{ secrets.SB_KEY }}|g" inventario-quallit.html
+
+      - name: Configurar GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Publicar arquivos
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'   # publica tudo na raiz do repositório
+
+      - name: Deploy para GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
