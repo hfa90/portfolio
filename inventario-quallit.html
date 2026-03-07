@@ -2257,6 +2257,8 @@
                             class="nav-icon">📈</span>Relatórios</button>
                     <button class="nav-item" id="ni-admin-backup" onclick="nav('admin-backup')"><span
                             class="nav-icon">💾</span>Backups</button>
+                    <button class="nav-item" id="ni-admin-log" onclick="nav('admin-log')"><span
+                            class="nav-icon">📜</span>Log de Auditoria</button>
                 </div>
                 <div class="sidebar-section" id="cd-nav" style="display:none">
                     <div class="sidebar-label">Meu Inventário</div>
@@ -2764,12 +2766,75 @@
                     </div>
                 </div>
 
+                <!-- ADMIN LOG -->
+                <div class="page" id="page-admin-log">
+                    <div class="page-header fade-in">
+                        <div>
+                            <div class="page-title">📜 Log de Auditoria</div>
+                            <div class="page-subtitle">Todas as ações realizadas no sistema — logins, adições, edições e
+                                exclusões</div>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-ghost" onclick="loadLogPage()">🔄 Atualizar</button>
+                            <button class="btn btn-outline" onclick="exportLog()">📥 Exportar Excel</button>
+                        </div>
+                    </div>
+                    <!-- Online now -->
+                    <div id="online-panel" style="margin-bottom:20px;display:none">
+                        <div
+                            style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--mono);margin-bottom:10px">
+                            🟢 ONLINE AGORA</div>
+                        <div id="online-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="table-container fade-in">
+                        <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
+                            <input class="search-input" placeholder="🔍 Buscar..." id="log-search" oninput="filterLog()"
+                                style="min-width:180px">
+                            <select class="filter-select" id="log-flt-cd" onchange="filterLog()">
+                                <option value="">Todos os CDs</option>
+                            </select>
+                            <select class="filter-select" id="log-flt-action" onchange="filterLog()">
+                                <option value="">Todas Ações</option>
+                                <option value="login">🔑 Login</option>
+                                <option value="add">➕ Adição</option>
+                                <option value="edit">✏️ Edição</option>
+                                <option value="delete">🗑️ Exclusão</option>
+                            </select>
+                            <select class="filter-select" id="log-flt-date" onchange="filterLog()">
+                                <option value="">Qualquer data</option>
+                                <option value="today">Hoje</option>
+                                <option value="week">Últimos 7 dias</option>
+                                <option value="month">Último mês</option>
+                            </select>
+                            <div style="flex:1"></div>
+                            <span id="log-count"
+                                style="font-size:12px;color:var(--text3);font-family:var(--mono);align-self:center"></span>
+                        </div>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:36px">#</th>
+                                        <th>Data/Hora</th>
+                                        <th>Usuário</th>
+                                        <th>CD</th>
+                                        <th>Ação</th>
+                                        <th>Categoria</th>
+                                        <th>Equipamento</th>
+                                        <th>Detalhes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tb-log"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
-
-
-    <!-- CUSTOM DIALOG -->
     <div class="dialog-overlay" id="app-dialog">
         <div class="dialog-box" id="dialog-box">
             <div class="dialog-stripe" id="dialog-stripe"></div>
@@ -2958,8 +3023,10 @@
         // ============================================================
         // SUPABASE CLIENT
         // ============================================================
-        const SB_URL = 'https://dhjbdkxugctpflqfuzed.supabase.co';
-        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRoamJka3h1Z2N0cGZscWZ1emVkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIyMDQ4MDAsImV4cCI6MjA4Nzc4MDgwMH0.3OcMUD0KGZS6IEvgVh8bKrUPLOcThkxADl2xhvpL17g';
+        // As credenciais são injetadas pelo GitHub Actions via secrets.
+        // No repositório só existem os placeholders abaixo — nunca os valores reais.
+        const SB_URL = '__SB_URL__';
+        const SB_KEY = '__SB_KEY__';
 
         async function sbReq(method, table, qs = '', body = null) {
             const r = await fetch(`${SB_URL}/rest/v1/${table}${qs}`, {
@@ -3107,9 +3174,10 @@
                 const rows = await DB.get('admin_users', `?email=eq.${enc(email)}&password=eq.${enc(pass)}&select=*`);
                 if (!rows.length) { toast('Credenciais inválidas', 'error'); return; }
                 const admin = rows[0];
-                ME = { name: admin.name || 'Administrador', email: admin.email }; ROLE = 'admin';
+                ME = { name: admin.name || 'Administrador', email: admin.email, id: admin.id }; ROLE = 'admin';
                 // Update last access
                 await DB.patch('admin_users', `?id=eq.${admin.id}`, { last_access: new Date().toISOString() }).catch(() => { });
+                await writeLog({ actor_type: 'admin', actor_name: ME.name, actor_cd: 'ADMIN', action: 'login', detail: `Login de administrador: ${ME.email}` }).catch(() => { });
                 sessionStorage.setItem('ta', 'admin:' + admin.id);
                 await boot();
             } catch (e) {
@@ -3128,6 +3196,8 @@
                 if (!rows.length) { setLoad(false); return toast('Código ou senha incorretos', 'error'); }
                 ME = rows[0]; ROLE = 'cd';
                 await DB.patch('cd_users', `?id=eq.${ME.id}`, { last_access: new Date().toISOString() });
+                await writeLog({ actor_type: 'cd', actor_name: ME.name, actor_cd: ME.cd, action: 'login', detail: `Login do CD: ${ME.cd} — ${ME.name}` }).catch(() => { });
+                await updatePresence(true).catch(() => { });
                 sessionStorage.setItem('ta', 'cd:' + ME.id);
                 await boot();
             } catch (e) { setLoad(false); toast('Erro: ' + e.message, 'error'); }
@@ -3158,8 +3228,8 @@
 
                 // ── FIX: navigate properly so page + nav both activate ──
                 renderMobNav();
-                if (isAdmin) await nav('admin-dashboard');
-                else { renderCustomNav(); await nav('cd-dashboard'); }
+                if (isAdmin) { await nav('admin-dashboard'); startOnlinePolling(); }
+                else { renderCustomNav(); await nav('cd-dashboard'); startPresence(); }
 
                 setLoad(false);
             } catch (e) { setLoad(false); toast('Erro ao carregar: ' + e.message, 'error'); }
@@ -3186,6 +3256,10 @@
         async function logout() {
             const ok = await dlgConfirmLogout();
             if (!ok) return;
+            if (ROLE === 'cd') await updatePresence(false).catch(() => { });
+            if (ROLE === 'cd') await writeLog({ actor_type: 'cd', actor_name: ME?.name, actor_cd: ME?.cd, action: 'logout', detail: `Logout: ${ME?.cd} — ${ME?.name}` }).catch(() => { });
+            stopPresence();
+            if (_onlineInterval) { clearInterval(_onlineInterval); _onlineInterval = null; }
             sessionStorage.clear();
             ME = ROLE = currentCat = editingId = null;
             cdsCache = itemsCache = catsCache = [];
@@ -3209,7 +3283,7 @@
                     { id: 'admin-inventory', icon: '📋', label: 'Inventário' },
                     { id: 'admin-cds', icon: '👥', label: 'CDs' },
                     { id: 'admin-backup', icon: '💾', label: 'Backups' },
-                    { id: 'admin-reports', icon: '📈', label: 'Relatórios' },
+                    { id: 'admin-log', icon: '📜', label: 'Log' },
                 ].map(item =>
                     `<button class="mob-nav-btn" id="mbn-${item.id}" onclick="nav('${item.id}')">
                         <span class="mn-icon">${item.icon}</span>${item.label}
@@ -3259,6 +3333,7 @@
                 'admin-categories': loadCatsPage,
                 'admin-reports': loadReportsPage,
                 'admin-backup': loadAdminBackup,
+                'admin-log': loadLogPage,
                 'cd-dashboard': loadCDDash,
                 'cd-backup': loadCDBackup
             };
@@ -4089,10 +4164,12 @@
                 if (editingId) {
                     const r = await DB.patch('inventory_items', `?id=eq.${editingId}`, { ...body, updated_at: new Date().toISOString() });
                     const u = Array.isArray(r) ? r[0] : r; const idx = itemsCache.findIndex(i => i.id === editingId); if (idx >= 0) itemsCache[idx] = { ...itemsCache[idx], ...u };
+                    await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'edit', category: catId, item_name: body.equipamento || body.modelo || '—', detail: `Editou: ${body.equipamento || body.modelo || 'item'} · ${body.fabricante || ''} (${catId})` }).catch(() => { });
                     toast('Item atualizado!', 'success');
                 } else {
                     body.cd_id = ME.id;
                     const r = await DB.post('inventory_items', body); const ni = Array.isArray(r) ? r[0] : r; itemsCache.unshift(ni);
+                    await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'add', category: catId, item_name: body.equipamento || body.modelo || '—', detail: `Adicionou: ${body.equipamento || body.modelo || 'item'} · ${body.fabricante || ''} (${catId})` }).catch(() => { });
                     toast('Item adicionado!', 'success');
                 }
                 closeModal('m-add-item'); editingId = null;
@@ -4145,6 +4222,7 @@
             if (!ok) return;
             try {
                 await DB.delete('inventory_items', `?id=eq.${itemId}`);
+                await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'delete', category: item?.category, item_name: item?.equipamento || item?.modelo || '—', detail: `Excluiu: ${item?.equipamento || item?.modelo || 'item'} · ${item?.fabricante || ''} (${item?.category || ''})` }).catch(() => { });
                 itemsCache = itemsCache.filter(i => i.id !== itemId);
                 if (currentCat) renderCatTable(itemsCache.filter(i => i.category === currentCat), currentCat);
                 toast('Item removido', 'info');
@@ -4341,7 +4419,217 @@
         }
 
         // ============================================================
-        // THEME TOGGLE
+        // AUDIT LOG
+        // ============================================================
+        let logCache = [];
+
+        // Write a log entry to Supabase (table: audit_log)
+        // Falls back silently if table doesn't exist yet
+        async function writeLog({ actor_type, actor_name, actor_cd, action, category = null, item_name = null, detail = '' }) {
+            try {
+                await DB.post('audit_log', {
+                    actor_type: actor_type || 'unknown',
+                    actor_name: actor_name || '—',
+                    actor_cd: actor_cd || '—',
+                    action,
+                    category: category || null,
+                    item_name: item_name || null,
+                    detail,
+                    created_at: new Date().toISOString()
+                });
+            } catch (e) {
+                // If table doesn't exist, silently ignore (don't break the app)
+                console.warn('audit_log write failed (table may not exist):', e.message);
+            }
+        }
+
+        // Online presence: update cd_users.online_at every 60s while active
+        let _presenceInterval = null;
+        async function updatePresence(online) {
+            if (!ME?.id || ROLE !== 'cd') return;
+            await DB.patch('cd_users', `?id=eq.${ME.id}`, { online_at: online ? new Date().toISOString() : null }).catch(() => { });
+        }
+        function startPresence() {
+            stopPresence();
+            updatePresence(true).catch(() => { });
+            _presenceInterval = setInterval(() => updatePresence(true).catch(() => { }), 55000);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') updatePresence(false).catch(() => { });
+                else updatePresence(true).catch(() => { });
+            });
+            window.addEventListener('beforeunload', () => updatePresence(false));
+        }
+        function stopPresence() {
+            if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+        }
+
+        async function loadLogPage() {
+            setLoad(true, 'Carregando log...');
+            try {
+                const [logs, cds] = await Promise.all([
+                    DB.get('audit_log', '?select=*&order=created_at.desc&limit=1000').catch(() => []),
+                    DB.get('cd_users', '?select=id,name,cd,online_at&order=name.asc').catch(() => [])
+                ]);
+                logCache = logs;
+                // Populate CD filter
+                const sel = document.getElementById('log-flt-cd');
+                const uniqueCDs = [...new Map(logs.filter(l => l.actor_cd && l.actor_cd !== 'ADMIN').map(l => [l.actor_cd, l])).values()];
+                sel.innerHTML = '<option value="">Todos os CDs</option>' +
+                    uniqueCDs.map(l => `<option value="${l.actor_cd}">${l.actor_cd} — ${l.actor_name}</option>`).join('');
+                // Render online CDs
+                renderOnlineCDs(cds);
+                renderLogTable(logs, cds);
+                setLoad(false);
+            } catch (e) { setLoad(false); toast('Erro ao carregar log: ' + e.message, 'error'); }
+        }
+
+        function renderOnlineCDs(cds) {
+            const panel = document.getElementById('online-panel');
+            const chips = document.getElementById('online-chips');
+            if (!panel || !chips) return;
+            const now = Date.now();
+            // Consider online if online_at within last 2 minutes
+            const online = cds.filter(cd => cd.online_at && (now - new Date(cd.online_at).getTime()) < 120000);
+            if (!online.length) { panel.style.display = 'none'; return; }
+            panel.style.display = 'block';
+            chips.innerHTML = online.map(cd =>
+                `<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.25);border-radius:20px;padding:5px 12px 5px 8px">
+                    <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e;display:inline-block;animation:pulse-dot 1.5s ease-in-out infinite"></span>
+                    <span style="font-size:12px;font-weight:600;color:var(--green)">${cd.cd}</span>
+                    <span style="font-size:12px;color:var(--text2)">${cd.name}</span>
+                </div>`
+            ).join('');
+        }
+
+        function filterLog() {
+            const q = document.getElementById('log-search')?.value.toLowerCase() || '';
+            const cdF = document.getElementById('log-flt-cd')?.value || '';
+            const actionF = document.getElementById('log-flt-action')?.value || '';
+            const dateF = document.getElementById('log-flt-date')?.value || '';
+            const now = new Date();
+            let logs = logCache;
+            if (cdF) logs = logs.filter(l => l.actor_cd === cdF);
+            if (actionF) logs = logs.filter(l => l.action === actionF);
+            if (dateF === 'today') { const d = now.toLocaleDateString('pt-BR'); logs = logs.filter(l => new Date(l.created_at).toLocaleDateString('pt-BR') === d); }
+            else if (dateF === 'week') { const w = new Date(now - 7 * 86400000); logs = logs.filter(l => new Date(l.created_at) >= w); }
+            else if (dateF === 'month') { const m = new Date(now - 30 * 86400000); logs = logs.filter(l => new Date(l.created_at) >= m); }
+            if (q) logs = logs.filter(l => JSON.stringify(l).toLowerCase().includes(q));
+            renderLogTable(logs, []);
+        }
+
+        function renderLogTable(logs, cds) {
+            const tb = document.getElementById('tb-log');
+            const countEl = document.getElementById('log-count');
+            if (countEl) countEl.textContent = `${logs.length} registro(s)`;
+            if (!logs.length) {
+                tb.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📜</div><div class="empty-title">Nenhum registro encontrado</div><div class="empty-text">As ações realizadas aparecerão aqui automaticamente.<br>Certifique-se que a tabela <code style="font-family:var(--mono);background:var(--bg3);padding:2px 6px;border-radius:4px">audit_log</code> existe no Supabase.</div></div></td></tr>`;
+                return;
+            }
+            const actionCfg = {
+                login: { icon: '🔑', label: 'Login', cls: 'badge-active' },
+                logout: { icon: '🚪', label: 'Logout', cls: 'badge-inactive' },
+                add: { icon: '➕', label: 'Adição', cls: 'badge-backup' },
+                edit: { icon: '✏️', label: 'Edição', cls: 'badge', style: 'background:rgba(245,158,11,.1);color:var(--yellow);border:1px solid rgba(245,158,11,.2)' },
+                delete: { icon: '🗑️', label: 'Exclusão', cls: 'badge-inactive' }
+            };
+            tb.innerHTML = logs.map((l, idx) => {
+                const ac = actionCfg[l.action] || { icon: '⚙️', label: l.action, cls: 'badge-cd' };
+                const dt = new Date(l.created_at);
+                const dateStr = dt.toLocaleDateString('pt-BR');
+                const timeStr = dt.toLocaleTimeString('pt-BR');
+                const isAdmin = l.actor_type === 'admin';
+                const avatarCls = isAdmin ? 'avatar-admin' : 'avatar-cd';
+                const initials = (l.actor_name || '?')[0].toUpperCase();
+                const catEl = l.category ? `<span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${l.category}</span>` : '—';
+                const badgeEl = ac.style
+                    ? `<span class="badge" style="${ac.style}">${ac.icon} ${ac.label}</span>`
+                    : `<span class="badge ${ac.cls}">${ac.icon} ${ac.label}</span>`;
+                return `<tr>
+                    <td style="text-align:center;color:var(--text3);font-family:var(--mono);font-size:11px">${logs.length - idx}</td>
+                    <td><div style="font-size:13px">${dateStr}</div><div style="font-size:11px;color:var(--text3);font-family:var(--mono)">${timeStr}</div></td>
+                    <td><div style="display:flex;align-items:center;gap:8px">
+                        <div class="user-avatar ${avatarCls}" style="width:26px;height:26px;font-size:11px;flex-shrink:0">${initials}</div>
+                        <div><div style="font-size:13px;font-weight:500">${l.actor_name || '—'}</div><div style="font-size:11px;color:var(--text3)">${isAdmin ? 'Administrador' : 'CD'}</div></div>
+                    </div></td>
+                    <td><span class="badge ${isAdmin ? 'badge-inactive' : 'badge-cd'}">${l.actor_cd || '—'}</span></td>
+                    <td>${badgeEl}</td>
+                    <td>${catEl}</td>
+                    <td style="font-size:12px">${l.item_name || '—'}</td>
+                    <td style="font-size:11px;color:var(--text3);max-width:220px;word-break:break-word">${l.detail || '—'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function exportLog() {
+            if (!logCache?.length) return toast('Nenhum dado para exportar', 'error');
+            const data = logCache.map((l, idx) => ({
+                '#': logCache.length - idx,
+                'Data': new Date(l.created_at).toLocaleDateString('pt-BR'),
+                'Hora': new Date(l.created_at).toLocaleTimeString('pt-BR'),
+                'Tipo': l.actor_type === 'admin' ? 'Administrador' : 'CD',
+                'Usuário': l.actor_name || '',
+                'CD': l.actor_cd || '',
+                'Ação': l.action || '',
+                'Categoria': l.category || '',
+                'Equipamento': l.item_name || '',
+                'Detalhes': l.detail || ''
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws['!cols'] = [{ wch: 5 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 12 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 40 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Log de Auditoria');
+            XLSX.writeFile(wb, `log_auditoria_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            toast('Log exportado!', 'success');
+        }
+
+        // ============================================================
+        // ONLINE CDs INDICATOR — visible to ALL users in topbar/sidebar
+        // ============================================================
+        let _onlineInterval = null;
+
+        async function refreshOnlineIndicator() {
+            try {
+                const cds = await DB.get('cd_users', '?select=id,name,cd,online_at&order=name.asc');
+                const now = Date.now();
+                const online = cds.filter(cd => cd.online_at && (now - new Date(cd.online_at).getTime()) < 120000);
+                // Update log page if open
+                const logPage = document.getElementById('page-admin-log');
+                if (logPage?.classList.contains('active')) renderOnlineCDs(cds);
+                // Update sidebar indicator
+                let badge = document.getElementById('online-sidebar-badge');
+                if (!badge) {
+                    // inject below CDs nav item
+                    const cdsNav = document.getElementById('ni-admin-cds');
+                    if (cdsNav) {
+                        const wrap = document.createElement('div');
+                        wrap.id = 'online-sidebar-wrap';
+                        wrap.style.cssText = 'margin:4px 0 8px;padding:0 8px';
+                        wrap.innerHTML = '<div id="online-sidebar-badge"></div>';
+                        cdsNav.after(wrap);
+                        badge = document.getElementById('online-sidebar-badge');
+                    }
+                }
+                if (badge) {
+                    if (online.length) {
+                        badge.innerHTML = `<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.2);border-radius:8px;cursor:pointer" onclick="nav('admin-log')" title="Ver log">
+                            <span style="width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 5px #22c55e;display:inline-block"></span>
+                            <span style="font-size:11px;font-weight:600;color:var(--green)">${online.length} online</span>
+                            <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${online.slice(0, 2).map(c => c.cd).join(', ')}${online.length > 2 ? '…' : ''}</span>
+                        </div>`;
+                    } else {
+                        badge.innerHTML = '';
+                    }
+                }
+            } catch { }
+        }
+
+        function startOnlinePolling() {
+            if (_onlineInterval) clearInterval(_onlineInterval);
+            refreshOnlineIndicator();
+            _onlineInterval = setInterval(refreshOnlineIndicator, 60000);
+        }
+
+        // ============================================================
         // ============================================================
         function toggleTheme() {
             const html = document.documentElement;
@@ -4364,7 +4652,7 @@
         // BOOT
         // ============================================================
         initTheme();
-        window.addEventListener('load', resume);
+        window.addEventListener('load', async () => { await resume(); });
     </script>
 </body>
 
