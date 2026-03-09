@@ -2387,7 +2387,37 @@
             }
         }
 
-        /* ── iOS bottom sheet animation ── */
+        /* ── PHOTO UPLOAD ── */
+        #photo-upload-area:hover {
+            border-color: var(--accent);
+            background: rgba(14, 165, 233, .04);
+        }
+
+        /* ── CHECKLIST ── */
+        #checklist-content input[type=checkbox] {
+            flex-shrink: 0;
+        }
+
+        /* ── QR CANVAS ── */
+        #qr-canvas {
+            image-rendering: pixelated;
+        }
+
+        /* ── DATE INPUT THEME ── */
+        input[type=date].filter-select {
+            color-scheme: dark;
+        }
+
+        [data-theme="light"] input[type=date].filter-select {
+            color-scheme: light;
+        }
+
+        /* ── MOVE HISTORY ── */
+        #move-history {
+            max-height: 160px;
+            overflow-y: auto;
+        }
+
         @keyframes iosSheetUp {
             from {
                 opacity: 0;
@@ -2542,731 +2572,918 @@
                             <div class="page-title">Dashboard</div>
                             <div class="page-subtitle">Visão geral do inventário corporativo</div>
                         </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="loadDashboard()">🔄 Atualizar</button>
+                        <div class="page-actions"><button class="btn btn-ghost" onclick="loadDashboard()">🔄
+                                Atualizar</button>
+                            <button class="btn btn-outline" onclick="openAlertConfig()">⚙️ Config Alertas</button>
+                            <button class="btn btn-ghost" onclick="openAdminImport()">📥 Importar p/ CD</button>
                             <button class="btn btn-accent" onclick="openModal('m-new-cd')">+ Novo CD</button>
                         </div>
-                    </div>
-                    <div class="stats-grid">
-                        <div class="stat-card" style="--card-color:var(--accent)">
-                            <div class="stat-label">Total CDs</div>
-                            <div class="stat-value" id="s-cds">—</div>
-                            <div class="stat-icon">👥</div>
+                        <div class="stats-grid">
+                            <div class="stat-card" style="--card-color:var(--accent)">
+                                <div class="stat-label">Total CDs</div>
+                                <div class="stat-value" id="s-cds">—</div>
+                                <div class="stat-icon">👥</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--green)">
+                                <div class="stat-label">Equipamentos</div>
+                                <div class="stat-value" id="s-items">—</div>
+                                <div class="stat-icon">💻</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--yellow)">
+                                <div class="stat-label">Manutenção</div>
+                                <div class="stat-value" id="s-manut">—</div>
+                                <div class="stat-icon">🔧</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--red)">
+                                <div class="stat-label">Inativos</div>
+                                <div class="stat-value" id="s-inactive">—</div>
+                                <div class="stat-icon">⚠️</div>
+                            </div>
                         </div>
-                        <div class="stat-card" style="--card-color:var(--green)">
-                            <div class="stat-label">Equipamentos</div>
-                            <div class="stat-value" id="s-items">—</div>
-                            <div class="stat-icon">💻</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--yellow)">
-                            <div class="stat-label">Manutenção</div>
-                            <div class="stat-value" id="s-manut">—</div>
-                            <div class="stat-icon">🔧</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--red)">
-                            <div class="stat-label">Inativos</div>
-                            <div class="stat-value" id="s-inactive">—</div>
-                            <div class="stat-icon">⚠️</div>
-                        </div>
-                    </div>
 
-                    <!-- CHARTS -->
-                    <div class="chart-row" id="dash-charts">
-                        <div class="chart-card">
-                            <div class="chart-title">📦 Equipamentos por Categoria</div>
-                            <div class="bar-chart" id="chart-by-cat"></div>
+                        <!-- CHARTS -->
+                        <div class="chart-row" id="dash-charts">
+                            <div class="chart-card">
+                                <div class="chart-title">📦 Equipamentos por Categoria</div>
+                                <div class="bar-chart" id="chart-by-cat"></div>
+                            </div>
+                            <div class="chart-card">
+                                <div class="chart-title">🔵 Distribuição por Status</div>
+                                <div class="donut-wrap">
+                                    <canvas id="chart-donut" width="110" height="110"></canvas>
+                                    <div class="donut-legend" id="donut-legend"></div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="chart-card">
-                            <div class="chart-title">🔵 Distribuição por Status</div>
-                            <div class="donut-wrap">
-                                <canvas id="chart-donut" width="110" height="110"></canvas>
-                                <div class="donut-legend" id="donut-legend"></div>
+
+                        <!-- ALERT PANEL -->
+                        <div class="alert-panel" id="alert-panel" style="display:none">
+                            <div class="alert-ph">
+                                <div class="pulse-dot"></div>
+                                <div class="alert-ph-title">⚠️ Alertas do Sistema</div>
+                                <span id="alert-count-lbl" style="font-size:12px;color:var(--text3)"></span>
+                            </div>
+                            <div class="alert-list-inner" id="alert-list-inner"></div>
+                        </div>
+
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar"><strong style="font-size:14px">CDs Cadastrados</strong>
+                                <div style="flex:1"></div>
+                                <input class="search-input" placeholder="🔍 Buscar CD..." style="max-width:220px"
+                                    oninput="filterDashCDs(this.value)">
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>CD</th>
+                                            <th>Equipamentos</th>
+                                            <th>Último Acesso</th>
+                                            <th>Status</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-dash-cds"></tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
 
-                    <!-- ALERT PANEL -->
-                    <div class="alert-panel" id="alert-panel" style="display:none">
-                        <div class="alert-ph">
-                            <div class="pulse-dot"></div>
-                            <div class="alert-ph-title">⚠️ Alertas do Sistema</div>
-                            <span id="alert-count-lbl" style="font-size:12px;color:var(--text3)"></span>
+                    <!-- ADMIN CDs -->
+                    <div class="page" id="page-admin-cds">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">Gerenciar CDs</div>
+                                <div class="page-subtitle">Crie e gerencie acessos para colaboradores</div>
+                            </div>
+                            <div class="page-actions"><button class="btn btn-accent" onclick="openModal('m-new-cd')">+
+                                    Novo
+                                    CD</button></div>
                         </div>
-                        <div class="alert-list-inner" id="alert-list-inner"></div>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar"><input class="search-input" placeholder="🔍 Buscar..."
+                                    oninput="filterCDsTable(this.value)"></div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Nome</th>
+                                            <th>Email</th>
+                                            <th>CD</th>
+                                            <th>Código</th>
+                                            <th>Criado em</th>
+                                            <th>Itens</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-cds"></tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
 
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar"><strong style="font-size:14px">CDs Cadastrados</strong>
-                            <div style="flex:1"></div>
-                            <input class="search-input" placeholder="🔍 Buscar CD..." style="max-width:220px"
-                                oninput="filterDashCDs(this.value)">
+                    <!-- ADMIN INVENTORY -->
+                    <div class="page" id="page-admin-inventory">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">Todo o Inventário</div>
+                                <div class="page-subtitle">Visualização completa por CD e categoria</div>
+                            </div>
+                            <div class="page-actions"><button class="btn btn-green"
+                                    onclick="exportToExcel(itemsCache,'inventario_completo')">📥 Exportar Excel</button>
+                            </div>
                         </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Nome</th>
-                                        <th>CD</th>
-                                        <th>Equipamentos</th>
-                                        <th>Último Acesso</th>
-                                        <th>Status</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-dash-cds"></tbody>
-                            </table>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar">
+                                <input class="search-input" placeholder="🔍 Buscar..."
+                                    oninput="filterAllItems(this.value)">
+                                <select class="filter-select" id="flt-cd" onchange="filterAllItems('')">
+                                    <option value="">Todos os CDs</option>
+                                </select>
+                                <select class="filter-select" id="flt-cat" onchange="filterAllItems('')">
+                                    <option value="">Todas Categorias</option>
+                                </select>
+                                <select class="filter-select" id="flt-st" onchange="filterAllItems('')">
+                                    <option value="">Todos Status</option>
+                                    <option>Ativo</option>
+                                    <option>Inativo</option>
+                                    <option>Manutenção</option>
+                                    <option>Backup</option>
+                                </select>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>CD</th>
+                                            <th>Categoria</th>
+                                            <th>Fabricante</th>
+                                            <th>Equipamento</th>
+                                            <th>Modelo</th>
+                                            <th>N/S</th>
+                                            <th>Patrimônio</th>
+                                            <th>Departamento</th>
+                                            <th>Status</th>
+                                            <th>Adicionado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-all-items"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
+
+                    <!-- ADMIN CATEGORIES -->
+                    <div class="page" id="page-admin-categories">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">Categorias</div>
+                                <div class="page-subtitle">Gerencie categorias de equipamentos</div>
+                            </div>
+                            <div class="page-actions"><button class="btn btn-accent" onclick="openModal('m-new-cat')">+
+                                    Nova
+                                    Categoria</button></div>
+                        </div>
+                        <div class="stats-grid" id="cat-stats"></div>
+                        <div class="table-container fade-in">
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Categoria</th>
+                                            <th>Tipo Base</th>
+                                            <th>Total Itens</th>
+                                            <th>Tipo</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-cats"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ADMIN REPORTS -->
+                    <div class="page" id="page-admin-reports">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">Relatórios</div>
+                                <div class="page-subtitle">Análise detalhada do inventário</div>
+                            </div>
+                            <div class="page-actions"><button class="btn btn-green" onclick="exportReport()">📥 Exportar
+                                    Excel</button></div>
+                        </div>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar">
+                                <select class="filter-select" id="rep-cd" onchange="renderReport()">
+                                    <option value="">Todos os CDs</option>
+                                </select>
+                                <select class="filter-select" id="rep-cat" onchange="renderReport()">
+                                    <option value="">Todas Categorias</option>
+                                </select>
+                                <select class="filter-select" id="rep-st" onchange="renderReport()">
+                                    <option value="">Todos Status</option>
+                                    <option>Ativo</option>
+                                    <option>Inativo</option>
+                                    <option>Manutenção</option>
+                                    <option>Backup</option>
+                                </select>
+                                <select class="filter-select" id="rep-periodo" onchange="renderReport()">
+                                    <option value="">Qualquer período</option>
+                                    <option value="7">Últimos 7 dias</option>
+                                    <option value="30">Últimos 30 dias</option>
+                                    <option value="90">Últimos 90 dias</option>
+                                    <option value="365">Último ano</option>
+                                </select>
+                                <input type="date" class="filter-select" id="rep-date-from" onchange="renderReport()"
+                                    title="De" placeholder="De">
+                                <input type="date" class="filter-select" id="rep-date-to" onchange="renderReport()"
+                                    title="Até" placeholder="Até">
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>CD</th>
+                                            <th>Categoria</th>
+                                            <th>Fabricante</th>
+                                            <th>Equipamento</th>
+                                            <th>Modelo</th>
+                                            <th>N/S</th>
+                                            <th>Patrimônio</th>
+                                            <th>SO</th>
+                                            <th>Depto</th>
+                                            <th>RAM</th>
+                                            <th>HD/SSD</th>
+                                            <th>CPU</th>
+                                            <th>Hostname</th>
+                                            <th>Status</th>
+                                            <th>Tempo Uso</th>
+                                            <th>Data</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-report"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- ADMIN BACKUP -->
+                    <div class="page" id="page-admin-backup">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">💾 Backups — Visão Geral</div>
+                                <div class="page-subtitle">Todos os equipamentos com status Backup, organizados por CD
+                                </div>
+                            </div>
+                            <div class="page-actions">
+                                <button class="btn btn-ghost" onclick="loadAdminBackup()">🔄 Atualizar</button>
+                                <button class="btn btn-green" onclick="exportAdminBackup()">📥 Exportar Excel</button>
+                            </div>
+                        </div>
+                        <div class="stats-grid" style="margin-bottom:28px">
+                            <div class="stat-card" style="--card-color:#06b6d4">
+                                <div class="stat-label">Total Backups</div>
+                                <div class="stat-value" id="bs-total">—</div>
+                                <div class="stat-icon">💾</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--accent)">
+                                <div class="stat-label">CDs com Backup</div>
+                                <div class="stat-value" id="bs-cds">—</div>
+                                <div class="stat-icon">👥</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--green)">
+                                <div class="stat-label">Categorias</div>
+                                <div class="stat-value" id="bs-cats">—</div>
+                                <div class="stat-icon">🏷️</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--purple)">
+                                <div class="stat-label">Último Backup</div>
+                                <div class="stat-value" id="bs-last" style="font-size:15px">—</div>
+                                <div class="stat-icon">📅</div>
+                            </div>
+                        </div>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar">
+                                <input class="search-input" placeholder="🔍 Buscar equipamento, modelo, N/S..."
+                                    oninput="filterAdminBackup(this.value)" id="bk-search">
+                                <select class="filter-select" id="bk-flt-cd" onchange="filterAdminBackup('')">
+                                    <option value="">Todos os CDs</option>
+                                </select>
+                                <select class="filter-select" id="bk-flt-cat" onchange="filterAdminBackup('')">
+                                    <option value="">Todas Categorias</option>
+                                </select>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="width:36px;text-align:center">#</th>
+                                            <th>CD</th>
+                                            <th>Colaborador</th>
+                                            <th>Categoria</th>
+                                            <th>Fabricante</th>
+                                            <th>Equipamento</th>
+                                            <th>Modelo</th>
+                                            <th>N/S Patrimônio</th>
+                                            <th>Departamento</th>
+                                            <th>RAM</th>
+                                            <th>HD/SSD</th>
+                                            <th>Processador</th>
+                                            <th>Hostname</th>
+                                            <th>Tempo de Uso</th>
+                                            <th>Registrado em</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-admin-backup"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CD DASHBOARD -->
+                    <div class="page" id="page-cd-dashboard">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title" id="cd-welcome">Bem-vindo!</div>
+                                <div class="page-subtitle">Seu inventário de TI</div>
+                            </div>
+                            <div class="page-actions">
+                                <button class="btn btn-ghost" onclick="openImportModal()">📥 Importar Excel</button>
+                                <button class="btn btn-outline" onclick="openChecklist()">✅ Iniciar Inventário</button>
+                                <button class="btn btn-accent" onclick="openAddModal()">+ Adicionar Item</button>
+                            </div>
+                        </div>
+                        <!-- ALERTA ITENS EM MANUTENÇÃO -->
+                        <div id="cd-alert-bar" style="display:none;margin-bottom:20px"></div>
+                        <div class="stats-grid" id="cd-stats"></div>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar"><strong style="font-size:14px">Itens Recentes</strong>
+                                <div style="flex:1"></div><button class="btn btn-ghost btn-sm"
+                                    onclick="loadCDDash()">🔄</button>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Categoria</th>
+                                            <th>Equipamento</th>
+                                            <th>Modelo</th>
+                                            <th>Departamento</th>
+                                            <th>Status</th>
+                                            <th>Adicionado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-cd-recent"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CD CATEGORY -->
+                    <div class="page" id="page-cd-category">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title" id="cat-title">Categoria</div>
+                                <div class="page-subtitle" id="cat-sub"></div>
+                            </div>
+                            <div class="page-actions">
+                                <button class="btn btn-ghost" onclick="openImportModal()">📥 Importar Excel</button>
+                                <button class="btn btn-green" onclick="exportCatExcel()">📤 Exportar</button>
+                                <button class="btn btn-accent" onclick="openAddModal(currentCat)">+ Adicionar</button>
+                            </div>
+                        </div>
+                        <div class="table-container fade-in">
+                            <!-- BATCH BAR -->
+                            <div class="batch-bar" id="batch-bar">
+                                <span class="batch-lbl" id="batch-lbl">0 selecionados</span>
+                                <div style="flex:1"></div>
+                                <select class="filter-select" id="batch-st" style="font-size:12px">
+                                    <option value="">Alterar status...</option>
+                                    <option>Ativo</option>
+                                    <option>Inativo</option>
+                                    <option>Manutenção</option>
+                                    <option>Backup</option>
+                                </select>
+                                <button class="btn btn-ghost btn-sm" onclick="batchStatus()">✔ Aplicar</button>
+                                <button class="btn btn-danger btn-sm" onclick="batchDelete()">🗑️ Excluir</button>
+                                <button class="btn btn-ghost btn-sm" onclick="clearSel()">✕</button>
+                            </div>
+                            <div class="table-toolbar">
+                                <input class="search-input" placeholder="🔍 Buscar..."
+                                    oninput="filterCatItems(this.value)">
+                                <select class="filter-select" id="cat-st-flt" onchange="filterCatItems('')">
+                                    <option value="">Todos Status</option>
+                                    <option>Ativo</option>
+                                    <option>Inativo</option>
+                                    <option>Manutenção</option>
+                                    <option>Backup</option>
+                                </select>
+                                <label
+                                    style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);cursor:pointer;user-select:none">
+                                    <input type="checkbox" id="sel-all" onchange="selectAll(this.checked)"
+                                        style="accent-color:var(--accent)"> Selec. todos
+                                </label>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead id="cat-head"></thead>
+                                    <tbody id="tb-cat"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    <!-- CD BACKUP -->
+                    <div class="page" id="page-cd-backup">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">💾 Meus Equipamentos de Backup</div>
+                                <div class="page-subtitle">Equipamentos do seu inventário marcados como Backup</div>
+                            </div>
+                            <div class="page-actions">
+                                <button class="btn btn-ghost" onclick="loadCDBackup()">🔄 Atualizar</button>
+                                <button class="btn btn-green" onclick="exportCDBackup()">📤 Exportar Excel</button>
+                            </div>
+                        </div>
+                        <div class="stats-grid" style="margin-bottom:24px" id="cd-backup-stats">
+                            <div class="stat-card" style="--card-color:#06b6d4">
+                                <div class="stat-label">Total Backups</div>
+                                <div class="stat-value" id="cbs-total">—</div>
+                                <div class="stat-icon">💾</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--green)">
+                                <div class="stat-label">Categorias</div>
+                                <div class="stat-value" id="cbs-cats">—</div>
+                                <div class="stat-icon">🏷️</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--yellow)">
+                                <div class="stat-label">Mais Recente</div>
+                                <div class="stat-value" id="cbs-recent" style="font-size:14px">—</div>
+                                <div class="stat-icon">📅</div>
+                            </div>
+                            <div class="stat-card" style="--card-color:var(--purple)">
+                                <div class="stat-label">Última Atualização</div>
+                                <div class="stat-value" id="cbs-updated" style="font-size:13px">—</div>
+                                <div class="stat-icon">🔄</div>
+                            </div>
+                        </div>
+                        <!-- RESUMO POR CATEGORIA -->
+                        <div id="cd-backup-by-cat" style="margin-bottom:24px"></div>
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar">
+                                <input class="search-input" placeholder="🔍 Buscar..."
+                                    oninput="filterCDBackup(this.value)" id="bk-cd-search">
+                                <select class="filter-select" id="bk-cd-cat" onchange="filterCDBackup('')">
+                                    <option value="">Todas Categorias</option>
+                                </select>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="width:36px;text-align:center">#</th>
+                                            <th>Categoria</th>
+                                            <th>Fabricante</th>
+                                            <th>Equipamento</th>
+                                            <th>Modelo</th>
+                                            <th>N/S Patrimônio</th>
+                                            <th>Departamento</th>
+                                            <th>RAM</th>
+                                            <th>HD/SSD</th>
+                                            <th>Hostname</th>
+                                            <th>Tempo de Uso</th>
+                                            <th>Adicionado</th>
+                                            <th>Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-cd-backup"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ADMIN LOG -->
+                    <div class="page" id="page-admin-log">
+                        <div class="page-header fade-in">
+                            <div>
+                                <div class="page-title">📜 Log de Auditoria</div>
+                                <div class="page-subtitle">Todas as ações realizadas no sistema — logins, adições,
+                                    edições e
+                                    exclusões</div>
+                            </div>
+                            <div class="page-actions">
+                                <button class="btn btn-ghost" onclick="loadLogPage()">🔄 Atualizar</button>
+                                <button class="btn btn-outline" onclick="exportLog()">📥 Exportar Excel</button>
+                            </div>
+                        </div>
+                        <!-- Online now -->
+                        <div id="online-panel" style="margin-bottom:20px;display:none">
+                            <div
+                                style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--mono);margin-bottom:10px">
+                                🟢 ONLINE AGORA</div>
+                            <div id="online-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+                        </div>
+
+                        <!-- Filters -->
+                        <div class="table-container fade-in">
+                            <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
+                                <input class="search-input" placeholder="🔍 Buscar..." id="log-search"
+                                    oninput="filterLog()" style="min-width:180px">
+                                <select class="filter-select" id="log-flt-cd" onchange="filterLog()">
+                                    <option value="">Todos os CDs</option>
+                                </select>
+                                <select class="filter-select" id="log-flt-action" onchange="filterLog()">
+                                    <option value="">Todas Ações</option>
+                                    <option value="login">🔑 Login</option>
+                                    <option value="add">➕ Adição</option>
+                                    <option value="edit">✏️ Edição</option>
+                                    <option value="delete">🗑️ Exclusão</option>
+                                </select>
+                                <select class="filter-select" id="log-flt-date" onchange="filterLog()">
+                                    <option value="">Qualquer data</option>
+                                    <option value="today">Hoje</option>
+                                    <option value="week">Últimos 7 dias</option>
+                                    <option value="month">Último mês</option>
+                                </select>
+                                <div style="flex:1"></div>
+                                <span id="log-count"
+                                    style="font-size:12px;color:var(--text3);font-family:var(--mono);align-self:center"></span>
+                            </div>
+                            <div class="table-scroll">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="width:36px">#</th>
+                                            <th>Data/Hora</th>
+                                            <th>Usuário</th>
+                                            <th>CD</th>
+                                            <th>Ação</th>
+                                            <th>Categoria</th>
+                                            <th>Equipamento</th>
+                                            <th>Detalhes</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tb-log"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
-
-                <!-- ADMIN CDs -->
-                <div class="page" id="page-admin-cds">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">Gerenciar CDs</div>
-                            <div class="page-subtitle">Crie e gerencie acessos para colaboradores</div>
-                        </div>
-                        <div class="page-actions"><button class="btn btn-accent" onclick="openModal('m-new-cd')">+ Novo
-                                CD</button></div>
-                    </div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar"><input class="search-input" placeholder="🔍 Buscar..."
-                                oninput="filterCDsTable(this.value)"></div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Nome</th>
-                                        <th>Email</th>
-                                        <th>CD</th>
-                                        <th>Código</th>
-                                        <th>Criado em</th>
-                                        <th>Itens</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-cds"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ADMIN INVENTORY -->
-                <div class="page" id="page-admin-inventory">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">Todo o Inventário</div>
-                            <div class="page-subtitle">Visualização completa por CD e categoria</div>
-                        </div>
-                        <div class="page-actions"><button class="btn btn-green"
-                                onclick="exportToExcel(itemsCache,'inventario_completo')">📥 Exportar Excel</button>
-                        </div>
-                    </div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar">
-                            <input class="search-input" placeholder="🔍 Buscar..." oninput="filterAllItems(this.value)">
-                            <select class="filter-select" id="flt-cd" onchange="filterAllItems('')">
-                                <option value="">Todos os CDs</option>
-                            </select>
-                            <select class="filter-select" id="flt-cat" onchange="filterAllItems('')">
-                                <option value="">Todas Categorias</option>
-                            </select>
-                            <select class="filter-select" id="flt-st" onchange="filterAllItems('')">
-                                <option value="">Todos Status</option>
-                                <option>Ativo</option>
-                                <option>Inativo</option>
-                                <option>Manutenção</option>
-                                <option>Backup</option>
-                            </select>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>CD</th>
-                                        <th>Categoria</th>
-                                        <th>Fabricante</th>
-                                        <th>Equipamento</th>
-                                        <th>Modelo</th>
-                                        <th>N/S</th>
-                                        <th>Patrimônio</th>
-                                        <th>Departamento</th>
-                                        <th>Status</th>
-                                        <th>Adicionado</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-all-items"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ADMIN CATEGORIES -->
-                <div class="page" id="page-admin-categories">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">Categorias</div>
-                            <div class="page-subtitle">Gerencie categorias de equipamentos</div>
-                        </div>
-                        <div class="page-actions"><button class="btn btn-accent" onclick="openModal('m-new-cat')">+ Nova
-                                Categoria</button></div>
-                    </div>
-                    <div class="stats-grid" id="cat-stats"></div>
-                    <div class="table-container fade-in">
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Categoria</th>
-                                        <th>Tipo Base</th>
-                                        <th>Total Itens</th>
-                                        <th>Tipo</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-cats"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ADMIN REPORTS -->
-                <div class="page" id="page-admin-reports">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">Relatórios</div>
-                            <div class="page-subtitle">Análise detalhada do inventário</div>
-                        </div>
-                        <div class="page-actions"><button class="btn btn-green" onclick="exportReport()">📥 Exportar
-                                Excel</button></div>
-                    </div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar">
-                            <select class="filter-select" id="rep-cd" onchange="renderReport()">
-                                <option value="">Todos os CDs</option>
-                            </select>
-                            <select class="filter-select" id="rep-cat" onchange="renderReport()">
-                                <option value="">Todas Categorias</option>
-                            </select>
-                            <select class="filter-select" id="rep-st" onchange="renderReport()">
-                                <option value="">Todos Status</option>
-                                <option>Ativo</option>
-                                <option>Inativo</option>
-                                <option>Manutenção</option>
-                                <option>Backup</option>
-                            </select>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>CD</th>
-                                        <th>Categoria</th>
-                                        <th>Fabricante</th>
-                                        <th>Equipamento</th>
-                                        <th>Modelo</th>
-                                        <th>N/S</th>
-                                        <th>Patrimônio</th>
-                                        <th>SO</th>
-                                        <th>Depto</th>
-                                        <th>RAM</th>
-                                        <th>HD/SSD</th>
-                                        <th>CPU</th>
-                                        <th>Hostname</th>
-                                        <th>Status</th>
-                                        <th>Tempo Uso</th>
-                                        <th>Data</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-report"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-
-                <!-- ADMIN BACKUP -->
-                <div class="page" id="page-admin-backup">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">💾 Backups — Visão Geral</div>
-                            <div class="page-subtitle">Todos os equipamentos com status Backup, organizados por CD</div>
-                        </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="loadAdminBackup()">🔄 Atualizar</button>
-                            <button class="btn btn-green" onclick="exportAdminBackup()">📥 Exportar Excel</button>
-                        </div>
-                    </div>
-                    <div class="stats-grid" style="margin-bottom:28px">
-                        <div class="stat-card" style="--card-color:#06b6d4">
-                            <div class="stat-label">Total Backups</div>
-                            <div class="stat-value" id="bs-total">—</div>
-                            <div class="stat-icon">💾</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--accent)">
-                            <div class="stat-label">CDs com Backup</div>
-                            <div class="stat-value" id="bs-cds">—</div>
-                            <div class="stat-icon">👥</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--green)">
-                            <div class="stat-label">Categorias</div>
-                            <div class="stat-value" id="bs-cats">—</div>
-                            <div class="stat-icon">🏷️</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--purple)">
-                            <div class="stat-label">Último Backup</div>
-                            <div class="stat-value" id="bs-last" style="font-size:15px">—</div>
-                            <div class="stat-icon">📅</div>
-                        </div>
-                    </div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar">
-                            <input class="search-input" placeholder="🔍 Buscar equipamento, modelo, N/S..."
-                                oninput="filterAdminBackup(this.value)" id="bk-search">
-                            <select class="filter-select" id="bk-flt-cd" onchange="filterAdminBackup('')">
-                                <option value="">Todos os CDs</option>
-                            </select>
-                            <select class="filter-select" id="bk-flt-cat" onchange="filterAdminBackup('')">
-                                <option value="">Todas Categorias</option>
-                            </select>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:36px;text-align:center">#</th>
-                                        <th>CD</th>
-                                        <th>Colaborador</th>
-                                        <th>Categoria</th>
-                                        <th>Fabricante</th>
-                                        <th>Equipamento</th>
-                                        <th>Modelo</th>
-                                        <th>N/S Patrimônio</th>
-                                        <th>Departamento</th>
-                                        <th>RAM</th>
-                                        <th>HD/SSD</th>
-                                        <th>Processador</th>
-                                        <th>Hostname</th>
-                                        <th>Tempo de Uso</th>
-                                        <th>Registrado em</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-admin-backup"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CD DASHBOARD -->
-                <div class="page" id="page-cd-dashboard">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title" id="cd-welcome">Bem-vindo!</div>
-                            <div class="page-subtitle">Seu inventário de TI</div>
-                        </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="openImportModal()">📥 Importar Excel</button>
-                            <button class="btn btn-accent" onclick="openAddModal()">+ Adicionar Item</button>
-                        </div>
-                    </div>
-                    <!-- ALERTA ITENS EM MANUTENÇÃO -->
-                    <div id="cd-alert-bar" style="display:none;margin-bottom:20px"></div>
-                    <div class="stats-grid" id="cd-stats"></div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar"><strong style="font-size:14px">Itens Recentes</strong>
-                            <div style="flex:1"></div><button class="btn btn-ghost btn-sm"
-                                onclick="loadCDDash()">🔄</button>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Categoria</th>
-                                        <th>Equipamento</th>
-                                        <th>Modelo</th>
-                                        <th>Departamento</th>
-                                        <th>Status</th>
-                                        <th>Adicionado</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-cd-recent"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- CD CATEGORY -->
-                <div class="page" id="page-cd-category">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title" id="cat-title">Categoria</div>
-                            <div class="page-subtitle" id="cat-sub"></div>
-                        </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="openImportModal()">📥 Importar Excel</button>
-                            <button class="btn btn-green" onclick="exportCatExcel()">📤 Exportar</button>
-                            <button class="btn btn-accent" onclick="openAddModal(currentCat)">+ Adicionar</button>
-                        </div>
-                    </div>
-                    <div class="table-container fade-in">
-                        <!-- BATCH BAR -->
-                        <div class="batch-bar" id="batch-bar">
-                            <span class="batch-lbl" id="batch-lbl">0 selecionados</span>
-                            <div style="flex:1"></div>
-                            <select class="filter-select" id="batch-st" style="font-size:12px">
-                                <option value="">Alterar status...</option>
-                                <option>Ativo</option>
-                                <option>Inativo</option>
-                                <option>Manutenção</option>
-                                <option>Backup</option>
-                            </select>
-                            <button class="btn btn-ghost btn-sm" onclick="batchStatus()">✔ Aplicar</button>
-                            <button class="btn btn-danger btn-sm" onclick="batchDelete()">🗑️ Excluir</button>
-                            <button class="btn btn-ghost btn-sm" onclick="clearSel()">✕</button>
-                        </div>
-                        <div class="table-toolbar">
-                            <input class="search-input" placeholder="🔍 Buscar..." oninput="filterCatItems(this.value)">
-                            <select class="filter-select" id="cat-st-flt" onchange="filterCatItems('')">
-                                <option value="">Todos Status</option>
-                                <option>Ativo</option>
-                                <option>Inativo</option>
-                                <option>Manutenção</option>
-                                <option>Backup</option>
-                            </select>
-                            <label
-                                style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3);cursor:pointer;user-select:none">
-                                <input type="checkbox" id="sel-all" onchange="selectAll(this.checked)"
-                                    style="accent-color:var(--accent)"> Selec. todos
-                            </label>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead id="cat-head"></thead>
-                                <tbody id="tb-cat"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-
-                <!-- CD BACKUP -->
-                <div class="page" id="page-cd-backup">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">💾 Meus Equipamentos de Backup</div>
-                            <div class="page-subtitle">Equipamentos do seu inventário marcados como Backup</div>
-                        </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="loadCDBackup()">🔄 Atualizar</button>
-                            <button class="btn btn-green" onclick="exportCDBackup()">📤 Exportar Excel</button>
-                        </div>
-                    </div>
-                    <div class="stats-grid" style="margin-bottom:24px" id="cd-backup-stats">
-                        <div class="stat-card" style="--card-color:#06b6d4">
-                            <div class="stat-label">Total Backups</div>
-                            <div class="stat-value" id="cbs-total">—</div>
-                            <div class="stat-icon">💾</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--green)">
-                            <div class="stat-label">Categorias</div>
-                            <div class="stat-value" id="cbs-cats">—</div>
-                            <div class="stat-icon">🏷️</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--yellow)">
-                            <div class="stat-label">Mais Recente</div>
-                            <div class="stat-value" id="cbs-recent" style="font-size:14px">—</div>
-                            <div class="stat-icon">📅</div>
-                        </div>
-                        <div class="stat-card" style="--card-color:var(--purple)">
-                            <div class="stat-label">Última Atualização</div>
-                            <div class="stat-value" id="cbs-updated" style="font-size:13px">—</div>
-                            <div class="stat-icon">🔄</div>
-                        </div>
-                    </div>
-                    <!-- RESUMO POR CATEGORIA -->
-                    <div id="cd-backup-by-cat" style="margin-bottom:24px"></div>
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar">
-                            <input class="search-input" placeholder="🔍 Buscar..." oninput="filterCDBackup(this.value)"
-                                id="bk-cd-search">
-                            <select class="filter-select" id="bk-cd-cat" onchange="filterCDBackup('')">
-                                <option value="">Todas Categorias</option>
-                            </select>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:36px;text-align:center">#</th>
-                                        <th>Categoria</th>
-                                        <th>Fabricante</th>
-                                        <th>Equipamento</th>
-                                        <th>Modelo</th>
-                                        <th>N/S Patrimônio</th>
-                                        <th>Departamento</th>
-                                        <th>RAM</th>
-                                        <th>HD/SSD</th>
-                                        <th>Hostname</th>
-                                        <th>Tempo de Uso</th>
-                                        <th>Adicionado</th>
-                                        <th>Ações</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-cd-backup"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ADMIN LOG -->
-                <div class="page" id="page-admin-log">
-                    <div class="page-header fade-in">
-                        <div>
-                            <div class="page-title">📜 Log de Auditoria</div>
-                            <div class="page-subtitle">Todas as ações realizadas no sistema — logins, adições, edições e
-                                exclusões</div>
-                        </div>
-                        <div class="page-actions">
-                            <button class="btn btn-ghost" onclick="loadLogPage()">🔄 Atualizar</button>
-                            <button class="btn btn-outline" onclick="exportLog()">📥 Exportar Excel</button>
-                        </div>
-                    </div>
-                    <!-- Online now -->
-                    <div id="online-panel" style="margin-bottom:20px;display:none">
-                        <div
-                            style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:2px;text-transform:uppercase;font-family:var(--mono);margin-bottom:10px">
-                            🟢 ONLINE AGORA</div>
-                        <div id="online-chips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-                    </div>
-
-                    <!-- Filters -->
-                    <div class="table-container fade-in">
-                        <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
-                            <input class="search-input" placeholder="🔍 Buscar..." id="log-search" oninput="filterLog()"
-                                style="min-width:180px">
-                            <select class="filter-select" id="log-flt-cd" onchange="filterLog()">
-                                <option value="">Todos os CDs</option>
-                            </select>
-                            <select class="filter-select" id="log-flt-action" onchange="filterLog()">
-                                <option value="">Todas Ações</option>
-                                <option value="login">🔑 Login</option>
-                                <option value="add">➕ Adição</option>
-                                <option value="edit">✏️ Edição</option>
-                                <option value="delete">🗑️ Exclusão</option>
-                            </select>
-                            <select class="filter-select" id="log-flt-date" onchange="filterLog()">
-                                <option value="">Qualquer data</option>
-                                <option value="today">Hoje</option>
-                                <option value="week">Últimos 7 dias</option>
-                                <option value="month">Último mês</option>
-                            </select>
-                            <div style="flex:1"></div>
-                            <span id="log-count"
-                                style="font-size:12px;color:var(--text3);font-family:var(--mono);align-self:center"></span>
-                        </div>
-                        <div class="table-scroll">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th style="width:36px">#</th>
-                                        <th>Data/Hora</th>
-                                        <th>Usuário</th>
-                                        <th>CD</th>
-                                        <th>Ação</th>
-                                        <th>Categoria</th>
-                                        <th>Equipamento</th>
-                                        <th>Detalhes</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tb-log"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
-    </div>
-    <div class="dialog-overlay" id="app-dialog">
-        <div class="dialog-box" id="dialog-box">
-            <div class="dialog-stripe" id="dialog-stripe"></div>
-            <div class="dialog-inner">
-                <div class="dialog-icon" id="dialog-icon"></div>
-                <div class="dialog-title" id="dialog-title"></div>
-                <div class="dialog-msg" id="dialog-msg"></div>
-                <div class="dialog-detail" id="dialog-detail" style="display:none"></div>
-            </div>
-            <div class="dialog-footer">
-                <button class="dialog-btn dialog-btn-cancel" id="dialog-cancel">Cancelar</button>
-                <button class="dialog-btn" id="dialog-confirm">Confirmar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Novo CD -->
-    <div class="modal-overlay" id="m-new-cd">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">Novo Colaborador (CD)</div><button class="modal-close"
-                    onclick="closeModal('m-new-cd')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-grid">
-                    <div class="form-group"><label>Nome *</label><input type="text" id="ncd-name"
-                            placeholder="Nome completo"></div>
-                    <div class="form-group"><label>Email *</label><input type="email" id="ncd-email"
-                            placeholder="email@empresa.com"></div>
-                    <div class="form-group"><label>ID do CD *</label><input type="text" id="ncd-cd"
-                            placeholder="Ex: CD-TI-001"></div>
-                    <div class="form-group"><label>Departamento</label><input type="text" id="ncd-dept"
-                            placeholder="Ex: TI, RH..."></div>
-                    <div class="form-group full-width"><label>Senha *</label><input type="password" id="ncd-pass"
-                            placeholder="Mínimo 6 caracteres"></div>
+        <div class="dialog-overlay" id="app-dialog">
+            <div class="dialog-box" id="dialog-box">
+                <div class="dialog-stripe" id="dialog-stripe"></div>
+                <div class="dialog-inner">
+                    <div class="dialog-icon" id="dialog-icon"></div>
+                    <div class="dialog-title" id="dialog-title"></div>
+                    <div class="dialog-msg" id="dialog-msg"></div>
+                    <div class="dialog-detail" id="dialog-detail" style="display:none"></div>
                 </div>
-                <div class="alert alert-info">🔑 Um código único será gerado automaticamente.</div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeModal('m-new-cd')">Cancelar</button>
-                <button class="btn btn-accent" id="btn-create-cd" onclick="createCD()">Criar + Gerar Código</button>
+                <div class="dialog-footer">
+                    <button class="dialog-btn dialog-btn-cancel" id="dialog-cancel">Cancelar</button>
+                    <button class="dialog-btn" id="dialog-confirm">Confirmar</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- MODAL: Mostrar Código -->
-    <div class="modal-overlay" id="m-show-code">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">✅ CD Criado!</div><button class="modal-close"
-                    onclick="closeModal('m-show-code')">×</button>
-            </div>
-            <div class="modal-body">
-                <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Compartilhe este código com o
-                    colaborador:</p>
-                <div class="code-box" id="code-display"></div>
-                <div class="alert alert-warn">⚠️ Guarde este código — não poderá ser recuperado depois.</div>
-                <div style="display:flex;gap:16px;margin-top:16px">
-                    <div style="flex:1">
-                        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">NOME</div>
-                        <div id="code-name" style="font-weight:500"></div>
+        <!-- MODAL: Novo CD -->
+        <div class="modal-overlay" id="m-new-cd">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">Novo Colaborador (CD)</div><button class="modal-close"
+                        onclick="closeModal('m-new-cd')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid">
+                        <div class="form-group"><label>Nome *</label><input type="text" id="ncd-name"
+                                placeholder="Nome completo"></div>
+                        <div class="form-group"><label>Email *</label><input type="email" id="ncd-email"
+                                placeholder="email@empresa.com"></div>
+                        <div class="form-group"><label>ID do CD *</label><input type="text" id="ncd-cd"
+                                placeholder="Ex: CD-TI-001"></div>
+                        <div class="form-group"><label>Departamento</label><input type="text" id="ncd-dept"
+                                placeholder="Ex: TI, RH..."></div>
+                        <div class="form-group full-width"><label>Senha *</label><input type="password" id="ncd-pass"
+                                placeholder="Mínimo 6 caracteres"></div>
                     </div>
-                    <div style="flex:1">
-                        <div style="font-size:11px;color:var(--text3);margin-bottom:4px">EMAIL</div>
-                        <div id="code-email" style="font-weight:500"></div>
-                    </div>
+                    <div class="alert alert-info">🔑 Um código único será gerado automaticamente.</div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-new-cd')">Cancelar</button>
+                    <button class="btn btn-accent" id="btn-create-cd" onclick="createCD()">Criar + Gerar Código</button>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="copyCode()">📋 Copiar Código</button>
-                <button class="btn btn-accent" onclick="closeModal('m-show-code')">Concluir</button>
-            </div>
         </div>
-    </div>
 
-    <!-- MODAL: Nova Categoria -->
-    <div class="modal-overlay" id="m-new-cat">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">Nova Categoria</div><button class="modal-close"
-                    onclick="closeModal('m-new-cat')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group"><label>Nome *</label><input type="text" id="cat-name-inp"
-                        placeholder="Ex: Impressoras Térmicas"></div>
-                <div class="form-group"><label>Ícone (emoji)</label><input type="text" id="cat-icon-inp"
-                        placeholder="🖨️" maxlength="4"></div>
-                <div class="form-group"><label>Tipo Base (define campos)</label>
-                    <select id="cat-base-inp">
-                        <option value="geral">Geral</option>
-                        <option value="desktops">Desktop</option>
-                        <option value="notebooks">Notebook</option>
-                        <option value="impressoras">Impressora</option>
-                        <option value="monitores">Monitor</option>
-                        <option value="perifericos">Periférico</option>
-                    </select>
+        <!-- MODAL: Mostrar Código -->
+        <div class="modal-overlay" id="m-show-code">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">✅ CD Criado!</div><button class="modal-close"
+                        onclick="closeModal('m-show-code')">×</button>
                 </div>
-                <div class="form-group"><label>Descrição</label><textarea id="cat-desc-inp"
-                        placeholder="Descrição opcional..."></textarea></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeModal('m-new-cat')">Cancelar</button>
-                <button class="btn btn-accent" id="btn-save-cat" onclick="createCategory()">Criar Categoria</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Add/Edit Item -->
-    <div class="modal-overlay" id="m-add-item">
-        <div class="modal modal-lg">
-            <div class="modal-header">
-                <div class="modal-title" id="add-item-title">Adicionar Equipamento</div><button class="modal-close"
-                    onclick="closeModal('m-add-item')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group" style="margin-bottom:20px"><label>Categoria *</label><select id="item-cat"
-                        onchange="renderItemForm()">
-                        <option value="">Selecione...</option>
-                    </select></div>
-                <div id="item-form-fields"></div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeModal('m-add-item')">Cancelar</button>
-                <button class="btn btn-accent" id="btn-save-item" onclick="saveItem()">Salvar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: Importar Excel -->
-    <div class="modal-overlay" id="m-import">
-        <div class="modal">
-            <div class="modal-header">
-                <div class="modal-title">📥 Importar via Excel</div><button class="modal-close"
-                    onclick="closeModal('m-import')">×</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group"><label>Categoria de Destino *</label><select id="imp-cat">
-                        <option value="">Selecione...</option>
-                    </select></div>
-                <div class="import-zone" id="imp-zone" onclick="document.getElementById('imp-file').click()">
-                    <div class="import-icon">📊</div>
-                    <div class="import-title">Arraste o arquivo Excel ou clique aqui</div>
-                    <div class="import-text">.xlsx ou .xls — campos mapeados automaticamente</div>
-                    <input type="file" id="imp-file" accept=".xlsx,.xls" style="display:none"
-                        onchange="handleExcel(this)">
-                </div>
-                <div class="alert alert-info" style="margin-top:16px">📌 As colunas do Excel são mapeadas
-                    automaticamente para os campos do inventário</div>
-                <div id="imp-preview" style="display:none;margin-top:16px">
-                    <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="imp-preview-title"></div>
-                    <div class="table-scroll" style="max-height:200px;overflow-y:auto">
-                        <table>
-                            <thead id="imp-ph"></thead>
-                            <tbody id="imp-pb"></tbody>
-                        </table>
+                <div class="modal-body">
+                    <p style="color:var(--text2);font-size:13px;margin-bottom:12px">Compartilhe este código com o
+                        colaborador:</p>
+                    <div class="code-box" id="code-display"></div>
+                    <div class="alert alert-warn">⚠️ Guarde este código — não poderá ser recuperado depois.</div>
+                    <div style="display:flex;gap:16px;margin-top:16px">
+                        <div style="flex:1">
+                            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">NOME</div>
+                            <div id="code-name" style="font-weight:500"></div>
+                        </div>
+                        <div style="flex:1">
+                            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">EMAIL</div>
+                            <div id="code-email" style="font-weight:500"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline" onclick="dlTemplate()">📋 Baixar Template</button>
-                <button class="btn btn-ghost" onclick="closeModal('m-import')">Cancelar</button>
-                <button class="btn btn-green" id="btn-confirm-imp" style="display:none" onclick="confirmImport()">✅
-                    Confirmar Importação</button>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="copyCode()">📋 Copiar Código</button>
+                    <button class="btn btn-accent" onclick="closeModal('m-show-code')">Concluir</button>
+                </div>
             </div>
         </div>
-    </div>
 
-    <!-- MODAL: Ver Item -->
-    <div class="modal-overlay" id="m-view-item">
-        <div class="modal modal-lg">
-            <div class="modal-header">
-                <div class="modal-title">Detalhes do Equipamento</div><button class="modal-close"
-                    onclick="closeModal('m-view-item')">×</button>
+        <!-- MODAL: Nova Categoria -->
+        <div class="modal-overlay" id="m-new-cat">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">Nova Categoria</div><button class="modal-close"
+                        onclick="closeModal('m-new-cat')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group"><label>Nome *</label><input type="text" id="cat-name-inp"
+                            placeholder="Ex: Impressoras Térmicas"></div>
+                    <div class="form-group"><label>Ícone (emoji)</label><input type="text" id="cat-icon-inp"
+                            placeholder="🖨️" maxlength="4"></div>
+                    <div class="form-group"><label>Tipo Base (define campos)</label>
+                        <select id="cat-base-inp">
+                            <option value="geral">Geral</option>
+                            <option value="desktops">Desktop</option>
+                            <option value="notebooks">Notebook</option>
+                            <option value="impressoras">Impressora</option>
+                            <option value="monitores">Monitor</option>
+                            <option value="perifericos">Periférico</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Descrição</label><textarea id="cat-desc-inp"
+                            placeholder="Descrição opcional..."></textarea></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-new-cat')">Cancelar</button>
+                    <button class="btn btn-accent" id="btn-save-cat" onclick="createCategory()">Criar Categoria</button>
+                </div>
             </div>
-            <div class="modal-body" id="view-item-body"></div>
-            <div class="modal-footer">
-                <button class="btn btn-ghost" onclick="closeModal('m-view-item')">Fechar</button>
-                <button class="btn btn-purple btn-sm" onclick="duplicateItem()">⧉ Duplicar</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteViewedItem()">🗑️ Excluir</button>
-                <button class="btn btn-accent" id="btn-edit-view">✏️ Editar</button>
+        </div>
+
+        <!-- MODAL: Add/Edit Item -->
+        <div class="modal-overlay" id="m-add-item">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <div class="modal-title" id="add-item-title">Adicionar Equipamento</div><button class="modal-close"
+                        onclick="closeModal('m-add-item')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group" style="margin-bottom:20px"><label>Categoria *</label><select id="item-cat"
+                            onchange="renderItemForm()">
+                            <option value="">Selecione...</option>
+                        </select></div>
+                    <div id="item-form-fields"></div>
+                    <!-- FOTO DO EQUIPAMENTO -->
+                    <div style="margin-top:16px">
+                        <label
+                            style="display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:8px;letter-spacing:.5px;text-transform:uppercase">📷
+                            Foto do Equipamento (opcional)</label>
+                        <div id="photo-upload-area" onclick="document.getElementById('item-photo-input').click()"
+                            style="border:2px dashed var(--border2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg3)">
+                            <div id="photo-preview-wrap" style="display:none">
+                                <img id="photo-preview-img"
+                                    style="max-height:160px;max-width:100%;border-radius:8px;object-fit:cover">
+                                <div style="margin-top:8px;font-size:12px;color:var(--text3)">Clique para trocar a foto
+                                </div>
+                            </div>
+                            <div id="photo-placeholder">
+                                <div style="font-size:28px;margin-bottom:6px">📷</div>
+                                <div style="font-size:13px;color:var(--text3)">Clique para adicionar foto</div>
+                            </div>
+                            <input type="file" id="item-photo-input" accept="image/*" style="display:none"
+                                onchange="handlePhotoSelect(this)">
+                        </div>
+                        <input type="hidden" id="item-photo-b64">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-add-item')">Cancelar</button>
+                    <button class="btn btn-accent" id="btn-save-item" onclick="saveItem()">Salvar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Importar Excel -->
+        <div class="modal-overlay" id="m-import">
+            <div class="modal">
+                <div class="modal-header">
+                    <div class="modal-title">📥 Importar via Excel</div><button class="modal-close"
+                        onclick="closeModal('m-import')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group"><label>Categoria de Destino *</label><select id="imp-cat">
+                            <option value="">Selecione...</option>
+                        </select></div>
+                    <div class="import-zone" id="imp-zone" onclick="document.getElementById('imp-file').click()">
+                        <div class="import-icon">📊</div>
+                        <div class="import-title">Arraste o arquivo Excel ou clique aqui</div>
+                        <div class="import-text">.xlsx ou .xls — campos mapeados automaticamente</div>
+                        <input type="file" id="imp-file" accept=".xlsx,.xls" style="display:none"
+                            onchange="handleExcel(this)">
+                    </div>
+                    <div class="alert alert-info" style="margin-top:16px">📌 As colunas do Excel são mapeadas
+                        automaticamente para os campos do inventário</div>
+                    <div id="imp-preview" style="display:none;margin-top:16px">
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="imp-preview-title"></div>
+                        <div class="table-scroll" style="max-height:200px;overflow-y:auto">
+                            <table>
+                                <thead id="imp-ph"></thead>
+                                <tbody id="imp-pb"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" onclick="dlTemplate()">📋 Baixar Template</button>
+                    <button class="btn btn-ghost" onclick="closeModal('m-import')">Cancelar</button>
+                    <button class="btn btn-green" id="btn-confirm-imp" style="display:none" onclick="confirmImport()">✅
+                        Confirmar Importação</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Ver Item -->
+        <div class="modal-overlay" id="m-view-item">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <div class="modal-title">Detalhes do Equipamento</div><button class="modal-close"
+                        onclick="closeModal('m-view-item')">×</button>
+                </div>
+                <div class="modal-body" id="view-item-body"></div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-view-item')">Fechar</button>
+                    <button class="btn btn-outline btn-sm" onclick="showQRCode(viewedId)">📲 QR Code</button>
+                    <button class="btn btn-ghost btn-sm" onclick="openMoveDepto(viewedId)">🔀 Mover Depto</button>
+                    <button class="btn btn-purple btn-sm" onclick="duplicateItem()">⧉ Duplicar</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteViewedItem()">🗑️ Excluir</button>
+                    <button class="btn btn-accent" id="btn-edit-view">✏️ Editar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: QR Code -->
+        <div class="modal-overlay" id="m-qrcode">
+            <div class="modal" style="max-width:400px;text-align:center">
+                <div class="modal-header">
+                    <div class="modal-title">📲 QR Code do Equipamento</div><button class="modal-close"
+                        onclick="closeModal('m-qrcode')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div id="qr-info" style="margin-bottom:16px;font-size:13px;color:var(--text2)"></div>
+                    <canvas id="qr-canvas"
+                        style="border-radius:12px;background:#fff;padding:12px;max-width:220px;display:block;margin:0 auto"></canvas>
+                    <div style="margin-top:12px;font-size:11px;color:var(--text3)">Aponte a câmera do celular para
+                        identificar o equipamento</div>
+                </div>
+                <div class="modal-footer" style="justify-content:center">
+                    <button class="btn btn-ghost" onclick="closeModal('m-qrcode')">Fechar</button>
+                    <button class="btn btn-accent" onclick="downloadQR()">⬇️ Baixar PNG</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Mover Departamento -->
+        <div class="modal-overlay" id="m-move-depto">
+            <div class="modal" style="max-width:420px">
+                <div class="modal-header">
+                    <div class="modal-title">🔀 Mover para outro Departamento</div><button class="modal-close"
+                        onclick="closeModal('m-move-depto')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div id="move-item-info"
+                        style="margin-bottom:16px;padding:12px;background:var(--bg3);border-radius:8px;font-size:13px">
+                    </div>
+                    <div class="form-group"><label>Novo Departamento *</label><input type="text" id="move-depto-input"
+                            placeholder="Ex: Financeiro, RH, TI..."></div>
+                    <div class="form-group"><label>Motivo da Movimentação</label><textarea id="move-motivo-input"
+                            placeholder="Ex: Redistribuição de equipamentos, solicitação do gestor..."
+                            style="min-height:70px"></textarea></div>
+                    <div id="move-history" style="margin-top:12px"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-move-depto')">Cancelar</button>
+                    <button class="btn btn-accent" id="btn-confirm-move" onclick="confirmMoveDepto()">✔ Confirmar
+                        Movimentação</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Checklist de Inventário -->
+        <div class="modal-overlay" id="m-checklist">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <div class="modal-title">✅ Checklist de Inventário</div><button class="modal-close"
+                        onclick="closeModal('m-checklist')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info" style="margin-bottom:16px">📋 Confirme a existência física de cada
+                        equipamento. Itens não confirmados ficam marcados como <strong>não localizados</strong>.</div>
+                    <div id="checklist-content"></div>
+                </div>
+                <div class="modal-footer" style="justify-content:space-between">
+                    <span id="checklist-progress" style="font-size:13px;color:var(--text2);align-self:center"></span>
+                    <div style="display:flex;gap:10px">
+                        <button class="btn btn-ghost" onclick="closeModal('m-checklist')">Fechar</button>
+                        <button class="btn btn-green" onclick="finishChecklist()">✅ Finalizar Inventário</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Importação Admin -->
+        <div class="modal-overlay" id="m-admin-import">
+            <div class="modal modal-lg">
+                <div class="modal-header">
+                    <div class="modal-title">📥 Importação em Massa (Admin)</div><button class="modal-close"
+                        onclick="closeModal('m-admin-import')">×</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-grid" style="margin-bottom:16px">
+                        <div class="form-group"><label>CD Destino *</label><select id="adm-imp-cd">
+                                <option value="">Selecione...</option>
+                            </select></div>
+                        <div class="form-group"><label>Categoria de Destino *</label><select id="adm-imp-cat">
+                                <option value="">Selecione...</option>
+                            </select></div>
+                    </div>
+                    <div class="import-zone" id="adm-imp-zone"
+                        onclick="document.getElementById('adm-imp-file').click()">
+                        <div class="import-icon">📊</div>
+                        <div class="import-title">Arraste o arquivo Excel ou clique aqui</div>
+                        <div class="import-text">.xlsx ou .xls</div>
+                        <input type="file" id="adm-imp-file" accept=".xlsx,.xls" style="display:none"
+                            onchange="handleAdminExcel(this)">
+                    </div>
+                    <div id="adm-imp-preview" style="display:none;margin-top:16px">
+                        <div style="font-size:13px;font-weight:600;margin-bottom:8px" id="adm-imp-preview-title"></div>
+                        <div class="table-scroll" style="max-height:200px;overflow-y:auto">
+                            <table>
+                                <thead id="adm-imp-ph"></thead>
+                                <tbody id="adm-imp-pb"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-admin-import')">Cancelar</button>
+                    <button class="btn btn-green" id="btn-adm-imp" style="display:none" onclick="confirmAdminImport()">✅
+                        Importar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Config Alertas de Uso -->
+        <div class="modal-overlay" id="m-alert-config">
+            <div class="modal" style="max-width:460px">
+                <div class="modal-header">
+                    <div class="modal-title">⚙️ Configurar Alertas de Uso</div><button class="modal-close"
+                        onclick="closeModal('m-alert-config')">×</button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:13px;color:var(--text2);margin-bottom:20px">Defina o limite de tempo de uso a
+                        partir do qual equipamentos serão alertados.</p>
+                    <div class="form-group">
+                        <label>Alertar equipamentos com mais de:</label>
+                        <select id="alert-age-sel">
+                            <option value="">Desativado</option>
+                            <option value="1-2 anos">1-2 anos</option>
+                            <option value="2-3 anos">2-3 anos</option>
+                            <option value="3-5 anos">3-5 anos</option>
+                            <option value="> 5 anos">> 5 anos (padrão)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Categorias monitoradas</label>
+                        <div id="alert-cats-check" style="display:flex;flex-wrap:wrap;gap:10px;margin-top:8px"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-ghost" onclick="closeModal('m-alert-config')">Cancelar</button>
+                    <button class="btn btn-accent" onclick="saveAlertConfig()">💾 Salvar Configuração</button>
+                </div>
             </div>
         </div>
     </div>
@@ -3276,21 +3493,6 @@
         const SB_URL = '__SB_URL__';
         const SB_KEY = '__SB_KEY__';
 
-        /*
-        ═══════════════════════════════════════════════════════════════
-        SUPABASE — MIGRATION SQL (execute no SQL Editor do Supabase)
-        Adiciona as colunas numero_serie e patrimonio à tabela inventory_items
-        ═══════════════════════════════════════════════════════════════
-        ALTER TABLE inventory_items
-          ADD COLUMN IF NOT EXISTS numero_serie TEXT DEFAULT '',
-          ADD COLUMN IF NOT EXISTS patrimonio TEXT DEFAULT '';
-
-        -- Migrar dados existentes (ns_patrimonio → numero_serie)
-        UPDATE inventory_items
-          SET numero_serie = ns_patrimonio
-          WHERE numero_serie = '' AND ns_patrimonio IS NOT NULL AND ns_patrimonio != '';
-        ═══════════════════════════════════════════════════════════════
-        */
 
         async function sbReq(method, table, qs = '', body = null) {
             const r = await fetch(`${SB_URL}/rest/v1/${table}${qs}`, {
@@ -3720,6 +3922,9 @@
 
         // ── ALERTS ──
         function renderAlerts(cds, items) {
+            // Load config
+            try { const s = localStorage.getItem('quallit_alert_cfg'); if (s) alertConfig = { ...alertConfig, ...JSON.parse(s) }; } catch { }
+
             const alerts = [];
             const backup = items.filter(i => i.status === 'Backup');
             if (backup.length) alerts.push({ ico: '💾', title: `${backup.length} equipamento(s) marcados como Backup`, sub: backup.slice(0, 3).map(i => i.equipamento || i.modelo || 'Item').join(', ') + (backup.length > 3 ? '...' : '') });
@@ -3731,6 +3936,18 @@
             if (neverAccess.length) alerts.push({ ico: '👤', title: `${neverAccess.length} CD(s) nunca acessaram o sistema`, sub: neverAccess.slice(0, 3).map(c => c.name).join(', ') });
             const noItems = cds.filter(cd => !items.find(i => i.cd_id === cd.id));
             if (noItems.length) alerts.push({ ico: '📋', title: `${noItems.length} CD(s) sem itens cadastrados`, sub: noItems.slice(0, 3).map(c => c.name).join(', ') });
+
+            // Age-based alerts (configurable)
+            if (alertConfig.ageThreshold) {
+                const ageOrder = ['< 1 ano', '1-2 anos', '2-3 anos', '3-5 anos', '> 5 anos'];
+                const thresholdIdx = ageOrder.indexOf(alertConfig.ageThreshold);
+                const oldItems = items.filter(i => {
+                    const catOk = !alertConfig.categories?.length || alertConfig.categories.includes(i.category);
+                    const ageIdx = ageOrder.indexOf(i.tempo_uso);
+                    return catOk && ageIdx >= thresholdIdx && ageIdx !== -1;
+                });
+                if (oldItems.length) alerts.push({ ico: '⏰', title: `${oldItems.length} equipamento(s) com uso ≥ ${alertConfig.ageThreshold}`, sub: oldItems.slice(0, 3).map(i => `${i.equipamento || i.modelo || 'Item'} (${i.tempo_uso})`).join(', ') + (oldItems.length > 3 ? '...' : '') });
+            }
 
             const panel = document.getElementById('alert-panel');
             const inner = document.getElementById('alert-list-inner');
@@ -3918,10 +4135,19 @@
 
         function renderReport() {
             const cf = g('rep-cd'), ct = g('rep-cat'), sf = g('rep-st');
+            const periodo = g('rep-periodo');
+            const dateFrom = g('rep-date-from');
+            const dateTo = g('rep-date-to');
             let it = itemsCache;
             if (cf) it = it.filter(i => i.cd_id === cf);
             if (ct) it = it.filter(i => i.category === ct);
             if (sf) it = it.filter(i => i.status === sf);
+            if (periodo) {
+                const cutoff = new Date(Date.now() - parseInt(periodo) * 86400000);
+                it = it.filter(i => new Date(i.created_at) >= cutoff);
+            }
+            if (dateFrom) it = it.filter(i => new Date(i.created_at) >= new Date(dateFrom));
+            if (dateTo) it = it.filter(i => new Date(i.created_at) <= new Date(dateTo + 'T23:59:59'));
             const tb = document.getElementById('tb-report');
             if (!it.length) { tb.innerHTML = `<tr><td colspan="15"><div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Sem dados</div></div></td></tr>`; return; }
             tb.innerHTML = it.map(item => {
@@ -3934,7 +4160,15 @@
 
         function exportReport() {
             const cf = g('rep-cd'), ct = g('rep-cat'), sf = g('rep-st');
-            exportToExcel(itemsCache.filter(i => (!cf || i.cd_id === cf) && (!ct || i.category === ct) && (!sf || i.status === sf)), 'relatorio');
+            const periodo = g('rep-periodo'), dateFrom = g('rep-date-from'), dateTo = g('rep-date-to');
+            let it = itemsCache;
+            if (cf) it = it.filter(i => i.cd_id === cf);
+            if (ct) it = it.filter(i => i.category === ct);
+            if (sf) it = it.filter(i => i.status === sf);
+            if (periodo) { const c = new Date(Date.now() - parseInt(periodo) * 86400000); it = it.filter(i => new Date(i.created_at) >= c); }
+            if (dateFrom) it = it.filter(i => new Date(i.created_at) >= new Date(dateFrom));
+            if (dateTo) it = it.filter(i => new Date(i.created_at) <= new Date(dateTo + 'T23:59:59'));
+            exportToExcel(it, 'relatorio');
         }
 
 
@@ -4413,6 +4647,7 @@
 
         function openAddModal(pre) {
             editingId = null;
+            resetPhotoUpload();
             document.getElementById('add-item-title').textContent = 'Adicionar Equipamento';
             const sel = document.getElementById('item-cat');
             sel.innerHTML = '<option value="">Selecione...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
@@ -4502,6 +4737,9 @@
             });
             // Also keep ns_patrimonio populated for backward compatibility
             body.ns_patrimonio = [body.numero_serie, body.patrimonio].filter(v => v && v !== 'Não possui').join(' / ') || body.numero_serie || body.patrimonio || '';
+            // Include photo if present
+            const photoB64 = document.getElementById('item-photo-b64')?.value || '';
+            if (photoB64) body.photo_b64 = photoB64;
             setBtn('btn-save-item', true, 'Salvando...');
             try {
                 if (editingId) {
@@ -4525,6 +4763,14 @@
         function editItem(itemId, catId) {
             editingId = itemId; currentCat = catId;
             document.getElementById('add-item-title').textContent = 'Editar Equipamento';
+            // Load photo if exists
+            const item = itemsCache.find(i => i.id === itemId);
+            if (item?.photo_b64) {
+                document.getElementById('item-photo-b64').value = item.photo_b64;
+                document.getElementById('photo-preview-img').src = item.photo_b64;
+                document.getElementById('photo-preview-wrap').style.display = 'block';
+                document.getElementById('photo-placeholder').style.display = 'none';
+            } else { resetPhotoUpload(); }
             const sel = document.getElementById('item-cat');
             sel.innerHTML = '<option value="">Selecione...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
             sel.value = catId; renderItemForm(); openModal('m-add-item');
@@ -4534,7 +4780,12 @@
             const item = itemsCache.find(i => i.id === itemId); if (!item) return;
             viewedId = itemId;
             const cat = catsCache.find(c => c.id === catId); const flds = getFields(catId);
-            let html = `<div style="margin-bottom:16px"><span class="badge badge-cd">${cat?.icon} ${cat?.name}</span></div><div class="form-grid">`;
+            let html = `<div style="margin-bottom:16px"><span class="badge badge-cd">${cat?.icon} ${cat?.name}</span></div>`;
+            // Show photo if available
+            if (item.photo_b64) {
+                html += `<div style="margin-bottom:16px;text-align:center"><img src="${item.photo_b64}" style="max-height:200px;max-width:100%;border-radius:10px;object-fit:cover;border:1px solid var(--border)"></div>`;
+            }
+            html += `<div class="form-grid">`;
             flds.forEach(f => {
                 let v = item[f.k];
                 // Fallback for old ns_patrimonio data
@@ -4677,7 +4928,300 @@
         }
 
         // ============================================================
-        // EXCEL IMPORT
+        // FOTO DO EQUIPAMENTO
+        // ============================================================
+        function handlePhotoSelect(input) {
+            const file = input.files[0]; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const b64 = e.target.result;
+                document.getElementById('item-photo-b64').value = b64;
+                document.getElementById('photo-preview-img').src = b64;
+                document.getElementById('photo-preview-wrap').style.display = 'block';
+                document.getElementById('photo-placeholder').style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function resetPhotoUpload() {
+            document.getElementById('item-photo-b64').value = '';
+            document.getElementById('photo-preview-img').src = '';
+            document.getElementById('photo-preview-wrap').style.display = 'none';
+            document.getElementById('photo-placeholder').style.display = 'block';
+            document.getElementById('item-photo-input').value = '';
+        }
+
+        // ============================================================
+        // QR CODE
+        // ============================================================
+        function showQRCode(itemId) {
+            const item = itemsCache.find(i => i.id === itemId); if (!item) return;
+            const cat = catsCache.find(c => c.id === item.category);
+            const cd = cdsCache.find(c => c.id === item.cd_id);
+            const ns = item.numero_serie || item.ns_patrimonio || '';
+            const pat = item.patrimonio || '';
+            const text = [
+                `QUALLIT-IT`,
+                `Equip: ${item.equipamento || item.modelo || '—'}`,
+                `Fab: ${item.fabricante || '—'}`,
+                `Modelo: ${item.modelo || '—'}`,
+                `N/S: ${ns}`,
+                `Pat: ${pat}`,
+                `Cat: ${cat?.name || item.category}`,
+                `CD: ${cd?.cd || '—'}`,
+                `Depto: ${item.departamento || '—'}`,
+                `Status: ${item.status || '—'}`,
+                `ID: ${itemId}`
+            ].join('\n');
+            document.getElementById('qr-info').innerHTML = `<strong>${item.equipamento || item.modelo}</strong><br><span style="color:var(--text3)">${item.fabricante || ''} ${item.modelo || ''}</span>`;
+            const canvas = document.getElementById('qr-canvas');
+            drawQR(canvas, text, 220);
+            closeModal('m-view-item');
+            openModal('m-qrcode');
+        }
+
+        function drawQR(canvas, text, size) {
+            // Simple QR using Google Charts API (CDN-free alternative: data URI approach)
+            // We'll use a URL-based approach with an img tag fallback
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#555'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
+            // Draw using QR pattern simulation via Google Charts
+            const img = new Image();
+            const encoded = encodeURIComponent(text);
+            img.onload = () => ctx.drawImage(img, 0, 0, size, size);
+            img.onerror = () => { ctx.fillStyle = '#222'; ctx.fillText('QR', size / 2, size / 2); };
+            img.src = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encoded}&format=png`;
+            canvas.dataset.qrText = text;
+        }
+
+        function downloadQR() {
+            const canvas = document.getElementById('qr-canvas');
+            const link = document.createElement('a');
+            const item = itemsCache.find(i => i.id === viewedId);
+            link.download = `qr_${item?.equipamento || item?.modelo || 'equip'}_${viewedId?.slice(0, 8) || 'qr'}.png`.replace(/\s+/g, '_');
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            toast('QR Code baixado!', 'success');
+        }
+
+        // ============================================================
+        // MOVER DEPARTAMENTO
+        // ============================================================
+        let movingItemId = null;
+        function openMoveDepto(itemId) {
+            const item = itemsCache.find(i => i.id === itemId); if (!item) return;
+            movingItemId = itemId;
+            document.getElementById('move-item-info').innerHTML = `
+                <strong>${item.equipamento || item.modelo || 'Equipamento'}</strong><br>
+                <span style="color:var(--text3);font-size:12px">Depto atual: <strong style="color:var(--accent2)">${item.departamento || '—'}</strong></span>`;
+            document.getElementById('move-depto-input').value = '';
+            document.getElementById('move-motivo-input').value = '';
+            // Show move history
+            const hist = (item.move_history || []);
+            const histEl = document.getElementById('move-history');
+            if (hist.length) {
+                histEl.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:1px">Histórico de movimentações</div>` +
+                    hist.slice().reverse().slice(0, 5).map(h => `<div style="font-size:12px;padding:6px 10px;background:var(--bg3);border-radius:6px;margin-bottom:4px;border-left:2px solid var(--border2)">
+                        <span style="color:var(--text3)">${h.date}</span> — <strong>${h.from}</strong> → <strong style="color:var(--accent2)">${h.to}</strong>
+                        ${h.motivo ? `<br><span style="color:var(--text3);font-style:italic">${h.motivo}</span>` : ''}
+                    </div>`).join('');
+            } else { histEl.innerHTML = ''; }
+            closeModal('m-view-item');
+            openModal('m-move-depto');
+        }
+
+        async function confirmMoveDepto() {
+            const newDepto = document.getElementById('move-depto-input').value.trim();
+            const motivo = document.getElementById('move-motivo-input').value.trim();
+            if (!newDepto) return toast('Informe o novo departamento', 'error');
+            const item = itemsCache.find(i => i.id === movingItemId); if (!item) return;
+            const oldDepto = item.departamento || '—';
+            const histEntry = { date: new Date().toLocaleDateString('pt-BR'), from: oldDepto, to: newDepto, motivo, by: ME?.name || '—' };
+            const newHist = [...(item.move_history || []), histEntry];
+            setBtn('btn-confirm-move', true, 'Salvando...');
+            try {
+                await DB.patch('inventory_items', `?id=eq.${movingItemId}`, { departamento: newDepto, move_history: newHist, updated_at: new Date().toISOString() });
+                const idx = itemsCache.findIndex(i => i.id === movingItemId);
+                if (idx >= 0) { itemsCache[idx].departamento = newDepto; itemsCache[idx].move_history = newHist; }
+                await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'edit', category: item.category, item_name: item.equipamento || item.modelo, detail: `Moveu de "${oldDepto}" → "${newDepto}"${motivo ? ` — ${motivo}` : ''}` }).catch(() => { });
+                closeModal('m-move-depto');
+                if (currentCat) renderCatTable(itemsCache.filter(i => i.category === currentCat), currentCat);
+                toast(`Movido para "${newDepto}" com sucesso!`, 'success');
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
+            finally { setBtn('btn-confirm-move', false, '✔ Confirmar Movimentação'); }
+        }
+
+        // ============================================================
+        // CHECKLIST DE INVENTÁRIO
+        // ============================================================
+        let checklistState = {};
+        function openChecklist() {
+            const myItems = itemsCache.filter(i => i.cd_id === ME?.id && i.status !== 'Inativo');
+            if (!myItems.length) return toast('Nenhum equipamento para fazer inventário', 'info');
+            checklistState = {};
+            myItems.forEach(i => checklistState[i.id] = false);
+            // Group by category
+            const byCat = {};
+            myItems.forEach(i => {
+                if (!byCat[i.category]) byCat[i.category] = [];
+                byCat[i.category].push(i);
+            });
+            let html = '';
+            Object.entries(byCat).forEach(([catId, items]) => {
+                const cat = catsCache.find(c => c.id === catId);
+                html += `<div style="margin-bottom:20px">
+                    <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">${cat?.icon || '📦'} ${cat?.name || catId}</div>`;
+                items.forEach(item => {
+                    const ns = item.numero_serie || item.ns_patrimonio || '';
+                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg3);border-radius:8px;margin-bottom:6px;border:1px solid var(--border);transition:all .2s" id="chk-row-${item.id}">
+                        <input type="checkbox" style="accent-color:var(--green);width:18px;height:18px;cursor:pointer;flex-shrink:0" onchange="toggleChecklistItem('${item.id}',this.checked)">
+                        <div style="flex:1">
+                            <div style="font-size:13px;font-weight:500">${item.equipamento || item.modelo || 'Item'}</div>
+                            <div style="font-size:11px;color:var(--text3)">${item.fabricante || ''} ${item.modelo || ''} ${ns ? '· N/S: ' + ns : ''} · ${item.departamento || '—'}</div>
+                        </div>
+                        <span id="chk-badge-${item.id}" style="font-size:11px;color:var(--text3)">Não confirmado</span>
+                    </div>`;
+                });
+                html += '</div>';
+            });
+            document.getElementById('checklist-content').innerHTML = html;
+            updateChecklistProgress();
+            openModal('m-checklist');
+        }
+
+        function toggleChecklistItem(id, checked) {
+            checklistState[id] = checked;
+            const row = document.getElementById(`chk-row-${id}`);
+            const badge = document.getElementById(`chk-badge-${id}`);
+            if (row) row.style.borderColor = checked ? 'rgba(34,197,94,.4)' : 'var(--border)';
+            if (row) row.style.background = checked ? 'rgba(34,197,94,.05)' : 'var(--bg3)';
+            if (badge) { badge.textContent = checked ? '✅ Confirmado' : 'Não confirmado'; badge.style.color = checked ? 'var(--green)' : 'var(--text3)'; }
+            updateChecklistProgress();
+        }
+
+        function updateChecklistProgress() {
+            const total = Object.keys(checklistState).length;
+            const done = Object.values(checklistState).filter(Boolean).length;
+            document.getElementById('checklist-progress').textContent = `${done} de ${total} confirmados`;
+        }
+
+        async function finishChecklist() {
+            const unconfirmed = Object.entries(checklistState).filter(([, v]) => !v).map(([id]) => id);
+            const confirmed = Object.entries(checklistState).filter(([, v]) => v).map(([id]) => id);
+            if (!confirmed.length) return toast('Confirme ao menos um equipamento', 'error');
+            const ok = await showDialog({
+                type: 'warning', icon: '✅', title: 'Finalizar inventário?',
+                msg: `${confirmed.length} confirmado(s)${unconfirmed.length ? ` · ${unconfirmed.length} não localizado(s) — serão mantidos como estão` : ' — todos localizados! 🎉'}`,
+                confirmText: 'Finalizar'
+            });
+            if (!ok) return;
+            try {
+                await writeLog({ actor_type: 'cd', actor_name: ME?.name, actor_cd: ME?.cd, action: 'edit', detail: `Checklist: ${confirmed.length} confirmados, ${unconfirmed.length} não localizados` }).catch(() => { });
+                closeModal('m-checklist');
+                toast(`Inventário finalizado! ${confirmed.length} confirmados.`, 'success');
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
+        }
+
+        // ============================================================
+        // IMPORTAÇÃO EM MASSA (ADMIN)
+        // ============================================================
+        let adminImportBuf = null;
+
+        function openAdminImport() {
+            adminImportBuf = null;
+            document.getElementById('adm-imp-preview').style.display = 'none';
+            document.getElementById('btn-adm-imp').style.display = 'none';
+            document.getElementById('adm-imp-file').value = '';
+            const cdSel = document.getElementById('adm-imp-cd');
+            cdSel.innerHTML = '<option value="">Selecione o CD...</option>' + cdsCache.map(c => `<option value="${c.id}">${c.cd} — ${c.name}</option>`).join('');
+            const catSel = document.getElementById('adm-imp-cat');
+            catSel.innerHTML = '<option value="">Selecione a categoria...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            openModal('m-admin-import');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const z2 = document.getElementById('adm-imp-zone'); if (!z2) return;
+            z2.addEventListener('dragover', e => { e.preventDefault(); z2.classList.add('drag-over'); });
+            z2.addEventListener('dragleave', () => z2.classList.remove('drag-over'));
+            z2.addEventListener('drop', e => { e.preventDefault(); z2.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) procAdminExcel(f); });
+        });
+
+        function handleAdminExcel(input) { if (input.files[0]) procAdminExcel(input.files[0]); }
+
+        function procAdminExcel(file) {
+            const r = new FileReader();
+            r.onload = e => {
+                const wb = XLSX.read(e.target.result, { type: 'binary' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                const raw = XLSX.utils.sheet_to_json(ws, { header: 1 });
+                if (!raw.length) return toast('Arquivo vazio', 'error');
+                const hdrs = raw[0].map(h => String(h).toLowerCase().trim());
+                const rows = raw.slice(1).filter(r => r.some(c => c !== undefined && c !== ''));
+                const mapped = rows.map(row => { const o = {}; hdrs.forEach((h, i) => { const f = FMAP[h] || h; o[f] = row[i] !== undefined ? String(row[i]).trim() : ''; }); return o; });
+                adminImportBuf = mapped;
+                const ph = hdrs.slice(0, 7).map(h => FMAP[h] || h);
+                document.getElementById('adm-imp-preview').style.display = 'block';
+                document.getElementById('adm-imp-preview-title').textContent = `📊 ${rows.length} linha(s) — Prévia`;
+                document.getElementById('adm-imp-ph').innerHTML = `<tr>${ph.map(f => `<th>${f}</th>`).join('')}</tr>`;
+                document.getElementById('adm-imp-pb').innerHTML = mapped.slice(0, 5).map(row => `<tr>${ph.map(f => `<td>${row[f] || ''}</td>`).join('')}</tr>`).join('');
+                document.getElementById('btn-adm-imp').style.display = 'inline-flex';
+                toast(`${rows.length} itens prontos`, 'info');
+            };
+            r.readAsBinaryString(file);
+        }
+
+        async function confirmAdminImport() {
+            const cdId = document.getElementById('adm-imp-cd')?.value;
+            const catId = document.getElementById('adm-imp-cat')?.value;
+            if (!cdId) return toast('Selecione o CD de destino', 'error');
+            if (!catId) return toast('Selecione a categoria', 'error');
+            if (!adminImportBuf?.length) return toast('Nenhum dado', 'error');
+            setBtn('btn-adm-imp', true, `Importando ${adminImportBuf.length}...`);
+            try {
+                const toIns = adminImportBuf.map(row => ({ cd_id: cdId, category: catId, fabricante: row.fabricante || '', equipamento: row.equipamento || '', modelo: row.modelo || '', numero_serie: row.numero_serie || row.ns_patrimonio || '', patrimonio: row.patrimonio || '', ns_patrimonio: row.ns_patrimonio || row.numero_serie || '', sistema_operacional: row.sistema_operacional || '', departamento: row.departamento || '', memoria_ram: row.memoria_ram || '', hd_ssd: row.hd_ssd || '', processador: row.processador || '', hostname: row.hostname || '', status: row.status || 'Ativo', tempo_uso: row.tempo_uso || '', observacoes: row.observacoes || '' }));
+                let ins = [];
+                for (let i = 0; i < toIns.length; i += 100) { const b = toIns.slice(i, i + 100); const r = await DB.post('inventory_items', b); ins = ins.concat(Array.isArray(r) ? r : [r]); }
+                const cd = cdsCache.find(c => c.id === cdId);
+                await writeLog({ actor_type: 'admin', actor_name: ME?.name, actor_cd: 'ADMIN', action: 'add', category: catId, detail: `Importação em massa: ${ins.length} itens para CD ${cd?.cd || cdId}` }).catch(() => { });
+                closeModal('m-admin-import');
+                toast(`✅ ${ins.length} itens importados para ${cd?.name || cdId}!`, 'success');
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
+            finally { setBtn('btn-adm-imp', false, '✅ Importar'); }
+        }
+
+        // ============================================================
+        // CONFIG ALERTAS DE USO
+        // ============================================================
+        let alertConfig = { ageThreshold: '> 5 anos', categories: [] };
+
+        function openAlertConfig() {
+            // Load from localStorage
+            try { const s = localStorage.getItem('quallit_alert_cfg'); if (s) alertConfig = JSON.parse(s); } catch { }
+            const sel = document.getElementById('alert-age-sel');
+            sel.value = alertConfig.ageThreshold || '> 5 anos';
+            const catWrap = document.getElementById('alert-cats-check');
+            catWrap.innerHTML = catsCache.map(c => `
+                <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);cursor:pointer;padding:6px 10px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+                    <input type="checkbox" style="accent-color:var(--accent)" value="${c.id}" ${(alertConfig.categories.length === 0 || alertConfig.categories.includes(c.id)) ? 'checked' : ''}>
+                    ${c.icon} ${c.name}
+                </label>`).join('');
+            openModal('m-alert-config');
+        }
+
+        function saveAlertConfig() {
+            alertConfig.ageThreshold = document.getElementById('alert-age-sel').value;
+            alertConfig.categories = [...document.querySelectorAll('#alert-cats-check input:checked')].map(cb => cb.value);
+            try { localStorage.setItem('quallit_alert_cfg', JSON.stringify(alertConfig)); } catch { }
+            closeModal('m-alert-config');
+            toast('Configuração salva!', 'success');
+            // Re-render alerts with new config
+            if (itemsCache.length) renderAlerts(cdsCache, itemsCache);
+        }
+
+        // ============================================================
+        // ALERT RENDER — agora usa alertConfig para tempo de uso
         // ============================================================
         function openImportModal() {
             importBuf = null;
