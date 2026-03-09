@@ -1176,6 +1176,61 @@
             transform: rotate(20deg) scale(1.05);
         }
 
+        /* ── REPORT PERIOD CHIPS ── */
+        .rep-period-chip {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            font-family: var(--font);
+            cursor: pointer;
+            border: 1px solid var(--border2);
+            background: var(--bg3);
+            color: var(--text2);
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .rep-period-chip:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: rgba(14, 165, 233, .06);
+        }
+
+        .rep-period-chip.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+            box-shadow: 0 2px 10px rgba(14, 165, 233, .3);
+        }
+
+        /* ── ALERT CONFIG CATEGORY TOGGLE ── */
+        .alert-cat-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid var(--border2);
+            background: var(--bg3);
+            color: var(--text2);
+            transition: all .15s;
+            user-select: none;
+        }
+
+        .alert-cat-toggle.on {
+            background: rgba(245, 158, 11, .1);
+            color: var(--yellow);
+            border-color: rgba(245, 158, 11, .35);
+        }
+
+        .alert-cat-toggle input {
+            display: none;
+        }
+
         /* ── PHOTO UPLOAD ── */
         .photo-upload-box {
             border: 2px dashed var(--border2);
@@ -1697,6 +1752,16 @@
             color: var(--text3);
             font-size: 13px;
         }
+
+        .alert-row-highlight {
+            background: rgba(245, 158, 11, .05);
+            border-left: 3px solid var(--yellow);
+        }
+
+        .alert-row-highlight .alert-row-body strong {
+            color: var(--yellow);
+        }
+
 
         /* ── BATCH SELECT ── */
         .batch-bar {
@@ -2715,6 +2780,7 @@
                         </div>
                         <div class="page-actions">
                             <button class="btn btn-ghost" onclick="loadDashboard()">🔄 Atualizar</button>
+                            <button class="btn btn-outline" onclick="openAlertConfig()">⚙️ Config Alertas</button>
                             <button class="btn btn-accent" onclick="openModal('m-new-cd')">+ Novo CD</button>
                         </div>
                     </div>
@@ -2908,11 +2974,48 @@
                             <div class="page-title">Relatórios</div>
                             <div class="page-subtitle">Análise detalhada do inventário</div>
                         </div>
-                        <div class="page-actions"><button class="btn btn-green" onclick="exportReport()">📥 Exportar
-                                Excel</button></div>
+                        <div class="page-actions">
+                            <span id="rep-count-lbl"
+                                style="font-size:12px;color:var(--text3);font-family:var(--mono);align-self:center"></span>
+                            <button class="btn btn-green" onclick="exportReport()">📥 Exportar Excel</button>
+                        </div>
                     </div>
+
+                    <!-- FILTROS DE DATA -->
+                    <div class="table-container fade-in" style="margin-bottom:16px">
+                        <div class="table-toolbar" style="flex-wrap:wrap;gap:8px;padding:14px 16px">
+                            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                                <span
+                                    style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:1px;text-transform:uppercase;font-family:var(--mono);white-space:nowrap">📅
+                                    Período</span>
+                                <div id="rep-period-chips" style="display:flex;gap:6px;flex-wrap:wrap">
+                                    <button class="rep-period-chip" data-days=""
+                                        onclick="setRepPeriod(this)">Todos</button>
+                                    <button class="rep-period-chip" data-days="7" onclick="setRepPeriod(this)">7
+                                        dias</button>
+                                    <button class="rep-period-chip" data-days="30" onclick="setRepPeriod(this)">30
+                                        dias</button>
+                                    <button class="rep-period-chip" data-days="90" onclick="setRepPeriod(this)">90
+                                        dias</button>
+                                    <button class="rep-period-chip" data-days="365" onclick="setRepPeriod(this)">Último
+                                        ano</button>
+                                    <button class="rep-period-chip" data-days="custom"
+                                        onclick="setRepPeriod(this)">Personalizado</button>
+                                </div>
+                            </div>
+                            <div id="rep-custom-range" style="display:none;align-items:center;gap:8px;flex-wrap:wrap">
+                                <span style="font-size:12px;color:var(--text3)">De</span>
+                                <input type="date" id="rep-date-from" class="filter-select" style="padding:7px 10px"
+                                    onchange="renderReport()">
+                                <span style="font-size:12px;color:var(--text3)">até</span>
+                                <input type="date" id="rep-date-to" class="filter-select" style="padding:7px 10px"
+                                    onchange="renderReport()">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="table-container fade-in">
-                        <div class="table-toolbar">
+                        <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
                             <select class="filter-select" id="rep-cd" onchange="renderReport()">
                                 <option value="">Todos os CDs</option>
                             </select>
@@ -2926,6 +3029,16 @@
                                 <option>Manutenção</option>
                                 <option>Backup</option>
                             </select>
+                            <select class="filter-select" id="rep-tempo" onchange="renderReport()">
+                                <option value="">Todos Tempo de Uso</option>
+                                <option value="&lt; 1 ano">&lt; 1 ano</option>
+                                <option value="1-2 anos">1-2 anos</option>
+                                <option value="2-3 anos">2-3 anos</option>
+                                <option value="3-5 anos">3-5 anos</option>
+                                <option value="&gt; 5 anos">&gt; 5 anos</option>
+                            </select>
+                            <input class="search-input" placeholder="🔍 Buscar..." id="rep-search"
+                                oninput="renderReport()" style="min-width:160px">
                         </div>
                         <div class="table-scroll">
                             <table>
@@ -3551,34 +3664,55 @@
         </div>
     </div>
 
+    <!-- MODAL: Config Alertas de Tempo de Uso -->
+    <div class="modal-overlay" id="m-alert-config">
+        <div class="modal" style="max-width:560px">
+            <div class="modal-header">
+                <div class="modal-title">⚙️ Configurar Alertas de Tempo de Uso</div>
+                <button class="modal-close" onclick="closeModal('m-alert-config')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info" style="margin-bottom:20px">⏰ Equipamentos com tempo de uso igual ou
+                    superior ao limite configurado aparecerão como alerta no Dashboard.</div>
+                <div class="form-group" style="margin-bottom:20px">
+                    <label>Limite de Tempo de Uso para Alerta</label>
+                    <select id="alert-cfg-threshold" onchange="previewAlertConfig()">
+                        <option value="">Desativado (sem alerta)</option>
+                        <option value="1-2 anos">A partir de 1-2 anos</option>
+                        <option value="2-3 anos">A partir de 2-3 anos</option>
+                        <option value="3-5 anos">A partir de 3-5 anos</option>
+                        <option value="> 5 anos">A partir de &gt; 5 anos</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label style="margin-bottom:10px;display:block">Categorias Monitoradas</label>
+                    <div id="alert-cfg-cats" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+                    <div style="margin-top:8px;display:flex;gap:8px">
+                        <button class="btn btn-ghost btn-sm" onclick="alertCfgSelectAll(true)">Selecionar todas</button>
+                        <button class="btn btn-ghost btn-sm" onclick="alertCfgSelectAll(false)">Desmarcar todas</button>
+                    </div>
+                </div>
+                <div id="alert-cfg-preview" style="display:none;margin-top:20px">
+                    <div
+                        style="font-size:11px;font-weight:600;color:var(--text3);letter-spacing:1.5px;text-transform:uppercase;font-family:var(--mono);margin-bottom:10px">
+                        Pré-visualização do alerta</div>
+                    <div id="alert-cfg-preview-inner"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-alert-config')">Cancelar</button>
+                <button class="btn btn-outline btn-sm" onclick="previewAlertConfig()">👁 Pré-visualizar</button>
+                <button class="btn btn-accent" onclick="saveAlertConfig()">💾 Salvar Configuração</button>
+            </div>
+        </div>
+    </div>
+
     <script>
 
         const SB_URL = '__SB_URL__';
         const SB_KEY = '__SB_KEY__';
 
-        /*
-        ═══════════════════════════════════════════════════════════════
-        SUPABASE — MIGRATION SQL (execute no SQL Editor do Supabase)
-        ═══════════════════════════════════════════════════════════════
-        -- Colunas base
-        ALTER TABLE inventory_items
-          ADD COLUMN IF NOT EXISTS numero_serie TEXT DEFAULT '',
-          ADD COLUMN IF NOT EXISTS patrimonio TEXT DEFAULT '';
 
-        -- Migrar dados existentes (ns_patrimonio → numero_serie)
-        UPDATE inventory_items
-          SET numero_serie = ns_patrimonio
-          WHERE numero_serie = '' AND ns_patrimonio IS NOT NULL AND ns_patrimonio != '';
-
-        -- Foto do equipamento (base64)
-        ALTER TABLE inventory_items
-          ADD COLUMN IF NOT EXISTS photo_b64 TEXT DEFAULT NULL;
-
-        -- Histórico de movimentações entre departamentos
-        ALTER TABLE inventory_items
-          ADD COLUMN IF NOT EXISTS move_history JSONB DEFAULT '[]'::jsonb;
-        ═══════════════════════════════════════════════════════════════
-        */
 
         async function sbReq(method, table, qs = '', body = null) {
             const r = await fetch(`${SB_URL}/rest/v1/${table}${qs}`, {
@@ -4006,8 +4140,88 @@
             ).join('');
         }
 
+        // ── ALERT CONFIG STATE (persisted in localStorage) ──
+        let _alertCfg = null;
+
+        function loadAlertCfg() {
+            try { _alertCfg = JSON.parse(localStorage.getItem('quallit_alert_cfg')) || null; } catch { _alertCfg = null; }
+            if (!_alertCfg) _alertCfg = { threshold: '', cats: [] }; // default: disabled
+        }
+
+        function saveAlertConfig() {
+            const threshold = g('alert-cfg-threshold');
+            const cats = [...document.querySelectorAll('#alert-cfg-cats input[type=checkbox]:checked')].map(cb => cb.value);
+            _alertCfg = { threshold, cats };
+            localStorage.setItem('quallit_alert_cfg', JSON.stringify(_alertCfg));
+            closeModal('m-alert-config');
+            // Re-run alerts with current cache
+            if (itemsCache.length) renderAlerts(cdsCache, itemsCache);
+            toast('Configuração de alertas salva!', 'success');
+        }
+
+        function openAlertConfig() {
+            loadAlertCfg();
+            // Populate threshold
+            const sel = document.getElementById('alert-cfg-threshold');
+            if (sel) sel.value = _alertCfg.threshold || '';
+            // Populate category checkboxes
+            const catsEl = document.getElementById('alert-cfg-cats');
+            if (catsEl) {
+                catsEl.innerHTML = catsCache.map(c => {
+                    const checked = !_alertCfg.cats.length || _alertCfg.cats.includes(c.id) ? 'checked' : '';
+                    return `<label class="alert-cat-toggle ${checked ? 'on' : ''}" onclick="this.classList.toggle('on')">
+                        <input type="checkbox" value="${c.id}" ${checked} onchange="">
+                        ${c.icon} ${c.name}
+                    </label>`;
+                }).join('');
+            }
+            // Hide preview
+            const prev = document.getElementById('alert-cfg-preview');
+            if (prev) prev.style.display = 'none';
+            openModal('m-alert-config');
+        }
+
+        function alertCfgSelectAll(on) {
+            document.querySelectorAll('#alert-cfg-cats input[type=checkbox]').forEach(cb => {
+                cb.checked = on;
+                cb.closest('label').classList.toggle('on', on);
+            });
+            previewAlertConfig();
+        }
+
+        function previewAlertConfig() {
+            const threshold = g('alert-cfg-threshold');
+            if (!threshold) {
+                const prev = document.getElementById('alert-cfg-preview');
+                if (prev) { prev.style.display = 'block'; document.getElementById('alert-cfg-preview-inner').innerHTML = '<div style="font-size:13px;color:var(--text3);font-style:italic">Alerta desativado.</div>'; }
+                return;
+            }
+            const cats = [...document.querySelectorAll('#alert-cfg-cats input[type=checkbox]:checked')].map(cb => cb.value);
+            const ORDER = ['< 1 ano', '1-2 anos', '2-3 anos', '3-5 anos', '> 5 anos'];
+            const threshIdx = ORDER.indexOf(threshold);
+            const affected = itemsCache.filter(i => {
+                if (cats.length && !cats.includes(i.category)) return false;
+                const idx = ORDER.indexOf(i.tempo_uso);
+                return idx >= threshIdx && idx >= 0;
+            });
+            const prev = document.getElementById('alert-cfg-preview');
+            const inner = document.getElementById('alert-cfg-preview-inner');
+            prev.style.display = 'block';
+            if (!affected.length) {
+                inner.innerHTML = '<div style="font-size:13px;color:var(--green)">✅ Nenhum equipamento atingiria esse critério atualmente.</div>'; return;
+            }
+            inner.innerHTML = `<div class="alert-row" style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:12px 14px">
+                <div class="alert-row-ico">⏰</div>
+                <div class="alert-row-body">
+                    <strong style="color:var(--text)">${affected.length} equipamento(s) com tempo de uso ≥ "${threshold}"</strong>
+                    <span style="color:var(--text3)">${affected.slice(0, 4).map(i => i.equipamento || i.modelo || 'Item').join(', ')}${affected.length > 4 ? '...' : ''}</span>
+                </div>
+            </div>`;
+        }
+
         // ── ALERTS ──
         function renderAlerts(cds, items) {
+            loadAlertCfg();
             const alerts = [];
             const backup = items.filter(i => i.status === 'Backup');
             if (backup.length) alerts.push({ ico: '💾', title: `${backup.length} equipamento(s) marcados como Backup`, sub: backup.slice(0, 3).map(i => i.equipamento || i.modelo || 'Item').join(', ') + (backup.length > 3 ? '...' : '') });
@@ -4020,13 +4234,29 @@
             const noItems = cds.filter(cd => !items.find(i => i.cd_id === cd.id));
             if (noItems.length) alerts.push({ ico: '📋', title: `${noItems.length} CD(s) sem itens cadastrados`, sub: noItems.slice(0, 3).map(c => c.name).join(', ') });
 
+            // ⏰ Configurable usage-time alert
+            if (_alertCfg?.threshold) {
+                const ORDER = ['< 1 ano', '1-2 anos', '2-3 anos', '3-5 anos', '> 5 anos'];
+                const threshIdx = ORDER.indexOf(_alertCfg.threshold);
+                const monitoredCats = _alertCfg.cats || [];
+                const aged = items.filter(i => {
+                    if (monitoredCats.length && !monitoredCats.includes(i.category)) return false;
+                    const idx = ORDER.indexOf(i.tempo_uso);
+                    return idx >= threshIdx && idx >= 0;
+                });
+                if (aged.length) {
+                    const catNames = [...new Set(aged.map(i => { const c = catsCache.find(x => x.id === i.category); return c ? c.icon + ' ' + c.name : i.category; }))].slice(0, 3).join(', ');
+                    alerts.push({ ico: '⏰', title: `${aged.length} equipamento(s) com tempo de uso ≥ "${_alertCfg.threshold}"`, sub: `Categorias: ${catNames}${aged.length > 3 ? '...' : ''}`, highlight: true });
+                }
+            }
+
             const panel = document.getElementById('alert-panel');
             const inner = document.getElementById('alert-list-inner');
             const lbl = document.getElementById('alert-count-lbl');
             if (!alerts.length) { panel.style.display = 'none'; return; }
             panel.style.display = 'block';
             lbl.textContent = `${alerts.length} alerta(s)`;
-            inner.innerHTML = alerts.map(a => `<div class="alert-row"><div class="alert-row-ico">${a.ico}</div><div class="alert-row-body"><strong>${a.title}</strong><span>${a.sub}</span></div></div>`).join('');
+            inner.innerHTML = alerts.map(a => `<div class="alert-row${a.highlight ? ' alert-row-highlight' : ''}"><div class="alert-row-ico">${a.ico}</div><div class="alert-row-body"><strong>${a.title}</strong><span>${a.sub}</span></div></div>`).join('');
         }
 
         // ============================================================
@@ -4200,18 +4430,34 @@
                 cdsCache = cds; itemsCache = items;
                 document.getElementById('rep-cd').innerHTML = '<option value="">Todos os CDs</option>' + cds.map(c => `<option value="${c.id}">${c.name} (${c.cd})</option>`).join('');
                 document.getElementById('rep-cat').innerHTML = '<option value="">Todas Categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+                // Activate "Todos" chip if none active
+                const chips = document.querySelectorAll('.rep-period-chip');
+                if (chips.length && !document.querySelector('.rep-period-chip.active')) {
+                    chips[0].classList.add('active');
+                    _repActivePeriodDays = chips[0].dataset.days;
+                }
                 renderReport(); setLoad(false);
             } catch (e) { setLoad(false); toast('Erro: ' + e.message, 'error'); }
         }
 
         function renderReport() {
             const cf = g('rep-cd'), ct = g('rep-cat'), sf = g('rep-st');
+            const tempo = g('rep-tempo');
+            const search = (document.getElementById('rep-search')?.value || '').toLowerCase();
             let it = itemsCache;
             if (cf) it = it.filter(i => i.cd_id === cf);
             if (ct) it = it.filter(i => i.category === ct);
             if (sf) it = it.filter(i => i.status === sf);
+            if (tempo) it = it.filter(i => i.tempo_uso === tempo);
+            // Date filter
+            it = applyRepDateFilter(it);
+            // Search
+            if (search) it = it.filter(i => JSON.stringify(i).toLowerCase().includes(search));
+            // Count label
+            const lbl = document.getElementById('rep-count-lbl');
+            if (lbl) lbl.textContent = `${it.length} registro(s)`;
             const tb = document.getElementById('tb-report');
-            if (!it.length) { tb.innerHTML = `<tr><td colspan="15"><div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Sem dados</div></div></td></tr>`; return; }
+            if (!it.length) { tb.innerHTML = `<tr><td colspan="16"><div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Sem dados para o período/filtros selecionados</div></div></td></tr>`; return; }
             tb.innerHTML = it.map(item => {
                 const cd = cdsCache.find(c => c.id === item.cd_id); const cat = catsCache.find(c => c.id === item.category);
                 const ns = item.numero_serie || item.ns_patrimonio || '—';
@@ -4220,9 +4466,91 @@
             }).join('');
         }
 
+        // Returns filtered items respecting active period/date range
+        function applyRepDateFilter(items) {
+            const activePeriodDays = _repActivePeriodDays;
+            const dateFrom = document.getElementById('rep-date-from')?.value;
+            const dateTo = document.getElementById('rep-date-to')?.value;
+            if (activePeriodDays === 'custom') {
+                const from = dateFrom ? new Date(dateFrom + 'T00:00:00') : null;
+                const to = dateTo ? new Date(dateTo + 'T23:59:59') : null;
+                return items.filter(i => {
+                    const d = new Date(i.created_at);
+                    if (from && d < from) return false;
+                    if (to && d > to) return false;
+                    return true;
+                });
+            } else if (activePeriodDays) {
+                const cutoff = new Date(Date.now() - activePeriodDays * 86400000);
+                return items.filter(i => new Date(i.created_at) >= cutoff);
+            }
+            return items;
+        }
+
+        let _repActivePeriodDays = '';
+
+        function setRepPeriod(btn) {
+            document.querySelectorAll('.rep-period-chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            _repActivePeriodDays = btn.dataset.days;
+            const customRange = document.getElementById('rep-custom-range');
+            if (_repActivePeriodDays === 'custom') {
+                customRange.style.display = 'flex';
+                // Default date range: last 30 days
+                const to = new Date(); const from = new Date(to - 30 * 86400000);
+                const fmt = d => d.toISOString().slice(0, 10);
+                const fEl = document.getElementById('rep-date-from');
+                const tEl = document.getElementById('rep-date-to');
+                if (fEl && !fEl.value) fEl.value = fmt(from);
+                if (tEl && !tEl.value) tEl.value = fmt(to);
+            } else {
+                customRange.style.display = 'none';
+            }
+            renderReport();
+        }
+
         function exportReport() {
             const cf = g('rep-cd'), ct = g('rep-cat'), sf = g('rep-st');
-            exportToExcel(itemsCache.filter(i => (!cf || i.cd_id === cf) && (!ct || i.category === ct) && (!sf || i.status === sf)), 'relatorio');
+            const tempo = g('rep-tempo');
+            const search = (document.getElementById('rep-search')?.value || '').toLowerCase();
+            let it = itemsCache;
+            if (cf) it = it.filter(i => i.cd_id === cf);
+            if (ct) it = it.filter(i => i.category === ct);
+            if (sf) it = it.filter(i => i.status === sf);
+            if (tempo) it = it.filter(i => i.tempo_uso === tempo);
+            it = applyRepDateFilter(it);
+            if (search) it = it.filter(i => JSON.stringify(i).toLowerCase().includes(search));
+            if (!it.length) return toast('Nenhum dado para exportar com os filtros aplicados', 'error');
+            // Build period label for filename
+            let periodSuffix = '';
+            if (_repActivePeriodDays === 'custom') {
+                const df = document.getElementById('rep-date-from')?.value || '';
+                const dt = document.getElementById('rep-date-to')?.value || '';
+                periodSuffix = `_${df}_${dt}`;
+            } else if (_repActivePeriodDays) {
+                periodSuffix = `_ultimos_${_repActivePeriodDays}d`;
+            }
+            const data = it.map(item => {
+                const cd = cdsCache.find(c => c.id === item.cd_id); const cat = catsCache.find(c => c.id === item.category);
+                return {
+                    'CD': cd?.cd || '', 'Nome CD': cd?.name || '', 'Categoria': cat?.name || item.category,
+                    'Fabricante': item.fabricante || '', 'Equipamento': item.equipamento || '', 'Modelo': item.modelo || '',
+                    'N/S': item.numero_serie || item.ns_patrimonio || '', 'Patrimônio': item.patrimonio || '',
+                    'SO': item.sistema_operacional || '', 'Departamento': item.departamento || '',
+                    'RAM': item.memoria_ram || '', 'HD/SSD': item.hd_ssd || '', 'CPU': item.processador || '',
+                    'Hostname': item.hostname || '', 'Status': item.status || '', 'Tempo de Uso': item.tempo_uso || '',
+                    'Data Cadastro': new Date(item.created_at).toLocaleString('pt-BR'), 'Observações': item.observacoes || ''
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws['!cols'] = [
+                { wch: 8 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+                { wch: 8 }, { wch: 12 }, { wch: 20 }, { wch: 14 }, { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 30 }
+            ];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Relatório');
+            XLSX.writeFile(wb, `relatorio${periodSuffix}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            toast(`${it.length} registro(s) exportados!`, 'success');
         }
 
 
