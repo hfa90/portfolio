@@ -3748,13 +3748,25 @@
                         style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.75));padding:14px;text-align:center;font-size:13px;color:#fff">
                         Aponte para o QR Code do equipamento</div>
                 </div>
-                <div id="qrs-cam-error" style="display:none;padding:28px 0;text-align:center">
-                    <div style="font-size:40px;margin-bottom:8px">📷</div>
-                    <div style="font-weight:700;margin-bottom:6px">Câmera não disponível</div>
-                    <div style="font-size:12px;color:var(--text3)">Verifique as permissões ou use o checklist manual.
+                <div id="qrs-cam-error" style="display:none;padding:24px 16px;text-align:center">
+                    <div style="font-size:48px;margin-bottom:10px">📷</div>
+                    <div style="font-weight:700;font-size:15px;margin-bottom:8px;color:var(--text)">Câmera não
+                        disponível</div>
+                    <div id="qrs-cam-error-msg"
+                        style="font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:16px">Verifique as
+                        permissões ou use o checklist manual.</div>
+                    <div style="display:flex;flex-direction:column;gap:10px;align-items:center">
+                        <label
+                            style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;background:rgba(14,165,233,.12);border:1.5px solid rgba(14,165,233,.3);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;color:var(--accent2);transition:.15s"
+                            onmouseover="this.style.background='rgba(14,165,233,.2)'"
+                            onmouseout="this.style.background='rgba(14,165,233,.12)'">
+                            🖼️ Enviar Foto do QR Code
+                            <input type="file" accept="image/*" capture="environment" style="display:none"
+                                onchange="handleQRImageUpload(event)">
+                        </label>
+                        <button class="btn btn-ghost btn-sm" onclick="stopQRScan();startManualChecklist()">📋 Usar
+                            Checklist Manual</button>
                     </div>
-                    <button class="btn btn-accent" style="margin-top:14px"
-                        onclick="stopQRScan();startManualChecklist()">📋 Usar Checklist Manual</button>
                 </div>
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
                     <span style="font-size:12px;color:var(--text3)">Validados nesta sessão:</span>
@@ -3786,7 +3798,8 @@
             <div class="modal-body" id="qrv-body"></div>
             <div class="modal-footer">
                 <button class="btn btn-danger btn-sm" onclick="rejectQRItem()">✗ Não encontrado</button>
-                <button class="btn btn-accent" style="flex:1" onclick="validateQRItem()">✅ Validar Equipamento</button>
+                <button class="btn btn-accent" id="btn-qr-validate-confirm" style="flex:1" onclick="validateQRItem()">✅
+                    Validar Equipamento</button>
             </div>
         </div>
     </div>
@@ -3880,6 +3893,17 @@
             return r.status === 204 ? [] : r.json();
         }
         const DB = { get: (t, q) => sbReq('GET', t, q), post: (t, b) => sbReq('POST', t, '', b), patch: (t, q, b) => sbReq('PATCH', t, q, b), delete: (t, q) => sbReq('DELETE', t, q) };
+
+        /*
+         * ── MIGRAÇÃO SUPABASE NECESSÁRIA ──────────────────────────────
+         * Execute no SQL Editor do Supabase para habilitar validação por QR:
+         *
+         * ALTER TABLE inventory_items
+         *   ADD COLUMN IF NOT EXISTS last_validated_at TIMESTAMPTZ,
+         *   ADD COLUMN IF NOT EXISTS validated_by TEXT;
+         *
+         * ─────────────────────────────────────────────────────────────
+         */
 
         // ============================================================
         // CONSTANTS
@@ -5687,36 +5711,114 @@
             qrsUpdateProgress();
             openModal('m-qr-scan');
 
+            // Verificar se estamos em contexto seguro (HTTPS ou localhost)
+            const isSecureCtx = window.isSecureContext || location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            if (!isSecureCtx) {
+                console.warn('Camera error: Not a secure context (requires HTTPS)');
+                showCamError('A câmera requer HTTPS. Use o <strong>Upload de Imagem</strong> ou o Checklist Manual.');
+                return;
+            }
+
+            // Verificar se getUserMedia está disponível
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                console.warn('Camera error: mediaDevices.getUserMedia not available');
+                showCamError('Câmera não disponível neste navegador. Tente pelo <strong>Chrome/Edge</strong> ou use o Checklist Manual.');
+                return;
+            }
+
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } } });
                 _qrsStream = stream;
                 const video = document.getElementById('qrs-video');
                 video.srcObject = stream;
                 await video.play();
+                document.getElementById('qrs-status').textContent = 'Aponte para o QR Code do equipamento';
 
-                if ('BarcodeDetector' in window) {
-                    const det = new BarcodeDetector({ formats: ['qr_code'] });
-                    const loop = async () => {
-                        if (!_qrsStream) return;
-                        try { const bs = await det.detect(video); if (bs.length) handleQRRead(bs[0].rawValue); } catch { }
+                // Carregar jsQR de forma assíncrona como biblioteca principal
+                const loadAndStartScan = () => {
+                    if ('BarcodeDetector' in window) {
+                        // BarcodeDetector nativo (Chromium)
+                        const det = new BarcodeDetector({ formats: ['qr_code'] });
+                        const loop = async () => {
+                            if (!_qrsStream) return;
+                            try {
+                                const bs = await det.detect(video);
+                                if (bs.length && !_qrsPaused) handleQRRead(bs[0].rawValue);
+                            } catch { }
+                            _qrsRaf = requestAnimationFrame(loop);
+                        };
                         _qrsRaf = requestAnimationFrame(loop);
-                    };
-                    _qrsRaf = requestAnimationFrame(loop);
-                } else {
-                    // Load jsQR from CDN as fallback
-                    if (!window.jsQR) {
+                    } else if (window.jsQR) {
+                        startJsQRLoop(video);
+                    } else {
                         const s = document.createElement('script');
                         s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
                         s.onload = () => startJsQRLoop(video);
-                        s.onerror = () => { document.getElementById('qrs-status').textContent = 'Usando modo de compatibilidade...'; startJsQRLoop(video); };
+                        s.onerror = () => {
+                            document.getElementById('qrs-status').textContent = '⚠️ Erro ao carregar leitor QR. Câmera ativa mas sem decodificação.';
+                        };
                         document.head.appendChild(s);
-                    } else { startJsQRLoop(video); }
-                }
+                    }
+                };
+                loadAndStartScan();
+
             } catch (err) {
                 console.warn('Camera error:', err);
-                document.getElementById('qrs-viewport').style.display = 'none';
-                document.getElementById('qrs-cam-error').style.display = 'block';
+                let msg = 'Câmera não disponível. Verifique as permissões ou use o Checklist Manual.';
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    msg = '🔒 Permissão de câmera <strong>negada</strong>. Clique no ícone 🔒 na barra de endereço e permita o acesso à câmera.';
+                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    msg = '📷 <strong>Nenhuma câmera encontrada</strong> neste dispositivo.';
+                } else if (err.name === 'NotReadableError') {
+                    msg = '⚠️ Câmera está sendo usada por outro aplicativo. Feche-o e tente novamente.';
+                }
+                showCamError(msg);
             }
+        }
+
+        function showCamError(msg) {
+            document.getElementById('qrs-viewport').style.display = 'none';
+            const errEl = document.getElementById('qrs-cam-error');
+            const msgEl = document.getElementById('qrs-cam-error-msg');
+            if (msgEl) msgEl.innerHTML = msg;
+            errEl.style.display = 'block';
+        }
+
+        // Leitura de QR por imagem (fallback quando câmera não disponível)
+        function handleQRImageUpload(event) {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.width; canvas.height = img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const tryDecode = () => {
+                        const code = window.jsQR?.(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
+                        if (code) {
+                            handleQRRead(code.data);
+                        } else {
+                            toast('QR Code não encontrado na imagem. Tente uma foto mais nítida.', 'error');
+                        }
+                    };
+                    if (window.jsQR) {
+                        tryDecode();
+                    } else {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+                        s.onload = tryDecode;
+                        document.head.appendChild(s);
+                    }
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            // Reset input so same file can be re-selected
+            event.target.value = '';
         }
 
         function startJsQRLoop(video) {
@@ -5768,31 +5870,109 @@
             const cat = catsCache.find(c => c.id === item.category);
             const ns = item.numero_serie || item.ns_patrimonio || '—';
             const pat = item.patrimonio || '—';
+
             let html = '';
-            // Foto ou ícone de categoria
+
+            // ── Cabeçalho de Categoria ──────────────────────────────────
+            html += `<div style="display:flex;align-items:center;gap:10px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);border-radius:10px;padding:10px 14px;margin-bottom:14px">
+                <span style="font-size:28px">${cat?.icon || '📦'}</span>
+                <div>
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);font-family:var(--mono)">Categoria</div>
+                    <div style="font-size:14px;font-weight:700;color:var(--accent2)">${cat?.name || item.category || '—'}</div>
+                </div>
+            </div>`;
+
+            // ── Foto do equipamento ─────────────────────────────────────
             if (item.photo_b64) {
-                html += `<img src="${item.photo_b64}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;border:1px solid var(--border);display:block" alt="Foto">`;
+                html += `<div style="position:relative;margin-bottom:14px">
+                    <img src="${item.photo_b64}" style="width:100%;max-height:180px;object-fit:cover;border-radius:10px;border:1px solid var(--border);display:block" alt="Foto do Equipamento">
+                    <span style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;padding:3px 7px;border-radius:6px;font-family:var(--mono)">📷 Foto cadastrada</span>
+                </div>`;
             } else {
-                html += `<div style="width:100%;height:90px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:44px;margin-bottom:16px">${cat?.icon || '📦'}</div>`;
+                html += `<div style="width:100%;height:80px;background:var(--bg3);border-radius:10px;border:1.5px dashed var(--border2);display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:14px;color:var(--text3);font-size:13px">
+                    <span style="font-size:30px">${cat?.icon || '📦'}</span> Sem foto cadastrada
+                </div>`;
             }
-            const row = (lbl, val, mono) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:8px"><span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);width:90px;flex-shrink:0">${lbl}</span><span style="font-size:14px;font-weight:600;${mono ? 'font-family:var(--mono)' : ''}">${val}</span></div>`;
-            html += row('Equipamento', item.equipamento || item.modelo || '—', false);
-            html += row('Fabricante', item.fabricante || '—', false);
-            html += row('Modelo', item.modelo || '—', false);
-            html += row('N/S', ns, true);
-            html += row('Patrimônio', pat, true);
-            html += row('Departamento', item.departamento || '—', false);
-            html += row('Status', sBadge(item.status), false);
+
+            // ── Cards de destaque: Patrimônio e N/S ─────────────────────
+            html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                <div style="background:rgba(34,197,94,.08);border:1.5px solid rgba(34,197,94,.25);border-radius:10px;padding:10px 12px;text-align:center">
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:var(--mono);margin-bottom:4px">Patrimônio</div>
+                    <div style="font-size:16px;font-weight:800;color:var(--green);font-family:var(--mono)">${pat}</div>
+                </div>
+                <div style="background:rgba(14,165,233,.08);border:1.5px solid rgba(14,165,233,.22);border-radius:10px;padding:10px 12px;text-align:center">
+                    <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:var(--mono);margin-bottom:4px">Número de Série</div>
+                    <div style="font-size:13px;font-weight:700;color:var(--accent2);font-family:var(--mono);word-break:break-all">${ns}</div>
+                </div>
+            </div>`;
+
+            // ── Informações adicionais ──────────────────────────────────
+            const row = (ico, lbl, val, accent) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
+                <span style="font-size:16px;flex-shrink:0">${ico}</span>
+                <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);width:82px;flex-shrink:0">${lbl}</span>
+                <span style="font-size:13px;font-weight:600;color:${accent || 'var(--text)'};flex:1">${val}</span>
+            </div>`;
+
+            html += row('🖥️', 'Equipamento', item.equipamento || item.modelo || '—');
+            html += row('🏭', 'Fabricante', item.fabricante || '—');
+            html += row('📋', 'Modelo', item.modelo || '—');
+            html += row('🏢', 'Departamento', item.departamento || '—');
+            html += row('📌', 'Status', (() => { const s = item.status; const map = { ativo: ['🟢 Ativo', 'var(--green)'], inativo: ['🔴 Inativo', 'var(--red)'], manutencao: ['🟡 Manutenção', 'var(--yellow)'], backup: ['🔵 Backup', 'var(--accent)'] }; return `<span style="color:${map[s]?.[1] || 'var(--text3)'}">${map[s]?.[0] || s || '—'}</span>`; })());
+
+            // ── Última validação ────────────────────────────────────────
+            if (item.last_validated_at) {
+                const dt = new Date(item.last_validated_at).toLocaleString('pt-BR');
+                html += `<div style="margin-top:10px;padding:8px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:8px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px">
+                    ✅ <span>Última validação: <strong style="color:var(--green)">${dt}</strong>${item.validated_by ? ' por ' + item.validated_by : ''}</span>
+                </div>`;
+            }
+
             document.getElementById('qrv-body').innerHTML = html;
             openModal('m-qr-validate');
         }
 
-        function validateQRItem() {
+        async function validateQRItem() {
             if (!_qrsPendingItem) return;
             const item = _qrsPendingItem;
+
+            // Botão de carregamento no modal
+            const btnValidate = document.getElementById('btn-qr-validate-confirm');
+            if (btnValidate) { btnValidate.disabled = true; btnValidate.textContent = '⏳ Salvando...'; }
+
+            const now = new Date().toISOString();
+            const validatedBy = ME?.name || ME?.email || 'Usuário';
+
+            try {
+                // ── Persistir no banco de dados ─────────────────────────
+                await DB.patch('inventory_items', `?id=eq.${item.id}`, {
+                    last_validated_at: now,
+                    validated_by: validatedBy,
+                    updated_at: now
+                });
+                // Atualizar cache local
+                const idx = itemsCache.findIndex(i => i.id === item.id);
+                if (idx >= 0) {
+                    itemsCache[idx] = { ...itemsCache[idx], last_validated_at: now, validated_by: validatedBy };
+                }
+                // Gravar log de auditoria
+                await writeLog({
+                    actor_type: ROLE,
+                    actor_name: ME?.name,
+                    actor_cd: ME?.cd || 'ADMIN',
+                    action: 'qr_validate',
+                    category: item.category,
+                    item_name: item.equipamento || item.modelo || '—',
+                    detail: `Validado por QR Code. Patrimônio: ${item.patrimonio || '—'} · N/S: ${item.numero_serie || item.ns_patrimonio || '—'}`
+                }).catch(() => { });
+            } catch (e) {
+                console.warn('Erro ao salvar validação no banco:', e.message);
+                // Continua mesmo se o banco falhar — registra localmente
+            }
+
             _qrsConfirmed.add(item.id);
             _checklistConfirmed.add(item.id);
-            // Add chip
+
+            // Add chip de confirmação
             const chip = document.createElement('span');
             chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--green)';
             chip.textContent = '✅ ' + (item.equipamento || item.modelo || '—').slice(0, 22);
@@ -5801,6 +5981,7 @@
             qrsUpdateProgress();
             _qrsPendingItem = null;
             _qrsPaused = false;
+            if (btnValidate) { btnValidate.disabled = false; btnValidate.textContent = '✅ Validar Equipamento'; }
             closeModal('m-qr-validate');
         }
 
