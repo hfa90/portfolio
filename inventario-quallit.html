@@ -1363,6 +1363,40 @@
             transition: width .4s cubic-bezier(.16, 1, .3, 1);
         }
 
+
+        /* ── QR SCANNER ANIMATION ── */
+        @keyframes qrScanLine {
+            0% {
+                top: 2px;
+                opacity: 1;
+            }
+
+            48% {
+                top: calc(100% - 4px);
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0;
+                top: calc(100% - 4px);
+            }
+
+            52% {
+                opacity: 0;
+                top: 2px;
+            }
+
+            54% {
+                opacity: 1;
+                top: 2px;
+            }
+
+            100% {
+                top: calc(100% - 4px);
+                opacity: 1;
+            }
+        }
+
         /* ── MOVE DEPT ── */
         .move-history-row {
             display: flex;
@@ -3633,15 +3667,138 @@
         </div>
     </div>
 
-    <!-- MODAL: Checklist de Inventário -->
+    <!-- MODAL: Iniciar Inventário — escolher modo -->
+    <div class="modal-overlay" id="m-inventory-mode">
+        <div class="modal" style="max-width:440px">
+            <div class="modal-header">
+                <div class="modal-title">✅ Iniciar Inventário</div>
+                <button class="modal-close" onclick="closeModal('m-inventory-mode')">×</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:13px;color:var(--text2);margin:0 0 20px">Escolha como deseja confirmar os
+                    equipamentos:</p>
+                <div style="display:flex;flex-direction:column;gap:12px">
+                    <button onclick="startQRScan()"
+                        style="background:rgba(14,165,233,.08);border:1.5px solid rgba(14,165,233,.25);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;transition:.15s"
+                        onmouseover="this.style.background='rgba(14,165,233,.15)'"
+                        onmouseout="this.style.background='rgba(14,165,233,.08)'">
+                        <span style="font-size:32px;flex-shrink:0">📷</span>
+                        <div>
+                            <div style="font-size:15px;font-weight:700;color:var(--accent2);margin-bottom:3px">Leitura
+                                por QR Code</div>
+                            <div style="font-size:12px;color:var(--text3)">Aponte a câmera para o QR Code fixado no
+                                equipamento</div>
+                        </div>
+                    </button>
+                    <button onclick="startManualChecklist()"
+                        style="background:rgba(34,197,94,.06);border:1.5px solid rgba(34,197,94,.2);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:16px;cursor:pointer;text-align:left;transition:.15s"
+                        onmouseover="this.style.background='rgba(34,197,94,.13)'"
+                        onmouseout="this.style.background='rgba(34,197,94,.06)'">
+                        <span style="font-size:32px;flex-shrink:0">📋</span>
+                        <div>
+                            <div style="font-size:15px;font-weight:700;color:var(--green);margin-bottom:3px">Checklist
+                                Manual</div>
+                            <div style="font-size:12px;color:var(--text3)">Marque cada equipamento manualmente em uma
+                                lista</div>
+                        </div>
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-inventory-mode')">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: QR Scanner -->
+    <div class="modal-overlay" id="m-qr-scan">
+        <div class="modal" style="max-width:460px">
+            <div class="modal-header">
+                <div class="modal-title">📷 Scanner de Inventário</div>
+                <button class="modal-close" onclick="stopQRScan()">×</button>
+            </div>
+            <div class="modal-body" style="padding-bottom:16px">
+                <div id="qrs-viewport"
+                    style="position:relative;border-radius:12px;overflow:hidden;background:#000;width:100%;aspect-ratio:4/3">
+                    <video id="qrs-video" style="width:100%;height:100%;object-fit:cover;display:block" autoplay
+                        playsinline muted></video>
+                    <canvas id="qrs-canvas" style="display:none"></canvas>
+                    <!-- Corner frame -->
+                    <div
+                        style="position:absolute;inset:0;pointer-events:none;display:flex;align-items:center;justify-content:center">
+                        <div style="position:relative;width:180px;height:180px">
+                            <div
+                                style="position:absolute;top:0;left:0;width:32px;height:32px;border-top:3px solid #38bdf8;border-left:3px solid #38bdf8;border-radius:3px 0 0 0">
+                            </div>
+                            <div
+                                style="position:absolute;top:0;right:0;width:32px;height:32px;border-top:3px solid #38bdf8;border-right:3px solid #38bdf8;border-radius:0 3px 0 0">
+                            </div>
+                            <div
+                                style="position:absolute;bottom:0;left:0;width:32px;height:32px;border-bottom:3px solid #38bdf8;border-left:3px solid #38bdf8;border-radius:0 0 0 3px">
+                            </div>
+                            <div
+                                style="position:absolute;bottom:0;right:0;width:32px;height:32px;border-bottom:3px solid #38bdf8;border-right:3px solid #38bdf8;border-radius:0 0 3px 0">
+                            </div>
+                            <div id="qrs-scanline"
+                                style="position:absolute;left:4px;right:4px;height:2px;top:0;background:linear-gradient(90deg,transparent,#38bdf8,transparent);animation:qrScanLine 1.8s linear infinite">
+                            </div>
+                        </div>
+                    </div>
+                    <div id="qrs-status"
+                        style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.75));padding:14px;text-align:center;font-size:13px;color:#fff">
+                        Aponte para o QR Code do equipamento</div>
+                </div>
+                <div id="qrs-cam-error" style="display:none;padding:28px 0;text-align:center">
+                    <div style="font-size:40px;margin-bottom:8px">📷</div>
+                    <div style="font-weight:700;margin-bottom:6px">Câmera não disponível</div>
+                    <div style="font-size:12px;color:var(--text3)">Verifique as permissões ou use o checklist manual.
+                    </div>
+                    <button class="btn btn-accent" style="margin-top:14px"
+                        onclick="stopQRScan();startManualChecklist()">📋 Usar Checklist Manual</button>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px">
+                    <span style="font-size:12px;color:var(--text3)">Validados nesta sessão:</span>
+                    <span id="qrs-count" style="font-weight:700;color:var(--green);font-family:var(--mono)">0 / 0</span>
+                </div>
+                <div class="checklist-progress-bar" style="margin-top:6px">
+                    <div class="checklist-progress-fill" id="qrs-fill" style="width:0%"></div>
+                </div>
+                <div id="qrs-chips"
+                    style="display:flex;flex-wrap:wrap;gap:5px;margin-top:10px;max-height:66px;overflow-y:auto"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="stopQRScan()">Fechar</button>
+                <button class="btn btn-outline btn-sm" onclick="stopQRScan();startManualChecklist()">📋 Modo
+                    Manual</button>
+                <button class="btn btn-accent" id="btn-qrs-finish" style="display:none" onclick="finishQRInventory()">✅
+                    Finalizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Validar item lido por QR -->
+    <div class="modal-overlay" id="m-qr-validate">
+        <div class="modal" style="max-width:400px">
+            <div class="modal-header">
+                <div class="modal-title">🔍 Equipamento Encontrado</div>
+                <button class="modal-close" onclick="rejectQRItem()">×</button>
+            </div>
+            <div class="modal-body" id="qrv-body"></div>
+            <div class="modal-footer">
+                <button class="btn btn-danger btn-sm" onclick="rejectQRItem()">✗ Não encontrado</button>
+                <button class="btn btn-accent" style="flex:1" onclick="validateQRItem()">✅ Validar Equipamento</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Checklist Manual -->
     <div class="modal-overlay" id="m-checklist">
         <div class="modal modal-lg" style="max-width:680px">
             <div class="modal-header">
-                <div class="modal-title">✅ Checklist de Inventário</div>
+                <div class="modal-title">📋 Checklist Manual</div>
                 <button class="modal-close" onclick="closeModal('m-checklist')">×</button>
             </div>
             <div class="modal-body">
-                <!-- Progress -->
                 <div style="margin-bottom:16px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
                         <span style="font-size:13px;font-weight:600" id="ck-progress-lbl">0 / 0 confirmados</span>
@@ -4161,24 +4318,31 @@
 
         function openAlertConfig() {
             loadAlertCfg();
-            // Populate threshold
+            // Use DEFAULT_CATS fallback if catsCache is not yet populated
+            const cats = (catsCache && catsCache.length) ? catsCache : DEFAULT_CATS;
             const sel = document.getElementById('alert-cfg-threshold');
             if (sel) sel.value = _alertCfg.threshold || '';
-            // Populate category checkboxes
             const catsEl = document.getElementById('alert-cfg-cats');
             if (catsEl) {
-                catsEl.innerHTML = catsCache.map(c => {
-                    const checked = !_alertCfg.cats.length || _alertCfg.cats.includes(c.id) ? 'checked' : '';
-                    return `<label class="alert-cat-toggle ${checked ? 'on' : ''}" onclick="this.classList.toggle('on')">
-                        <input type="checkbox" value="${c.id}" ${checked} onchange="">
-                        ${c.icon} ${c.name}
+                catsEl.innerHTML = cats.map(c => {
+                    const isOn = !_alertCfg.cats.length || _alertCfg.cats.includes(c.id);
+                    return `<label class="alert-cat-toggle ${isOn ? 'on' : ''}" onclick="event.preventDefault();toggleAlertCat(this)">
+                        <input type="checkbox" value="${c.id}" ${isOn ? 'checked' : ''}>
+                        ${c.icon || '📦'} ${c.name}
                     </label>`;
                 }).join('');
             }
-            // Hide preview
             const prev = document.getElementById('alert-cfg-preview');
             if (prev) prev.style.display = 'none';
             openModal('m-alert-config');
+        }
+
+        function toggleAlertCat(label) {
+            const cb = label.querySelector('input[type=checkbox]');
+            const nowOn = !label.classList.contains('on');
+            label.classList.toggle('on', nowOn);
+            if (cb) cb.checked = nowOn;
+            previewAlertConfig();
         }
 
         function alertCfgSelectAll(on) {
@@ -5425,46 +5589,52 @@
         }
 
         // ============================================================
-        // ✅ CHECKLIST DE INVENTÁRIO
+        // ✅ INVENTÁRIO — ESTADO COMPARTILHADO
         // ============================================================
         let _checklistItems = [];
-        let _checklistConfirmed = new Set();
+        let _checklistConfirmed = new Set(); // manual checklist
+        let _qrsConfirmed = new Set();       // QR scanner validated
+        let _qrsStream = null;
+        let _qrsRaf = null;
+        let _qrsPaused = false;
+        let _qrsPendingItem = null;
 
+        // Botão "Iniciar Inventário" → picker
         function openChecklist() {
-            _checklistItems = itemsCache.filter(i => i.status === 'Ativo' || i.status === 'Manutenção' || i.status === 'Backup');
+            _checklistItems = itemsCache.filter(i => ['Ativo', 'Manutenção', 'Backup'].includes(i.status));
             _checklistConfirmed = new Set();
+            _qrsConfirmed = new Set();
+            openModal('m-inventory-mode');
+        }
+
+        // ─── MODO MANUAL ───────────────────────────────────────────
+        function startManualChecklist() {
+            closeModal('m-inventory-mode');
             renderChecklist();
             openModal('m-checklist');
         }
 
         function renderChecklist() {
             const body = document.getElementById('checklist-body');
+            if (!body) return;
             if (!_checklistItems.length) {
                 body.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Nenhum equipamento ativo</div></div>`;
                 updateChecklistProgress(); return;
             }
-            // Group by category
             const catMap = {};
-            _checklistItems.forEach(item => {
-                const cid = item.category;
-                if (!catMap[cid]) catMap[cid] = [];
-                catMap[cid].push(item);
-            });
+            _checklistItems.forEach(item => { const cid = item.category; if (!catMap[cid]) catMap[cid] = []; catMap[cid].push(item); });
             let html = '';
             Object.entries(catMap).forEach(([cid, items]) => {
                 const cat = catsCache.find(c => c.id === cid);
                 const confirmedInCat = items.filter(i => _checklistConfirmed.has(i.id)).length;
-                html += `<div class="checklist-cat-header">
-                    <span>${cat?.icon || '📦'} ${cat?.name || cid}</span>
-                    <span style="font-size:11px;color:var(--text3);margin-left:auto;font-family:var(--mono)">${confirmedInCat}/${items.length}</span>
-                </div>`;
+                html += `<div class="checklist-cat-header"><span>${cat?.icon || '📦'} ${cat?.name || cid}</span><span style="font-size:11px;color:var(--text3);margin-left:auto;font-family:var(--mono)">${confirmedInCat}/${items.length}</span></div>`;
                 items.forEach(item => {
-                    const checked = _checklistConfirmed.has(item.id) ? 'checked' : '';
+                    const checked = _checklistConfirmed.has(item.id);
                     const ns = item.numero_serie || item.ns_patrimonio || '';
                     html += `<div class="checklist-item ${checked ? 'confirmed' : ''}" onclick="toggleChecklist('${item.id}',this)">
-                        <input type="checkbox" ${checked} onclick="event.stopPropagation();toggleChecklist('${item.id}',this.closest('.checklist-item'))">
+                        <input type="checkbox" ${checked ? 'checked' : ''} onclick="event.stopPropagation();toggleChecklist('${item.id}',this.closest('.checklist-item'))">
                         <div class="checklist-item-info">
-                            <div class="checklist-item-name">${item.equipamento || item.modelo || '—'} ${item.fabricante ? '· ' + item.fabricante : ''}</div>
+                            <div class="checklist-item-name">${item.equipamento || item.modelo || '—'}${item.fabricante ? ' · ' + item.fabricante : ''}</div>
                             <div class="checklist-item-sub">${[ns, item.departamento, sBadge(item.status)].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>
                         </div>
                     </div>`;
@@ -5476,30 +5646,17 @@
 
         function toggleChecklist(itemId, el) {
             const cb = el.querySelector('input[type=checkbox]');
-            if (_checklistConfirmed.has(itemId)) {
-                _checklistConfirmed.delete(itemId);
-                el.classList.remove('confirmed');
-                if (cb) cb.checked = false;
-            } else {
-                _checklistConfirmed.add(itemId);
-                el.classList.add('confirmed');
-                if (cb) cb.checked = true;
-            }
+            if (_checklistConfirmed.has(itemId)) { _checklistConfirmed.delete(itemId); el.classList.remove('confirmed'); if (cb) cb.checked = false; }
+            else { _checklistConfirmed.add(itemId); el.classList.add('confirmed'); if (cb) cb.checked = true; }
             updateChecklistProgress();
         }
 
-        function checklistSelectAll() {
-            _checklistItems.forEach(i => _checklistConfirmed.add(i.id));
-            renderChecklist();
-        }
+        function checklistSelectAll() { _checklistItems.forEach(i => _checklistConfirmed.add(i.id)); renderChecklist(); }
 
         function updateChecklistProgress() {
-            const total = _checklistItems.length;
-            const done = _checklistConfirmed.size;
+            const total = _checklistItems.length, done = _checklistConfirmed.size;
             const pct = total ? Math.round(done / total * 100) : 0;
-            const lbl = document.getElementById('ck-progress-lbl');
-            const pctLbl = document.getElementById('ck-pct-lbl');
-            const fill = document.getElementById('ck-progress-fill');
+            const lbl = document.getElementById('ck-progress-lbl'), pctLbl = document.getElementById('ck-pct-lbl'), fill = document.getElementById('ck-progress-fill');
             if (lbl) lbl.textContent = `${done} / ${total} confirmados`;
             if (pctLbl) pctLbl.textContent = `${pct}%`;
             if (fill) fill.style.width = pct + '%';
@@ -5507,21 +5664,173 @@
 
         async function finishChecklist() {
             if (!_checklistConfirmed.size) return toast('Confirme ao menos um equipamento', 'error');
-            const total = _checklistItems.length;
-            const done = _checklistConfirmed.size;
-            const ok = await showDialog({ type: 'success', icon: '✅', title: 'Finalizar Inventário?', msg: `${done} de ${total} equipamentos foram confirmados presencialmente.`, confirmText: 'Finalizar' });
+            const total = _checklistItems.length, done = _checklistConfirmed.size;
+            const ok = await showDialog({ type: 'success', icon: '✅', title: 'Finalizar Inventário?', msg: `${done} de ${total} equipamentos confirmados.`, confirmText: 'Finalizar' });
             if (!ok) return;
             try {
-                await writeLog({
-                    actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN',
-                    action: 'inventory_check',
-                    category: '',
-                    item_name: `Checklist: ${done}/${total}`,
-                    detail: `Inventário presencial finalizado. ${done} de ${total} equipamentos confirmados. IDs: ${[..._checklistConfirmed].join(', ')}`
-                }).catch(() => { });
+                await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'inventory_check', category: '', item_name: `Checklist: ${done}/${total}`, detail: `Inventário manual: ${done}/${total} confirmados. IDs: ${[..._checklistConfirmed].join(', ')}` }).catch(() => { });
                 toast(`Inventário registrado! ${done}/${total} confirmados.`, 'success');
                 closeModal('m-checklist');
-            } catch (e) { toast('Erro ao finalizar: ' + e.message, 'error'); }
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
+        }
+
+        // ─── MODO QR SCANNER ───────────────────────────────────────
+        async function startQRScan() {
+            closeModal('m-inventory-mode');
+            _qrsConfirmed = new Set();
+            _qrsPaused = false;
+            _qrsPendingItem = null;
+            document.getElementById('qrs-chips').innerHTML = '';
+            document.getElementById('btn-qrs-finish').style.display = 'none';
+            document.getElementById('qrs-cam-error').style.display = 'none';
+            document.getElementById('qrs-viewport').style.display = 'block';
+            qrsUpdateProgress();
+            openModal('m-qr-scan');
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } } });
+                _qrsStream = stream;
+                const video = document.getElementById('qrs-video');
+                video.srcObject = stream;
+                await video.play();
+
+                if ('BarcodeDetector' in window) {
+                    const det = new BarcodeDetector({ formats: ['qr_code'] });
+                    const loop = async () => {
+                        if (!_qrsStream) return;
+                        try { const bs = await det.detect(video); if (bs.length) handleQRRead(bs[0].rawValue); } catch { }
+                        _qrsRaf = requestAnimationFrame(loop);
+                    };
+                    _qrsRaf = requestAnimationFrame(loop);
+                } else {
+                    // Load jsQR from CDN as fallback
+                    if (!window.jsQR) {
+                        const s = document.createElement('script');
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+                        s.onload = () => startJsQRLoop(video);
+                        s.onerror = () => { document.getElementById('qrs-status').textContent = 'Usando modo de compatibilidade...'; startJsQRLoop(video); };
+                        document.head.appendChild(s);
+                    } else { startJsQRLoop(video); }
+                }
+            } catch (err) {
+                console.warn('Camera error:', err);
+                document.getElementById('qrs-viewport').style.display = 'none';
+                document.getElementById('qrs-cam-error').style.display = 'block';
+            }
+        }
+
+        function startJsQRLoop(video) {
+            const canvas = document.getElementById('qrs-canvas');
+            const ctx = canvas.getContext('2d');
+            const loop = () => {
+                if (!_qrsStream) return;
+                if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+                    ctx.drawImage(video, 0, 0);
+                    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = window.jsQR?.(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+                    if (code) handleQRRead(code.data);
+                }
+                _qrsRaf = requestAnimationFrame(loop);
+            };
+            _qrsRaf = requestAnimationFrame(loop);
+        }
+
+        function stopQRScan() {
+            if (_qrsRaf) { cancelAnimationFrame(_qrsRaf); _qrsRaf = null; }
+            if (_qrsStream) { _qrsStream.getTracks().forEach(t => t.stop()); _qrsStream = null; }
+            const v = document.getElementById('qrs-video'); if (v) v.srcObject = null;
+            closeModal('m-qr-scan');
+        }
+
+        function handleQRRead(raw) {
+            if (_qrsPaused) return;
+            let data = null;
+            try { data = JSON.parse(raw); } catch { data = { id: raw }; }
+            // Try to find item by id, then by N/S, then by patrimônio
+            const item = itemsCache.find(i => i.id === data.id)
+                || itemsCache.find(i => i.numero_serie && i.numero_serie === (data.ns || raw))
+                || itemsCache.find(i => i.patrimonio && i.patrimonio === (data.patrimonio || raw));
+            if (!item) { qrsSetStatus('QR Code não reconhecido neste inventário ⚠️', false); return; }
+            if (_qrsConfirmed.has(item.id)) { qrsSetStatus(`Já validado: ${item.equipamento || item.modelo || '—'} ✅`, true); return; }
+            _qrsPaused = true;
+            _qrsPendingItem = item;
+            showQRValidateModal(item);
+        }
+
+        function qrsSetStatus(msg, ok) {
+            const el = document.getElementById('qrs-status'); if (!el) return;
+            el.textContent = msg; el.style.color = ok ? '#86efac' : '#fca5a5';
+            setTimeout(() => { if (el) { el.textContent = 'Aponte para o QR Code do equipamento'; el.style.color = '#fff'; } }, 2500);
+        }
+
+        function showQRValidateModal(item) {
+            const cat = catsCache.find(c => c.id === item.category);
+            const ns = item.numero_serie || item.ns_patrimonio || '—';
+            const pat = item.patrimonio || '—';
+            let html = '';
+            // Foto ou ícone de categoria
+            if (item.photo_b64) {
+                html += `<img src="${item.photo_b64}" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;margin-bottom:16px;border:1px solid var(--border);display:block" alt="Foto">`;
+            } else {
+                html += `<div style="width:100%;height:90px;background:var(--bg3);border-radius:10px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:44px;margin-bottom:16px">${cat?.icon || '📦'}</div>`;
+            }
+            const row = (lbl, val, mono) => `<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);margin-bottom:8px"><span style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:var(--mono);width:90px;flex-shrink:0">${lbl}</span><span style="font-size:14px;font-weight:600;${mono ? 'font-family:var(--mono)' : ''}">${val}</span></div>`;
+            html += row('Equipamento', item.equipamento || item.modelo || '—', false);
+            html += row('Fabricante', item.fabricante || '—', false);
+            html += row('Modelo', item.modelo || '—', false);
+            html += row('N/S', ns, true);
+            html += row('Patrimônio', pat, true);
+            html += row('Departamento', item.departamento || '—', false);
+            html += row('Status', sBadge(item.status), false);
+            document.getElementById('qrv-body').innerHTML = html;
+            openModal('m-qr-validate');
+        }
+
+        function validateQRItem() {
+            if (!_qrsPendingItem) return;
+            const item = _qrsPendingItem;
+            _qrsConfirmed.add(item.id);
+            _checklistConfirmed.add(item.id);
+            // Add chip
+            const chip = document.createElement('span');
+            chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);border-radius:20px;padding:3px 10px;font-size:11px;color:var(--green)';
+            chip.textContent = '✅ ' + (item.equipamento || item.modelo || '—').slice(0, 22);
+            document.getElementById('qrs-chips').prepend(chip);
+            qrsSetStatus(`Validado: ${item.equipamento || item.modelo || '—'} ✅`, true);
+            qrsUpdateProgress();
+            _qrsPendingItem = null;
+            _qrsPaused = false;
+            closeModal('m-qr-validate');
+        }
+
+        function rejectQRItem() {
+            _qrsPendingItem = null;
+            _qrsPaused = false;
+            qrsSetStatus('Item não validado', false);
+            closeModal('m-qr-validate');
+        }
+
+        function qrsUpdateProgress() {
+            const total = _checklistItems.length, done = _qrsConfirmed.size;
+            const pct = total ? Math.round(done / total * 100) : 0;
+            const cnt = document.getElementById('qrs-count'), fill = document.getElementById('qrs-fill');
+            if (cnt) cnt.textContent = `${done} / ${total}`;
+            if (fill) fill.style.width = pct + '%';
+            const btn = document.getElementById('btn-qrs-finish');
+            if (btn) btn.style.display = done > 0 ? 'inline-flex' : 'none';
+        }
+
+        async function finishQRInventory() {
+            const total = _checklistItems.length, done = _qrsConfirmed.size;
+            if (!done) return toast('Nenhum equipamento validado', 'error');
+            const ok = await showDialog({ type: 'success', icon: '✅', title: 'Finalizar Inventário?', msg: `${done} de ${total} equipamentos validados por QR Code.`, confirmText: 'Finalizar' });
+            if (!ok) return;
+            try {
+                await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'inventory_check', category: '', item_name: `QR Code: ${done}/${total}`, detail: `Inventário por QR Code: ${done}/${total} validados. IDs: ${[..._qrsConfirmed].join(', ')}` }).catch(() => { });
+                toast(`Inventário registrado! ${done}/${total} validados.`, 'success');
+                stopQRScan();
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
         }
 
         // ============================================================
