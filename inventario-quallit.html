@@ -4112,7 +4112,7 @@
             </div>
             <div class="modal-footer">
                 <button class="btn btn-ghost" onclick="closeModal('m-rollout-form')">Cancelar</button>
-                <button class="btn btn-accent" onclick="saveRollout()">💾 Salvar Campanha</button>
+                <button class="btn btn-accent" id="btn-save-rollout" onclick="saveRollout()">💾 Salvar Campanha</button>
             </div>
         </div>
     </div>
@@ -4176,7 +4176,40 @@
         }
         const DB = { get: (t, q) => sbReq('GET', t, q), post: (t, b) => sbReq('POST', t, '', b), patch: (t, q, b) => sbReq('PATCH', t, q, b), delete: (t, q) => sbReq('DELETE', t, q) };
 
+        /*
+         * ── MIGRAÇÃO SUPABASE NECESSÁRIA ──────────────────────────────
+         * Execute o arquivo quallit_migration.sql no SQL Editor do Supabase.
+         * Resumo das alterações:
+         *
+         * 1. ALTER TABLE inventory_items
+         *      ADD COLUMN tags JSONB DEFAULT '[]',
+         *      ADD COLUMN updated_at TIMESTAMPTZ,
+         *      ADD COLUMN last_validated_at TIMESTAMPTZ,
+         *      ADD COLUMN validated_by TEXT;
+         *
+         * 2. CREATE TABLE rollouts (
+         *      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+         *      name TEXT NOT NULL,
+         *      description TEXT,
+         *      criteria TEXT,
+         *      category TEXT,
+         *      deadline DATE NOT NULL,
+         *      priority TEXT DEFAULT 'normal',
+         *      target_cds JSONB DEFAULT '[]',
+         *      completed_cds JSONB DEFAULT '[]',
+         *      created_by TEXT,
+         *      created_at TIMESTAMPTZ DEFAULT NOW(),
+         *      updated_at TIMESTAMPTZ
+         *    );
+         *
+         * 3. GRANT SELECT,INSERT,UPDATE,DELETE ON rollouts TO anon, authenticated;
+         *
+         * ─────────────────────────────────────────────────────────────
+         */
 
+        // ============================================================
+        // CONSTANTS
+        // ============================================================
         const DEFAULT_CATS = [
             { id: 'desktops', name: 'Desktops', icon: '🖥️', type: 'desktops', is_default: true },
             { id: 'notebooks', name: 'Notebooks', icon: '💻', type: 'notebooks', is_default: true },
@@ -7004,26 +7037,17 @@
 
         // ============================================================
         // ══════════════════════════════════════════════════════════════
-        // FEATURE: ROLLOUTS / CAMPANHAS DE SUBSTITUIÇÃO
+        // FEATURE: ROLLOUTS / CAMPANHAS DE SUBSTITUIÇÃO  (Supabase)
         // ══════════════════════════════════════════════════════════════
-        // Storage key for localStorage rollouts (no new Supabase table needed)
-        const RL_KEY = 'quallit_rollouts';
         let rolloutsCache = [];
         let _editingRolloutId = null;
-
-        function loadRollouts() {
-            try { rolloutsCache = JSON.parse(localStorage.getItem(RL_KEY)) || []; } catch { rolloutsCache = []; }
-        }
-        function saveRollouts() {
-            localStorage.setItem(RL_KEY, JSON.stringify(rolloutsCache));
-        }
 
         function rolloutStatus(rl) {
             const now = new Date();
             const deadline = new Date(rl.deadline);
-            const total = getRolloutItems(rl).length;
-            const done = (rl.completed_cds || []).length;
-            if (done >= (rl.target_cds || []).length && (rl.target_cds || []).length > 0) return 'done';
+            const tgt = (rl.target_cds || []);
+            const done = (rl.completed_cds || []);
+            if (tgt.length > 0 && done.length >= tgt.length) return 'done';
             if (deadline < now) return 'overdue';
             return 'active';
         }
@@ -7042,15 +7066,16 @@
         }
 
         async function loadRolloutsPage() {
-            loadRollouts();
-            if (!itemsCache.length || !cdsCache.length) {
-                setLoad(true);
-                try {
-                    const [cds, items] = await Promise.all([DB.get('cd_users', '?select=*'), DB.get('inventory_items', '?select=*')]);
-                    cdsCache = cds; itemsCache = items;
-                } catch (e) { toast('Erro ao carregar dados: ' + e.message, 'error'); }
-                setLoad(false);
-            }
+            setLoad(true, 'Carregando campanhas...');
+            try {
+                const [cds, items, rollouts] = await Promise.all([
+                    DB.get('cd_users', '?select=*'),
+                    DB.get('inventory_items', '?select=id,cd_id,category,tempo_uso,status'),
+                    DB.get('rollouts', '?select=*&order=deadline.asc')
+                ]);
+                cdsCache = cds; itemsCache = items; rolloutsCache = rollouts;
+            } catch (e) { setLoad(false); toast('Erro ao carregar campanhas: ' + e.message, 'error'); return; }
+            setLoad(false);
             // Stats
             const total = rolloutsCache.length;
             const active = rolloutsCache.filter(r => rolloutStatus(r) === 'active').length;
@@ -7061,7 +7086,6 @@
                 <div class="stat-card" style="--card-color:var(--green)"><div class="stat-label">Em andamento</div><div class="stat-value">${active}</div><div class="stat-icon">▶️</div></div>
                 <div class="stat-card" style="--card-color:var(--yellow)"><div class="stat-label">Concluídos</div><div class="stat-value">${done}</div><div class="stat-icon">✅</div></div>
                 <div class="stat-card" style="--card-color:var(--red)"><div class="stat-label">Atrasados</div><div class="stat-value">${overdue}</div><div class="stat-icon">⚠️</div></div>`;
-            // Update badge
             const badge = document.getElementById('rollout-badge');
             if (badge) { if (overdue > 0) { badge.style.display = ''; badge.textContent = overdue; } else badge.style.display = 'none'; }
             renderRollouts();
@@ -7076,12 +7100,8 @@
                 tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🚀</div><div class="empty-title">Nenhuma campanha${flt ? ' com este filtro' : ' cadastrada'}</div><div class="empty-text">Clique em "+ Nova Campanha" para criar um rollout de substituição</div></div></td></tr>`;
                 return;
             }
-            const statusCfg = {
-                active: { label: 'Em andamento', cls: 'badge-active' },
-                done: { label: 'Concluído', cls: 'badge-backup' },
-                overdue: { label: 'Atrasado', cls: 'badge-inactive' }
-            };
-            const priorityCfg = { normal: { icon: '🔵', label: 'Normal' }, high: { icon: '🟡', label: 'Alta' }, critical: { icon: '🔴', label: 'Crítica' } };
+            const statusCfg = { active: { label: 'Em andamento', cls: 'badge-active' }, done: { label: 'Concluído', cls: 'badge-backup' }, overdue: { label: 'Atrasado', cls: 'badge-inactive' } };
+            const priorityCfg = { normal: { icon: '🔵' }, high: { icon: '🟡' }, critical: { icon: '🔴' } };
             tb.innerHTML = list.map(rl => {
                 const st = rolloutStatus(rl);
                 const { done, total, pct } = rolloutProgress(rl);
@@ -7090,10 +7110,9 @@
                 const items = getRolloutItems(rl);
                 const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
                 const cat = catsCache.find(c => c.id === rl.category);
-                const criteria = rl.criteria ? `${rl.criteria}` : 'Todos';
                 return `<tr>
-                    <td><div style="font-weight:600;font-size:14px">${pc.icon} ${rl.name}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${rl.desc || ''}</div></td>
-                    <td><div style="font-size:12px">${cat ? cat.icon + ' ' + cat.name : 'Todas'}</div><div style="font-size:11px;color:var(--text3)">⏳ ${criteria}</div></td>
+                    <td><div style="font-weight:600;font-size:14px">${pc.icon} ${rl.name}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${rl.description || ''}</div></td>
+                    <td><div style="font-size:12px">${cat ? cat.icon + ' ' + cat.name : 'Todas'}</div><div style="font-size:11px;color:var(--text3)">⏳ ${rl.criteria || 'Todos'}</div></td>
                     <td><span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)">${total}</span> <span style="font-size:11px;color:var(--text3)">CD(s)</span> · ${items.length} itens</td>
                     <td style="font-size:13px">${deadline}</td>
                     <td>
@@ -7114,23 +7133,23 @@
             }).join('');
         }
 
+        function _fillRolloutModal() {
+            const catSel = document.getElementById('rl-cat');
+            catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+        }
+
         function openNewRolloutModal() {
             _editingRolloutId = null;
             document.getElementById('rollout-form-title').textContent = '🚀 Nova Campanha de Rollout';
-            document.getElementById('rl-name').value = '';
-            document.getElementById('rl-desc').value = '';
+            ['rl-name', 'rl-desc'].forEach(id => document.getElementById(id).value = '');
             document.getElementById('rl-criteria').value = '';
             document.getElementById('rl-deadline').value = '';
             document.getElementById('rl-priority').value = 'normal';
-            // Fill cats
-            const catSel = document.getElementById('rl-cat');
-            catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
-            // Fill CDs
+            _fillRolloutModal();
             document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
                 `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:13px">
                     <input type="checkbox" value="${cd.id}" style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
-                </label>`
-            ).join('');
+                </label>`).join('');
             openModal('m-rollout-form');
         }
 
@@ -7139,40 +7158,56 @@
             _editingRolloutId = id;
             document.getElementById('rollout-form-title').textContent = '✏️ Editar Campanha';
             document.getElementById('rl-name').value = rl.name || '';
-            document.getElementById('rl-desc').value = rl.desc || '';
+            document.getElementById('rl-desc').value = rl.description || '';
             document.getElementById('rl-criteria').value = rl.criteria || '';
             document.getElementById('rl-deadline').value = rl.deadline || '';
             document.getElementById('rl-priority').value = rl.priority || 'normal';
-            const catSel = document.getElementById('rl-cat');
-            catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
-            catSel.value = rl.category || '';
+            _fillRolloutModal();
+            document.getElementById('rl-cat').value = rl.category || '';
             document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
                 `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:13px">
                     <input type="checkbox" value="${cd.id}" ${(rl.target_cds || []).includes(cd.id) ? 'checked' : ''} style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
-                </label>`
-            ).join('');
+                </label>`).join('');
             openModal('m-rollout-form');
         }
 
-        function saveRollout() {
+        async function saveRollout() {
             const name = document.getElementById('rl-name').value.trim();
             const deadline = document.getElementById('rl-deadline').value;
             if (!name) return toast('Informe o nome da campanha', 'error');
             if (!deadline) return toast('Informe o prazo', 'error');
             const selected = [...document.querySelectorAll('#rl-cds-list input[type=checkbox]:checked')].map(cb => cb.value);
             if (!selected.length) return toast('Selecione ao menos um CD alvo', 'error');
-            if (_editingRolloutId) {
-                const idx = rolloutsCache.findIndex(r => r.id === _editingRolloutId);
-                if (idx >= 0) {
-                    rolloutsCache[idx] = { ...rolloutsCache[idx], name, desc: document.getElementById('rl-desc').value.trim(), criteria: document.getElementById('rl-criteria').value, category: document.getElementById('rl-cat').value, deadline, priority: document.getElementById('rl-priority').value, target_cds: selected, updated_at: new Date().toISOString() };
+            const payload = {
+                name,
+                description: document.getElementById('rl-desc').value.trim(),
+                criteria: document.getElementById('rl-criteria').value || null,
+                category: document.getElementById('rl-cat').value || null,
+                deadline,
+                priority: document.getElementById('rl-priority').value,
+                target_cds: selected,
+                updated_at: new Date().toISOString()
+            };
+            setBtn('btn-save-rollout', true, 'Salvando...');
+            try {
+                if (_editingRolloutId) {
+                    const r = await DB.patch('rollouts', `?id=eq.${_editingRolloutId}`, payload);
+                    const updated = Array.isArray(r) ? r[0] : r;
+                    const idx = rolloutsCache.findIndex(x => x.id === _editingRolloutId);
+                    if (idx >= 0) rolloutsCache[idx] = { ...rolloutsCache[idx], ...updated };
+                    toast('Campanha atualizada!', 'success');
+                } else {
+                    payload.completed_cds = [];
+                    payload.created_by = ME?.name || 'Admin';
+                    const r = await DB.post('rollouts', payload);
+                    const created = Array.isArray(r) ? r[0] : r;
+                    rolloutsCache.unshift(created);
+                    toast('Campanha criada!', 'success');
                 }
-            } else {
-                rolloutsCache.push({ id: 'rl_' + Date.now(), name, desc: document.getElementById('rl-desc').value.trim(), criteria: document.getElementById('rl-criteria').value, category: document.getElementById('rl-cat').value, deadline, priority: document.getElementById('rl-priority').value, target_cds: selected, completed_cds: [], created_at: new Date().toISOString() });
-            }
-            saveRollouts();
-            closeModal('m-rollout-form');
-            loadRolloutsPage();
-            toast(_editingRolloutId ? 'Campanha atualizada!' : 'Campanha criada!', 'success');
+                closeModal('m-rollout-form');
+                await loadRolloutsPage();
+            } catch (e) { toast('Erro ao salvar: ' + e.message, 'error'); }
+            finally { setBtn('btn-save-rollout', false, '💾 Salvar Campanha'); }
         }
 
         let _detailRolloutId = null;
@@ -7184,7 +7219,6 @@
             const st = rolloutStatus(rl);
             const items = getRolloutItems(rl);
             const statusColors = { active: 'var(--accent)', done: 'var(--green)', overdue: 'var(--red)' };
-            const statusLabel = { active: 'Em andamento', done: 'Concluído', overdue: 'Atrasado' };
             let html = `<div style="margin-bottom:20px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                     <span style="font-size:13px;font-weight:600;color:var(--text2)">${done}/${total} CDs concluídos</span>
@@ -7193,13 +7227,13 @@
                 <div style="height:10px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
                     <div style="height:100%;width:${pct}%;background:${statusColors[st]};border-radius:99px;transition:width .5s"></div>
                 </div>
-                <div style="margin-top:8px;font-size:12px;color:var(--text3)">Prazo: ${new Date(rl.deadline).toLocaleDateString('pt-BR')} · ${rl.criteria || 'Todos os tempos de uso'} · ${rl.desc || ''}</div>
+                <div style="margin-top:8px;font-size:12px;color:var(--text3)">Prazo: ${new Date(rl.deadline).toLocaleDateString('pt-BR')} · ${rl.criteria || 'Todos os tempos de uso'} · ${rl.description || ''}</div>
             </div>
             <div style="margin-bottom:20px;font-size:12px;color:var(--text2);background:var(--bg3);padding:10px 14px;border-radius:8px;border:1px solid var(--border)">
                 📦 <strong>${items.length}</strong> equipamentos afetados nesta campanha
             </div>
             <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:var(--mono)">PROGRESSO POR CD</div>`;
-            rl.target_cds.forEach(cdId => {
+            (rl.target_cds || []).forEach(cdId => {
                 const cd = cdsCache.find(c => c.id === cdId);
                 const isDone = (rl.completed_cds || []).includes(cdId);
                 const cdItems = items.filter(i => i.cd_id === cdId);
@@ -7216,17 +7250,19 @@
             openModal('m-rollout-detail');
         }
 
-        function toggleRolloutCD(rolloutId, cdId) {
+        async function toggleRolloutCD(rolloutId, cdId) {
             const rl = rolloutsCache.find(r => r.id === rolloutId); if (!rl) return;
-            rl.completed_cds = rl.completed_cds || [];
-            if (rl.completed_cds.includes(cdId)) rl.completed_cds = rl.completed_cds.filter(c => c !== cdId);
-            else rl.completed_cds.push(cdId);
-            saveRollouts();
-            openRolloutDetail(rolloutId);
-            renderRollouts();
-            // Update stats row
-            const { pct } = rolloutProgress(rl);
-            toast(`Progresso: ${pct}%`, 'success');
+            let completed = [...(rl.completed_cds || [])];
+            if (completed.includes(cdId)) completed = completed.filter(c => c !== cdId);
+            else completed.push(cdId);
+            try {
+                await DB.patch('rollouts', `?id=eq.${rolloutId}`, { completed_cds: completed, updated_at: new Date().toISOString() });
+                rl.completed_cds = completed;
+                openRolloutDetail(rolloutId);
+                renderRollouts();
+                const { pct } = rolloutProgress(rl);
+                toast(`Progresso: ${pct}%`, 'success');
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
         }
 
         async function deleteRollout() {
@@ -7234,11 +7270,13 @@
             const rl = rolloutsCache.find(r => r.id === _detailRolloutId);
             const ok = await dlgDelete('esta campanha', rl?.name || '');
             if (!ok) return;
-            rolloutsCache = rolloutsCache.filter(r => r.id !== _detailRolloutId);
-            saveRollouts();
-            closeModal('m-rollout-detail');
-            loadRolloutsPage();
-            toast('Campanha excluída', 'info');
+            try {
+                await DB.delete('rollouts', `?id=eq.${_detailRolloutId}`);
+                rolloutsCache = rolloutsCache.filter(r => r.id !== _detailRolloutId);
+                closeModal('m-rollout-detail');
+                loadRolloutsPage();
+                toast('Campanha excluída', 'info');
+            } catch (e) { toast('Erro ao excluir: ' + e.message, 'error'); }
         }
 
         // ============================================================
@@ -7427,42 +7465,46 @@
         // FEATURE: NOTIFICAÇÕES DE ROLLOUTS PARA O CD
         // ============================================================
         function loadCDRolloutBanner() {
-            loadRollouts();
             const banner = document.getElementById('cd-rollout-banner');
             if (!banner || !ME) return;
-            const myItems = itemsCache;
-            const activeRollouts = rolloutsCache.filter(rl => {
-                if (rolloutStatus(rl) === 'done') return false;
-                if (!(rl.target_cds || []).includes(ME.id)) return false;
-                return true;
-            });
-            if (!activeRollouts.length) { banner.style.display = 'none'; return; }
-            banner.style.display = 'block';
-            banner.innerHTML = activeRollouts.map(rl => {
-                const st = rolloutStatus(rl);
-                const { pct } = rolloutProgress(rl);
-                const isDoneCd = (rl.completed_cds || []).includes(ME.id);
-                const items = getRolloutItems(rl).filter(i => i.cd_id === ME.id);
-                const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
-                const color = st === 'overdue' ? 'var(--red)' : 'var(--accent)';
-                const bg = st === 'overdue' ? 'rgba(239,68,68,.08)' : 'rgba(14,165,233,.08)';
-                const border = st === 'overdue' ? 'rgba(239,68,68,.25)' : 'rgba(14,165,233,.25)';
-                const icon = st === 'overdue' ? '🔴' : isDoneCd ? '✅' : '🚀';
-                return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${bg};border:1px solid ${border};border-radius:10px;margin-bottom:8px;flex-wrap:wrap;gap:10px">
-                    <span style="font-size:18px">${icon}</span>
-                    <div style="flex:1;min-width:160px">
-                        <div style="font-weight:600;font-size:13px;color:var(--text)">${rl.name}</div>
-                        <div style="font-size:12px;color:var(--text3);margin-top:2px">${items.length} equipamento(s) afetado(s) · Prazo: ${deadline}</div>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-                        <div style="width:80px;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
-                            <div style="height:100%;width:${pct}%;background:${color};border-radius:99px"></div>
+            // Use rolloutsCache — already loaded from Supabase when admin visits rollouts,
+            // or fetch directly for CD users
+            const doRender = (rollouts) => {
+                const activeRollouts = rollouts.filter(rl => {
+                    if (rolloutStatus(rl) === 'done') return false;
+                    return (rl.target_cds || []).includes(ME.id);
+                });
+                if (!activeRollouts.length) { banner.style.display = 'none'; return; }
+                banner.style.display = 'block';
+                banner.innerHTML = activeRollouts.map(rl => {
+                    const st = rolloutStatus(rl);
+                    const { pct } = rolloutProgress(rl);
+                    const isDoneCd = (rl.completed_cds || []).includes(ME.id);
+                    const items = getRolloutItems(rl).filter(i => i.cd_id === ME.id);
+                    const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
+                    const color = st === 'overdue' ? 'var(--red)' : 'var(--accent)';
+                    const bg = st === 'overdue' ? 'rgba(239,68,68,.08)' : 'rgba(14,165,233,.08)';
+                    const border = st === 'overdue' ? 'rgba(239,68,68,.25)' : 'rgba(14,165,233,.25)';
+                    const icon = st === 'overdue' ? '🔴' : isDoneCd ? '✅' : '🚀';
+                    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${bg};border:1px solid ${border};border-radius:10px;margin-bottom:8px;flex-wrap:wrap;gap:10px">
+                        <span style="font-size:18px">${icon}</span>
+                        <div style="flex:1;min-width:160px">
+                            <div style="font-weight:600;font-size:13px;color:var(--text)">${rl.name}</div>
+                            <div style="font-size:12px;color:var(--text3);margin-top:2px">${items.length} equipamento(s) afetado(s) · Prazo: ${deadline}</div>
                         </div>
-                        <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${color}">${pct}%</span>
-                    </div>
-                    ${!isDoneCd ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:${bg};border:1px solid ${border};color:${color};font-weight:600">${st === 'overdue' ? '⚠️ Atrasado' : '⏳ Pendente'}</span>` : `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);font-weight:600">✅ Concluído por você</span>`}
-                </div>`;
-            }).join('');
+                        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                            <div style="width:80px;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
+                                <div style="height:100%;width:${pct}%;background:${color};border-radius:99px"></div>
+                            </div>
+                            <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${color}">${pct}%</span>
+                        </div>
+                        ${!isDoneCd ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:${bg};border:1px solid ${border};color:${color};font-weight:600">${st === 'overdue' ? '⚠️ Atrasado' : '⏳ Pendente'}</span>` : `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);font-weight:600">✅ Concluído por você</span>`}
+                    </div>`;
+                }).join('');
+            };
+            if (rolloutsCache.length) { doRender(rolloutsCache); return; }
+            // Fetch from Supabase for CD users (who won't have visited the rollouts admin page)
+            DB.get('rollouts', '?select=*').then(data => { rolloutsCache = data || []; doRender(rolloutsCache); }).catch(() => { banner.style.display = 'none'; });
         }
 
         // ============================================================
