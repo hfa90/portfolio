@@ -5733,34 +5733,7 @@
                 video.srcObject = stream;
                 await video.play();
                 document.getElementById('qrs-status').textContent = 'Aponte para o QR Code do equipamento';
-
-                // Carregar jsQR de forma assíncrona como biblioteca principal
-                const loadAndStartScan = () => {
-                    if ('BarcodeDetector' in window) {
-                        // BarcodeDetector nativo (Chromium)
-                        const det = new BarcodeDetector({ formats: ['qr_code'] });
-                        const loop = async () => {
-                            if (!_qrsStream) return;
-                            try {
-                                const bs = await det.detect(video);
-                                if (bs.length && !_qrsPaused) handleQRRead(bs[0].rawValue);
-                            } catch { }
-                            _qrsRaf = requestAnimationFrame(loop);
-                        };
-                        _qrsRaf = requestAnimationFrame(loop);
-                    } else if (window.jsQR) {
-                        startJsQRLoop(video);
-                    } else {
-                        const s = document.createElement('script');
-                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
-                        s.onload = () => startJsQRLoop(video);
-                        s.onerror = () => {
-                            document.getElementById('qrs-status').textContent = '⚠️ Erro ao carregar leitor QR. Câmera ativa mas sem decodificação.';
-                        };
-                        document.head.appendChild(s);
-                    }
-                };
-                loadAndStartScan();
+                startNativeScanLoop(video);
 
             } catch (err) {
                 console.warn('Camera error:', err);
@@ -5784,58 +5757,154 @@
             errEl.style.display = 'block';
         }
 
-        // Leitura de QR por imagem (fallback quando câmera não disponível)
+        // ─── SCANNER NATIVO SEM DEPENDÊNCIA EXTERNA ──────────────────────
+        // Estratégia 1: BarcodeDetector (Chrome/Edge/Android WebView)
+        // Estratégia 2: Leitura via canvas + BarcodeDetector sobre ImageBitmap
+        // Estratégia 3: loop canvas manual com BarcodeDetector a cada 150ms
+        // Todas as estratégias operam sem CDN externo.
+
+        async function startNativeScanLoop(video) {
+            const canvas = document.getElementById('qrs-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+            // Tenta BarcodeDetector nativo primeiro
+            if ('BarcodeDetector' in window) {
+                let det;
+                try {
+                    det = new BarcodeDetector({ formats: ['qr_code'] });
+                } catch {
+                    det = new BarcodeDetector(); // fallback sem especificar formato
+                }
+
+                let lastTick = 0;
+                const loop = async (ts) => {
+                    if (!_qrsStream) return;
+                    _qrsRaf = requestAnimationFrame(loop);
+                    if (ts - lastTick < 150) return; // throttle: 6-7fps para economizar CPU
+                    lastTick = ts;
+                    if (video.readyState < 2) return;
+                    try {
+                        // Tenta direto no video (Chrome moderno)
+                        const bs = await det.detect(video);
+                        if (bs.length && !_qrsPaused) { handleQRRead(bs[0].rawValue); return; }
+                    } catch { }
+                    try {
+                        // Fallback: deteta sobre canvas capturado
+                        canvas.width = video.videoWidth || 640;
+                        canvas.height = video.videoHeight || 480;
+                        ctx.drawImage(video, 0, 0);
+                        const bitmap = await createImageBitmap(canvas);
+                        const bs2 = await det.detect(bitmap);
+                        bitmap.close();
+                        if (bs2.length && !_qrsPaused) handleQRRead(bs2[0].rawValue);
+                    } catch { }
+                };
+                _qrsRaf = requestAnimationFrame(loop);
+                return;
+            }
+
+            // Sem BarcodeDetector: tenta carregar jsQR de múltiplas CDNs
+            const cdns = [
+                'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js',
+                'https://unpkg.com/jsqr@1.4.0/dist/jsQR.min.js',
+                'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js'
+            ];
+
+            const loadScript = (src) => new Promise((res, rej) => {
+                const s = document.createElement('script');
+                s.src = src;
+                s.onload = res;
+                s.onerror = rej;
+                document.head.appendChild(s);
+            });
+
+            document.getElementById('qrs-status').textContent = '⏳ Carregando leitor QR...';
+            let loaded = false;
+            for (const cdn of cdns) {
+                try {
+                    await loadScript(cdn);
+                    loaded = true;
+                    break;
+                } catch { /* tenta próxima CDN */ }
+            }
+
+            if (loaded && window.jsQR) {
+                document.getElementById('qrs-status').textContent = 'Aponte para o QR Code do equipamento';
+                startJsQRLoop(video);
+            } else {
+                // Último recurso: input de arquivo
+                document.getElementById('qrs-status').textContent = '⚠️ Leitor automático indisponível';
+                document.getElementById('qrs-viewport').style.display = 'none';
+                showCamError('Câmera ativa, mas o leitor QR não pôde ser carregado (sem internet).<br><small>Use o botão abaixo para enviar uma foto do QR Code.</small>');
+            }
+        }
+
+        function startJsQRLoop(video) {
+            const canvas = document.getElementById('qrs-canvas');
+            const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            let lastTick = 0;
+            const loop = (ts) => {
+                if (!_qrsStream) return;
+                _qrsRaf = requestAnimationFrame(loop);
+                if (ts - lastTick < 150) return; // ~6fps
+                lastTick = ts;
+                if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
+                ctx.drawImage(video, 0, 0);
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = window.jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+                if (code && !_qrsPaused) handleQRRead(code.data);
+            };
+            _qrsRaf = requestAnimationFrame(loop);
+        }
+
+        // Upload de imagem como fallback (sem câmera ou sem decodificador)
         function handleQRImageUpload(event) {
             const file = event.target.files?.[0];
             if (!file) return;
+            event.target.value = '';
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
-                img.onload = () => {
+                img.onload = async () => {
                     const canvas = document.createElement('canvas');
                     canvas.width = img.width; canvas.height = img.height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const tryDecode = () => {
-                        const code = window.jsQR?.(imageData.data, imageData.width, imageData.height, { inversionAttempts: 'attemptBoth' });
-                        if (code) {
-                            handleQRRead(code.data);
-                        } else {
-                            toast('QR Code não encontrado na imagem. Tente uma foto mais nítida.', 'error');
-                        }
+
+                    // Tenta BarcodeDetector primeiro
+                    if ('BarcodeDetector' in window) {
+                        try {
+                            const det = new BarcodeDetector({ formats: ['qr_code'] });
+                            const bitmap = await createImageBitmap(canvas);
+                            const bs = await det.detect(bitmap);
+                            bitmap.close();
+                            if (bs.length) { handleQRRead(bs[0].rawValue); return; }
+                        } catch { }
+                    }
+
+                    // Tenta jsQR
+                    const tryWithJsQR = () => {
+                        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = window.jsQR?.(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'attemptBoth' });
+                        if (code) { handleQRRead(code.data); }
+                        else { toast('QR Code não encontrado. Tente uma foto mais nítida e bem enquadrada.', 'error'); }
                     };
+
                     if (window.jsQR) {
-                        tryDecode();
+                        tryWithJsQR();
                     } else {
                         const s = document.createElement('script');
-                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
-                        s.onload = tryDecode;
+                        s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+                        s.onload = tryWithJsQR;
+                        s.onerror = () => toast('Não foi possível carregar o leitor QR. Verifique sua conexão.', 'error');
                         document.head.appendChild(s);
                     }
                 };
                 img.src = e.target.result;
             };
             reader.readAsDataURL(file);
-            // Reset input so same file can be re-selected
-            event.target.value = '';
-        }
-
-        function startJsQRLoop(video) {
-            const canvas = document.getElementById('qrs-canvas');
-            const ctx = canvas.getContext('2d');
-            const loop = () => {
-                if (!_qrsStream) return;
-                if (video.readyState === video.HAVE_ENOUGH_DATA) {
-                    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-                    ctx.drawImage(video, 0, 0);
-                    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    const code = window.jsQR?.(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
-                    if (code) handleQRRead(code.data);
-                }
-                _qrsRaf = requestAnimationFrame(loop);
-            };
-            _qrsRaf = requestAnimationFrame(loop);
         }
 
         function stopQRScan() {
