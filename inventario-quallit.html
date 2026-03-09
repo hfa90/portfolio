@@ -1126,6 +1126,39 @@
             }
         }
 
+        /* ── TAGS ── */
+        .tag-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 20px;
+            background: rgba(168, 85, 247, .12);
+            color: var(--purple);
+            border: 1px solid rgba(168, 85, 247, .25);
+            font-weight: 500
+        }
+
+        /* ── ROLLOUT PROGRESS ── */
+        .rollout-progress-bar {
+            height: 6px;
+            background: var(--bg3);
+            border-radius: 99px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            flex: 1
+        }
+
+        /* ── RANKING SCORE ── */
+        .score-bar {
+            height: 6px;
+            background: var(--bg3);
+            border-radius: 99px;
+            overflow: hidden;
+            width: 60px
+        }
+
         ::-webkit-scrollbar {
             width: 5px;
             height: 5px
@@ -2777,6 +2810,11 @@
                             class="nav-icon">🏷️</span>Categorias</button>
                     <button class="nav-item" id="ni-admin-reports" onclick="nav('admin-reports')"><span
                             class="nav-icon">📈</span>Relatórios</button>
+                    <button class="nav-item" id="ni-admin-rollouts" onclick="nav('admin-rollouts')"><span
+                            class="nav-icon">🚀</span>Rollouts<span class="nav-badge" id="rollout-badge"
+                            style="display:none">!</span></button>
+                    <button class="nav-item" id="ni-admin-ranking" onclick="nav('admin-ranking')"><span
+                            class="nav-icon">🏆</span>Ranking CDs</button>
                     <button class="nav-item" id="ni-admin-backup" onclick="nav('admin-backup')"><span
                             class="nav-icon">💾</span>Backups</button>
                     <button class="nav-item" id="ni-admin-log" onclick="nav('admin-log')"><span
@@ -3190,6 +3228,8 @@
                             <button class="btn btn-accent" onclick="openAddModal()">+ Adicionar Item</button>
                         </div>
                     </div>
+                    <!-- ALERTA ROLLOUTS PENDENTES -->
+                    <div id="cd-rollout-banner" style="display:none;margin-bottom:12px"></div>
                     <!-- ALERTA ITENS EM MANUTENÇÃO -->
                     <div id="cd-alert-bar" style="display:none;margin-bottom:20px"></div>
                     <div class="stats-grid" id="cd-stats"></div>
@@ -3337,6 +3377,98 @@
                             </table>
                         </div>
                     </div>
+                </div>
+
+                <!-- ADMIN ROLLOUTS -->
+                <div class="page" id="page-admin-rollouts">
+                    <div class="page-header fade-in">
+                        <div>
+                            <div class="page-title">🚀 Rollouts</div>
+                            <div class="page-subtitle">Campanhas de substituição e atualização de equipamentos</div>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-ghost" onclick="loadRolloutsPage()">🔄 Atualizar</button>
+                            <button class="btn btn-accent" onclick="openNewRolloutModal()">+ Nova Campanha</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid" id="rollout-stats"></div>
+                    <div class="table-container fade-in">
+                        <div class="table-toolbar">
+                            <strong style="font-size:14px">Campanhas Ativas</strong>
+                            <div style="flex:1"></div>
+                            <select class="filter-select" id="rollout-flt-status" onchange="renderRollouts()">
+                                <option value="">Todos os Status</option>
+                                <option value="active">Em andamento</option>
+                                <option value="done">Concluídos</option>
+                                <option value="overdue">Atrasados</option>
+                            </select>
+                        </div>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Campanha</th>
+                                        <th>Critério</th>
+                                        <th>CDs Alvo</th>
+                                        <th>Prazo</th>
+                                        <th>Progresso</th>
+                                        <th>Status</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tb-rollouts"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ADMIN RANKING -->
+                <div class="page" id="page-admin-ranking">
+                    <div class="page-header fade-in">
+                        <div>
+                            <div class="page-title">🏆 Ranking de CDs</div>
+                            <div class="page-subtitle">Comparativo de desempenho e saúde do parque por distribuição
+                            </div>
+                        </div>
+                        <div class="page-actions">
+                            <button class="btn btn-ghost" onclick="loadRankingPage()">🔄 Atualizar</button>
+                            <button class="btn btn-green" onclick="exportRanking()">📥 Exportar Excel</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid" id="ranking-global-stats"></div>
+                    <div class="table-container fade-in" style="margin-bottom:20px">
+                        <div class="table-toolbar" style="flex-wrap:wrap;gap:8px">
+                            <strong style="font-size:14px">Comparativo por CD</strong>
+                            <div style="flex:1"></div>
+                            <select class="filter-select" id="ranking-sort" onchange="renderRankingTable()">
+                                <option value="total">Ordenar: Total itens</option>
+                                <option value="ativos">Ativos</option>
+                                <option value="manutencao">Em manutenção</option>
+                                <option value="inativos">Inativos</option>
+                                <option value="score">Health Score</option>
+                            </select>
+                        </div>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th style="width:40px">#</th>
+                                        <th>CD / Nome</th>
+                                        <th>Total</th>
+                                        <th>✅ Ativos</th>
+                                        <th>🔧 Manutenção</th>
+                                        <th>⛔ Inativos</th>
+                                        <th>💾 Backup</th>
+                                        <th>⏳ +5 anos</th>
+                                        <th>Health Score</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tb-ranking"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div id="ranking-bars-section"></div>
                 </div>
 
                 <!-- ADMIN LOG -->
@@ -3932,6 +4064,101 @@
         </div>
     </div>
 
+    <!-- MODAL: Novo / Editar Rollout -->
+    <div class="modal-overlay" id="m-rollout-form">
+        <div class="modal modal-lg" style="max-width:640px">
+            <div class="modal-header">
+                <div class="modal-title" id="rollout-form-title">🚀 Nova Campanha de Rollout</div>
+                <button class="modal-close" onclick="closeModal('m-rollout-form')">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-grid">
+                    <div class="full-width form-group"><label>Nome da Campanha *</label><input id="rl-name"
+                            class="form-input" placeholder="Ex: Troca Notebooks Q2 2025"></div>
+                    <div class="full-width form-group"><label>Descrição</label><textarea id="rl-desc" class="form-input"
+                            rows="2" placeholder="Descreva o objetivo desta campanha..."
+                            style="resize:vertical"></textarea></div>
+                    <div class="form-group"><label>Critério (Tempo de Uso)</label>
+                        <select id="rl-criteria" class="form-input">
+                            <option value="">Todos os equipamentos</option>
+                            <option value="&gt; 5 anos">Mais de 5 anos</option>
+                            <option value="3-5 anos">3 a 5 anos</option>
+                            <option value="2-3 anos">2 a 3 anos</option>
+                            <option value="1-2 anos">1 a 2 anos</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Categoria</label>
+                        <select id="rl-cat" class="form-input">
+                            <option value="">Todas as categorias</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Prazo *</label><input id="rl-deadline" class="form-input"
+                            type="date"></div>
+                    <div class="form-group"><label>Prioridade</label>
+                        <select id="rl-priority" class="form-input">
+                            <option value="normal">Normal</option>
+                            <option value="high">Alta</option>
+                            <option value="critical">Crítica</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:12px">
+                    <label>CDs Alvo * <span style="font-size:11px;color:var(--text3)">(selecione um ou
+                            mais)</span></label>
+                    <div id="rl-cds-list"
+                        style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;padding:12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);max-height:150px;overflow-y:auto">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-rollout-form')">Cancelar</button>
+                <button class="btn btn-accent" onclick="saveRollout()">💾 Salvar Campanha</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Detalhe Rollout -->
+    <div class="modal-overlay" id="m-rollout-detail">
+        <div class="modal modal-lg" style="max-width:720px;max-height:90vh;overflow-y:auto">
+            <div class="modal-header">
+                <div class="modal-title" id="rld-title">Detalhe da Campanha</div>
+                <button class="modal-close" onclick="closeModal('m-rollout-detail')">×</button>
+            </div>
+            <div class="modal-body" id="rld-body"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-rollout-detail')">Fechar</button>
+                <button class="btn btn-danger btn-sm" id="btn-rld-delete" onclick="deleteRollout()">🗑️ Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Tags do item -->
+    <div class="modal-overlay" id="m-item-tags">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <div class="modal-title">🏷️ Tags do Equipamento</div>
+                <button class="modal-close" onclick="closeModal('m-item-tags')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:16px;font-size:13px;color:var(--text2)">Tags ajudam a categorizar e filtrar
+                    equipamentos com informações extras.</div>
+                <div id="tags-preset-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px"></div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+                    <input id="tag-custom-input" class="form-input" placeholder="Tag personalizada..." style="flex:1"
+                        onkeydown="if(event.key==='Enter')addCustomTag()">
+                    <button class="btn btn-outline btn-sm" onclick="addCustomTag()">+ Add</button>
+                </div>
+                <div id="tags-active-list"
+                    style="display:flex;flex-wrap:wrap;gap:6px;min-height:32px;padding:10px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-item-tags')">Cancelar</button>
+                <button class="btn btn-accent" onclick="saveItemTags()">💾 Salvar Tags</button>
+            </div>
+        </div>
+    </div>
+
     <script>
 
         const SB_URL = '__SB_URL__';
@@ -3949,20 +4176,7 @@
         }
         const DB = { get: (t, q) => sbReq('GET', t, q), post: (t, b) => sbReq('POST', t, '', b), patch: (t, q, b) => sbReq('PATCH', t, q, b), delete: (t, q) => sbReq('DELETE', t, q) };
 
-        /*
-         * ── MIGRAÇÃO SUPABASE NECESSÁRIA ──────────────────────────────
-         * Execute no SQL Editor do Supabase para habilitar validação por QR:
-         *
-         * ALTER TABLE inventory_items
-         *   ADD COLUMN IF NOT EXISTS last_validated_at TIMESTAMPTZ,
-         *   ADD COLUMN IF NOT EXISTS validated_by TEXT;
-         *
-         * ─────────────────────────────────────────────────────────────
-         */
 
-        // ============================================================
-        // CONSTANTS
-        // ============================================================
         const DEFAULT_CATS = [
             { id: 'desktops', name: 'Desktops', icon: '🖥️', type: 'desktops', is_default: true },
             { id: 'notebooks', name: 'Notebooks', icon: '💻', type: 'notebooks', is_default: true },
@@ -4262,6 +4476,8 @@
                 'admin-reports': loadReportsPage,
                 'admin-backup': loadAdminBackup,
                 'admin-log': loadLogPage,
+                'admin-rollouts': loadRolloutsPage,
+                'admin-ranking': loadRankingPage,
                 'cd-dashboard': loadCDDash,
                 'cd-backup': loadCDBackup
             };
@@ -5147,6 +5363,9 @@
                     alertBar.innerHTML = `<div class="alert alert-warn">🔧 <strong>${manut.length} equipamento(s) em manutenção:</strong> ${manut.slice(0, 3).map(i => i.equipamento || i.modelo || 'Item').join(', ')}${manut.length > 3 ? '...' : ''}</div>`;
                 } else if (alertBar) { alertBar.style.display = 'none'; }
 
+                // Rollout notifications for CD
+                loadCDRolloutBanner();
+
                 const tb = document.getElementById('tb-cd-recent');
                 const recent = items.slice(0, 8);
                 if (!recent.length) { tb.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">Nenhum item cadastrado</div><div class="empty-text">Clique em "+ Adicionar Item" para começar</div></div></td></tr>`; }
@@ -5435,8 +5654,14 @@
                     </div>
                 </div>`;
             }
-            // Print button
-            html += `<div style="margin-top:16px;text-align:right"><button class="btn btn-outline btn-sm" onclick="printItem('${itemId}','${catId}')">🖨️ Imprimir Ficha</button></div>`;
+            html += `<div style="margin-top:16px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">`;
+            // Tags display
+            const tags = item.tags || [];
+            if (tags.length) {
+                html += `<div style="display:flex;flex-wrap:wrap;gap:4px;flex:1">${tags.map(t => `<span style="font-size:11px;padding:3px 8px;border-radius:20px;background:rgba(168,85,247,.12);color:var(--purple);border:1px solid rgba(168,85,247,.25)">🏷️ ${t}</span>`).join('')}</div>`;
+            }
+            html += `<button class="btn btn-outline btn-sm" onclick="openTagsModal('${itemId}')">🏷️ Tags${tags.length ? ' (' + tags.length + ')' : ''}</button>`;
+            html += `<button class="btn btn-outline btn-sm" onclick="printItem('${itemId}','${catId}')">🖨️ Imprimir Ficha</button></div>`;
             document.getElementById('view-item-body').innerHTML = html;
             document.getElementById('btn-edit-view').onclick = () => { closeModal('m-view-item'); editItem(itemId, catId); };
             openModal('m-view-item');
@@ -6775,6 +7000,469 @@
             if (_onlineInterval) clearInterval(_onlineInterval);
             refreshOnlineIndicator();
             _onlineInterval = setInterval(refreshOnlineIndicator, 60000);
+        }
+
+        // ============================================================
+        // ══════════════════════════════════════════════════════════════
+        // FEATURE: ROLLOUTS / CAMPANHAS DE SUBSTITUIÇÃO
+        // ══════════════════════════════════════════════════════════════
+        // Storage key for localStorage rollouts (no new Supabase table needed)
+        const RL_KEY = 'quallit_rollouts';
+        let rolloutsCache = [];
+        let _editingRolloutId = null;
+
+        function loadRollouts() {
+            try { rolloutsCache = JSON.parse(localStorage.getItem(RL_KEY)) || []; } catch { rolloutsCache = []; }
+        }
+        function saveRollouts() {
+            localStorage.setItem(RL_KEY, JSON.stringify(rolloutsCache));
+        }
+
+        function rolloutStatus(rl) {
+            const now = new Date();
+            const deadline = new Date(rl.deadline);
+            const total = getRolloutItems(rl).length;
+            const done = (rl.completed_cds || []).length;
+            if (done >= (rl.target_cds || []).length && (rl.target_cds || []).length > 0) return 'done';
+            if (deadline < now) return 'overdue';
+            return 'active';
+        }
+
+        function getRolloutItems(rl) {
+            let items = itemsCache.filter(i => (rl.target_cds || []).includes(i.cd_id));
+            if (rl.criteria) items = items.filter(i => i.tempo_uso === rl.criteria);
+            if (rl.category) items = items.filter(i => i.category === rl.category);
+            return items;
+        }
+
+        function rolloutProgress(rl) {
+            const targetCDs = rl.target_cds || [];
+            const completedCDs = rl.completed_cds || [];
+            return { done: completedCDs.length, total: targetCDs.length, pct: targetCDs.length ? Math.round(completedCDs.length / targetCDs.length * 100) : 0 };
+        }
+
+        async function loadRolloutsPage() {
+            loadRollouts();
+            if (!itemsCache.length || !cdsCache.length) {
+                setLoad(true);
+                try {
+                    const [cds, items] = await Promise.all([DB.get('cd_users', '?select=*'), DB.get('inventory_items', '?select=*')]);
+                    cdsCache = cds; itemsCache = items;
+                } catch (e) { toast('Erro ao carregar dados: ' + e.message, 'error'); }
+                setLoad(false);
+            }
+            // Stats
+            const total = rolloutsCache.length;
+            const active = rolloutsCache.filter(r => rolloutStatus(r) === 'active').length;
+            const done = rolloutsCache.filter(r => rolloutStatus(r) === 'done').length;
+            const overdue = rolloutsCache.filter(r => rolloutStatus(r) === 'overdue').length;
+            document.getElementById('rollout-stats').innerHTML = `
+                <div class="stat-card" style="--card-color:var(--accent)"><div class="stat-label">Total</div><div class="stat-value">${total}</div><div class="stat-icon">🚀</div></div>
+                <div class="stat-card" style="--card-color:var(--green)"><div class="stat-label">Em andamento</div><div class="stat-value">${active}</div><div class="stat-icon">▶️</div></div>
+                <div class="stat-card" style="--card-color:var(--yellow)"><div class="stat-label">Concluídos</div><div class="stat-value">${done}</div><div class="stat-icon">✅</div></div>
+                <div class="stat-card" style="--card-color:var(--red)"><div class="stat-label">Atrasados</div><div class="stat-value">${overdue}</div><div class="stat-icon">⚠️</div></div>`;
+            // Update badge
+            const badge = document.getElementById('rollout-badge');
+            if (badge) { if (overdue > 0) { badge.style.display = ''; badge.textContent = overdue; } else badge.style.display = 'none'; }
+            renderRollouts();
+        }
+
+        function renderRollouts() {
+            const flt = document.getElementById('rollout-flt-status')?.value || '';
+            let list = rolloutsCache.slice().sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+            if (flt) list = list.filter(r => rolloutStatus(r) === flt);
+            const tb = document.getElementById('tb-rollouts');
+            if (!list.length) {
+                tb.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🚀</div><div class="empty-title">Nenhuma campanha${flt ? ' com este filtro' : ' cadastrada'}</div><div class="empty-text">Clique em "+ Nova Campanha" para criar um rollout de substituição</div></div></td></tr>`;
+                return;
+            }
+            const statusCfg = {
+                active: { label: 'Em andamento', cls: 'badge-active' },
+                done: { label: 'Concluído', cls: 'badge-backup' },
+                overdue: { label: 'Atrasado', cls: 'badge-inactive' }
+            };
+            const priorityCfg = { normal: { icon: '🔵', label: 'Normal' }, high: { icon: '🟡', label: 'Alta' }, critical: { icon: '🔴', label: 'Crítica' } };
+            tb.innerHTML = list.map(rl => {
+                const st = rolloutStatus(rl);
+                const { done, total, pct } = rolloutProgress(rl);
+                const sc = statusCfg[st];
+                const pc = priorityCfg[rl.priority || 'normal'];
+                const items = getRolloutItems(rl);
+                const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
+                const cat = catsCache.find(c => c.id === rl.category);
+                const criteria = rl.criteria ? `${rl.criteria}` : 'Todos';
+                return `<tr>
+                    <td><div style="font-weight:600;font-size:14px">${pc.icon} ${rl.name}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">${rl.desc || ''}</div></td>
+                    <td><div style="font-size:12px">${cat ? cat.icon + ' ' + cat.name : 'Todas'}</div><div style="font-size:11px;color:var(--text3)">⏳ ${criteria}</div></td>
+                    <td><span style="font-family:var(--mono);font-size:13px;font-weight:700;color:var(--accent)">${total}</span> <span style="font-size:11px;color:var(--text3)">CD(s)</span> · ${items.length} itens</td>
+                    <td style="font-size:13px">${deadline}</td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <div style="flex:1;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
+                                <div style="height:100%;width:${pct}%;background:${st === 'done' ? '#22c55e' : st === 'overdue' ? '#ef4444' : 'var(--accent)'};border-radius:99px;transition:width .4s"></div>
+                            </div>
+                            <span style="font-size:12px;font-weight:600;font-family:var(--mono);min-width:32px">${pct}%</span>
+                        </div>
+                        <div style="font-size:11px;color:var(--text3);margin-top:2px">${done}/${total} CDs</div>
+                    </td>
+                    <td><span class="badge ${sc.cls}">${sc.label}</span></td>
+                    <td><div class="action-btns">
+                        <button class="btn btn-ghost btn-sm" onclick="openRolloutDetail('${rl.id}')">👁️ Ver</button>
+                        <button class="btn btn-ghost btn-sm" onclick="editRollout('${rl.id}')">✏️</button>
+                    </div></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function openNewRolloutModal() {
+            _editingRolloutId = null;
+            document.getElementById('rollout-form-title').textContent = '🚀 Nova Campanha de Rollout';
+            document.getElementById('rl-name').value = '';
+            document.getElementById('rl-desc').value = '';
+            document.getElementById('rl-criteria').value = '';
+            document.getElementById('rl-deadline').value = '';
+            document.getElementById('rl-priority').value = 'normal';
+            // Fill cats
+            const catSel = document.getElementById('rl-cat');
+            catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            // Fill CDs
+            document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
+                `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:13px">
+                    <input type="checkbox" value="${cd.id}" style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
+                </label>`
+            ).join('');
+            openModal('m-rollout-form');
+        }
+
+        function editRollout(id) {
+            const rl = rolloutsCache.find(r => r.id === id); if (!rl) return;
+            _editingRolloutId = id;
+            document.getElementById('rollout-form-title').textContent = '✏️ Editar Campanha';
+            document.getElementById('rl-name').value = rl.name || '';
+            document.getElementById('rl-desc').value = rl.desc || '';
+            document.getElementById('rl-criteria').value = rl.criteria || '';
+            document.getElementById('rl-deadline').value = rl.deadline || '';
+            document.getElementById('rl-priority').value = rl.priority || 'normal';
+            const catSel = document.getElementById('rl-cat');
+            catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            catSel.value = rl.category || '';
+            document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
+                `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:13px">
+                    <input type="checkbox" value="${cd.id}" ${(rl.target_cds || []).includes(cd.id) ? 'checked' : ''} style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
+                </label>`
+            ).join('');
+            openModal('m-rollout-form');
+        }
+
+        function saveRollout() {
+            const name = document.getElementById('rl-name').value.trim();
+            const deadline = document.getElementById('rl-deadline').value;
+            if (!name) return toast('Informe o nome da campanha', 'error');
+            if (!deadline) return toast('Informe o prazo', 'error');
+            const selected = [...document.querySelectorAll('#rl-cds-list input[type=checkbox]:checked')].map(cb => cb.value);
+            if (!selected.length) return toast('Selecione ao menos um CD alvo', 'error');
+            if (_editingRolloutId) {
+                const idx = rolloutsCache.findIndex(r => r.id === _editingRolloutId);
+                if (idx >= 0) {
+                    rolloutsCache[idx] = { ...rolloutsCache[idx], name, desc: document.getElementById('rl-desc').value.trim(), criteria: document.getElementById('rl-criteria').value, category: document.getElementById('rl-cat').value, deadline, priority: document.getElementById('rl-priority').value, target_cds: selected, updated_at: new Date().toISOString() };
+                }
+            } else {
+                rolloutsCache.push({ id: 'rl_' + Date.now(), name, desc: document.getElementById('rl-desc').value.trim(), criteria: document.getElementById('rl-criteria').value, category: document.getElementById('rl-cat').value, deadline, priority: document.getElementById('rl-priority').value, target_cds: selected, completed_cds: [], created_at: new Date().toISOString() });
+            }
+            saveRollouts();
+            closeModal('m-rollout-form');
+            loadRolloutsPage();
+            toast(_editingRolloutId ? 'Campanha atualizada!' : 'Campanha criada!', 'success');
+        }
+
+        let _detailRolloutId = null;
+        function openRolloutDetail(id) {
+            _detailRolloutId = id;
+            const rl = rolloutsCache.find(r => r.id === id); if (!rl) return;
+            document.getElementById('rld-title').textContent = `🚀 ${rl.name}`;
+            const { done, total, pct } = rolloutProgress(rl);
+            const st = rolloutStatus(rl);
+            const items = getRolloutItems(rl);
+            const statusColors = { active: 'var(--accent)', done: 'var(--green)', overdue: 'var(--red)' };
+            const statusLabel = { active: 'Em andamento', done: 'Concluído', overdue: 'Atrasado' };
+            let html = `<div style="margin-bottom:20px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="font-size:13px;font-weight:600;color:var(--text2)">${done}/${total} CDs concluídos</span>
+                    <span style="font-size:24px;font-weight:800;font-family:var(--mono);color:${statusColors[st]}">${pct}%</span>
+                </div>
+                <div style="height:10px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
+                    <div style="height:100%;width:${pct}%;background:${statusColors[st]};border-radius:99px;transition:width .5s"></div>
+                </div>
+                <div style="margin-top:8px;font-size:12px;color:var(--text3)">Prazo: ${new Date(rl.deadline).toLocaleDateString('pt-BR')} · ${rl.criteria || 'Todos os tempos de uso'} · ${rl.desc || ''}</div>
+            </div>
+            <div style="margin-bottom:20px;font-size:12px;color:var(--text2);background:var(--bg3);padding:10px 14px;border-radius:8px;border:1px solid var(--border)">
+                📦 <strong>${items.length}</strong> equipamentos afetados nesta campanha
+            </div>
+            <div style="font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;font-family:var(--mono)">PROGRESSO POR CD</div>`;
+            rl.target_cds.forEach(cdId => {
+                const cd = cdsCache.find(c => c.id === cdId);
+                const isDone = (rl.completed_cds || []).includes(cdId);
+                const cdItems = items.filter(i => i.cd_id === cdId);
+                html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;background:${isDone ? 'rgba(34,197,94,.05)' : 'var(--surface)'}">
+                    <div style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;background:${isDone ? 'rgba(34,197,94,.15)' : 'var(--bg3)'};">${isDone ? '✅' : '⏳'}</div>
+                    <div style="flex:1">
+                        <div style="font-weight:600;font-size:13px">${cd?.name || cdId} <span class="badge badge-cd" style="font-size:10px">${cd?.cd || ''}</span></div>
+                        <div style="font-size:11px;color:var(--text3)">${cdItems.length} equipamento(s) no critério</div>
+                    </div>
+                    <button class="btn btn-sm ${isDone ? 'btn-ghost' : 'btn-green'}" onclick="toggleRolloutCD('${id}','${cdId}')">${isDone ? '↩️ Desfazer' : '✅ Marcar Concluído'}</button>
+                </div>`;
+            });
+            document.getElementById('rld-body').innerHTML = html;
+            openModal('m-rollout-detail');
+        }
+
+        function toggleRolloutCD(rolloutId, cdId) {
+            const rl = rolloutsCache.find(r => r.id === rolloutId); if (!rl) return;
+            rl.completed_cds = rl.completed_cds || [];
+            if (rl.completed_cds.includes(cdId)) rl.completed_cds = rl.completed_cds.filter(c => c !== cdId);
+            else rl.completed_cds.push(cdId);
+            saveRollouts();
+            openRolloutDetail(rolloutId);
+            renderRollouts();
+            // Update stats row
+            const { pct } = rolloutProgress(rl);
+            toast(`Progresso: ${pct}%`, 'success');
+        }
+
+        async function deleteRollout() {
+            if (!_detailRolloutId) return;
+            const rl = rolloutsCache.find(r => r.id === _detailRolloutId);
+            const ok = await dlgDelete('esta campanha', rl?.name || '');
+            if (!ok) return;
+            rolloutsCache = rolloutsCache.filter(r => r.id !== _detailRolloutId);
+            saveRollouts();
+            closeModal('m-rollout-detail');
+            loadRolloutsPage();
+            toast('Campanha excluída', 'info');
+        }
+
+        // ============================================================
+        // FEATURE: RANKING COMPARATIVO ENTRE CDs
+        // ============================================================
+        let rankingCache = [];
+
+        async function loadRankingPage() {
+            setLoad(true, 'Calculando ranking...');
+            try {
+                const [cds, items] = await Promise.all([DB.get('cd_users', '?select=*&order=name.asc'), DB.get('inventory_items', '?select=*')]);
+                cdsCache = cds; itemsCache = items;
+                // Build ranking data
+                rankingCache = cds.map(cd => {
+                    const its = items.filter(i => i.cd_id === cd.id);
+                    const ativos = its.filter(i => i.status === 'Ativo').length;
+                    const manut = its.filter(i => i.status === 'Manutenção').length;
+                    const inativos = its.filter(i => i.status === 'Inativo').length;
+                    const backup = its.filter(i => i.status === 'Backup').length;
+                    const old5 = its.filter(i => i.tempo_uso === '> 5 anos').length;
+                    const total = its.length;
+                    // Health score: penaliza inativos e muito velhos, premia ativos
+                    const score = total === 0 ? 0 : Math.max(0, Math.round(((ativos * 1.0) - (manut * 0.3) - (inativos * 0.7) - (old5 * 0.2)) / total * 100));
+                    return { cd, total, ativos, manut, inativos, backup, old5, score };
+                });
+                // Global stats
+                const totItems = items.length;
+                const totCDs = cds.length;
+                const avgPerCD = totCDs ? Math.round(totItems / totCDs) : 0;
+                const avgScore = rankingCache.length ? Math.round(rankingCache.reduce((a, r) => a + r.score, 0) / rankingCache.length) : 0;
+                document.getElementById('ranking-global-stats').innerHTML = `
+                    <div class="stat-card" style="--card-color:var(--accent)"><div class="stat-label">Total CDs</div><div class="stat-value">${totCDs}</div><div class="stat-icon">👥</div></div>
+                    <div class="stat-card" style="--card-color:var(--green)"><div class="stat-label">Total Itens</div><div class="stat-value">${totItems}</div><div class="stat-icon">💻</div></div>
+                    <div class="stat-card" style="--card-color:var(--yellow)"><div class="stat-label">Média por CD</div><div class="stat-value">${avgPerCD}</div><div class="stat-icon">📊</div></div>
+                    <div class="stat-card" style="--card-color:var(--purple)"><div class="stat-label">Health Score Médio</div><div class="stat-value">${avgScore}</div><div class="stat-icon">❤️</div></div>`;
+                renderRankingTable();
+                renderRankingBars();
+                setLoad(false);
+            } catch (e) { setLoad(false); toast('Erro: ' + e.message, 'error'); }
+        }
+
+        function renderRankingTable() {
+            const sort = document.getElementById('ranking-sort')?.value || 'total';
+            const sorted = rankingCache.slice().sort((a, b) => b[sort === 'ativos' ? 'ativos' : sort === 'manutencao' ? 'manut' : sort === 'inativos' ? 'inativos' : sort === 'score' ? 'score' : 'total'] - a[sort === 'ativos' ? 'ativos' : sort === 'manutencao' ? 'manut' : sort === 'inativos' ? 'inativos' : sort === 'score' ? 'score' : 'total']);
+            const tb = document.getElementById('tb-ranking');
+            if (!sorted.length) { tb.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">🏆</div><div class="empty-title">Nenhum CD cadastrado</div></div></td></tr>`; return; }
+            const medals = ['🥇', '🥈', '🥉'];
+            tb.innerHTML = sorted.map((r, i) => {
+                const scoreColor = r.score >= 80 ? 'var(--green)' : r.score >= 50 ? 'var(--yellow)' : 'var(--red)';
+                return `<tr>
+                    <td style="text-align:center;font-size:18px">${medals[i] || `<span style="font-size:13px;color:var(--text3);font-family:var(--mono)">${i + 1}°</span>`}</td>
+                    <td><div style="font-weight:600">${r.cd.name}</div><span class="badge badge-cd" style="font-size:10px">${r.cd.cd}</span></td>
+                    <td style="font-weight:700;font-size:15px;font-family:var(--mono)">${r.total}</td>
+                    <td style="color:var(--green);font-weight:600">${r.ativos}</td>
+                    <td style="color:var(--yellow)">${r.manut}</td>
+                    <td style="color:var(--red)">${r.inativos}</td>
+                    <td style="color:#06b6d4">${r.backup}</td>
+                    <td style="color:var(--text3)">${r.old5}</td>
+                    <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                            <div style="width:60px;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;">
+                                <div style="height:100%;width:${r.score}%;background:${scoreColor};border-radius:99px"></div>
+                            </div>
+                            <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${scoreColor}">${r.score}</span>
+                        </div>
+                    </td>
+                    <td><button class="btn btn-ghost btn-sm" onclick="viewCDItems('${r.cd.id}')">👁️ Ver</button></td>
+                </tr>`;
+            }).join('');
+        }
+
+        function renderRankingBars() {
+            const sorted = rankingCache.slice().sort((a, b) => b.total - a.total);
+            if (!sorted.length) { document.getElementById('ranking-bars-section').innerHTML = ''; return; }
+            const maxTotal = Math.max(...sorted.map(r => r.total), 1);
+            document.getElementById('ranking-bars-section').innerHTML = `
+                <div class="table-container fade-in">
+                    <div class="table-toolbar"><strong style="font-size:14px">📊 Distribuição Visual por CD</strong></div>
+                    <div style="padding:16px 20px">
+                        ${sorted.map(r => `
+                        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+                            <div style="width:120px;text-align:right;font-size:12px;font-weight:600;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.cd.name}</div>
+                            <div style="flex:1;display:flex;gap:2px;height:20px;border-radius:4px;overflow:hidden;background:var(--bg3)">
+                                ${r.ativos ? `<div style="width:${r.ativos / maxTotal * 100}%;background:var(--green);opacity:.85" title="Ativos: ${r.ativos}"></div>` : ''}
+                                ${r.manut ? `<div style="width:${r.manut / maxTotal * 100}%;background:var(--yellow);opacity:.85" title="Manutenção: ${r.manut}"></div>` : ''}
+                                ${r.inativos ? `<div style="width:${r.inativos / maxTotal * 100}%;background:var(--red);opacity:.8" title="Inativos: ${r.inativos}"></div>` : ''}
+                                ${r.backup ? `<div style="width:${r.backup / maxTotal * 100}%;background:#06b6d4;opacity:.8" title="Backup: ${r.backup}"></div>` : ''}
+                            </div>
+                            <div style="width:32px;text-align:left;font-size:12px;font-weight:700;font-family:var(--mono);color:var(--text)">${r.total}</div>
+                        </div>`).join('')}
+                        <div style="display:flex;gap:16px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+                            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)"><div style="width:12px;height:12px;background:var(--green);border-radius:2px"></div>Ativo</div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)"><div style="width:12px;height:12px;background:var(--yellow);border-radius:2px"></div>Manutenção</div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)"><div style="width:12px;height:12px;background:var(--red);border-radius:2px"></div>Inativo</div>
+                            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text3)"><div style="width:12px;height:12px;background:#06b6d4;border-radius:2px"></div>Backup</div>
+                        </div>
+                    </div>
+                </div>`;
+        }
+
+        function exportRanking() {
+            if (!rankingCache.length) return toast('Carregue o ranking primeiro', 'error');
+            const sorted = rankingCache.slice().sort((a, b) => b.total - a.total);
+            const data = sorted.map((r, i) => ({
+                'Posição': i + 1, 'Nome CD': r.cd.name, 'CD': r.cd.cd, 'Total Itens': r.total,
+                'Ativos': r.ativos, 'Manutenção': r.manut, 'Inativos': r.inativos, 'Backup': r.backup,
+                '+5 Anos': r.old5, 'Health Score': r.score
+            }));
+            const ws = XLSX.utils.json_to_sheet(data);
+            ws['!cols'] = [{ wch: 8 }, { wch: 22 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }];
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Ranking CDs');
+            XLSX.writeFile(wb, `ranking_cds_${new Date().toISOString().slice(0, 10)}.xlsx`);
+            toast('Ranking exportado!', 'success');
+        }
+
+        // ============================================================
+        // FEATURE: TAGS PERSONALIZADAS POR ITEM
+        // ============================================================
+        const TAG_PRESETS = ['Leasing', 'Garantia Ativa', 'Para Descarte', 'Patrimônio Físico', 'Atualizar SO', 'Sem Suporte', 'Reformado', 'Comodato'];
+        let _tagsItemId = null;
+        let _currentTags = [];
+
+        function openTagsModal(itemId) {
+            _tagsItemId = itemId;
+            const item = itemsCache.find(i => i.id === itemId); if (!item) return;
+            _currentTags = [...(item.tags || [])];
+            document.getElementById('tag-custom-input').value = '';
+            renderTagsPresets();
+            renderActiveTags();
+            openModal('m-item-tags');
+        }
+
+        function renderTagsPresets() {
+            document.getElementById('tags-preset-list').innerHTML = TAG_PRESETS.map(t =>
+                `<button onclick="togglePresetTag('${t}')" style="font-size:12px;padding:5px 12px;border-radius:20px;border:1px solid ${_currentTags.includes(t) ? 'rgba(168,85,247,.5)' : 'var(--border2)'};background:${_currentTags.includes(t) ? 'rgba(168,85,247,.12)' : 'transparent'};color:${_currentTags.includes(t) ? 'var(--purple)' : 'var(--text3)'};cursor:pointer;transition:.15s">${_currentTags.includes(t) ? '✓ ' : ''} ${t}</button>`
+            ).join('');
+        }
+
+        function renderActiveTags() {
+            const el = document.getElementById('tags-active-list');
+            if (!_currentTags.length) { el.innerHTML = '<span style="font-size:12px;color:var(--text3)">Nenhuma tag adicionada</span>'; return; }
+            el.innerHTML = _currentTags.map(t =>
+                `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 10px;border-radius:20px;background:rgba(168,85,247,.12);color:var(--purple);border:1px solid rgba(168,85,247,.25)">🏷️ ${t} <button onclick="removeTag('${t}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;line-height:1;padding:0 0 1px">×</button></span>`
+            ).join('');
+        }
+
+        function togglePresetTag(tag) {
+            if (_currentTags.includes(tag)) _currentTags = _currentTags.filter(t => t !== tag);
+            else _currentTags.push(tag);
+            renderTagsPresets();
+            renderActiveTags();
+        }
+
+        function addCustomTag() {
+            const val = document.getElementById('tag-custom-input').value.trim();
+            if (!val) return;
+            if (_currentTags.includes(val)) { toast('Tag já adicionada', 'error'); return; }
+            _currentTags.push(val);
+            document.getElementById('tag-custom-input').value = '';
+            renderTagsPresets();
+            renderActiveTags();
+        }
+
+        function removeTag(tag) {
+            _currentTags = _currentTags.filter(t => t !== tag);
+            renderTagsPresets();
+            renderActiveTags();
+        }
+
+        async function saveItemTags() {
+            if (!_tagsItemId) return;
+            try {
+                await DB.patch('inventory_items', `?id=eq.${_tagsItemId}`, { tags: _currentTags });
+                const idx = itemsCache.findIndex(i => i.id === _tagsItemId);
+                if (idx >= 0) itemsCache[idx].tags = _currentTags;
+                closeModal('m-item-tags');
+                // Refresh view if still open
+                const viewModal = document.getElementById('m-view-item');
+                if (viewModal?.classList.contains('active')) viewItem(_tagsItemId, itemsCache.find(i => i.id === _tagsItemId)?.category);
+                toast('Tags salvas!', 'success');
+            } catch (e) { toast('Erro ao salvar tags: ' + e.message, 'error'); }
+        }
+
+        // ============================================================
+        // FEATURE: NOTIFICAÇÕES DE ROLLOUTS PARA O CD
+        // ============================================================
+        function loadCDRolloutBanner() {
+            loadRollouts();
+            const banner = document.getElementById('cd-rollout-banner');
+            if (!banner || !ME) return;
+            const myItems = itemsCache;
+            const activeRollouts = rolloutsCache.filter(rl => {
+                if (rolloutStatus(rl) === 'done') return false;
+                if (!(rl.target_cds || []).includes(ME.id)) return false;
+                return true;
+            });
+            if (!activeRollouts.length) { banner.style.display = 'none'; return; }
+            banner.style.display = 'block';
+            banner.innerHTML = activeRollouts.map(rl => {
+                const st = rolloutStatus(rl);
+                const { pct } = rolloutProgress(rl);
+                const isDoneCd = (rl.completed_cds || []).includes(ME.id);
+                const items = getRolloutItems(rl).filter(i => i.cd_id === ME.id);
+                const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
+                const color = st === 'overdue' ? 'var(--red)' : 'var(--accent)';
+                const bg = st === 'overdue' ? 'rgba(239,68,68,.08)' : 'rgba(14,165,233,.08)';
+                const border = st === 'overdue' ? 'rgba(239,68,68,.25)' : 'rgba(14,165,233,.25)';
+                const icon = st === 'overdue' ? '🔴' : isDoneCd ? '✅' : '🚀';
+                return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:${bg};border:1px solid ${border};border-radius:10px;margin-bottom:8px;flex-wrap:wrap;gap:10px">
+                    <span style="font-size:18px">${icon}</span>
+                    <div style="flex:1;min-width:160px">
+                        <div style="font-weight:600;font-size:13px;color:var(--text)">${rl.name}</div>
+                        <div style="font-size:12px;color:var(--text3);margin-top:2px">${items.length} equipamento(s) afetado(s) · Prazo: ${deadline}</div>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+                        <div style="width:80px;height:6px;background:var(--bg3);border-radius:99px;overflow:hidden;border:1px solid var(--border)">
+                            <div style="height:100%;width:${pct}%;background:${color};border-radius:99px"></div>
+                        </div>
+                        <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${color}">${pct}%</span>
+                    </div>
+                    ${!isDoneCd ? `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:${bg};border:1px solid ${border};color:${color};font-weight:600">${st === 'overdue' ? '⚠️ Atrasado' : '⏳ Pendente'}</span>` : `<span style="font-size:11px;padding:4px 10px;border-radius:20px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);font-weight:600">✅ Concluído por você</span>`}
+                </div>`;
+            }).join('');
         }
 
         // ============================================================
