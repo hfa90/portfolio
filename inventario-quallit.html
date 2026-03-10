@@ -1126,6 +1126,53 @@
             }
         }
 
+        @keyframes notifSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(24px) scale(.96)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1)
+            }
+        }
+
+        .notif-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 11px 16px;
+            border-bottom: 1px solid var(--border);
+            transition: background .15s;
+        }
+
+        .notif-item:last-child {
+            border-bottom: none;
+        }
+
+        .notif-item:hover {
+            background: var(--bg3);
+        }
+
+        .notif-item.unread {
+            background: rgba(168, 85, 247, .05);
+        }
+
+        .notif-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--purple));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
         /* ── TAGS ── */
         .tag-chip {
             display: inline-flex;
@@ -5134,8 +5181,42 @@
         </div>
     </div>
 
-    <script>
+    <!-- POPUP: Notificações Admin (rollout concluído por field) -->
+    <div id="admin-notif-popup" style="
+        display:none;
+        position:fixed;bottom:28px;right:28px;z-index:9999;
+        width:360px;max-width:calc(100vw - 40px);
+        background:var(--surface);
+        border:1px solid rgba(168,85,247,.35);
+        border-radius:16px;
+        box-shadow:0 8px 40px rgba(0,0,0,.5),0 0 0 1px rgba(168,85,247,.15);
+        overflow:hidden;
+        animation: notifSlideIn .35s cubic-bezier(.34,1.56,.64,1);
+    ">
+        <div
+            style="background:linear-gradient(135deg,rgba(168,85,247,.15),rgba(14,165,233,.1));padding:14px 16px 10px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <div style="display:flex;align-items:center;gap:9px">
+                    <span style="font-size:22px">🎉</span>
+                    <div>
+                        <div style="font-weight:700;font-size:13px;color:var(--text1)">Campanha Concluída!</div>
+                        <div style="font-size:11px;color:var(--text3)" id="notif-count-label"></div>
+                    </div>
+                </div>
+                <button onclick="dismissAdminNotif()"
+                    style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;border-radius:6px"
+                    title="Fechar">×</button>
+            </div>
+        </div>
+        <div id="admin-notif-list" style="max-height:280px;overflow-y:auto;padding:8px 0"></div>
+        <div style="padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="dismissAdminNotif()">Fechar</button>
+            <button class="btn btn-accent btn-sm" onclick="dismissAdminNotif();nav('admin-rollouts')">Ver Campanhas
+                →</button>
+        </div>
+    </div>
 
+    <script>
         const SB_URL = '__SB_URL__';
         const SB_KEY = '__SB_KEY__';
 
@@ -8096,6 +8177,94 @@
             if (_onlineInterval) clearInterval(_onlineInterval);
             refreshOnlineIndicator();
             _onlineInterval = setInterval(refreshOnlineIndicator, 60000);
+            // Verifica notificações a cada 30s quando admin está online
+            checkAdminNotifications();
+            setInterval(checkAdminNotifications, 30000);
+        }
+
+        // ============================================================
+        // 🔔 SISTEMA DE NOTIFICAÇÕES DO ADMIN
+        // ============================================================
+        let _notifSeen = new Set(); // IDs já exibidos nesta sessão
+
+        async function checkAdminNotifications() {
+            if (ROLE !== 'admin') return;
+            try {
+                const notifs = await DB.get('admin_notifications',
+                    '?read=eq.false&order=created_at.desc&limit=20'
+                );
+                if (!notifs?.length) return;
+
+                // Filtra só as que ainda não mostramos nesta sessão
+                const fresh = notifs.filter(n => !_notifSeen.has(n.id));
+                if (!fresh.length) return;
+
+                fresh.forEach(n => _notifSeen.add(n.id));
+                showAdminNotifPopup(fresh);
+            } catch { /* silencioso se tabela não existir ainda */ }
+        }
+
+        function showAdminNotifPopup(notifs) {
+            const popup = document.getElementById('admin-notif-popup');
+            const list = document.getElementById('admin-notif-list');
+            const label = document.getElementById('notif-count-label');
+            if (!popup || !list) return;
+
+            label.textContent = `${notifs.length} nova(s) notificação(ões)`;
+
+            list.innerHTML = notifs.map(n => {
+                const initials = (n.cd_name || 'CD').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
+                const time = new Date(n.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                const pct = n.items_total > 0 ? Math.round(n.items_done / n.items_total * 100) : 100;
+                const col = pct === 100 ? 'var(--green)' : 'var(--yellow)';
+
+                return `<div class="notif-item unread" onclick="dismissAdminNotif();nav('admin-rollouts')" style="cursor:pointer">
+                    <div class="notif-avatar">${initials}</div>
+                    <div style="flex:1;min-width:0">
+                        <div style="font-weight:600;font-size:12px;color:var(--text1)">
+                            ✅ ${n.cd_name || 'Field'} <span class="badge badge-cd" style="font-size:10px">${n.cd_code || ''}</span>
+                        </div>
+                        <div style="font-size:11px;color:var(--text2);margin-top:2px">
+                            concluiu <strong>"${n.rollout_name || 'campanha'}"</strong>
+                        </div>
+                        <div style="font-size:11px;margin-top:4px;display:flex;align-items:center;gap:8px">
+                            <div style="flex:1;height:4px;background:var(--bg3);border-radius:99px;overflow:hidden">
+                                <div style="height:100%;width:${pct}%;background:${col};border-radius:99px"></div>
+                            </div>
+                            <span style="font-size:10px;font-weight:700;font-family:var(--mono);color:${col}">${pct}%</span>
+                            <span style="font-size:10px;color:var(--text3)">${time}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            popup.style.display = 'block';
+
+            // Marca como lidas no banco após 4s
+            setTimeout(async () => {
+                try {
+                    await Promise.all(notifs.map(n =>
+                        DB.patch('admin_notifications', `?id=eq.${n.id}`, { read: true })
+                    ));
+                } catch { }
+            }, 4000);
+        }
+
+        function dismissAdminNotif() {
+            const popup = document.getElementById('admin-notif-popup');
+            if (popup) {
+                popup.style.animation = 'none';
+                popup.style.opacity = '0';
+                popup.style.transform = 'translateY(16px)';
+                popup.style.transition = 'opacity .2s, transform .2s';
+                setTimeout(() => {
+                    popup.style.display = 'none';
+                    popup.style.opacity = '';
+                    popup.style.transform = '';
+                    popup.style.transition = '';
+                    popup.style.animation = '';
+                }, 200);
+            }
         }
 
         // ============================================================
@@ -8797,7 +8966,7 @@
             _execRolloutId = rolloutId;
             _execFlt = '';
 
-            // Garante que o rollout está no cache (pode chegar aqui via banner sem ter carregado a página)
+            // Garante rollout no cache
             let rl = rolloutsCache.find(r => r.id === rolloutId);
             if (!rl) {
                 try {
@@ -8809,37 +8978,43 @@
             if (!rl) { toast('Campanha não encontrada', 'error'); return; }
 
             setLoad(true, 'Carregando itens da campanha...');
+
+            // ── 1. Busca itens ────────────────────────────────────────────
+            // Filtra categoria no servidor (string simples, sem caracteres especiais)
+            // tempo_uso é filtrado em JS para evitar qualquer problema de encoding
+            let qs = `?cd_id=eq.${ME.id}&select=*`;
+            if (rl.category) qs += `&category=eq.${rl.category}`;
+
+            let allMyItems = [];
             try {
-                // ── Busca TODOS os itens do CD e filtra em JS ────────────────
-                // NÃO usar encodeURIComponent no valor do filtro PostgREST:
-                // "?tempo_uso=eq.1-2%20anos" não funciona — o Supabase espera
-                // o valor literal na URL, ex: "?tempo_uso=eq.1-2 anos"
-                // Para evitar qualquer problema de encoding, buscamos tudo e filtramos em JS.
-                let qs = `?cd_id=eq.${ME.id}&select=*`;
-                // Filtra categoria no servidor (seguro — sem espaços/caracteres especiais)
-                if (rl.category) qs += `&category=eq.${rl.category}`;
+                allMyItems = await DB.get('inventory_items', qs);
+            } catch (e) {
+                setLoad(false);
+                toast('Erro ao buscar itens: ' + e.message, 'error');
+                return;
+            }
 
-                const allMyItems = await DB.get('inventory_items', qs);
+            // Filtro de critério em JS (seguro contra qualquer encoding)
+            _execItems = rl.criteria
+                ? allMyItems.filter(i => (i.tempo_uso || '').trim() === (rl.criteria || '').trim())
+                : allMyItems;
 
-                // Filtra critério de tempo_uso em JavaScript (evita bug de encoding)
-                _execItems = rl.criteria
-                    ? allMyItems.filter(i => i.tempo_uso === rl.criteria)
-                    : allMyItems;
-
-                // Busca execuções existentes
+            // ── 2. Busca execuções existentes ─────────────────────────────
+            // Isolado em try/catch próprio: se falhar (ex: tabela ainda com cd_id TEXT)
+            // os itens já aparecem normalmente — só não terão status salvo ainda
+            try {
                 const execs = await DB.get('rollout_executions',
                     `?rollout_id=eq.${rolloutId}&cd_id=eq.${ME.id}&select=*`
                 );
                 _cdRolloutExecs[rolloutId] = execs || [];
-
             } catch (e) {
-                toast('Erro ao carregar itens: ' + e.message, 'error');
-                setLoad(false);
-                return;
+                _cdRolloutExecs[rolloutId] = [];
+                console.warn('rollout_executions indisponível:', e.message);
             }
+
             setLoad(false);
 
-            // Navega para a página de execução
+            // ── 3. Navega para a página ───────────────────────────────────
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.getElementById('page-cd-rollout-exec').classList.add('active');
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
@@ -8852,12 +9027,11 @@
             document.getElementById('exec-subtitle').textContent =
                 `${rl.description || ''}${critLabel}${catLabel} · Prazo: ${deadline}`;
 
-            // Botão concluir: só mostra se não está concluído ainda
             const isDone = (rl.completed_cds || []).includes(ME.id);
             document.getElementById('btn-exec-concluir').style.display = isDone ? 'none' : '';
 
-            // Reseta filtros
-            document.querySelectorAll('.exec-flt-btn').forEach(b => b.classList.toggle('active', b.dataset.flt === ''));
+            document.querySelectorAll('.exec-flt-btn').forEach(b =>
+                b.classList.toggle('active', b.dataset.flt === ''));
 
             renderExecItems();
         }
@@ -9034,6 +9208,21 @@
                     updated_at: new Date().toISOString()
                 });
                 rl.completed_cds = completed;
+
+                // ── Grava notificação para o admin ──────────────────────────
+                // Silencioso: se a tabela não existir ainda, não trava o fluxo
+                DB.post('admin_notifications', {
+                    type: 'rollout_done',
+                    rollout_id: rolloutId,
+                    rollout_name: rl.name,
+                    cd_id: ME.id,
+                    cd_name: ME.name || '',
+                    cd_code: ME.cd || '',
+                    items_total: total,
+                    items_done: treated,
+                    read: false
+                }).catch(() => { });
+
                 await writeLog({
                     actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || '',
                     action: 'rollout_done',
@@ -9041,6 +9230,7 @@
                     item_name: rl.name,
                     detail: `Campanha concluída: ${treated}/${total} itens tratados (${pct}%)`
                 }).catch(() => { });
+
                 toast(`✅ Campanha "${rl.name}" marcada como concluída!`, 'success');
                 document.getElementById('btn-exec-concluir').style.display = 'none';
                 // Atualiza badge nav
