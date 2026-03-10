@@ -7986,6 +7986,40 @@
                 .replace(/\s+/g, ' '); // colapsa espaços múltiplos
         }
 
+        // Converte data serial do Excel (ex: 45292) ou string de data (DD/MM/YYYY, YYYY-MM-DD)
+        // para o formato ISO YYYY-MM-DD aceito pelo Supabase/PostgreSQL.
+        // Retorna null se o valor for vazio ou inválido.
+        function parseExcelDate(value) {
+            if (value === null || value === undefined || value === '') return null;
+            const s = String(value).trim();
+            if (!s) return null;
+
+            // Número serial do Excel (inteiro ou float)
+            if (/^\d{4,6}(\.\d+)?$/.test(s)) {
+                const serial = parseFloat(s);
+                // Excel conta a partir de 1/1/1900, com o bug do ano 1900 (serial 60 = 28/02/1900 inexistente)
+                const epoch = new Date(Date.UTC(1899, 11, 30)); // 30/12/1899
+                const ms = epoch.getTime() + serial * 86400000;
+                const d = new Date(ms);
+                if (isNaN(d.getTime())) return null;
+                return d.toISOString().slice(0, 10); // YYYY-MM-DD
+            }
+
+            // Formato BR: DD/MM/YYYY ou DD-MM-YYYY
+            const brMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+            if (brMatch) {
+                const [, dd, mm, yyyy] = brMatch;
+                const d = new Date(Date.UTC(+yyyy, +mm - 1, +dd));
+                if (isNaN(d.getTime())) return null;
+                return d.toISOString().slice(0, 10);
+            }
+
+            // Formato ISO: YYYY-MM-DD (já correto)
+            if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+
+            return null;
+        }
+
         function procExcel(file) {
             const r = new FileReader();
             r.onload = e => {
@@ -8039,9 +8073,9 @@
                     status: row.status || 'Ativo',
                     tempo_uso: row.tempo_uso || '',
                     observacoes: row.observacoes || '',
-                    data_aquisicao: row.data_aquisicao || row['data de aquisição'] || row['data aquisicao'] || null,
-                    valor_equipamento: row.valor_equipamento != null ? parseFloat(row.valor_equipamento) : null,
-                    garantia_ate: row.garantia_ate || row['garantia até'] || row['garantia ate'] || null,
+                    data_aquisicao: parseExcelDate(row.data_aquisicao || row['data de aquisição'] || row['data aquisicao'] || ''),
+                    valor_equipamento: row.valor_equipamento != null && row.valor_equipamento !== '' ? parseFloat(String(row.valor_equipamento).replace(',', '.')) : null,
+                    garantia_ate: parseExcelDate(row.garantia_ate || row['garantia até'] || row['garantia ate'] || ''),
                     // Campos JSONB inicializados corretamente
                     maint_history: [],
                     tags: [],
