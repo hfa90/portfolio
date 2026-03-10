@@ -5101,16 +5101,16 @@
                             rows="2" placeholder="Descreva o objetivo desta campanha..."
                             style="resize:vertical"></textarea></div>
                     <div class="form-group"><label>Critério (Tempo de Uso)</label>
-                        <select id="rl-criteria" class="form-input">
+                        <select id="rl-criteria" class="form-input" onchange="previewRolloutEligible()">
                             <option value="">Todos os equipamentos</option>
-                            <option value="&gt; 5 anos">Mais de 5 anos</option>
+                            <option value="> 5 anos">Mais de 5 anos</option>
                             <option value="3-5 anos">3 a 5 anos</option>
                             <option value="2-3 anos">2 a 3 anos</option>
                             <option value="1-2 anos">1 a 2 anos</option>
                         </select>
                     </div>
                     <div class="form-group"><label>Categoria</label>
-                        <select id="rl-cat" class="form-input">
+                        <select id="rl-cat" class="form-input" onchange="previewRolloutEligible()">
                             <option value="">Todas as categorias</option>
                         </select>
                     </div>
@@ -5124,6 +5124,31 @@
                         </select>
                     </div>
                 </div>
+
+                <!-- PREVIEW de equipamentos elegíveis -->
+                <div id="rl-eligible-preview"
+                    style="display:none;margin-top:4px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:12px">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                        <span style="color:var(--text2);font-weight:600">📊 Equipamentos elegíveis para esta
+                            campanha</span>
+                        <span id="rl-eligible-count"
+                            style="background:var(--accent);color:#fff;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700"></span>
+                    </div>
+                    <div id="rl-eligible-breakdown" style="color:var(--text3);line-height:1.7"></div>
+                    <!-- Seleção manual caso queira especificar itens individualmente -->
+                    <div id="rl-manual-section"
+                        style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                            <span style="color:var(--text2);font-weight:600">🎯 Seleção manual de itens</span>
+                            <button type="button" class="btn btn-ghost btn-sm" onclick="toggleManualSelection()"
+                                id="btn-toggle-manual" style="font-size:11px">Selecionar manualmente</button>
+                        </div>
+                        <div id="rl-manual-items-list"
+                            style="display:none;max-height:180px;overflow-y:auto;display:none;flex-wrap:wrap;gap:6px;padding:8px;background:var(--surface);border-radius:8px">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-group" style="margin-top:12px">
                     <label>CDs Alvo * <span style="font-size:11px;color:var(--text3)">(selecione um ou
                             mais)</span></label>
@@ -8285,8 +8310,13 @@
         }
 
         function getRolloutItems(rl) {
+            // Se o rollout tem itens manuais definidos, usa eles
+            if (rl.manual_item_ids && rl.manual_item_ids.length > 0) {
+                return itemsCache.filter(i => rl.manual_item_ids.includes(i.id));
+            }
+            // Caso contrário, filtra por critério automático (tolerante a encoding)
             let items = itemsCache.filter(i => (rl.target_cds || []).includes(i.cd_id));
-            if (rl.criteria) items = items.filter(i => i.tempo_uso === rl.criteria);
+            if (rl.criteria) items = items.filter(i => _normalizeCriteria(i.tempo_uso) === _normalizeCriteria(rl.criteria));
             if (rl.category) items = items.filter(i => i.category === rl.category);
             return items;
         }
@@ -8370,30 +8400,163 @@
             catSel.innerHTML = '<option value="">Todas as categorias</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
         }
 
+        // ── PREVIEW: Mostra equipamentos elegíveis ao configurar critério ──
+        let _manualSelectionActive = false;
+        let _manualSelectedItems = new Set();
+
+        function _normalizeCriteria(val) {
+            // Normaliza para comparação tolerante: remove espaços extras, decodifica HTML entities
+            return (val || '').trim()
+                .replace(/&gt;/g, '>').replace(/&lt;/g, '<').replace(/&amp;/g, '&');
+        }
+
+        function _itemMatchesCriteria(item, criteria, category) {
+            const itemTempo = _normalizeCriteria(item.tempo_uso);
+            const critNorm = _normalizeCriteria(criteria);
+            if (criteria && itemTempo !== critNorm) return false;
+            if (category && item.category !== category) return false;
+            return true;
+        }
+
+        async function previewRolloutEligible() {
+            const criteria = document.getElementById('rl-criteria').value;
+            const category = document.getElementById('rl-cat').value;
+            const previewDiv = document.getElementById('rl-eligible-preview');
+            const countBadge = document.getElementById('rl-eligible-count');
+            const breakdownDiv = document.getElementById('rl-eligible-breakdown');
+            const manualSection = document.getElementById('rl-manual-section');
+
+            // Busca itens do banco se ainda não temos
+            let allItems = itemsCache;
+            if (!allItems || !allItems.length) {
+                try {
+                    allItems = await DB.get('inventory_items', '?select=id,cd_id,category,tempo_uso,status,name,serial,brand,model');
+                    itemsCache = allItems;
+                } catch (e) {
+                    previewDiv.style.display = 'none';
+                    return;
+                }
+            }
+
+            // Filtra elegíveis usando a função tolerante
+            const eligible = allItems.filter(i => _itemMatchesCriteria(i, criteria, category));
+
+            if (!criteria && !category) {
+                // Mostra preview geral
+                countBadge.textContent = `${eligible.length} equipamentos`;
+                const byTempo = {};
+                eligible.forEach(i => { const t = i.tempo_uso || 'Não informado'; byTempo[t] = (byTempo[t] || 0) + 1; });
+                breakdownDiv.innerHTML = Object.entries(byTempo)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([t, n]) => `<span style="margin-right:12px">⏱️ <strong>${t}</strong>: ${n}</span>`).join('') || 'Nenhum dado disponível';
+            } else {
+                countBadge.textContent = `${eligible.length} equipamento(s)`;
+                countBadge.style.background = eligible.length === 0 ? 'var(--red)' : eligible.length < 5 ? 'var(--yellow)' : 'var(--accent)';
+
+                if (eligible.length === 0) {
+                    breakdownDiv.innerHTML = `<span style="color:var(--red)">⚠️ Nenhum equipamento encontrado com este critério. Verifique os dados do inventário.</span>`;
+                } else {
+                    // Agrupa por CD para mostrar distribuição
+                    const byCD = {};
+                    eligible.forEach(i => {
+                        const cd = cdsCache.find(c => c.id === i.cd_id);
+                        const label = cd ? `${cd.cd}` : 'Sem CD';
+                        byCD[label] = (byCD[label] || 0) + 1;
+                    });
+                    breakdownDiv.innerHTML = `<span style="color:var(--green)">✅ Encontrados em ${Object.keys(byCD).length} CD(s): </span>` +
+                        Object.entries(byCD).map(([cd, n]) => `<span style="margin-right:10px"><strong>${cd}</strong>: ${n}</span>`).join('');
+                }
+            }
+
+            previewDiv.style.display = 'block';
+            manualSection.style.display = eligible.length > 0 ? 'block' : 'none';
+
+            // Popula lista de seleção manual
+            _populateManualList(eligible);
+        }
+
+        function _populateManualList(items) {
+            _manualSelectedItems = new Set();
+            const list = document.getElementById('rl-manual-items-list');
+            if (!items.length) { list.innerHTML = ''; return; }
+            list.innerHTML = items.map(i => {
+                const cd = cdsCache.find(c => c.id === i.cd_id);
+                const cdLabel = cd ? cd.cd : '?';
+                return `<label style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--surface2);border-radius:6px;cursor:pointer;font-size:11px;border:1px solid var(--border)">
+                    <input type="checkbox" class="rl-manual-item-cb" value="${i.id}" data-cd="${i.cd_id}" style="accent-color:var(--accent)" onchange="_updateManualCount()">
+                    <span class="badge badge-cd" style="font-size:9px">${cdLabel}</span>
+                    <span style="color:var(--text)">${i.name || i.brand || 'Item'} ${i.model || ''}</span>
+                    <span style="color:var(--text3)">${i.serial || ''}</span>
+                    <span style="color:var(--yellow);font-size:10px">${i.tempo_uso || ''}</span>
+                </label>`;
+            }).join('');
+        }
+
+        function _updateManualCount() {
+            const checked = document.querySelectorAll('.rl-manual-item-cb:checked');
+            _manualSelectedItems = new Set([...checked].map(cb => cb.value));
+            const btn = document.getElementById('btn-toggle-manual');
+            if (btn && _manualSelectionActive) {
+                btn.textContent = `${_manualSelectedItems.size} selecionados`;
+            }
+        }
+
+        function toggleManualSelection() {
+            _manualSelectionActive = !_manualSelectionActive;
+            const list = document.getElementById('rl-manual-items-list');
+            const btn = document.getElementById('btn-toggle-manual');
+            if (_manualSelectionActive) {
+                list.style.display = 'flex';
+                btn.textContent = 'Cancelar seleção manual';
+                btn.style.color = 'var(--red)';
+            } else {
+                list.style.display = 'none';
+                _manualSelectedItems = new Set();
+                btn.textContent = 'Selecionar manualmente';
+                btn.style.color = '';
+                document.querySelectorAll('.rl-manual-item-cb').forEach(cb => cb.checked = false);
+            }
+        }
+
         function openNewRolloutModal() {
             _editingRolloutId = null;
+            _manualSelectionActive = false;
+            _manualSelectedItems = new Set();
             document.getElementById('rollout-form-title').textContent = '🚀 Nova Campanha de Rollout';
             ['rl-name', 'rl-desc'].forEach(id => document.getElementById(id).value = '');
             document.getElementById('rl-criteria').value = '';
             document.getElementById('rl-deadline').value = '';
             document.getElementById('rl-priority').value = 'normal';
+            document.getElementById('rl-eligible-preview').style.display = 'none';
+            document.getElementById('rl-manual-items-list').style.display = 'none';
+            const btn = document.getElementById('btn-toggle-manual');
+            if (btn) { btn.textContent = 'Selecionar manualmente'; btn.style.color = ''; }
             _fillRolloutModal();
             document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
                 `<label style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-radius:8px;cursor:pointer;border:1px solid var(--border);font-size:13px">
                     <input type="checkbox" value="${cd.id}" style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
                 </label>`).join('');
             openModal('m-rollout-form');
+            // Dispara preview para mostrar total geral
+            setTimeout(() => previewRolloutEligible(), 100);
         }
 
         function editRollout(id) {
             const rl = rolloutsCache.find(r => r.id === id); if (!rl) return;
             _editingRolloutId = id;
+            _manualSelectionActive = false;
+            _manualSelectedItems = new Set();
             document.getElementById('rollout-form-title').textContent = '✏️ Editar Campanha';
             document.getElementById('rl-name').value = rl.name || '';
             document.getElementById('rl-desc').value = rl.description || '';
-            document.getElementById('rl-criteria').value = rl.criteria || '';
+            // Normaliza o critério ao carregar (corrige eventual &gt; salvo antes do fix)
+            document.getElementById('rl-criteria').value = _normalizeCriteria(rl.criteria || '');
             document.getElementById('rl-deadline').value = rl.deadline || '';
             document.getElementById('rl-priority').value = rl.priority || 'normal';
+            document.getElementById('rl-eligible-preview').style.display = 'none';
+            document.getElementById('rl-manual-items-list').style.display = 'none';
+            const btn = document.getElementById('btn-toggle-manual');
+            if (btn) { btn.textContent = 'Selecionar manualmente'; btn.style.color = ''; }
             _fillRolloutModal();
             document.getElementById('rl-cat').value = rl.category || '';
             document.getElementById('rl-cds-list').innerHTML = cdsCache.map(cd =>
@@ -8401,6 +8564,7 @@
                     <input type="checkbox" value="${cd.id}" ${(rl.target_cds || []).includes(cd.id) ? 'checked' : ''} style="accent-color:var(--accent)"> <span class="badge badge-cd" style="font-size:10px">${cd.cd}</span> ${cd.name}
                 </label>`).join('');
             openModal('m-rollout-form');
+            setTimeout(() => previewRolloutEligible(), 100);
         }
 
         async function saveRollout() {
@@ -8410,14 +8574,25 @@
             if (!deadline) return toast('Informe o prazo', 'error');
             const selected = [...document.querySelectorAll('#rl-cds-list input[type=checkbox]:checked')].map(cb => cb.value);
             if (!selected.length) return toast('Selecione ao menos um CD alvo', 'error');
+
+            // Normaliza o critério — garante que nunca será salvo com &gt; (HTML entity)
+            const criteriaRaw = document.getElementById('rl-criteria').value;
+            const criteria = _normalizeCriteria(criteriaRaw) || null;
+
+            // Itens selecionados manualmente (se o admin usou seleção manual)
+            const manualItems = _manualSelectionActive && _manualSelectedItems.size > 0
+                ? [..._manualSelectedItems]
+                : null;
+
             const payload = {
                 name,
                 description: document.getElementById('rl-desc').value.trim(),
-                criteria: document.getElementById('rl-criteria').value || null,
+                criteria,
                 category: document.getElementById('rl-cat').value || null,
                 deadline,
                 priority: document.getElementById('rl-priority').value,
                 target_cds: selected,
+                manual_item_ids: manualItems,  // null = usa critério automático
                 updated_at: new Date().toISOString()
             };
             setBtn('btn-save-rollout', true, 'Salvando...');
@@ -8994,10 +9169,16 @@
                 return;
             }
 
-            // Filtro de critério em JS (seguro contra qualquer encoding)
-            _execItems = rl.criteria
-                ? allMyItems.filter(i => (i.tempo_uso || '').trim() === (rl.criteria || '').trim())
-                : allMyItems;
+            // Filtro de critério em JS — tolerante a encoding e espaços
+            // Também suporta itens selecionados manualmente pelo admin
+            if (rl.manual_item_ids && rl.manual_item_ids.length > 0) {
+                // Rollout com itens manuais: filtra pelos IDs específicos do CD atual
+                _execItems = allMyItems.filter(i => rl.manual_item_ids.includes(i.id));
+            } else {
+                _execItems = rl.criteria
+                    ? allMyItems.filter(i => _normalizeCriteria(i.tempo_uso) === _normalizeCriteria(rl.criteria))
+                    : allMyItems;
+            }
 
             // ── 2. Busca execuções existentes ─────────────────────────────
             // Isolado em try/catch próprio: se falhar (ex: tabela ainda com cd_id TEXT)
