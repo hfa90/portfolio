@@ -112,6 +112,8 @@
 
         .screen.active {
             display: block;
+            position: relative;
+            z-index: 1;
         }
 
         #login-screen.active {
@@ -1771,7 +1773,7 @@
                 });
                 if (!r.ok) {
                     const e = await r.json().catch(() => ({}));
-                    throw new Error(e.message || e.hint || `HTTP ${r.status}`);
+                    throw new Error('HTTP ' + r.status + (e.message || e.hint || e.error ? ': ' + (e.message || e.hint || e.error) : ' — verifique se as tabelas existem no Supabase'));
                 }
                 return r.status === 204 ? [] : r.json();
             }
@@ -1920,19 +1922,32 @@
                     const [cats, sols] = await Promise.all([
                         DB.get('fs_categories', '?order=name.asc'),
                         DB.get('fs_solutions', '?order=created_at.desc&select=id,cat_id,title,description,level,link,doc_name,img_data,views,author,created_at,updated_at')
-                        // doc_data excluído da listagem (pesado) — carregado só ao abrir a solução
                     ]);
-                    db.categories = cats;
-                    db.solutions = sols;
-
-                    // Seed de categorias padrão se banco estiver vazio
+                    db.categories = Array.isArray(cats) ? cats : [];
+                    db.solutions = Array.isArray(sols) ? sols : [];
                     if (!db.categories.length) await seedDefaultCategories();
+                    hideLoader();
+                    renderAll();
                 } catch (e) {
-                    toast('Erro ao carregar dados: ' + e.message, 'error');
+                    hideLoader();
+                    console.error('Erro loadAllFromDB:', e);
                     db = { categories: [], solutions: [] };
+                    // Mostra erro na tela em vez de tela preta
+                    const msg = e.message || '';
+                    const isMissing = msg.includes('404') || msg.includes('42P01') || msg.includes('does not exist');
+                    const errText = isMissing
+                        ? 'As tabelas do Field Support nao existem no Supabase ainda. Execute o SQL de migração no painel do Supabase e recarregue.'
+                        : 'Erro ao conectar ao banco: ' + msg;
+                    renderAll(); // renderiza tela vazia
+                    const grid = document.getElementById('cat-grid');
+                    if (grid) grid.innerHTML =
+                        '<div class="empty-state" style="grid-column:1/-1;border:1px solid rgba(239,68,68,.25);background:rgba(239,68,68,.05);border-radius:16px;padding:40px 24px">' +
+                        '<div class="empty-icon">⚠️</div>' +
+                        '<div class="empty-title" style="color:var(--red)">Erro de conexão</div>' +
+                        '<div class="empty-sub" style="max-width:480px;margin:12px auto 20px">' + errText + '</div>' +
+                        '<button onclick="loadAllFromDB()" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:var(--font);font-size:13px;font-weight:600">🔄 Tentar novamente</button>' +
+                        '</div>';
                 }
-                hideLoader();
-                renderAll();
             }
 
             async function seedDefaultCategories() {
