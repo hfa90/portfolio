@@ -6477,24 +6477,57 @@
         // ── ALERT CONFIG STATE (persisted in localStorage) ──
         let _alertCfg = null;
 
-        function loadAlertCfg() {
-            try { _alertCfg = JSON.parse(localStorage.getItem('quallit_alert_cfg')) || null; } catch { _alertCfg = null; }
-            if (!_alertCfg) _alertCfg = { threshold: '', cats: [] }; // default: disabled
+        // ── Helpers de persistência de preferências ──────────────────
+        async function loadPref(key) {
+            try {
+                const userId = ME?.id || 'anonymous';
+                const rows = await DB.get('user_preferences',
+                    `?user_id=eq.${encodeURIComponent(userId)}&key=eq.${encodeURIComponent(key)}&select=value`);
+                return rows?.[0]?.value || null;
+            } catch { return null; }
         }
 
-        function saveAlertConfig() {
+        async function savePref(key, value) {
+            const userId = ME?.id || 'anonymous';
+            const userType = ROLE || 'unknown';
+            try {
+                await sbReq('POST', 'user_preferences', '', {
+                    user_id: userId, user_type: userType, key, value,
+                    updated_at: new Date().toISOString()
+                });
+            } catch {
+                // Se já existe, atualiza
+                await DB.patch('user_preferences',
+                    `?user_id=eq.${encodeURIComponent(userId)}&key=eq.${encodeURIComponent(key)}`,
+                    { value, updated_at: new Date().toISOString() });
+            }
+        }
+
+        async function loadAlertCfg() {
+            // Tenta Supabase primeiro, fallback para localStorage
+            try {
+                const remote = await loadPref('alert_cfg');
+                if (remote) { _alertCfg = remote; return; }
+            } catch { }
+            // Fallback localStorage (migração)
+            try { _alertCfg = JSON.parse(localStorage.getItem('quallit_alert_cfg')) || null; } catch { _alertCfg = null; }
+            if (!_alertCfg) _alertCfg = { threshold: '', cats: [] };
+        }
+
+        async function saveAlertConfig() {
             const threshold = g('alert-cfg-threshold');
             const cats = [...document.querySelectorAll('#alert-cfg-cats input[type=checkbox]:checked')].map(cb => cb.value);
             _alertCfg = { threshold, cats };
+            // Salva no Supabase (e mantém localStorage como backup)
             localStorage.setItem('quallit_alert_cfg', JSON.stringify(_alertCfg));
+            await savePref('alert_cfg', _alertCfg).catch(() => { });
             closeModal('m-alert-config');
-            // Re-run alerts with current cache
             if (itemsCache.length) renderAlerts(cdsCache, itemsCache);
             toast('Configuração de alertas salva!', 'success');
         }
 
-        function openAlertConfig() {
-            loadAlertCfg();
+        async function openAlertConfig() {
+            await loadAlertCfg();
             // Use DEFAULT_CATS fallback if catsCache is not yet populated
             const cats = (catsCache && catsCache.length) ? catsCache : DEFAULT_CATS;
             const sel = document.getElementById('alert-cfg-threshold');
@@ -7251,7 +7284,7 @@
                 updateCDRolloutBadge(); // Atualiza badge no nav lateral
 
                 // 📋 Notas rápidas: inicializa FAB apenas para o CD
-                initNotes();
+                await initNotes();
 
                 // 📍 Heatmap de departamentos
                 renderDeptHeatmap();
@@ -10454,14 +10487,29 @@ Regras:
 
         function _notesKey() { return `quallit_notes_${ME?.id || 'x'}`; }
 
-        function initNotes() {
-            try { _sessionNotes = JSON.parse(sessionStorage.getItem(_notesKey())) || []; } catch { _sessionNotes = []; }
+        async function initNotes() {
+            // Carrega notas do Supabase
+            try {
+                const userId = ME?.id || 'anonymous';
+                const rows = await DB.get('user_notes',
+                    `?user_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&select=*`);
+                _sessionNotes = rows.map(r => ({
+                    id: r.id,
+                    text: r.text,
+                    time: new Date(r.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+                    ts: r.created_at
+                }));
+            } catch {
+                // Fallback sessionStorage
+                try { _sessionNotes = JSON.parse(sessionStorage.getItem(_notesKey())) || []; } catch { _sessionNotes = []; }
+            }
             const fab = document.getElementById('notes-fab');
             if (fab) fab.style.display = 'flex';
             _renderNotes();
         }
 
         function _saveNotes() {
+            // Mantém sessionStorage como cache local
             sessionStorage.setItem(_notesKey(), JSON.stringify(_sessionNotes));
             _renderNotes();
         }
@@ -10494,27 +10542,50 @@ Regras:
             if (isOpen) setTimeout(() => document.getElementById('note-input')?.focus(), 80);
         }
 
-        function addNote() {
+        async function addNote() {
             const inp = document.getElementById('note-input');
             const text = inp?.value.trim();
             if (!text) return;
+            inp.value = '';
             const now = new Date();
-            _sessionNotes.unshift({
+            const noteObj = {
                 text,
                 time: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
                 ts: now.toISOString()
-            });
-            inp.value = '';
+            };
+            // Grava no Supabase
+            try {
+                const userId = ME?.id || 'anonymous';
+                const rows = await DB.post('user_notes', {
+                    user_id: userId,
+                    user_type: ROLE || 'unknown',
+                    text,
+                    created_at: now.toISOString()
+                });
+                const saved = Array.isArray(rows) ? rows[0] : rows;
+                noteObj.id = saved?.id;
+            } catch { }
+            _sessionNotes.unshift(noteObj);
             _saveNotes();
         }
 
-        function deleteNote(idx) {
+        async function deleteNote(idx) {
+            const note = _sessionNotes[idx];
+            // Remove do Supabase se tiver id
+            if (note?.id) {
+                DB.delete('user_notes', `?id=eq.${note.id}`).catch(() => { });
+            }
             _sessionNotes.splice(idx, 1);
             _saveNotes();
         }
 
-        function clearAllNotes() {
+        async function clearAllNotes() {
             if (!_sessionNotes.length) return;
+            // Remove todas do Supabase
+            try {
+                const userId = ME?.id || 'anonymous';
+                await DB.delete('user_notes', `?user_id=eq.${encodeURIComponent(userId)}`);
+            } catch { }
             _sessionNotes = [];
             _saveNotes();
         }
