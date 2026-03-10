@@ -1749,11 +1749,16 @@
         const _urlP = new URLSearchParams(location.search);
 
         // ── MESMO SB_URL / SB_KEY do inventario-quallit.html ──
-        const SB_URL = '__SB_URL__';
-        const SB_KEY = '__SB_KEY__';
+        // Os placeholders __SB_URL__ / __SB_KEY__ são substituídos pelo deploy.
+        // Se não estiverem substituídos, lê do localStorage onde o inventário salva.
+        function getSbUrl() { const v = '__SB_URL__'; return (v && !v.startsWith('__')) ? v : (localStorage.getItem('_sb_url') || localStorage.getItem('_sq_url') || ''); }
+        function getSbKey() { const v = '__SB_KEY__'; return (v && !v.startsWith('__')) ? v : (localStorage.getItem('_sb_key') || localStorage.getItem('_sq_key') || ''); }
 
         // ── DB HELPER (idêntico ao inventário) ──
         async function sbReq(method, table, qs = '', body = null) {
+            const SB_URL = getSbUrl();
+            const SB_KEY = getSbKey();
+            if (!SB_URL || !SB_KEY) throw new Error('Banco não configurado. Acesse o Inventário Quallit primeiro para inicializar a conexão.');
             const r = await fetch(`${SB_URL}/rest/v1/${table}${qs}`, {
                 method,
                 headers: {
@@ -1783,7 +1788,6 @@
         // ── AUTH state ──
         let ME = null;
         let ROLE = null;
-        let _authToken = null; // JWT token for admin auth
 
         // ════════════════════════════════════════════
         // THEME
@@ -1818,14 +1822,6 @@
         }
 
         async function doLogin() {
-            // Tenta reutilizar sessão ativa do inventário (sessionStorage)
-            try {
-                const raw = sessionStorage.getItem('quallit_session');
-                if (raw) {
-                    const s = JSON.parse(raw);
-                    if (s.ME && s.ROLE) { bootApp(s.ME, s.ROLE, s.token); return; }
-                }
-            } catch { }
 
             if (_loginTab === 'admin') {
                 const email = document.getElementById('admin-email').value.trim();
@@ -1843,17 +1839,19 @@
         async function loginAsAdmin(email, pass) {
             showLoader('Autenticando...');
             try {
-                const res = await fetch(`${SB_URL}/auth/v1/token?grant_type=password`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'apikey': SB_KEY },
-                    body: JSON.stringify({ email, password: pass })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error_description || data.msg || 'Credenciais inválidas');
-                const me = { name: email.split('@')[0], email, id: data.user?.id };
-                sessionStorage.setItem('quallit_session', JSON.stringify({ ME: me, ROLE: 'admin', token: data.access_token }));
+                // Idêntico ao inventário: consulta tabela admin_users com hashPassword
+                const passHash = await hashPassword(pass);
+                const rows = await DB.get('admin_users', `?email=eq.${encodeURIComponent(email)}&select=*`);
+                const matched = rows.filter(u => u.password === passHash || u.password === pass);
+                if (!matched.length) throw new Error('Credenciais inválidas');
+                const admin = matched[0];
+                const me = { name: admin.name || email.split('@')[0], email: admin.email, id: admin.id };
+                // Atualiza last_access
+                DB.patch('admin_users', `?id=eq.${admin.id}`, { last_access: new Date().toISOString() }).catch(() => { });
+                sessionStorage.setItem('ta', 'admin:' + admin.id);
+                sessionStorage.setItem('quallit_session', JSON.stringify({ ME: me, ROLE: 'admin' }));
                 hideLoader();
-                bootApp(me, 'admin', data.access_token);
+                bootApp(me, 'admin');
             } catch (e) {
                 hideLoader();
                 toast('Erro: ' + e.message, 'error');
@@ -1863,29 +1861,34 @@
         async function loginAsCD(code, pass) {
             showLoader('Verificando acesso...');
             try {
-                // Busca o CD pelo código — mesma lógica do inventário
-                const rows = await DB.get('cd_users', `?code=eq.${encodeURIComponent(code)}&select=id,name,cd,code,password_hash`);
-                if (!rows.length) throw new Error('Código não encontrado');
-                const row = rows[0];
-                const inputHash = await sha256(pass);
-                if (row.password_hash && row.password_hash !== inputHash) throw new Error('Senha incorreta');
+                // Idêntico ao inventário: consulta cd_users com campo 'password'
+                const passHash = await hashPassword(pass);
+                const rows = await DB.get('cd_users', `?code=eq.${encodeURIComponent(code)}&select=*`);
+                const matched = rows.filter(u => u.password === passHash || u.password === pass);
+                if (!matched.length) throw new Error('Código ou senha incorretos');
+                const row = matched[0];
+                // Atualiza last_access
+                DB.patch('cd_users', `?id=eq.${row.id}`, { last_access: new Date().toISOString() }).catch(() => { });
                 const me = { name: row.name, cd: row.cd, id: row.id };
+                sessionStorage.setItem('ta', 'cd:' + row.id);
                 sessionStorage.setItem('quallit_session', JSON.stringify({ ME: me, ROLE: 'cd' }));
                 hideLoader();
-                bootApp(me, 'cd', null);
+                bootApp(me, 'cd');
             } catch (e) {
                 hideLoader();
                 toast('Erro: ' + e.message, 'error');
             }
         }
 
-        async function sha256(str) {
-            const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-            return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+        async function hashPassword(pass) {
+            try {
+                const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pass));
+                return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch { return pass; }
         }
 
-        async function bootApp(me, role, token) {
-            ME = me; ROLE = role; _authToken = token;
+        async function bootApp(me, role) {
+            ME = me; ROLE = role;
             document.getElementById('uname-el').textContent = ME?.name || 'Usuário';
             document.getElementById('urole-el').textContent = ROLE === 'admin' ? '● Admin' : `● Field ${ME?.cd || ''}`;
             document.getElementById('uavatar-el').textContent = (ME?.name || 'F').charAt(0).toUpperCase();
@@ -1895,7 +1898,7 @@
 
         function logout() {
             sessionStorage.removeItem('quallit_session');
-            ME = null; ROLE = null; _authToken = null;
+            ME = null; ROLE = null;
             db = { categories: [], solutions: [] };
             showScreen('login-screen');
         }
@@ -2575,16 +2578,27 @@
         // ════════════════════════════════════════════
         initTheme();
 
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             hideLoader();
-            // Tenta reutilizar sessão ativa do inventário (mesma aba/browser)
-            try {
-                const raw = sessionStorage.getItem('quallit_session');
-                if (raw) {
-                    const s = JSON.parse(raw);
-                    if (s.ME && s.ROLE) { bootApp(s.ME, s.ROLE, s.token); return; }
-                }
-            } catch { }
+            // Tenta reutilizar sessão ativa (mesma chave que o inventário usa)
+            const ta = sessionStorage.getItem('ta');
+            if (ta) {
+                try {
+                    if (ta.startsWith('admin:')) {
+                        const adminId = ta.split(':')[1];
+                        const rows = await DB.get('admin_users', `?id=eq.${adminId}&select=*`);
+                        if (rows.length) {
+                            const a = rows[0];
+                            await bootApp({ name: a.name || 'Administrador', email: a.email, id: a.id }, 'admin');
+                            return;
+                        }
+                    } else if (ta.startsWith('cd:')) {
+                        const cdId = ta.split(':')[1];
+                        const rows = await DB.get('cd_users', `?id=eq.${cdId}&select=*`);
+                        if (rows.length) { await bootApp(rows[0], 'cd'); return; }
+                    }
+                } catch { }
+            }
 
             // Auto-login via URL params passados pelo botão no inventário
             if (_urlP.has('t')) {
