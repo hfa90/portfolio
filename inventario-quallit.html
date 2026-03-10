@@ -5369,7 +5369,65 @@
             ]
         };
         FIELDS.teclados = FIELDS.mouses = FIELDS.perifericos;
-        const FMAP = { 'cd': 'cd_id', 'fabricante': 'fabricante', 'equipamento': 'equipamento', 'modelo': 'modelo', 'n/s': 'numero_serie', 'ns': 'numero_serie', 'numero de serie': 'numero_serie', 'número de série': 'numero_serie', 'numero_serie': 'numero_serie', 'ns_patrimonio': 'numero_serie', 'n/s (número de série)': 'numero_serie', 'n/s (numero de serie)': 'numero_serie', 'patrimonio': 'patrimonio', 'patrimônio': 'patrimonio', 'ativo': 'patrimonio', 'patrimônio (ativo)': 'patrimonio', 'patrimonio (ativo)': 'patrimonio', 'n/spatrimônio': 'numero_serie', 'n/s patrimônio': 'numero_serie', 'sistema operacional': 'sistema_operacional', 'so': 'sistema_operacional', 'os': 'sistema_operacional', 'departamento': 'departamento', 'setor': 'departamento', 'memoria': 'memoria_ram', 'memória': 'memoria_ram', 'ram': 'memoria_ram', 'memória ram': 'memoria_ram', 'memoria ram': 'memoria_ram', 'hd': 'hd_ssd', 'ssd': 'hd_ssd', 'hd/ssd': 'hd_ssd', 'processador': 'processador', 'cpu': 'processador', 'hostname': 'hostname', 'status': 'status', 'tempo': 'tempo_uso', 'tempo de uso': 'tempo_uso', 'tempo aproximado de uso': 'tempo_uso', 'observacoes': 'observacoes', 'observações': 'observacoes', 'obs': 'observacoes' };
+        const FMAP = {
+            // CD
+            'cd': 'cd_id',
+            // Fabricante
+            'fabricante': 'fabricante',
+            // Equipamento
+            'equipamento': 'equipamento',
+            // Modelo
+            'modelo': 'modelo',
+            // Número de Série — todas as variações possíveis
+            'n/s': 'numero_serie', 'ns': 'numero_serie',
+            'numero de serie': 'numero_serie', 'número de série': 'numero_serie',
+            'numero_serie': 'numero_serie', 'ns_patrimonio': 'numero_serie',
+            'n/s (número de série)': 'numero_serie', 'n/s (numero de serie)': 'numero_serie',
+            'n/spatrimônio': 'numero_serie', 'n/s patrimônio': 'numero_serie',
+            'número de série / patrimônio': 'numero_serie',
+            // Patrimônio
+            'patrimonio': 'patrimonio', 'patrimônio': 'patrimonio',
+            'ativo': 'patrimonio', 'patrimônio (ativo)': 'patrimonio',
+            'patrimonio (ativo)': 'patrimonio',
+            // Sistema Operacional
+            'sistema operacional': 'sistema_operacional',
+            'so': 'sistema_operacional', 'os': 'sistema_operacional',
+            // Departamento/Setor — LABELS USADOS NO TEMPLATE
+            'departamento': 'departamento', 'setor': 'departamento',
+            'departamento/setor': 'departamento',
+            'departamento / setor': 'departamento',
+            'departamento setor': 'departamento',
+            // Memória RAM — LABELS USADOS NO TEMPLATE
+            'memoria': 'memoria_ram', 'memória': 'memoria_ram',
+            'ram': 'memoria_ram', 'memória ram': 'memoria_ram',
+            'memoria ram': 'memoria_ram',
+            'memória ram': 'memoria_ram',
+            // HD/SSD
+            'hd': 'hd_ssd', 'ssd': 'hd_ssd', 'hd/ssd': 'hd_ssd',
+            // Processador
+            'processador': 'processador', 'cpu': 'processador',
+            // Hostname
+            'hostname': 'hostname', 'ip / hostname': 'hostname', 'ip/hostname': 'hostname',
+            // Status
+            'status': 'status',
+            // Tempo de Uso — LABELS USADOS NO TEMPLATE
+            'tempo': 'tempo_uso', 'tempo de uso': 'tempo_uso',
+            'tempo aproximado de uso': 'tempo_uso',
+            'tempo aprox. de uso': 'tempo_uso',
+            'tempo aprox de uso': 'tempo_uso',
+            'tempo aproximado': 'tempo_uso',
+            // Observações
+            'observacoes': 'observacoes', 'observações': 'observacoes', 'obs': 'observacoes',
+            // Colunas do Export (nomes exatos usados na exportação)
+            'n/s (número de série)': 'numero_serie',
+            'n/s (numero de serie)': 'numero_serie',
+            'patrimônio (ativo)': 'patrimonio',
+            'patrimonio (ativo)': 'patrimonio',
+            'memória ram': 'memoria_ram',
+            'tempo de uso': 'tempo_uso',
+            'adicionado em': 'created_at',
+            'observações': 'observacoes'
+        };
 
         // ============================================================
         // STATE
@@ -7805,6 +7863,13 @@
 
         function handleExcel(input) { if (input.files[0]) procExcel(input.files[0]); }
 
+        function normalizeHeader(h) {
+            // Normaliza: lowercase, remove acentos, trim
+            return String(h).toLowerCase().trim()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+                .replace(/\s+/g, ' '); // colapsa espaços múltiplos
+        }
+
         function procExcel(file) {
             const r = new FileReader();
             r.onload = e => {
@@ -7812,9 +7877,19 @@
                 const ws = wb.Sheets[wb.SheetNames[0]];
                 const raw = XLSX.utils.sheet_to_json(ws, { header: 1 });
                 if (!raw.length) return toast('Arquivo vazio', 'error');
+                // Normaliza os headers para busca no FMAP (com e sem acento)
                 const hdrs = raw[0].map(h => String(h).toLowerCase().trim());
+                const hdrsNorm = raw[0].map(h => normalizeHeader(h));
                 const rows = raw.slice(1).filter(r => r.some(c => c !== undefined && c !== ''));
-                const mapped = rows.map(row => { const o = {}; hdrs.forEach((h, i) => { const f = FMAP[h] || h; o[f] = row[i] !== undefined ? String(row[i]).trim() : ''; }); return o; });
+                const mapped = rows.map(row => {
+                    const o = {};
+                    hdrs.forEach((h, i) => {
+                        // Tenta com o header original primeiro, depois normalizado sem acento
+                        const f = FMAP[h] || FMAP[hdrsNorm[i]] || h;
+                        o[f] = row[i] !== undefined ? String(row[i]).trim() : '';
+                    });
+                    return o;
+                });
                 importBuf = mapped;
                 const ph = hdrs.slice(0, 7); const pf = ph.map(h => FMAP[h] || h);
                 document.getElementById('imp-preview').style.display = 'block';
