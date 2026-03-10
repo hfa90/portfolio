@@ -1533,6 +1533,9 @@
         <div class="topbar">
             <div class="topbar-brand">⚡ Field<span>Support</span> <span class="topbar-badge">KB</span></div>
             <div class="topbar-spacer"></div>
+            <button onclick="showToolsPanel()" class="btn-sm"
+                style="margin-right:4px;background:rgba(14,165,233,.1);border-color:rgba(14,165,233,.3);color:var(--accent2)">🔧
+                Ferramentas</button>
             <button onclick="window.history.back()" class="btn-sm" style="margin-right:4px">← Inventário</button>
             <button onclick="toggleTheme()" class="theme-btn" id="app-theme-btn">☀️</button>
             <div class="topbar-user" style="margin-left:8px">
@@ -2073,18 +2076,23 @@
             document.getElementById('sol-view-title').textContent = `${_currentCat.icon || '📁'} ${_currentCat.name}`;
             const sols = db.solutions.filter(s => s.cat_id === catId);
             document.getElementById('sol-view-sub').textContent = `${sols.length} soluções documentadas`;
-            document.getElementById('cats-view').style.display = 'none';
-            document.getElementById('sols-view').style.display = 'block';
-            document.getElementById('search-view').style.display = 'none';
+            _showView('sols');
             renderSols(sols);
         }
 
         function showCatsView() {
             _currentCat = null;
-            document.getElementById('cats-view').style.display = 'block';
-            document.getElementById('sols-view').style.display = 'none';
-            document.getElementById('search-view').style.display = 'none';
+            document.getElementById('search-input').value = '';
+            _showView('cats');
             renderAll();
+        }
+
+        function _showView(view) {
+            const map = { cats: 'cats-view', sols: 'sols-view', search: 'search-view' };
+            Object.entries(map).forEach(([k, id]) => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = (k === view) ? 'block' : 'none';
+            });
         }
 
         function renderSols(sols) {
@@ -2137,9 +2145,7 @@
                 (db.categories.find(c => c.id === s.cat_id)?.name || '').toLowerCase().includes(lower)
             );
             document.getElementById('search-title').textContent = `${results.length} resultado${results.length !== 1 ? 's' : ''} para "${q}"`;
-            document.getElementById('cats-view').style.display = 'none';
-            document.getElementById('sols-view').style.display = 'none';
-            document.getElementById('search-view').style.display = 'block';
+            _showView('search');
 
             const grid = document.getElementById('search-grid');
             if (!results.length) {
@@ -2168,10 +2174,8 @@
 
         function clearSearch() {
             document.getElementById('search-input').value = '';
-            document.getElementById('cats-view').style.display = 'block';
-            document.getElementById('sols-view').style.display = 'none';
-            document.getElementById('search-view').style.display = 'none';
             _currentCat = null;
+            _showView('cats');
             renderAll();
         }
 
@@ -2590,6 +2594,376 @@
         function esc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
         // ════════════════════════════════════════════
+        // FERRAMENTAS FIELD
+        // ════════════════════════════════════════════
+        let _activeToolTab = 'ip';
+        let _slaInterval = null, _slaElapsed = 0, _slaRunning = false, _slaTarget = 60;
+        let _pingHosts = [];
+        let _notes = sessionStorage.getItem('fs_notes') || '';
+        let _checkState = {};
+        let _tickets = JSON.parse(sessionStorage.getItem('fs_tickets') || '[]');
+        let _lastPass = '';
+
+        function showToolsPanel() {
+            document.getElementById('tools-panel').style.display = 'block';
+            switchToolTab(_activeToolTab);
+        }
+        function hideToolsPanel() {
+            document.getElementById('tools-panel').style.display = 'none';
+            if (_slaInterval) { clearInterval(_slaInterval); _slaInterval = null; _slaRunning = false; }
+        }
+        function switchToolTab(tab) {
+            _activeToolTab = tab;
+            document.querySelectorAll('.tool-tab').forEach(t => t.classList.remove('active'));
+            const el = document.getElementById('ttab-' + tab);
+            if (el) el.classList.add('active');
+            const renders = { ip: renderToolIP, pass: renderToolPass, ping: renderToolPing, sla: renderToolSLA, notes: renderToolNotes, check: renderToolChecklist };
+            if (renders[tab]) renders[tab]();
+        }
+
+        // ── IP/SUBNET ──
+        function renderToolIP() {
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Calcule informações de rede a partir de um IP com máscara CIDR.</div>
+                    <div class="tool-label">Endereço IP / CIDR</div>
+                    <div style="display:flex;gap:8px;margin-bottom:10px">
+                        <input class="tool-input" id="ip-input" placeholder="192.168.1.100/24" style="flex:1">
+                        <button class="tool-btn" onclick="calcIP()">Calcular</button>
+                    </div>
+                    <div id="ip-result"></div>
+                </div>
+                <div class="tool-section">
+                    <div class="tool-label">Referência — Máscaras comuns</div>
+                    <div class="tool-result">
+                        <div>/8 &nbsp;→ 255.0.0.0 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;— 16.7M hosts</div>
+                        <div>/16 → 255.255.0.0 &nbsp;&nbsp;&nbsp;— 65k hosts</div>
+                        <div>/24 → 255.255.255.0 &nbsp;— 254 hosts</div>
+                        <div>/25 → 255.255.255.128 — 126 hosts</div>
+                        <div>/26 → 255.255.255.192 — 62 hosts</div>
+                        <div>/27 → 255.255.255.224 — 30 hosts</div>
+                        <div>/28 → 255.255.255.240 — 14 hosts</div>
+                        <div>/29 → 255.255.255.248 — 6 hosts</div>
+                        <div>/30 → 255.255.255.252 — 2 hosts</div>
+                    </div>
+                </div>`;
+        }
+        function calcIP() {
+            const val = document.getElementById('ip-input').value.trim();
+            const res = document.getElementById('ip-result');
+            try {
+                const [ip, cidrStr] = val.split('/');
+                const cidr = parseInt(cidrStr);
+                if (!ip || isNaN(cidr) || cidr < 0 || cidr > 32) throw new Error('Formato inválido. Use: 192.168.1.1/24');
+                const parts = ip.split('.').map(Number);
+                if (parts.length !== 4 || parts.some(p => isNaN(p) || p < 0 || p > 255)) throw new Error('IP inválido');
+                const ipInt = parts.reduce((acc, p) => (acc << 8) | p, 0) >>> 0;
+                const maskInt = cidr === 0 ? 0 : (0xFFFFFFFF << (32 - cidr)) >>> 0;
+                const netInt = (ipInt & maskInt) >>> 0;
+                const bcastInt = (netInt | (~maskInt >>> 0)) >>> 0;
+                const toIP = n => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join('.');
+                const hosts = cidr >= 31 ? Math.pow(2, 32 - cidr) : Math.pow(2, 32 - cidr) - 2;
+                const firstHost = cidr >= 31 ? toIP(netInt) : toIP(netInt + 1);
+                const lastHost = cidr >= 31 ? toIP(bcastInt) : toIP(bcastInt - 1);
+                res.innerHTML = `<div class="tool-result">
+                    <div><span class="hl">Rede:</span> ${toIP(netInt)}/${cidr}</div>
+                    <div><span class="hl">Máscara:</span> ${toIP(maskInt)}</div>
+                    <div><span class="hl">Broadcast:</span> ${toIP(bcastInt)}</div>
+                    <div><span class="hl">Primeiro host:</span> ${firstHost}</div>
+                    <div><span class="hl">Último host:</span> ${lastHost}</div>
+                    <div><span class="hl">Total hosts:</span> ${hosts.toLocaleString('pt-BR')}</div>
+                    <div><span class="hl">IP inserido:</span> ${ip} ${ipInt >= netInt && ipInt <= bcastInt ? '<span class="ok">✓ na rede</span>' : '<span class="err">✗ fora da rede</span>'}</div>
+                </div>`;
+            } catch (e) { res.innerHTML = `<div class="tool-result"><span class="err">⚠ ${e.message}</span></div>`; }
+        }
+
+        // ── GERADOR DE SENHA ──
+        function renderToolPass() {
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Gere senhas seguras para resetar acessos de usuários.</div>
+                    <div class="tool-label">Tamanho: <span id="pass-len-lbl">16</span> caracteres</div>
+                    <input type="range" min="8" max="32" value="16" id="pass-len" oninput="document.getElementById('pass-len-lbl').textContent=this.value;genPass()" style="width:100%;margin-bottom:14px;accent-color:var(--accent)">
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+                        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text2)"><input type="checkbox" id="pass-upper" checked onchange="genPass()" style="accent-color:var(--accent)"> Maiúsculas</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text2)"><input type="checkbox" id="pass-num" checked onchange="genPass()" style="accent-color:var(--accent)"> Números</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;color:var(--text2)"><input type="checkbox" id="pass-sym" checked onchange="genPass()" style="accent-color:var(--accent)"> Símbolos</label>
+                    </div>
+                    <div id="pass-out" onclick="copyPass()" title="Clique para copiar" style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:14px;font-family:var(--mono);font-size:15px;font-weight:600;color:var(--accent2);letter-spacing:1px;text-align:center;cursor:pointer;min-height:52px;display:flex;align-items:center;justify-content:center">—</div>
+                    <div id="pass-strength-bar" style="height:4px;border-radius:2px;background:var(--border);margin-top:6px;transition:all .3s"></div>
+                    <div style="display:flex;gap:8px;margin-top:12px">
+                        <button class="tool-btn" onclick="genPass()" style="flex:1">🔄 Gerar Nova</button>
+                        <button class="tool-btn-ghost" onclick="copyPass()">📋 Copiar</button>
+                    </div>
+                    <div id="pass-copied" style="font-size:12px;color:var(--green);text-align:center;margin-top:8px;opacity:0;transition:.3s">✓ Copiado!</div>
+                </div>`;
+            genPass();
+        }
+        function genPass() {
+            const len = parseInt(document.getElementById('pass-len').value);
+            const upper = document.getElementById('pass-upper').checked;
+            const num = document.getElementById('pass-num').checked;
+            const sym = document.getElementById('pass-sym').checked;
+            let chars = 'abcdefghijkmnpqrstuvwxyz';
+            if (upper) chars += 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+            if (num) chars += '23456789';
+            if (sym) chars += '@#$%!?+-=';
+            const arr = new Uint8Array(len);
+            crypto.getRandomValues(arr);
+            _lastPass = Array.from(arr).map(b => chars[b % chars.length]).join('');
+            document.getElementById('pass-out').textContent = _lastPass;
+            let score = (len >= 12 ? 1 : 0) + (len >= 16 ? 1 : 0) + (upper ? 1 : 0) + (num ? 1 : 0) + (sym ? 1 : 0);
+            const colors = ['#ef4444', '#f59e0b', '#f59e0b', '#22c55e', '#22c55e', '#0ea5e9'];
+            const bar = document.getElementById('pass-strength-bar');
+            bar.style.background = colors[score]; bar.style.width = (score / 5 * 100) + '%';
+        }
+        function copyPass() {
+            if (!_lastPass) return;
+            navigator.clipboard.writeText(_lastPass).then(() => {
+                const el = document.getElementById('pass-copied');
+                el.style.opacity = '1'; setTimeout(() => el.style.opacity = '0', 2000);
+            });
+        }
+
+        // ── PING ──
+        function renderToolPing() {
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:4px">Testa acessibilidade de hosts via HTTP.</div>
+                    <div style="font-size:11px;color:var(--text3);margin-bottom:14px;font-family:var(--mono)">⚠ Browsers não permitem ICMP real — usa HTTP para testar URLs.</div>
+                    <div class="tool-label">Adicionar host / URL</div>
+                    <div style="display:flex;gap:8px;margin-bottom:12px">
+                        <input class="tool-input" id="ping-input" placeholder="https://google.com" style="flex:1" onkeydown="if(event.key==='Enter')addPingHost()">
+                        <button class="tool-btn" onclick="addPingHost()">+ Add</button>
+                    </div>
+                    <div id="ping-list"></div>
+                    <div style="margin-top:14px;display:flex;gap:8px">
+                        <button class="tool-btn" onclick="pingAll()" style="flex:1">▶ Testar Todos</button>
+                        <button class="tool-btn-ghost" onclick="_pingHosts=[];renderPingList()">Limpar</button>
+                    </div>
+                    <div style="margin-top:14px">
+                        <div class="tool-label">Atalhos</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            ${['https://google.com', 'https://cloudflare.com', 'https://1.1.1.1'].map(h => `<button class="tool-btn-ghost" style="font-size:11px;padding:5px 10px" onclick="addPingPreset('${h}')">${h.replace('https://', '')}</button>`).join('')}
+                        </div>
+                    </div>
+                </div>`;
+            renderPingList();
+        }
+        function addPingHost() {
+            let v = document.getElementById('ping-input').value.trim();
+            if (!v) return;
+            if (!v.startsWith('http')) v = 'https://' + v;
+            if (!_pingHosts.find(h => h.url === v)) _pingHosts.push({ url: v, status: 'idle' });
+            document.getElementById('ping-input').value = '';
+            renderPingList();
+        }
+        function addPingPreset(url) {
+            if (!_pingHosts.find(h => h.url === url)) _pingHosts.push({ url, status: 'idle' });
+            renderPingList();
+        }
+        function renderPingList() {
+            const el = document.getElementById('ping-list'); if (!el) return;
+            if (!_pingHosts.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:20px">Nenhum host adicionado</div>'; return; }
+            el.innerHTML = _pingHosts.map((h, i) => `
+                <div class="ping-row">
+                    <div class="ping-dot ${h.status === 'ok' ? 'ok' : h.status === 'fail' ? 'fail' : h.status === 'checking' ? 'checking' : ''}" style="${h.status === 'idle' ? 'background:var(--border)' : ''}"></div>
+                    <div style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${h.url}</div>
+                    <div style="color:${h.status === 'ok' ? 'var(--green)' : h.status === 'fail' ? 'var(--red)' : 'var(--text3)'};min-width:70px;text-align:right;font-size:11px">${h.status === 'ok' ? '✓ OK ' + h.ms + 'ms' : h.status === 'fail' ? '✗ Falha' : h.status === 'checking' ? '...' : '—'}</div>
+                    <button onclick="_pingHosts.splice(${i},1);renderPingList()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;padding:0 6px">×</button>
+                </div>`).join('');
+        }
+        async function pingAll() {
+            for (let i = 0; i < _pingHosts.length; i++) {
+                _pingHosts[i].status = 'checking'; renderPingList();
+                const t0 = Date.now();
+                try {
+                    await fetch(_pingHosts[i].url, { method: 'HEAD', mode: 'no-cors', signal: AbortSignal.timeout(5000) });
+                    _pingHosts[i].status = 'ok'; _pingHosts[i].ms = Date.now() - t0;
+                } catch { _pingHosts[i].status = 'fail'; _pingHosts[i].ms = null; }
+                renderPingList();
+            }
+        }
+
+        // ── SLA TIMER ──
+        function renderToolSLA() {
+            if (_slaInterval) { clearInterval(_slaInterval); _slaInterval = null; _slaRunning = false; }
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Cronômetro de SLA para controlar tempo de atendimento.</div>
+                    <div class="tool-label">Meta de SLA</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+                        ${[15, 30, 60, 120, 240].map(m => `<button class="tool-btn-ghost" style="font-size:12px;padding:6px 12px" onclick="setSLATarget(${m})">${m}min</button>`).join('')}
+                        <input class="tool-input" id="sla-custom" placeholder="Custom min" style="width:90px" onkeydown="if(event.key==='Enter'){setSLATarget(parseInt(this.value)||60)}">
+                    </div>
+                    <div class="sla-display" id="sla-display">00:00:00</div>
+                    <div style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:12px">Meta: <span id="sla-meta-val">${_slaTarget}</span> min</div>
+                    <div style="height:6px;border-radius:3px;background:var(--border);margin-bottom:20px;overflow:hidden"><div id="sla-progress" style="height:100%;border-radius:3px;background:var(--green);width:0%;transition:.5s"></div></div>
+                    <div style="display:flex;gap:8px;justify-content:center">
+                        <button class="tool-btn" id="sla-start-btn" onclick="toggleSLA()">▶ Iniciar</button>
+                        <button class="tool-btn-ghost" onclick="resetSLA()">↺ Reset</button>
+                    </div>
+                    <div style="margin-top:20px">
+                        <div class="tool-label">Chamados em aberto</div>
+                        <div style="display:flex;gap:8px;margin-bottom:8px">
+                            <input class="tool-input" id="ticket-input" placeholder="Nº ou descrição do chamado" style="flex:1" onkeydown="if(event.key==='Enter')addTicket()">
+                            <button class="tool-btn" onclick="addTicket()">+</button>
+                        </div>
+                        <div id="ticket-list"></div>
+                    </div>
+                </div>`;
+            updateSLADisplay();
+            renderTickets();
+            if (_slaRunning) {
+                _slaInterval = setInterval(() => { _slaElapsed = Math.floor((Date.now() - _slaStart) / 1000); updateSLADisplay(); }, 1000);
+                document.getElementById('sla-start-btn').textContent = '⏸ Pausar';
+            }
+        }
+        function setSLATarget(m) { _slaTarget = m; const el = document.getElementById('sla-meta-val'); if (el) el.textContent = m; updateSLADisplay(); }
+        function toggleSLA() {
+            if (_slaRunning) {
+                _slaRunning = false; clearInterval(_slaInterval); _slaInterval = null;
+                const btn = document.getElementById('sla-start-btn'); if (btn) btn.textContent = '▶ Continuar';
+            } else {
+                _slaRunning = true; _slaStart = Date.now() - _slaElapsed * 1000;
+                _slaInterval = setInterval(() => { _slaElapsed = Math.floor((Date.now() - _slaStart) / 1000); updateSLADisplay(); }, 1000);
+                const btn = document.getElementById('sla-start-btn'); if (btn) btn.textContent = '⏸ Pausar';
+            }
+        }
+        function resetSLA() {
+            clearInterval(_slaInterval); _slaInterval = null; _slaElapsed = 0; _slaRunning = false;
+            const btn = document.getElementById('sla-start-btn'); if (btn) btn.textContent = '▶ Iniciar';
+            updateSLADisplay();
+        }
+        function updateSLADisplay() {
+            const s = _slaElapsed, h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+            const pct = Math.min(100, (_slaElapsed / (_slaTarget * 60)) * 100);
+            const el = document.getElementById('sla-display'), bar = document.getElementById('sla-progress'); if (!el) return;
+            el.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+            el.className = 'sla-display' + (pct >= 100 ? ' crit' : pct >= 75 ? ' warn' : '');
+            if (bar) { bar.style.width = pct + '%'; bar.style.background = pct >= 100 ? 'var(--red)' : pct >= 75 ? 'var(--yellow)' : 'var(--green)'; }
+        }
+        function addTicket() {
+            const v = document.getElementById('ticket-input').value.trim(); if (!v) return;
+            _tickets.unshift({ id: Date.now(), text: v, done: false, ts: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+            sessionStorage.setItem('fs_tickets', JSON.stringify(_tickets));
+            document.getElementById('ticket-input').value = ''; renderTickets();
+        }
+        function toggleTicket(id) {
+            const t = _tickets.find(t => t.id === id); if (t) { t.done = !t.done; sessionStorage.setItem('fs_tickets', JSON.stringify(_tickets)); renderTickets(); }
+        }
+        function removeTicket(id) {
+            _tickets = _tickets.filter(t => t.id !== id); sessionStorage.setItem('fs_tickets', JSON.stringify(_tickets)); renderTickets();
+        }
+        function renderTickets() {
+            const el = document.getElementById('ticket-list'); if (!el) return;
+            if (!_tickets.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px">Nenhum chamado</div>'; return; }
+            el.innerHTML = _tickets.map(t => `
+                <div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+                    <input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleTicket(${t.id})" style="accent-color:var(--accent);width:14px;height:14px;flex-shrink:0">
+                    <span style="flex:1;font-size:12px;${t.done ? 'text-decoration:line-through;color:var(--text3)' : 'color:var(--text2)'}">${esc(t.text)}</span>
+                    <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${t.ts}</span>
+                    <button onclick="removeTicket(${t.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:13px">×</button>
+                </div>`).join('');
+        }
+
+        // ── NOTAS RÁPIDAS ──
+        function renderToolNotes() {
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:12px">Bloco de notas rápido. Salvo na sessão atual.</div>
+                    <textarea class="tool-input" id="notes-area" placeholder="Digite suas notas aqui..." style="min-height:200px;resize:vertical"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:10px">
+                        <button class="tool-btn" onclick="saveNotes()" style="flex:1">💾 Salvar</button>
+                        <button class="tool-btn-ghost" onclick="copyNotes()">📋 Copiar</button>
+                        <button class="tool-btn-ghost" onclick="clearNotes()" title="Apagar tudo">🗑</button>
+                    </div>
+                    <div id="notes-status" style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center"></div>
+                    <div style="margin-top:16px">
+                        <div class="tool-label">Templates rápidos</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <button class="tool-btn-ghost" style="font-size:11px;padding:5px 10px" onclick="insertTemplate('incident')">🔴 Incidente</button>
+                            <button class="tool-btn-ghost" style="font-size:11px;padding:5px 10px" onclick="insertTemplate('visit')">🏭 Visita</button>
+                            <button class="tool-btn-ghost" style="font-size:11px;padding:5px 10px" onclick="insertTemplate('reset')">🔑 Reset Senha</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.getElementById('notes-area').value = _notes;
+        }
+        const _templates = {
+            incident: `[INCIDENTE] ${new Date().toLocaleString('pt-BR')}\nCD: \nProblema: \nImpacto: \nAção tomada: \nStatus: Em andamento\n`,
+            visit: `[VISITA TÉCNICA] ${new Date().toLocaleString('pt-BR')}\nLocal: \nSolicitante: \nEquipamento: \nProblema relatado: \nSolução aplicada: \nStatus: \n`,
+            reset: `[RESET DE SENHA] ${new Date().toLocaleString('pt-BR')}\nUsuário: \nSistema: \nNova senha temporária: \nAlteração obrigatória: Sim\n`
+        };
+        function insertTemplate(t) {
+            const area = document.getElementById('notes-area');
+            area.value = (area.value ? area.value + '\n---\n' : '') + (_templates[t] || '');
+            _notes = area.value; sessionStorage.setItem('fs_notes', _notes);
+        }
+        function saveNotes() {
+            _notes = document.getElementById('notes-area').value;
+            sessionStorage.setItem('fs_notes', _notes);
+            const s = document.getElementById('notes-status');
+            s.textContent = '✓ Salvo às ' + new Date().toLocaleTimeString('pt-BR');
+            s.style.color = 'var(--green)';
+        }
+        function copyNotes() {
+            navigator.clipboard.writeText(document.getElementById('notes-area').value).then(() => {
+                const s = document.getElementById('notes-status'); s.textContent = '✓ Copiado!'; s.style.color = 'var(--green)';
+            });
+        }
+        function clearNotes() {
+            if (!confirm('Apagar todas as notas?')) return;
+            _notes = ''; document.getElementById('notes-area').value = ''; sessionStorage.removeItem('fs_notes');
+        }
+
+        // ── CHECKLIST ──
+        const _checklists = {
+            network: { title: '🌐 Troubleshooting de Rede', items: ['Verificar cabo físico / Wi-Fi conectado', 'Verificar LED do switch/roteador', 'Ping no gateway (ipconfig + ping 192.168.x.1)', 'Testar DNS (nslookup google.com)', 'Verificar IP (estático ou DHCP correto)', 'Liberar/renovar IP (ipconfig /release + /renew)', 'Verificar firewall local', 'Testar em outro equipamento', 'Verificar VLAN no switch', 'Escalar para NOC se persistir'] },
+            printer: { title: '🖨️ Troubleshooting de Impressora', items: ['Verificar alimentação elétrica', 'Verificar cabo USB/Rede', 'Verificar fila de impressão (limpar se travado)', 'Reinstalar driver da impressora', 'Testar página de teste direto no equipamento', 'Verificar papel e toner/cartucho', 'Ping no IP da impressora (se rede)', 'Verificar se IP mudou (DHCP)', 'Verificar porta no servidor de impressão', 'Testar em outro computador'] },
+            vpn: { title: '🔒 Troubleshooting de VPN', items: ['Verificar conexão com internet', 'Testar credenciais (usuário/senha corretos)', 'Verificar se conta não está bloqueada', 'Limpar cache do cliente VPN', 'Reinstalar cliente VPN', 'Verificar versão do cliente (atualizar se necessário)', 'Testar com outro usuário', 'Verificar split tunnel / rota', 'Verificar firewall bloqueando porta 1194/443', 'Contatar suporte da VPN'] },
+            collector: { title: '📱 Troubleshooting de Coletor', items: ['Verificar bateria (acima de 20%)', 'Reiniciar o equipamento', 'Verificar conexão Wi-Fi (SSID correto)', 'Verificar certificado Wi-Fi Enterprise', 'Limpar cache do app', 'Reinstalar aplicativo', 'Sincronizar hora e data', 'Verificar versão do firmware', 'Verificar política MDM', 'Escalar para suporte N2'] },
+            windows: { title: '🪟 Troubleshooting Windows', items: ['Reiniciar o computador', 'Verificar atualizações pendentes', 'Limpar arquivos temporários (cleanmgr)', 'Verificar espaço em disco (mín 10% livre)', 'Verificar processos no Task Manager', 'Executar SFC /scannow no CMD admin', 'Verificar logs no Event Viewer', 'Atualizar drivers', 'Verificar antivírus / malware', 'Restaurar ponto de sistema se necessário'] }
+        };
+        function renderToolChecklist() {
+            document.getElementById('tool-content').innerHTML = `
+                <div class="tool-section">
+                    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">Checklists de troubleshooting. Marque os passos conforme executa.</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+                        ${Object.entries(_checklists).map(([k, v]) => `<button class="tool-btn-ghost" style="font-size:12px;padding:7px 12px" onclick="loadChecklist('${k}')">${v.title.split(' ').slice(0, 2).join(' ')}</button>`).join('')}
+                    </div>
+                    <div id="checklist-content"><div style="font-size:13px;color:var(--text3);text-align:center;padding:30px">Selecione uma categoria acima</div></div>
+                </div>`;
+        }
+        function loadChecklist(key) {
+            const cl = _checklists[key]; if (!cl) return;
+            if (!_checkState[key]) _checkState[key] = new Array(cl.items.length).fill(false);
+            const done = _checkState[key].filter(Boolean).length;
+            document.getElementById('checklist-content').innerHTML = `
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px">${cl.title}</div>
+                <div style="font-size:11px;color:var(--text3);margin-bottom:12px;font-family:var(--mono)">${done}/${cl.items.length} concluídos</div>
+                ${cl.items.map((item, i) => `
+                    <div class="checklist-item ${_checkState[key][i] ? 'done' : ''}" id="ci-${key}-${i}">
+                        <input type="checkbox" id="cb-${key}-${i}" ${_checkState[key][i] ? 'checked' : ''} onchange="toggleCheck('${key}',${i})">
+                        <label for="cb-${key}-${i}">${esc(item)}</label>
+                    </div>`).join('')}
+                <div style="margin-top:12px;display:flex;gap:8px">
+                    <button class="tool-btn-ghost" style="font-size:12px" onclick="resetChecklist('${key}')">↺ Reset</button>
+                    <button class="tool-btn-ghost" style="font-size:12px" onclick="checkAll('${key}')">✓ Todos</button>
+                </div>`;
+        }
+        function toggleCheck(key, i) {
+            _checkState[key][i] = !_checkState[key][i];
+            const item = document.getElementById(`ci-${key}-${i}`);
+            if (item) item.className = 'checklist-item ' + (_checkState[key][i] ? 'done' : '');
+            const done = _checkState[key].filter(Boolean).length;
+            const sub = document.querySelector('#checklist-content [style*="concluídos"]');
+            if (sub) sub.textContent = `${done}/${_checklists[key].items.length} concluídos`;
+        }
+        function resetChecklist(key) { _checkState[key] = new Array(_checklists[key].items.length).fill(false); loadChecklist(key); }
+        function checkAll(key) { _checkState[key] = new Array(_checklists[key].items.length).fill(true); loadChecklist(key); }
+
+        // ════════════════════════════════════════════
         // BOOT
         // ════════════════════════════════════════════
         initTheme();
@@ -2640,6 +3014,264 @@
         });
     </script>
     </div><!-- fim #app-screen -->
+
+    <!-- ════════════════════════════════════════════
+     PAINEL: FERRAMENTAS FIELD
+════════════════════════════════════════════ -->
+    <div id="tools-panel"
+        style="display:none;position:fixed;inset:0;z-index:5000;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)"
+        onclick="if(event.target===this)hideToolsPanel()">
+        <div id="tools-drawer"
+            style="position:absolute;right:0;top:0;bottom:0;width:min(480px,100vw);background:var(--bg2);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden">
+            <div
+                style="display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--border);flex-shrink:0">
+                <div style="font-size:16px;font-weight:700">🔧 Ferramentas do Field</div>
+                <button onclick="hideToolsPanel()"
+                    style="background:none;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1">×</button>
+            </div>
+            <!-- Tabs -->
+            <div style="display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto">
+                <button class="tool-tab active" id="ttab-ip" onclick="switchToolTab('ip')">🌐 IP/Rede</button>
+                <button class="tool-tab" id="ttab-pass" onclick="switchToolTab('pass')">🔑 Senha</button>
+                <button class="tool-tab" id="ttab-ping" onclick="switchToolTab('ping')">📡 Ping</button>
+                <button class="tool-tab" id="ttab-sla" onclick="switchToolTab('sla')">⏱️ SLA</button>
+                <button class="tool-tab" id="ttab-notes" onclick="switchToolTab('notes')">📝 Notas</button>
+                <button class="tool-tab" id="ttab-check" onclick="switchToolTab('check')">✅ Checklist</button>
+            </div>
+            <div id="tool-content" style="flex:1;overflow-y:auto;padding:20px"></div>
+        </div>
+    </div>
+
+    <style>
+        .tool-tab {
+            padding: 10px 14px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text3);
+            font-size: 12px;
+            font-family: var(--font);
+            font-weight: 500;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all .15s;
+        }
+
+        .tool-tab.active {
+            color: var(--accent2);
+            border-bottom-color: var(--accent);
+        }
+
+        .tool-tab:hover {
+            color: var(--text);
+        }
+
+        .tool-section {
+            margin-bottom: 20px;
+        }
+
+        .tool-label {
+            font-size: 11px;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .8px;
+            margin-bottom: 6px;
+            font-family: var(--mono);
+        }
+
+        .tool-input {
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            padding: 9px 12px;
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .tool-input:focus {
+            border-color: var(--accent);
+        }
+
+        .tool-btn {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, var(--accent), #0284c7);
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .tool-btn:hover {
+            opacity: .85;
+        }
+
+        .tool-btn-ghost {
+            padding: 8px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text2);
+            font-size: 13px;
+            font-family: var(--font);
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .tool-btn-ghost:hover {
+            border-color: var(--accent);
+            color: var(--accent2);
+        }
+
+        .tool-result {
+            background: var(--bg3);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--text2);
+            margin-top: 10px;
+            word-break: break-all;
+            line-height: 1.7;
+        }
+
+        .tool-result .hl {
+            color: var(--accent2);
+            font-weight: 600;
+        }
+
+        .tool-result .ok {
+            color: var(--green);
+        }
+
+        .tool-result .err {
+            color: var(--red);
+        }
+
+        .copy-btn {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 1px 8px;
+            background: rgba(14, 165, 233, .15);
+            border: 1px solid rgba(14, 165, 233, .3);
+            border-radius: 4px;
+            color: var(--accent2);
+            font-size: 11px;
+            cursor: pointer;
+        }
+
+        .sla-display {
+            font-size: 36px;
+            font-weight: 700;
+            font-family: var(--mono);
+            text-align: center;
+            padding: 20px;
+            color: var(--accent2);
+        }
+
+        .sla-display.warn {
+            color: var(--yellow);
+        }
+
+        .sla-display.crit {
+            color: var(--red);
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .checklist-item:last-child {
+            border-bottom: none;
+        }
+
+        .checklist-item input[type=checkbox] {
+            margin-top: 2px;
+            accent-color: var(--accent);
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .checklist-item label {
+            font-size: 13px;
+            color: var(--text2);
+            cursor: pointer;
+            line-height: 1.4;
+        }
+
+        .checklist-item.done label {
+            text-decoration: line-through;
+            color: var(--text3);
+        }
+
+        .ping-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            font-family: var(--mono);
+        }
+
+        .ping-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .ping-dot.ok {
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
+
+        .ping-dot.fail {
+            background: var(--red);
+            box-shadow: 0 0 6px var(--red);
+        }
+
+        .ping-dot.checking {
+            background: var(--yellow);
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .3
+            }
+        }
+
+        .pass-strength {
+            height: 4px;
+            border-radius: 2px;
+            margin-top: 6px;
+            transition: all .3s;
+        }
+
+        textarea.tool-input {
+            min-height: 120px;
+            resize: vertical;
+        }
+    </style>
 </body>
 
 </html>
