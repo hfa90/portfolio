@@ -8586,6 +8586,7 @@
                 ? [..._manualSelectedItems]
                 : null;
 
+            // Payload BASE — sem manual_item_ids (suporte a banco sem a coluna)
             const payload = {
                 name,
                 description: document.getElementById('rl-desc').value.trim(),
@@ -8594,13 +8595,29 @@
                 deadline,
                 priority: document.getElementById('rl-priority').value,
                 target_cds: selected,
-                manual_item_ids: manualItems,  // null = usa critério automático
                 updated_at: new Date().toISOString()
             };
+
+            // Helper: tenta salvar com manual_item_ids; se 400 (coluna inexistente), salva sem ela
+            async function _patchRollout(id, base, manual) {
+                if (manual !== null) {
+                    try {
+                        return await DB.patch('rollouts', `?id=eq.${id}`, { ...base, manual_item_ids: manual });
+                    } catch (e) {
+                        const msg = (e.message || '').toLowerCase();
+                        if (msg.includes('400') || msg.includes('column') || msg.includes('manual_item_ids') || msg.includes('bad request')) {
+                            console.warn('[Rollout] Coluna manual_item_ids ausente. Salvar sem ela. Execute o SQL: ALTER TABLE rollouts ADD COLUMN manual_item_ids jsonb;');
+                            toast('⚠️ Seleção manual ignorada: coluna manual_item_ids não existe no banco. Execute a migração SQL.', 'warn');
+                        } else { throw e; }
+                    }
+                }
+                return await DB.patch('rollouts', `?id=eq.${id}`, base);
+            }
+
             setBtn('btn-save-rollout', true, 'Salvando...');
             try {
                 if (_editingRolloutId) {
-                    const r = await DB.patch('rollouts', `?id=eq.${_editingRolloutId}`, payload);
+                    const r = await _patchRollout(_editingRolloutId, payload, manualItems);
                     const updated = Array.isArray(r) ? r[0] : r;
                     const idx = rolloutsCache.findIndex(x => x.id === _editingRolloutId);
                     if (idx >= 0) rolloutsCache[idx] = { ...rolloutsCache[idx], ...updated };
@@ -8608,7 +8625,17 @@
                 } else {
                     payload.completed_cds = [];
                     payload.created_by = ME?.name || 'Admin';
-                    const r = await DB.post('rollouts', payload);
+                    // Novo rollout: tenta com manual_item_ids; se 400, salva sem
+                    let r;
+                    try {
+                        r = await DB.post('rollouts', manualItems !== null ? { ...payload, manual_item_ids: manualItems } : payload);
+                    } catch (e) {
+                        const msg = (e.message || '').toLowerCase();
+                        if (msg.includes('400') || msg.includes('column') || msg.includes('manual_item_ids') || msg.includes('bad request')) {
+                            console.warn('[Rollout] Coluna manual_item_ids ausente no INSERT. Salvando sem ela.');
+                            r = await DB.post('rollouts', payload);
+                        } else { throw e; }
+                    }
                     const created = Array.isArray(r) ? r[0] : r;
                     rolloutsCache.unshift(created);
                     toast('Campanha criada!', 'success');
