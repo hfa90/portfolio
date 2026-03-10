@@ -8797,22 +8797,41 @@
             _execRolloutId = rolloutId;
             _execFlt = '';
 
-            const rl = rolloutsCache.find(r => r.id === rolloutId);
-            if (!rl) return;
+            // Garante que o rollout está no cache (pode chegar aqui via banner sem ter carregado a página)
+            let rl = rolloutsCache.find(r => r.id === rolloutId);
+            if (!rl) {
+                try {
+                    const rows = await DB.get('rollouts', `?id=eq.${rolloutId}&select=*`);
+                    rl = rows?.[0];
+                    if (rl) rolloutsCache.push(rl);
+                } catch { }
+            }
+            if (!rl) { toast('Campanha não encontrada', 'error'); return; }
 
             setLoad(true, 'Carregando itens da campanha...');
             try {
-                // Busca itens completos do meu CD que batem com o critério
+                // ── Busca TODOS os itens do CD e filtra em JS ────────────────
+                // NÃO usar encodeURIComponent no valor do filtro PostgREST:
+                // "?tempo_uso=eq.1-2%20anos" não funciona — o Supabase espera
+                // o valor literal na URL, ex: "?tempo_uso=eq.1-2 anos"
+                // Para evitar qualquer problema de encoding, buscamos tudo e filtramos em JS.
                 let qs = `?cd_id=eq.${ME.id}&select=*`;
+                // Filtra categoria no servidor (seguro — sem espaços/caracteres especiais)
                 if (rl.category) qs += `&category=eq.${rl.category}`;
-                if (rl.criteria) qs += `&tempo_uso=eq.${encodeURIComponent(rl.criteria)}`;
-                _execItems = await DB.get('inventory_items', qs);
 
-                // Garante que temos as execuções mais recentes
+                const allMyItems = await DB.get('inventory_items', qs);
+
+                // Filtra critério de tempo_uso em JavaScript (evita bug de encoding)
+                _execItems = rl.criteria
+                    ? allMyItems.filter(i => i.tempo_uso === rl.criteria)
+                    : allMyItems;
+
+                // Busca execuções existentes
                 const execs = await DB.get('rollout_executions',
                     `?rollout_id=eq.${rolloutId}&cd_id=eq.${ME.id}&select=*`
                 );
                 _cdRolloutExecs[rolloutId] = execs || [];
+
             } catch (e) {
                 toast('Erro ao carregar itens: ' + e.message, 'error');
                 setLoad(false);
@@ -8825,14 +8844,16 @@
             document.getElementById('page-cd-rollout-exec').classList.add('active');
             document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
 
-            const rl2 = rolloutsCache.find(r => r.id === rolloutId);
-            document.getElementById('exec-title').textContent = `🚀 ${rl2.name}`;
-            const deadline = new Date(rl2.deadline).toLocaleDateString('pt-BR');
+            document.getElementById('exec-title').textContent = `🚀 ${rl.name}`;
+            const deadline = new Date(rl.deadline).toLocaleDateString('pt-BR');
+            const critLabel = rl.criteria ? ` · Critério: ${rl.criteria}` : '';
+            const catObj = catsCache.find(c => c.id === rl.category);
+            const catLabel = catObj ? ` · ${catObj.icon} ${catObj.name}` : '';
             document.getElementById('exec-subtitle').textContent =
-                `${rl2.description || ''} · Prazo: ${deadline}`;
+                `${rl.description || ''}${critLabel}${catLabel} · Prazo: ${deadline}`;
 
             // Botão concluir: só mostra se não está concluído ainda
-            const isDone = (rl2.completed_cds || []).includes(ME.id);
+            const isDone = (rl.completed_cds || []).includes(ME.id);
             document.getElementById('btn-exec-concluir').style.display = isDone ? 'none' : '';
 
             // Reseta filtros
