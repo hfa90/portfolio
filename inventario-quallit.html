@@ -5144,7 +5144,7 @@
                                 id="btn-toggle-manual" style="font-size:11px">Selecionar manualmente</button>
                         </div>
                         <div id="rl-manual-items-list"
-                            style="display:none;max-height:180px;overflow-y:auto;display:none;flex-wrap:wrap;gap:6px;padding:8px;background:var(--surface);border-radius:8px">
+                            style="display:none;max-height:180px;overflow-y:auto;flex-wrap:wrap;gap:6px;padding:8px;background:var(--surface);border-radius:8px">
                         </div>
                     </div>
                 </div>
@@ -8314,11 +8314,13 @@
             if (rl.manual_item_ids && rl.manual_item_ids.length > 0) {
                 return itemsCache.filter(i => rl.manual_item_ids.includes(i.id));
             }
-            // Caso contrário, filtra por critério automático (tolerante a encoding)
-            let items = itemsCache.filter(i => (rl.target_cds || []).includes(i.cd_id));
-            if (rl.criteria) items = items.filter(i => _normalizeCriteria(i.tempo_uso) === _normalizeCriteria(rl.criteria));
-            if (rl.category) items = items.filter(i => i.category === rl.category);
-            return items;
+            // Filtra por critério automático — tudo em JS, tolerante a encoding e UUID
+            return itemsCache.filter(i => {
+                if (!(rl.target_cds || []).includes(i.cd_id)) return false;
+                if (rl.category && i.category !== rl.category) return false;
+                if (rl.criteria && _normalizeCriteria(i.tempo_uso) !== _normalizeCriteria(rl.criteria)) return false;
+                return true;
+            });
         }
 
         function rolloutProgress(rl) {
@@ -9115,10 +9117,11 @@
                     </div>
                     <!-- Mini contadores -->
                     <div style="display:flex;gap:12px;font-size:11px;color:var(--text3);flex-wrap:wrap">
-                        <span>📦 ${itemCount} equipamento(s) no critério</span>
+                        <span style="${itemCount === 0 ? 'color:var(--yellow)' : ''}">📦 ${itemCount} equipamento(s) no critério${itemCount === 0 ? ' ⚠️' : ''}</span>
                         ${subst ? `<span style="color:var(--green)">✅ ${subst} substituído(s)</span>` : ''}
                         ${aguard ? `<span style="color:var(--yellow)">⏸ ${aguard} aguardando</span>` : ''}
                         ${na ? `<span>➖ ${na} N/A</span>` : ''}
+                        ${itemCount === 0 ? `<span style="color:var(--text3);font-size:10px">Critério: ${rl.criteria || 'todos'} · Recarregue para atualizar</span>` : ''}
                     </div>
                     <!-- Ações -->
                     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -9154,11 +9157,9 @@
 
             setLoad(true, 'Carregando itens da campanha...');
 
-            // ── 1. Busca itens ────────────────────────────────────────────
-            // Filtra categoria no servidor (string simples, sem caracteres especiais)
-            // tempo_uso é filtrado em JS para evitar qualquer problema de encoding
+            // ── 1. Busca TODOS os itens do CD (sem filtro de categoria no servidor)
+            // O filtro de categoria é feito em JS para evitar falhas silenciosas de encoding/UUID na URL
             let qs = `?cd_id=eq.${ME.id}&select=*`;
-            if (rl.category) qs += `&category=eq.${rl.category}`;
 
             let allMyItems = [];
             try {
@@ -9169,15 +9170,19 @@
                 return;
             }
 
-            // Filtro de critério em JS — tolerante a encoding e espaços
-            // Também suporta itens selecionados manualmente pelo admin
+            // Filtro completo em JS — tolerante a encoding, espaços e problemas de UUID
+            // Suporta itens selecionados manualmente pelo admin
             if (rl.manual_item_ids && rl.manual_item_ids.length > 0) {
-                // Rollout com itens manuais: filtra pelos IDs específicos do CD atual
+                // Rollout com itens manuais: usa exatamente os IDs definidos pelo admin
                 _execItems = allMyItems.filter(i => rl.manual_item_ids.includes(i.id));
             } else {
-                _execItems = rl.criteria
-                    ? allMyItems.filter(i => _normalizeCriteria(i.tempo_uso) === _normalizeCriteria(rl.criteria))
-                    : allMyItems;
+                _execItems = allMyItems.filter(i => {
+                    // Filtro de categoria
+                    if (rl.category && i.category !== rl.category) return false;
+                    // Filtro de critério (tempo_uso) — tolerante a encoding
+                    if (rl.criteria && _normalizeCriteria(i.tempo_uso) !== _normalizeCriteria(rl.criteria)) return false;
+                    return true;
+                });
             }
 
             // ── 2. Busca execuções existentes ─────────────────────────────
