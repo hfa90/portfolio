@@ -3565,6 +3565,118 @@
             }
         }
 
+
+        /* ── AI FORM AUTOFILL ── */
+        .ai-autofill-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, rgba(124, 58, 237, .08), rgba(79, 70, 229, .05));
+            border: 1px solid rgba(124, 58, 237, .2);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-bottom: 18px;
+        }
+
+        .ai-autofill-bar .ai-bar-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .ai-autofill-bar .ai-bar-text {
+            flex: 1;
+            font-size: 12px;
+            color: var(--text2);
+            line-height: 1.4;
+        }
+
+        .ai-autofill-bar .ai-bar-text strong {
+            color: var(--text);
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        #ai-autofill-input {
+            width: 100%;
+            background: var(--bg3);
+            border: 1px solid rgba(124, 58, 237, .3);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: var(--text);
+            font-family: var(--font);
+            font-size: 13px;
+            outline: none;
+            transition: border-color .15s;
+            margin-top: 8px;
+        }
+
+        #ai-autofill-input:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, .1);
+        }
+
+        #ai-autofill-input::placeholder {
+            color: var(--text3);
+        }
+
+        #btn-ai-autofill {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 600;
+            font-family: var(--font);
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity .15s, transform .15s;
+            margin-top: 8px;
+            flex-shrink: 0;
+        }
+
+        #btn-ai-autofill:hover:not(:disabled) {
+            opacity: .85;
+            transform: translateY(-1px);
+        }
+
+        #btn-ai-autofill:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        .ai-autofill-status {
+            font-size: 11px;
+            color: #a78bfa;
+            font-family: var(--mono);
+            margin-top: 6px;
+            min-height: 16px;
+            transition: opacity .2s;
+        }
+
+        .ai-field-filled {
+            animation: fieldPop .4s cubic-bezier(.16, 1, .3, 1);
+            border-color: rgba(124, 58, 237, .5) !important;
+            background: rgba(124, 58, 237, .05) !important;
+        }
+
+        @keyframes fieldPop {
+            0% {
+                transform: scale(1);
+                box-shadow: none;
+            }
+
+            50% {
+                transform: scale(1.02);
+                box-shadow: 0 0 0 3px rgba(124, 58, 237, .2);
+            }
+
+            100% {
+                transform: scale(1);
+                box-shadow: none;
+            }
+        }
+
         /* ═══════════════════════════════════════════
            QUALLIT COPILOT — AI AGENT STYLES
         ═══════════════════════════════════════════ */
@@ -5184,6 +5296,21 @@
                         onchange="renderItemForm()">
                         <option value="">Selecione...</option>
                     </select></div>
+                <!-- ✦ AI AUTOFILL BAR -->
+                <div class="ai-autofill-bar" id="ai-autofill-bar" style="display:none">
+                    <div class="ai-bar-icon">✦</div>
+                    <div class="ai-bar-text" style="flex:1">
+                        <strong>Preencher com IA</strong>
+                        Descreva o equipamento em linguagem natural e a IA preenche os campos automaticamente.
+                        <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px">
+                            <input id="ai-autofill-input"
+                                placeholder='Ex: "Dell OptiPlex 3080, i5-10400, 8GB RAM, 256GB SSD, Win 11, Financeiro"'
+                                onkeydown="if(event.key==='Enter')aiAutofill()">
+                            <button id="btn-ai-autofill" onclick="aiAutofill()">✦ Preencher</button>
+                        </div>
+                        <div class="ai-autofill-status" id="ai-autofill-status"></div>
+                    </div>
+                </div>
                 <div id="item-form-fields"></div>
                 <!-- FOTO -->
                 <div class="form-group full-width" style="margin-top:16px">
@@ -7281,7 +7408,10 @@
         }
 
         function renderItemForm() {
-            const catId = g('item-cat'); if (!catId) { document.getElementById('item-form-fields').innerHTML = ''; return; }
+            const catId = g('item-cat');
+            const bar = document.getElementById('ai-autofill-bar');
+            if (!catId) { document.getElementById('item-form-fields').innerHTML = ''; if (bar) bar.style.display = 'none'; return; }
+            if (bar) bar.style.display = 'flex';
             const flds = getFields(catId);
             // Separate serial+patrimonio as a paired row, areas as full-width, rest as 2-col grid
             const serialF = flds.find(f => f.t === 'serial');
@@ -7343,6 +7473,103 @@
             if (f.t === 'date') return `<input type="date" id="${id}" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none">`;
             if (f.t === 'money') return `<div style="position:relative"><span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:13px;pointer-events:none">R$</span><input type="number" id="${id}" placeholder="0,00" step="0.01" min="0" style="width:100%;padding:9px 12px 9px 34px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none"></div>`;
             return `<input type="text" id="${id}" placeholder="${f.p || ''}">`;
+        }
+
+
+        // ═══════════════════════════════════════════════════════════════
+        // AI AUTOFILL — preenche o formulário com linguagem natural
+        // ═══════════════════════════════════════════════════════════════
+        async function aiAutofill() {
+            const desc = document.getElementById('ai-autofill-input')?.value?.trim();
+            if (!desc) return toast('Descreva o equipamento primeiro', 'error');
+
+            const catId = g('item-cat');
+            const cat = catsCache.find(c => c.id === catId);
+            const flds = getFields(catId);
+            const fieldList = flds.map(f => `${f.k} (${f.l}${f.o ? ': opções=' + f.o.join('|') : ''})`).join(', ');
+
+            const btn = document.getElementById('btn-ai-autofill');
+            const status = document.getElementById('ai-autofill-status');
+            btn.disabled = true;
+            btn.textContent = '⏳ Preenchendo...';
+            if (status) status.textContent = 'Analisando descrição...';
+
+            try {
+                const systemPrompt = `Você é um especialista em inventário de TI. 
+O usuário descreverá um equipamento em linguagem natural e você deve extrair os dados e retornar SOMENTE um JSON válido com os campos preenchidos.
+
+Categoria do equipamento: ${cat?.name || catId}
+Campos disponíveis: ${fieldList}
+
+Regras:
+- Retorne APENAS o JSON, sem markdown, sem explicações, sem blocos de código
+- Use exatamente os nomes de campo listados como chaves
+- Para campos com opções fixas, use EXATAMENTE uma das opções fornecidas ou deixe vazio
+- Para status, use: Ativo, Inativo, Manutenção ou Backup
+- Para tempo_uso, use: < 1 ano, 1-2 anos, 2-3 anos, 3-5 anos, > 5 anos
+- Para memoria_ram, use: 4GB, 8GB, 16GB, 32GB, 64GB ou Outro
+- Para hd_ssd, use: 256GB SSD, 512GB SSD, 1TB SSD, 1TB HD, 2TB HD, 500GB HD ou Outro
+- Para sistema_operacional, use: Windows 11, Windows 10, Windows 7, Linux Ubuntu, Linux Debian, macOS ou Outro
+- Campos que não conseguir inferir, deixe como string vazia ""
+- Não invente números de série ou patrimônio`;
+
+                const resp = await fetch(
+                    `${SB_URL}/functions/v1/supabase-functions-ai-proxy-index`,
+                    {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${SB_KEY}`,
+                            'apikey': SB_KEY
+                        },
+                        body: JSON.stringify({
+                            system: systemPrompt,
+                            messages: [{ role: 'user', content: `Equipamento: ${desc}` }]
+                        })
+                    }
+                );
+
+                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                const data = await resp.json();
+                const raw = data.content?.[0]?.text || '{}';
+
+                // Parse JSON — remove possíveis blocos markdown
+                const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+                let parsed;
+                try { parsed = JSON.parse(clean); }
+                catch { throw new Error('IA retornou formato inválido. Tente descrever de outra forma.'); }
+
+                // Fill fields with animation
+                let filled = 0;
+                flds.forEach(f => {
+                    const val = parsed[f.k];
+                    if (!val && val !== 0) return;
+                    const el = document.getElementById(`ff-${f.k}`);
+                    if (!el) return;
+                    // Don't override serial/patrimonio with invented values
+                    if ((f.t === 'serial' || f.t === 'patrimonio') && val) return;
+                    el.value = val;
+                    el.classList.remove('ai-field-filled');
+                    void el.offsetWidth; // reflow to restart animation
+                    el.classList.add('ai-field-filled');
+                    setTimeout(() => el.classList.remove('ai-field-filled'), 600);
+                    filled++;
+                });
+
+                if (status) status.textContent = `✦ ${filled} campo${filled !== 1 ? 's' : ''} preenchido${filled !== 1 ? 's' : ''} com sucesso!`;
+                toast(`✦ IA preencheu ${filled} campos`, 'success');
+
+                // Clear input
+                const input = document.getElementById('ai-autofill-input');
+                if (input) input.value = '';
+
+            } catch (e) {
+                if (status) status.textContent = '';
+                toast('Erro no preenchimento: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '✦ Preencher';
+            }
         }
 
         async function saveItem() {
@@ -11114,7 +11341,7 @@ Regras de resposta:
                 const session = sessionStorage.getItem('ta');
 
                 const resp = await fetch(
-                    `${SB_URL}/functions/v1/supabase-functions-ai-proxy-index`,
+                    `${SB_URL}/functions/v1/ai-proxy`,
                     {
                         method: 'POST',
                         headers: {
