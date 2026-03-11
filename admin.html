@@ -1857,6 +1857,13 @@
       const { url, key } = getSupabase();
       if (!url || !key) throw new Error('Supabase não configurado. Acesse Configurações.');
 
+      // Garantir token válido para operações que modificam dados
+      const method = opts.method || 'GET';
+      if (['PATCH', 'POST', 'DELETE'].includes(method)) {
+        const ok = await ensureValidToken();
+        if (!ok) throw new Error('Sessão expirada. Faça login novamente.');
+      }
+
       // Usar JWT do usuário logado (necessário para UPDATE/DELETE com RLS ativo)
       const sessionToken = localStorage.getItem('asproc_token');
       const authToken = sessionToken || key;
@@ -1940,6 +1947,7 @@
         currentUser = data.user;
         localStorage.setItem('asproc_token', data.access_token);
         localStorage.setItem('asproc_user', JSON.stringify(data.user));
+        if (data.refresh_token) localStorage.setItem('asproc_refresh_token', data.refresh_token);
 
         showApp(data.user);
       } catch (e) {
@@ -1965,21 +1973,80 @@
     function doLogout() {
       localStorage.removeItem('asproc_token');
       localStorage.removeItem('asproc_user');
+      localStorage.removeItem('asproc_refresh_token');
       location.reload();
     }
 
-    function checkSession() {
+    // Verifica se o token JWT ainda é válido (não expirado)
+    function isTokenValid() {
+      const token = localStorage.getItem('asproc_token');
+      if (!token) return false;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        // exp é em segundos, Date.now() em ms
+        return payload.exp * 1000 > Date.now() + 60000; // 1min de margem
+      } catch { return false; }
+    }
+
+    // Tenta renovar o token usando o refresh_token do Supabase
+    async function refreshToken() {
+      const refreshTk = localStorage.getItem('asproc_refresh_token');
+      if (!refreshTk) return false;
+      const { url, key } = getSupabase();
+      try {
+        const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+          method: 'POST',
+          headers: { 'apikey': key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshTk })
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        localStorage.setItem('asproc_token', data.access_token);
+        if (data.refresh_token) localStorage.setItem('asproc_refresh_token', data.refresh_token);
+        return true;
+      } catch { return false; }
+    }
+
+    // Garante que o token é válido antes de qualquer chamada autenticada
+    async function ensureValidToken() {
+      if (isTokenValid()) return true;
+      // Token expirado — tentar renovar
+      const refreshed = await refreshToken();
+      if (!refreshed) {
+        // Não conseguiu renovar — forçar novo login
+        toast('Sessão expirada. Por favor, faça login novamente.', 'error');
+        setTimeout(() => doLogout(), 2000);
+        return false;
+      }
+      return true;
+    }
+
+    async function checkSession() {
       const token = localStorage.getItem('asproc_token');
       const userStr = localStorage.getItem('asproc_user');
       if (token && userStr) {
         try {
           const user = JSON.parse(userStr);
-          currentUser = user;
-          showApp(user);
-          return;
+          // Token ainda válido? Entrar direto
+          if (isTokenValid()) {
+            currentUser = user;
+            showApp(user);
+            return;
+          }
+          // Token expirado — tentar renovar silenciosamente
+          const refreshed = await refreshToken();
+          if (refreshed) {
+            currentUser = user;
+            showApp(user);
+            return;
+          }
+          // Não conseguiu renovar — limpar sessão e pedir login
+          localStorage.removeItem('asproc_token');
+          localStorage.removeItem('asproc_user');
+          localStorage.removeItem('asproc_refresh_token');
         } catch { }
       }
-      // Sem sessão: mostrar login
+      // Sem sessão válida: mostrar login
       document.getElementById('login-screen').style.display = 'flex';
     }
 
@@ -2037,8 +2104,9 @@
 
     function loadConfig() {
       const cfg = getConfig();
-      document.getElementById('cfg-url').value = cfg.url || '';
-      document.getElementById('cfg-key').value = cfg.key || '';
+      // Mostrar as credenciais atuais (localStorage ou defaults hardcoded)
+      document.getElementById('cfg-url').value = cfg.url || DEFAULT_SUPABASE_URL;
+      document.getElementById('cfg-key').value = cfg.key || DEFAULT_SUPABASE_KEY;
     }
 
     function saveConfig() {
@@ -2093,7 +2161,15 @@
           feed.innerHTML = '<p style="font-size:.85rem;color:var(--texto-dim)">Nenhuma atividade ainda.</p>';
         }
       } catch (e) {
-        document.getElementById('activity-feed').innerHTML = `<p style="font-size:.82rem;color:var(--texto-dim)">Configure o Supabase para ver estatísticas.</p>`;
+        console.error('[ASPROC] loadDashboard error:', e);
+        // Se for 401, tentar renovar o token e recarregar
+        if (e.message && (e.message.includes('401') || e.message.includes('403'))) {
+          const refreshed = await refreshToken();
+          if (refreshed) { loadDashboard(); return; }
+          document.getElementById('activity-feed').innerHTML = `<p style="font-size:.82rem;color:#ff6b6b">Sessão expirada. <a href="#" onclick="doLogout()" style="color:var(--verde-neon)">Faça login novamente.</a></p>`;
+        } else {
+          document.getElementById('activity-feed').innerHTML = `<p style="font-size:.82rem;color:#ff6b6b">Erro ao conectar com o Supabase: ${e.message}</p>`;
+        }
       }
     }
 

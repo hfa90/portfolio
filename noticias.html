@@ -16,16 +16,18 @@
 
     <!-- Cole no <head> de noticias.html, avisos.html e trabalhe-conosco.html -->
     <script>
-        const SUPABASE_URL = 'https://pajjntbnrmfweqrdpvpy.supabase.co';
-        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhampudGJucm1md2VxcmRwdnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzI3MDksImV4cCI6MjA4ODgwODcwOX0.a_krlTkjWT_mys_RpvzPRxyYpDn7eS9BB-OajLQepGM';
-
+        // fetchSupabase — wrapper sobre as constantes do asproc-supabase.js
         async function fetchSupabase(table, params = '') {
-            const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + params, {
+            const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + (params ? '?' + params : ''), {
                 headers: {
                     'apikey': SUPABASE_KEY,
                     'Authorization': 'Bearer ' + SUPABASE_KEY
                 }
             });
+            if (!r.ok) {
+                const err = await r.json().catch(() => ({}));
+                throw new Error(err.message || err.hint || 'HTTP ' + r.status);
+            }
             return r.json();
         }
     </script>
@@ -1328,11 +1330,7 @@
         }
 
         /* PAGINATION */
-        function setPag(btn) {
-            document.querySelectorAll('.pg').forEach(b => b.classList.remove('on'));
-            btn.classList.add('on');
-            showToast('<strong>Carregando página ' + btn.textContent + '…</strong><br>Conecte ao Supabase para paginação real.');
-        }
+
 
         /* NEWSLETTER */
         function subNL() {
@@ -1397,58 +1395,88 @@
         }
 
         async function loadNoticias() {
+            totalNoticias = await fetchTotalNoticias();
+            await goToPage(1);
+        }
+
+        // ── PAGINAÇÃO REAL ──
+        const PER_PAGE = 6;
+        let currentPage = 1;
+        let totalNoticias = 0;
+
+        async function fetchTotalNoticias() {
+            try {
+                const r = await fetch(SUPABASE_URL + '/rest/v1/noticias?publicado=eq.true&select=id', {
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'count=exact',
+                        'Range': '0-0'
+                    }
+                });
+                const cr = r.headers.get('Content-Range');
+                return cr ? parseInt(cr.split('/')[1]) || 0 : 0;
+            } catch { return 0; }
+        }
+
+        function renderPagButtons(total, page) {
+            const pagDiv = document.querySelector('.pag');
+            if (!pagDiv) return;
+            const totalPages = Math.max(1, Math.ceil((total - 1) / PER_PAGE));
+            if (totalPages <= 1) { pagDiv.style.display = 'none'; return; }
+            pagDiv.style.display = '';
+            let html = '';
+            if (page > 1) html += `<button class="pg" onclick="goToPage(${page - 1})">←</button>`;
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= page - 1 && i <= page + 1)) {
+                    html += `<button class="pg${i === page ? ' on' : ''}" onclick="goToPage(${i})">${i}</button>`;
+                } else if (i === page - 2 || i === page + 2) {
+                    html += `<button class="pg" disabled style="opacity:.4;cursor:default">…</button>`;
+                }
+            }
+            if (page < totalPages) html += `<button class="pg" onclick="goToPage(${page + 1})">→</button>`;
+            pagDiv.innerHTML = html;
+        }
+
+        async function goToPage(page) {
+            currentPage = page;
             const loading = document.getElementById('noticias-loading');
             const grid = document.getElementById('noticias-grid');
-            const destaque = document.getElementById('noticia-destaque');
-
             loading.style.display = 'block';
-            // Ocultar cards estáticos enquanto carrega
-            Array.from(grid.children).forEach(c => c.style.display = 'none');
-
+            grid.innerHTML = '';
             try {
+                const offset = page === 1 ? 0 : 1 + (page - 1) * PER_PAGE;
+                const limit = page === 1 ? 7 : PER_PAGE;
                 const data = await fetchSupabase('noticias',
-                    'publicado=eq.true&order=data_pub.desc&limit=20');
-
+                    `publicado=eq.true&order=data_pub.desc&limit=${limit}&offset=${offset}`);
+                loading.style.display = 'none';
                 if (!Array.isArray(data) || !data.length) {
-                    loading.style.display = 'none';
-                    // Restaurar cards estáticos se não houver dados
-                    Array.from(grid.children).forEach(c => c.style.display = '');
+                    grid.innerHTML = '<p style="color:var(--verde-neon);padding:2rem">Nenhuma notícia nesta página.</p>';
+                    renderPagButtons(totalNoticias, page);
                     return;
                 }
-
-                loading.style.display = 'none';
-
-                // ── Card destaque ──
-                const feat = data.find(n => n.destaque) || data[0];
-                const resto = data.filter(n => n.id !== feat.id).slice(0, 6);
-
-                if (destaque && feat) {
+                const destaque = document.getElementById('noticia-destaque');
+                if (page === 1 && destaque) {
+                    const feat = data[0];
+                    destaque.style.display = '';
                     destaque.setAttribute('data-tag', feat.categoria || 'geral');
-                    destaque.onclick = feat.url_externa
-                        ? () => window.open(_url(feat.url_externa), '_blank')
-                        : null;
-
+                    destaque.onclick = feat.url_externa ? () => window.open(_url(feat.url_externa), '_blank') : null;
                     const catEl = destaque.querySelector('.feat-cat');
                     const dateEl = destaque.querySelector('.feat-date');
                     const titleEl = destaque.querySelector('.feat-title');
                     const excEl = destaque.querySelector('.feat-exc');
-
+                    const bgEl = destaque.querySelector('.feat-bg');
                     if (catEl) catEl.textContent = _CAT_LABEL[feat.categoria] || feat.categoria;
                     if (dateEl) dateEl.textContent = _fmtData(feat.data_pub);
                     if (titleEl) titleEl.textContent = feat.titulo;
                     if (excEl) excEl.textContent = feat.resumo || '';
-
-                    // Imagem de capa
-                    const bgEl = destaque.querySelector('.feat-bg');
-                    if (bgEl && feat.imagem_url) {
-                        bgEl.style.backgroundImage = "url('" + _url(feat.imagem_url) + "')";
-                    }
+                    if (bgEl && feat.imagem_url) bgEl.style.backgroundImage = "url('" + _url(feat.imagem_url) + "')";
+                } else if (destaque) {
+                    destaque.style.display = 'none';
                 }
-
-                // ── Cards normais ──
-                grid.innerHTML = resto.map((n, i) => `
-                    <div class="nc reveal" data-tag="${_esc(n.categoria)}"
-                         style="cursor:pointer"
+                const cards = page === 1 ? data.slice(1) : data;
+                grid.innerHTML = cards.map(n => `
+                    <div class="nc reveal" data-tag="${_esc(n.categoria)}" style="cursor:pointer"
                          onclick="window.open('${n.url_externa ? _url(n.url_externa) : '#'}','${n.url_externa ? '_blank' : '_self'}')">
                         <div class="nc-img">
                             <span class="nc-cat">${_esc(_CAT_LABEL[n.categoria] || n.categoria)}</span>
@@ -1461,29 +1489,39 @@
                             <span class="nc-link">Ler mais →</span>
                         </div>
                     </div>`).join('');
-
-                // Reativar IntersectionObserver nos novos cards
                 const ro = new IntersectionObserver(entries =>
-                    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }),
-                    { threshold: .1 }
-                );
+                    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible') }), { threshold: .1 });
                 grid.querySelectorAll('.nc.reveal').forEach(el => ro.observe(el));
-
-                // Reativar filtros com os dados reais
-                document.querySelectorAll('.fb').forEach(btn => {
-                    btn.addEventListener('click', function () {
-                        const tag = this.getAttribute('onclick')?.match(/'([^']+)'/)?.[1] || 'all';
-                        doFilter(this, tag);
-                    });
-                });
-
+                renderPagButtons(totalNoticias, page);
+                if (page > 1) document.querySelector('.nf-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } catch (err) {
-                console.error('[ASPROC] Erro ao carregar notícias:', err);
                 loading.style.display = 'none';
-                // Fallback: mostrar cards estáticos
-                Array.from(grid.children).forEach(c => c.style.display = '');
+                console.error('[ASPROC] Erro ao paginar:', err);
+                grid.innerHTML = '<p style="color:#ff6b6b;padding:2rem">Erro ao carregar notícias.</p>';
             }
         }
+
+        function setPag(btn) {
+            const page = parseInt(btn.textContent);
+            if (!isNaN(page)) goToPage(page);
+        }
+
+        /* NEWSLETTER */
+        function subNL() {
+            const v = document.getElementById('nl-mail').value;
+            if (!v || !v.includes('@')) { showToast('⚠️ Digite um e-mail válido.'); return; }
+            document.getElementById('nl-ok').style.display = 'block';
+            showToast('✅ <strong>Cadastrado!</strong> Você receberá novidades da ASPROC.');
+        }
+
+        /* TOAST */
+        function showToast(msg) {
+            const t = document.getElementById('toastMsg');
+            document.getElementById('toastText').innerHTML = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 4500);
+        }
+
 
         // Iniciar ao carregar a página
         document.addEventListener('DOMContentLoaded', loadNoticias);
