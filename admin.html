@@ -1857,9 +1857,13 @@
       const { url, key } = getSupabase();
       if (!url || !key) throw new Error('Supabase não configurado. Acesse Configurações.');
 
+      // Usar JWT do usuário logado (necessário para UPDATE/DELETE com RLS ativo)
+      const sessionToken = localStorage.getItem('asproc_token');
+      const authToken = sessionToken || key;
+
       const headers = {
         'apikey': key,
-        'Authorization': 'Bearer ' + key,
+        'Authorization': 'Bearer ' + authToken,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       };
@@ -1894,8 +1898,10 @@
     async function sbCount(table, params = '') {
       const { url, key } = getSupabase();
       if (!url || !key) return 0;
+      const sessionToken = localStorage.getItem('asproc_token');
+      const authToken = sessionToken || key;
       const res = await fetch(`${url}/rest/v1/${table}?${params}&select=id`, {
-        headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Prefer': 'count=exact', 'Range': '0-0' }
+        headers: { 'apikey': key, 'Authorization': 'Bearer ' + authToken, 'Prefer': 'count=exact', 'Range': '0-0' }
       });
       const count = res.headers.get('Content-Range');
       return count ? parseInt(count.split('/')[1]) || 0 : 0;
