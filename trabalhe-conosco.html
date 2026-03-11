@@ -888,7 +888,9 @@
                 <div class="slbl">Processo Seletivo</div>
                 <h3>Como se candidatar</h3>
                 <p class="sdesc" style="max-width:100%;margin-bottom:1.5rem">Envie sua candidatura pelo formulário
-                    abaixo ou diretamente para <strong style="color:var(--verde-neon)">selecao@asproc.org.br</strong>
+                    abaixo ou diretamente para <strong style="color:var(--verde-neon)"><a
+                            href="/cdn-cgi/l/email-protection" class="__cf_email__"
+                            data-cfemail="7c0f1910191f1d133c1d0f0c0e131f52130e1b521e0e">[email&#160;protected]</a></strong>
                     com o assunto correspondente à vaga.</p>
                 <div class="step">
                     <div class="step-n">1</div>
@@ -994,7 +996,10 @@
             <div class="fc">
                 <h4>Contato</h4>
                 <ul>
-                    <li><a href="mailto:comercial@asproc.org.br">comercial@asproc.org.br</a></li>
+                    <li><a href="/cdn-cgi/l/email-protection#91f2fefcf4e3f2f8f0fdd1f0e2e1e3fef2bffee3f6bff3e3"><span
+                                class="__cf_email__"
+                                data-cfemail="cdaea2a0a8bfaea4aca18dacbebdbfa2aee3a2bfaae3afbf">[email&#160;protected]</span></a>
+                    </li>
                     <li><a href="https://loja.asproc.org.br" target="_blank">Loja Virtual</a></li>
                     <li><a href="trabalhe-conosco.html">Trabalhe Conosco</a></li>
                     <li><a href="sobre.html#contato">Fale Conosco</a></li>
@@ -1006,6 +1011,7 @@
             <span>Médio Juruá, Amazônia 🌿</span>
         </div>
     </footer>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script>
     <script>
         const cur = document.querySelector(".cursor"), curR = document.querySelector(".cursor-ring");
         document.addEventListener("mousemove", e => {
@@ -1039,12 +1045,73 @@
             document.getElementById("cf-sec").scrollIntoView({ behavior: "smooth" });
         }
         function submitForm() {
-            const n = document.getElementById("cf-nome").value.trim();
-            const e = document.getElementById("cf-email").value.trim();
-            const v = document.getElementById("cf-vaga").value;
-            if (!n || !e || !v) { alert("Preencha nome, e-mail e vaga de interesse."); return; }
-            document.getElementById("cf-inner").style.display = "none";
-            document.getElementById("cf-ok").style.display = "block";
+            const nome = document.getElementById("cf-nome").value.trim();
+            const email = document.getElementById("cf-email").value.trim();
+            const telefone = document.getElementById("cf-tel").value.trim();
+            const vaga = document.getElementById("cf-vaga").value;
+            const mensagem = document.getElementById("cf-msg").value.trim();
+            const fileInput = document.getElementById("cf-file");
+            const btn = document.querySelector(".csub");
+
+            // Validação básica
+            if (!nome) { alert("Por favor, informe seu nome completo."); return; }
+            if (!email || !email.includes("@")) { alert("Por favor, informe um e-mail válido."); return; }
+            if (!vaga) { alert("Por favor, selecione a vaga de interesse."); return; }
+
+            btn.disabled = true;
+            btn.textContent = "Enviando…";
+
+            async function doSubmit(curriculo_url) {
+                try {
+                    await sbInsert("candidaturas", {
+                        nome,
+                        email,
+                        telefone: telefone || null,
+                        vaga,
+                        mensagem: mensagem || null,
+                        curriculo_url: curriculo_url || null,
+                        status: "nova"
+                    });
+                    document.querySelector(".form-inner").style.display = "none";
+                    document.getElementById("cf-ok").style.display = "block";
+                } catch (err) {
+                    console.error("[ASPROC] Erro ao enviar candidatura:", err);
+                    alert("Erro ao enviar candidatura. Tente novamente.\n" + err.message);
+                    btn.disabled = false;
+                    btn.textContent = "Enviar Candidatura →";
+                }
+            }
+
+            // Upload de currículo (Supabase Storage) se houver arquivo
+            const file = fileInput && fileInput.files[0];
+            if (file) {
+                if (file.size > 5 * 1024 * 1024) {
+                    alert("Arquivo muito grande. Máximo: 5 MB.");
+                    btn.disabled = false;
+                    btn.textContent = "Enviar Candidatura →";
+                    return;
+                }
+                const ext = file.name.split(".").pop();
+                const fileName = `curriculos/${Date.now()}_${nome.replace(/\s+/g, "_")}.${ext}`;
+                const uploadUrl = `${SUPABASE_URL}/storage/v1/object/candidaturas/${fileName}`;
+                fetch(uploadUrl, {
+                    method: "POST",
+                    headers: {
+                        "apikey": SUPABASE_KEY,
+                        "Authorization": "Bearer " + SUPABASE_KEY,
+                        "Content-Type": file.type,
+                        "x-upsert": "true"
+                    },
+                    body: file
+                }).then(r => {
+                    const publicUrl = r.ok
+                        ? `${SUPABASE_URL}/storage/v1/object/public/candidaturas/${fileName}`
+                        : null;
+                    doSubmit(publicUrl);
+                }).catch(() => doSubmit(null));
+            } else {
+                doSubmit(null);
+            }
         }
     </script>
 </body>
