@@ -2,1442 +2,2609 @@
 <html lang="pt-BR">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prevê Admin</title>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Clash+Display:wght@400;500;600;700&family=Cabinet+Grotesk:wght@300;400;500;700;800&display=swap"
-        rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <style>
-        :root {
-            --bg: #04070e;
-            --surface: #090e1a;
-            --surface2: #0e1526;
-            --surface3: #131d30;
-            --border: #18273a;
-            --border2: #1f3048;
-            --yes: #00d68f;
-            --no: #ff3d5a;
-            --gold: #f5c518;
-            --blue: #4f8cff;
-            --purple: #a855f7;
-            --text: #dde8f5;
-            --muted: #3f5a76;
-            --dim: #6a8ba8;
-            --r: 12px;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0
-        }
-
-        body {
-            background: var(--bg);
-            color: var(--text);
-            font-family: 'Cabinet Grotesk', sans-serif;
-            min-height: 100vh;
-            display: flex
-        }
-
-        ::-webkit-scrollbar {
-            width: 4px
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border2);
-            border-radius: 2px
-        }
-
-        /* ── SIDEBAR */
-        .sidebar {
-            width: 220px;
-            flex-shrink: 0;
-            background: var(--surface);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            position: sticky;
-            top: 0
-        }
-
-        .sb-logo {
-            padding: 22px 20px;
-            border-bottom: 1px solid var(--border);
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: 1.2rem;
-            letter-spacing: -.04em;
-            display: flex;
-            align-items: center;
-            gap: 8px
-        }
-
-        .sb-logo em {
-            font-style: normal;
-            color: var(--yes)
-        }
-
-        .sb-badge {
-            background: rgba(168, 85, 247, .15);
-            border: 1px solid rgba(168, 85, 247, .25);
-            color: var(--purple);
-            font-size: .6rem;
-            font-weight: 700;
-            letter-spacing: .1em;
-            text-transform: uppercase;
-            padding: 2px 7px;
-            border-radius: 50px;
-            margin-left: 4px
-        }
-
-        .nav {
-            padding: 14px 10px;
-            flex: 1
-        }
-
-        .nav-item {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            font-size: .85rem;
-            font-weight: 500;
-            color: var(--dim);
-            cursor: pointer;
-            transition: all .2s;
-            border: none;
-            background: transparent;
-            width: 100%;
-            text-align: left;
-            font-family: inherit
-        }
-
-        .nav-item:hover,
-        .nav-item.active {
-            background: rgba(0, 214, 143, .07);
-            color: var(--yes)
-        }
-
-        .nav-item.active {
-            border: 1px solid rgba(0, 214, 143, .15)
-        }
-
-        .nav-icon {
-            font-size: 1rem;
-            width: 20px;
-            text-align: center
-        }
-
-        .sb-bottom {
-            padding: 14px;
-            border-top: 1px solid var(--border)
-        }
-
-        .back-btn {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: .8rem;
-            color: var(--muted);
-            cursor: pointer;
-            transition: color .2s;
-            text-decoration: none
-        }
-
-        .back-btn:hover {
-            color: var(--dim)
-        }
-
-        /* ── MAIN */
-        .content {
-            flex: 1;
-            overflow-y: auto;
-            padding: 28px
-        }
-
-        .page {
-            display: none
-        }
-
-        .page.active {
-            display: block
-        }
-
-        .page-title {
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: 1.5rem;
-            margin-bottom: 4px;
-            letter-spacing: -.03em
-        }
-
-        .page-sub {
-            font-size: .82rem;
-            color: var(--muted);
-            margin-bottom: 28px
-        }
-
-        /* ── STAT CARDS */
-        .stat-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-            gap: 14px;
-            margin-bottom: 28px
-        }
-
-        .scard {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: var(--r);
-            padding: 18px;
-            position: relative;
-            overflow: hidden
-        }
-
-        .scard::before {
-            content: '';
-            position: absolute;
-            inset: 0;
-            opacity: .04;
-            pointer-events: none
-        }
-
-        .scard.g::before {
-            background: var(--yes)
-        }
-
-        .scard.r::before {
-            background: var(--no)
-        }
-
-        .scard.y::before {
-            background: var(--gold)
-        }
-
-        .scard.b::before {
-            background: var(--blue)
-        }
-
-        .sc-label {
-            font-size: .68rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: .09em;
-            color: var(--muted);
-            margin-bottom: 8px
-        }
-
-        .sc-val {
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: 1.7rem;
-            line-height: 1
-        }
-
-        .sc-sub {
-            font-size: .72rem;
-            color: var(--dim);
-            margin-top: 5px
-        }
-
-        .sc-icon {
-            position: absolute;
-            top: 14px;
-            right: 14px;
-            font-size: 1.4rem;
-            opacity: .25
-        }
-
-        /* ── TABLE */
-        .table-wrap {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: var(--r);
-            overflow: hidden;
-            margin-bottom: 24px
-        }
-
-        .tw-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            flex-wrap: wrap
-        }
-
-        .tw-title {
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: 1rem
-        }
-
-        .tw-sub {
-            font-size: .78rem;
-            color: var(--muted)
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse
-        }
-
-        th {
-            background: var(--surface2);
-            padding: 11px 16px;
-            text-align: left;
-            font-size: .7rem;
-            font-weight: 700;
-            letter-spacing: .09em;
-            text-transform: uppercase;
-            color: var(--muted);
-            white-space: nowrap
-        }
-
-        td {
-            padding: 12px 16px;
-            border-top: 1px solid var(--border);
-            font-size: .83rem;
-            vertical-align: middle
-        }
-
-        tr:hover td {
-            background: rgba(255, 255, 255, .015)
-        }
-
-        .td-truncate {
-            max-width: 220px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap
-        }
-
-        .badge {
-            display: inline-flex;
-            padding: 3px 9px;
-            border-radius: 50px;
-            font-size: .65rem;
-            font-weight: 700;
-            letter-spacing: .07em;
-            text-transform: uppercase
-        }
-
-        .badge-pending {
-            background: rgba(245, 197, 24, .1);
-            color: var(--gold);
-            border: 1px solid rgba(245, 197, 24, .2)
-        }
-
-        .badge-confirmed {
-            background: rgba(0, 214, 143, .1);
-            color: var(--yes);
-            border: 1px solid rgba(0, 214, 143, .2)
-        }
-
-        .badge-rejected {
-            background: rgba(255, 61, 90, .1);
-            color: var(--no);
-            border: 1px solid rgba(255, 61, 90, .2)
-        }
-
-        .badge-active {
-            background: rgba(0, 214, 143, .1);
-            color: var(--yes);
-            border: 1px solid rgba(0, 214, 143, .2)
-        }
-
-        .badge-resolved {
-            background: rgba(245, 197, 24, .1);
-            color: var(--gold);
-            border: 1px solid rgba(245, 197, 24, .2)
-        }
-
-        .badge-closed {
-            background: rgba(63, 90, 118, .1);
-            color: var(--muted);
-            border: 1px solid var(--border)
-        }
-
-        /* ── BUTTONS */
-        .btn {
-            border: none;
-            cursor: pointer;
-            font-family: 'Cabinet Grotesk', sans-serif;
-            transition: all .2s
-        }
-
-        .btn-sm {
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: .75rem;
-            font-weight: 600
-        }
-
-        .btn-confirm {
-            background: rgba(0, 214, 143, .1);
-            border: 1px solid rgba(0, 214, 143, .25);
-            color: var(--yes)
-        }
-
-        .btn-confirm:hover {
-            background: rgba(0, 214, 143, .2);
-            border-color: var(--yes)
-        }
-
-        .btn-reject {
-            background: rgba(255, 61, 90, .1);
-            border: 1px solid rgba(255, 61, 90, .25);
-            color: var(--no)
-        }
-
-        .btn-reject:hover {
-            background: rgba(255, 61, 90, .2);
-            border-color: var(--no)
-        }
-
-        .btn-primary {
-            background: var(--yes);
-            color: #03140d;
-            font-weight: 800
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 18px rgba(0, 214, 143, .3)
-        }
-
-        .btn-ghost {
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            color: var(--dim)
-        }
-
-        .btn-ghost:hover {
-            border-color: var(--yes);
-            color: var(--yes)
-        }
-
-        .btn-resolve {
-            background: rgba(245, 197, 24, .1);
-            border: 1px solid rgba(245, 197, 24, .25);
-            color: var(--gold)
-        }
-
-        .btn-resolve:hover {
-            background: rgba(245, 197, 24, .2);
-            border-color: var(--gold)
-        }
-
-        .action-group {
-            display: flex;
-            gap: 6px
-        }
-
-        /* ── SEARCH/FILTER BAR */
-        .bar-row {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 16px;
-            flex-wrap: wrap;
-            align-items: center
-        }
-
-        .search {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-radius: 10px;
-            padding: 9px 14px;
-            color: var(--text);
-            font-family: inherit;
-            font-size: .85rem;
-            outline: none;
-            transition: border-color .2s;
-            min-width: 220px
-        }
-
-        .search:focus {
-            border-color: var(--yes)
-        }
-
-        .filter-sel {
-            background: var(--surface2);
-            border: 1px solid var(--border2);
-            border-radius: 10px;
-            padding: 9px 12px;
-            color: var(--dim);
-            font-family: inherit;
-            font-size: .82rem;
-            outline: none;
-            cursor: pointer
-        }
-
-        .filter-sel option {
-            background: var(--surface2)
-        }
-
-        /* ── MODAL */
-        .overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 500;
-            background: rgba(0, 0, 0, .75);
-            backdrop-filter: blur(10px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity .25s
-        }
-
-        .overlay.open {
-            opacity: 1;
-            pointer-events: all
-        }
-
-        .modal {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 18px;
-            width: 100%;
-            max-width: 480px;
-            max-height: 90vh;
-            overflow-y: auto;
-            padding: 26px;
-            transform: translateY(14px);
-            transition: transform .3s
-        }
-
-        .overlay.open .modal {
-            transform: translateY(0)
-        }
-
-        .mh {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px
-        }
-
-        .mh h2 {
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: 1.15rem
-        }
-
-        .mcl {
-            width: 30px;
-            height: 30px;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--dim);
-            font-size: 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all .2s
-        }
-
-        .mcl:hover {
-            border-color: var(--no);
-            color: var(--no)
-        }
-
-        .form-group {
-            margin-bottom: 16px
-        }
-
-        .label {
-            display: block;
-            font-size: .72rem;
-            font-weight: 600;
-            letter-spacing: .07em;
-            text-transform: uppercase;
-            color: var(--dim);
-            margin-bottom: 6px
-        }
-
-        .input,
-        .select {
-            width: 100%;
-            background: var(--surface2);
-            border: 1px solid var(--border);
-            border-radius: 9px;
-            padding: 10px 13px;
-            color: var(--text);
-            font-family: inherit;
-            font-size: .88rem;
-            outline: none;
-            transition: border-color .2s
-        }
-
-        .input:focus,
-        .select:focus {
-            border-color: var(--yes)
-        }
-
-        .select option {
-            background: var(--surface2)
-        }
-
-        .btn-submit {
-            width: 100%;
-            background: var(--yes);
-            color: #03140d;
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: .95rem;
-            padding: 12px;
-            border-radius: 10px;
-            border: none;
-            cursor: pointer;
-            transition: all .2s
-        }
-
-        .btn-submit:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 10px 26px rgba(0, 214, 143, .28)
-        }
-
-        .vote-detail {
-            background: var(--surface2);
-            border-radius: 10px;
-            padding: 14px;
-            margin-bottom: 16px
-        }
-
-        .vd-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 0;
-            font-size: .8rem;
-            color: var(--dim)
-        }
-
-        .vd-row strong {
-            color: var(--text)
-        }
-
-        .divider {
-            height: 1px;
-            background: var(--border);
-            margin: 12px 0
-        }
-
-        /* CHOICE BTNS */
-        .resolve-btns {
-            display: grid;
-            gap: 10px;
-            margin-bottom: 16px
-        }
-
-        .rbtn {
-            padding: 14px;
-            border-radius: 10px;
-            border: 1px solid;
-            font-family: 'Clash Display', sans-serif;
-            font-weight: 700;
-            font-size: .95rem;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            transition: all .2s
-        }
-
-        .rbtn-yes {
-            background: rgba(0, 214, 143, .07);
-            border-color: rgba(0, 214, 143, .25);
-            color: var(--yes)
-        }
-
-        .rbtn-yes:hover {
-            background: rgba(0, 214, 143, .14);
-            border-color: var(--yes)
-        }
-
-        .rbtn-no {
-            background: rgba(255, 61, 90, .07);
-            border-color: rgba(255, 61, 90, .25);
-            color: var(--no)
-        }
-
-        .rbtn-no:hover {
-            background: rgba(255, 61, 90, .14);
-            border-color: var(--no)
-        }
-
-        /* TOAST */
-        .toasts {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px
-        }
-
-        .toast {
-            background: var(--surface);
-            border: 1px solid var(--border2);
-            border-radius: 10px;
-            padding: 11px 15px;
-            font-size: .8rem;
-            max-width: 270px;
-            animation: tin .3s ease;
-            box-shadow: 0 6px 24px rgba(0, 0, 0, .4)
-        }
-
-        .toast.s {
-            border-color: rgba(0, 214, 143, .3)
-        }
-
-        .toast.e {
-            border-color: rgba(255, 61, 90, .3)
-        }
-
-        @keyframes tin {
-            from {
-                opacity: 0;
-                transform: translateX(14px)
-            }
-
-            to {
-                opacity: 1;
-                transform: translateX(0)
-            }
-        }
-
-        .spin {
-            width: 30px;
-            height: 30px;
-            border: 2px solid var(--border);
-            border-top-color: var(--yes);
-            border-radius: 50%;
-            animation: sp .65s linear infinite;
-            margin: 40px auto;
-            display: block
-        }
-
-        @keyframes sp {
-            to {
-                transform: rotate(360deg)
-            }
-        }
-
-        .empty-row td {
-            text-align: center;
-            padding: 40px;
-            color: var(--muted);
-            font-size: .85rem
-        }
-
-        @media(max-width:700px) {
-            .sidebar {
-                display: none
-            }
-
-            .content {
-                padding: 16px
-            }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin – ASPROC</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500;600&display=swap"
+    rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.0/beautify.min.js"></script>
+
+
+  <style>
+    /* ═══════════════════════════════════════════════
+   VARIÁVEIS – mantém identidade visual ASPROC
+═══════════════════════════════════════════════ */
+    :root {
+      --verde: #2d6a2d;
+      --verde-claro: #4a9e3f;
+      --verde-neon: #7bc95c;
+      --dourado: #c8a84b;
+      --terra: #8b4513;
+      --agua: #1a6b8a;
+      --branco: #f5f0e8;
+      --escuro: #0f1a0f;
+      --cinza: #1e2e1e;
+      --cinza2: #2a3a2a;
+      --painel-bg: #111d11;
+      --card-bg: #182818;
+      --borda: rgba(123, 201, 92, .15);
+      --borda-hover: rgba(123, 201, 92, .4);
+      --texto: #e8f0e8;
+      --texto-dim: rgba(232, 240, 232, .55);
+      --danger: #c0392b;
+      --warning: #d4a017;
+      --success: #27ae60;
+      --info: #2980b9;
+      --sidebar-w: 260px;
+      --header-h: 62px;
+      --radius: 10px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, .45);
+      --transition: .22s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--painel-bg);
+      color: var(--texto);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ═══════════════════════════════════════════════
+   TELA DE LOGIN
+═══════════════════════════════════════════════ */
+    #login-screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--escuro);
+      z-index: 9999;
+      transition: opacity .4s;
+    }
+
+    #login-screen.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .login-box {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: 18px;
+      padding: 3rem 2.8rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow);
+      animation: fadeUp .5s ease;
+    }
+
+    @keyframes fadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(24px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .login-logo {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .login-logo-icon {
+      width: 60px;
+      height: 60px;
+      background: linear-gradient(135deg, var(--verde), var(--verde-neon));
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      margin-bottom: .8rem;
+    }
+
+    .login-logo h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.5rem;
+      color: var(--branco);
+    }
+
+    .login-logo p {
+      font-size: .78rem;
+      color: var(--texto-dim);
+      margin-top: .2rem;
+    }
+
+    .login-field {
+      margin-bottom: 1.2rem;
+    }
+
+    .login-field label {
+      display: block;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--texto-dim);
+      margin-bottom: .45rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .login-field input {
+      width: 100%;
+      padding: .75rem 1rem;
+      background: var(--cinza);
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      color: var(--texto);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color var(--transition);
+    }
+
+    .login-field input:focus {
+      border-color: var(--verde-neon);
+    }
+
+    .login-field input::placeholder {
+      color: var(--texto-dim);
+    }
+
+    .btn-login {
+      width: 100%;
+      padding: .85rem;
+      background: linear-gradient(135deg, var(--verde), var(--verde-claro));
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity var(--transition), transform var(--transition);
+      margin-top: .5rem;
+    }
+
+    .btn-login:hover {
+      opacity: .88;
+      transform: translateY(-1px);
+    }
+
+    .btn-login:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .login-error {
+      color: #ff6b6b;
+      font-size: .82rem;
+      margin-top: .8rem;
+      text-align: center;
+      display: none;
+    }
+
+    .login-error.show {
+      display: block;
+    }
+
+    /* ═══════════════════════════════════════════════
+   LAYOUT PRINCIPAL
+═══════════════════════════════════════════════ */
+    #app {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* ─── SIDEBAR ─── */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--escuro);
+      border-right: 1px solid var(--borda);
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      display: flex;
+      flex-direction: column;
+      z-index: 200;
+      transition: transform var(--transition);
+    }
+
+    .sidebar-brand {
+      padding: 1.4rem 1.4rem 1rem;
+      border-bottom: 1px solid var(--borda);
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+    }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--verde), var(--verde-neon));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      flex-shrink: 0;
+    }
+
+    .brand-text h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      line-height: 1.2;
+    }
+
+    .brand-text span {
+      font-size: .7rem;
+      color: var(--texto-dim);
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 1rem 0;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      padding: .5rem 1.2rem .3rem;
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--texto-dim);
+      opacity: .6;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .7rem 1.4rem;
+      color: var(--texto-dim);
+      cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+      border-left: 3px solid transparent;
+      font-size: .88rem;
+      font-weight: 500;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background: rgba(123, 201, 92, .07);
+      color: var(--texto);
+    }
+
+    .nav-item.active {
+      background: rgba(123, 201, 92, .12);
+      color: var(--verde-neon);
+      border-left-color: var(--verde-neon);
+    }
+
+    .nav-item .ni-icon {
+      width: 18px;
+      text-align: center;
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: var(--verde-neon);
+      color: var(--escuro);
+      border-radius: 99px;
+      padding: .1rem .45rem;
+      font-size: .68rem;
+      font-weight: 700;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .nav-badge.danger {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .sidebar-footer {
+      padding: 1rem 1.4rem;
+      border-top: 1px solid var(--borda);
+    }
+
+    .user-info {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      margin-bottom: .8rem;
+    }
+
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      background: linear-gradient(135deg, var(--verde), var(--dourado));
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .85rem;
+      color: #fff;
+    }
+
+    .user-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .user-meta strong {
+      display: block;
+      font-size: .85rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .user-meta span {
+      font-size: .72rem;
+      color: var(--verde-neon);
+    }
+
+    .btn-logout {
+      width: 100%;
+      padding: .55rem;
+      background: rgba(192, 57, 43, .15);
+      border: 1px solid rgba(192, 57, 43, .3);
+      border-radius: 7px;
+      color: #ff8a80;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background var(--transition);
+    }
+
+    .btn-logout:hover {
+      background: rgba(192, 57, 43, .3);
+    }
+
+    /* ─── CONTEÚDO PRINCIPAL ─── */
+    .main-content {
+      flex: 1;
+      margin-left: var(--sidebar-w);
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* ─── HEADER SUPERIOR ─── */
+    .topbar {
+      height: var(--header-h);
+      background: var(--escuro);
+      border-bottom: 1px solid var(--borda);
+      display: flex;
+      align-items: center;
+      padding: 0 2rem;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .topbar-title {
+      flex: 1;
+    }
+
+    .topbar-title h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    .topbar-title p {
+      font-size: .78rem;
+      color: var(--texto-dim);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      padding: .55rem 1.1rem;
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--verde-claro);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--verde-neon);
+      color: var(--escuro);
+    }
+
+    .btn-secondary {
+      background: var(--cinza2);
+      color: var(--texto);
+      border: 1px solid var(--borda);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--borda-hover);
+    }
+
+    .btn-danger {
+      background: rgba(192, 57, 43, .2);
+      color: #ff8a80;
+      border: 1px solid rgba(192, 57, 43, .3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(192, 57, 43, .35);
+    }
+
+    .btn-success {
+      background: rgba(39, 174, 96, .2);
+      color: #69e89c;
+      border: 1px solid rgba(39, 174, 96, .3);
+    }
+
+    .btn-success:hover {
+      background: rgba(39, 174, 96, .35);
+    }
+
+    .btn-sm {
+      padding: .35rem .75rem;
+      font-size: .78rem;
+    }
+
+    .btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    /* ─── ÁREA DA PÁGINA ─── */
+    .page-content {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    /* ─── SEÇÕES (tabs) ─── */
+    .section {
+      display: none;
+    }
+
+    .section.active {
+      display: block;
+      animation: fadeIn .28s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    /* ─── CARDS DE ESTATÍSTICA ─── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: var(--radius);
+      padding: 1.4rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      transition: border-color var(--transition);
+    }
+
+    .stat-card:hover {
+      border-color: var(--borda-hover);
+    }
+
+    .stat-icon {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      flex-shrink: 0;
+    }
+
+    .stat-icon.verde {
+      background: rgba(74, 158, 63, .2);
+    }
+
+    .stat-icon.azul {
+      background: rgba(26, 107, 138, .2);
+    }
+
+    .stat-icon.dourado {
+      background: rgba(200, 168, 75, .2);
+    }
+
+    .stat-icon.vermelho {
+      background: rgba(192, 57, 43, .2);
+    }
+
+    .stat-body {
+      flex: 1;
+    }
+
+    .stat-num {
+      font-family: 'Fraunces', serif;
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: .78rem;
+      color: var(--texto-dim);
+      margin-top: .2rem;
+    }
+
+    /* ─── TABELA ─── */
+    .table-wrap {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .table-header {
+      padding: 1.2rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      border-bottom: 1px solid var(--borda);
+      flex-wrap: wrap;
+    }
+
+    .table-header h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.1rem;
+      flex: 1;
+    }
+
+    .search-input {
+      padding: .55rem 1rem;
+      background: var(--cinza);
+      border: 1px solid var(--borda);
+      border-radius: 7px;
+      color: var(--texto);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .85rem;
+      outline: none;
+      transition: border-color var(--transition);
+      width: 220px;
+    }
+
+    .search-input:focus {
+      border-color: var(--verde-neon);
+    }
+
+    .search-input::placeholder {
+      color: var(--texto-dim);
+    }
+
+    .select-filter {
+      padding: .55rem .9rem;
+      background: var(--cinza);
+      border: 1px solid var(--borda);
+      border-radius: 7px;
+      color: var(--texto);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .85rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      padding: .85rem 1.2rem;
+      text-align: left;
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--texto-dim);
+      border-bottom: 1px solid var(--borda);
+      background: rgba(0, 0, 0, .15);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid rgba(123, 201, 92, .06);
+      transition: background var(--transition);
+    }
+
+    tbody tr:last-child {
+      border-bottom: none;
+    }
+
+    tbody tr:hover {
+      background: rgba(123, 201, 92, .04);
+    }
+
+    tbody td {
+      padding: .9rem 1.2rem;
+      font-size: .86rem;
+      vertical-align: middle;
+    }
+
+    .td-title {
+      font-weight: 600;
+      max-width: 320px;
+    }
+
+    .td-title .subtitle {
+      font-size: .75rem;
+      color: var(--texto-dim);
+      margin-top: .15rem;
+      font-weight: 400;
+    }
+
+    .td-actions {
+      display: flex;
+      gap: .4rem;
+      justify-content: flex-end;
+      white-space: nowrap;
+    }
+
+    /* ─── BADGES / TAGS ─── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: .2rem .65rem;
+      border-radius: 99px;
+      font-size: .72rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .badge-verde {
+      background: rgba(74, 158, 63, .2);
+      color: var(--verde-neon);
+    }
+
+    .badge-azul {
+      background: rgba(26, 107, 138, .2);
+      color: #5bc0de;
+    }
+
+    .badge-dourado {
+      background: rgba(200, 168, 75, .2);
+      color: var(--dourado);
+    }
+
+    .badge-terra {
+      background: rgba(139, 69, 19, .2);
+      color: #d4885a;
+    }
+
+    .badge-vermelho {
+      background: rgba(192, 57, 43, .2);
+      color: #ff8a80;
+    }
+
+    .badge-cinza {
+      background: rgba(255, 255, 255, .08);
+      color: var(--texto-dim);
+    }
+
+    /* ─── MODAL ─── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .75);
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+      animation: fadeIn .2s ease;
+    }
+
+    .modal {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 700px;
+      max-height: 92vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+      animation: slideUp .28s cubic-bezier(.4, 0, .2, 1);
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(40px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-head {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--borda);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .modal-head h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1.2rem;
+      flex: 1;
+    }
+
+    .modal-close {
+      width: 32px;
+      height: 32px;
+      background: var(--cinza2);
+      border: none;
+      border-radius: 50%;
+      color: var(--texto-dim);
+      cursor: pointer;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background var(--transition);
+    }
+
+    .modal-close:hover {
+      background: rgba(192, 57, 43, .3);
+      color: #ff8a80;
+    }
+
+    .modal-body {
+      padding: 1.5rem;
+    }
+
+    .modal-foot {
+      padding: 1.2rem 1.5rem;
+      border-top: 1px solid var(--borda);
+      display: flex;
+      justify-content: flex-end;
+      gap: .7rem;
+    }
+
+    /* ─── FORMULÁRIO ─── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .form-grid .full {
+      grid-column: 1 / -1;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+    }
+
+    .field label {
+      font-size: .78rem;
+      font-weight: 600;
+      color: var(--texto-dim);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      padding: .7rem 1rem;
+      background: var(--cinza);
+      border: 1px solid var(--borda);
+      border-radius: 8px;
+      color: var(--texto);
+      font-family: 'DM Sans', sans-serif;
+      font-size: .9rem;
+      outline: none;
+      transition: border-color var(--transition);
+      resize: vertical;
+    }
+
+    .field input:focus,
+    .field select,
+    .field textarea:focus {
+      border-color: var(--verde-neon);
+    }
+
+    .field textarea {
+      min-height: 120px;
+    }
+
+    .field select {
+      cursor: pointer;
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder {
+      color: var(--texto-dim);
+    }
+
+    /* Toggle switch */
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: .7rem;
+      cursor: pointer;
+    }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--cinza2);
+      border-radius: 24px;
+      transition: background var(--transition);
+      border: 1px solid var(--borda);
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 3px;
+      top: 3px;
+      background: var(--texto-dim);
+      border-radius: 50%;
+      transition: transform var(--transition), background var(--transition);
+    }
+
+    .toggle input:checked+.toggle-slider {
+      background: rgba(74, 158, 63, .35);
+      border-color: var(--verde-claro);
+    }
+
+    .toggle input:checked+.toggle-slider::before {
+      transform: translateX(20px);
+      background: var(--verde-neon);
+    }
+
+    .toggle-label {
+      font-size: .88rem;
+      color: var(--texto-dim);
+    }
+
+    /* ─── TOAST ─── */
+    #toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: .6rem;
+    }
+
+    .toast {
+      padding: .8rem 1.2rem;
+      border-radius: 9px;
+      font-size: .88rem;
+      font-weight: 500;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, .5);
+      animation: toastIn .3s ease;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      max-width: 340px;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(40px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    .toast.success {
+      background: rgba(39, 174, 96, .25);
+      border: 1px solid rgba(39, 174, 96, .4);
+      color: #69e89c;
+    }
+
+    .toast.error {
+      background: rgba(192, 57, 43, .25);
+      border: 1px solid rgba(192, 57, 43, .4);
+      color: #ff8a80;
+    }
+
+    .toast.info {
+      background: rgba(41, 128, 185, .25);
+      border: 1px solid rgba(41, 128, 185, .4);
+      color: #90caf9;
+    }
+
+    /* ─── LOADING ─── */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--borda);
+      border-top-color: var(--verde-neon);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ─── EMPTY STATE ─── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem;
+      color: var(--texto-dim);
+    }
+
+    .empty-state .es-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: .4;
+    }
+
+    .empty-state p {
+      font-size: .9rem;
+    }
+
+    /* ─── CANDIDATURAS ─── */
+    .cand-card {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: var(--radius);
+      padding: 1.2rem;
+      margin-bottom: .8rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      transition: border-color var(--transition);
+    }
+
+    .cand-card:hover {
+      border-color: var(--borda-hover);
+    }
+
+    .cand-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--verde), var(--dourado));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .cand-body {
+      flex: 1;
+    }
+
+    .cand-name {
+      font-weight: 600;
+      font-size: .95rem;
+    }
+
+    .cand-meta {
+      font-size: .78rem;
+      color: var(--texto-dim);
+      margin-top: .15rem;
+    }
+
+    .cand-actions {
+      display: flex;
+      gap: .4rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    /* ─── DASHBOARD EXTRA ─── */
+    .dash-row {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .dash-card {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: var(--radius);
+      padding: 1.4rem;
+    }
+
+    .dash-card h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: .7rem;
+      padding: .6rem 0;
+      border-bottom: 1px solid rgba(123, 201, 92, .06);
+    }
+
+    .activity-item:last-child {
+      border-bottom: none;
+    }
+
+    .activity-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--verde-neon);
+      margin-top: .35rem;
+      flex-shrink: 0;
+    }
+
+    .activity-text {
+      font-size: .84rem;
+      color: var(--texto-dim);
+    }
+
+    .activity-text strong {
+      color: var(--texto);
+    }
+
+    .activity-time {
+      font-size: .72rem;
+      color: var(--texto-dim);
+      opacity: .6;
+      margin-top: .15rem;
+    }
+
+    /* ─── CONFIG PAGE ─── */
+    .config-block {
+      background: var(--card-bg);
+      border: 1px solid var(--borda);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin-bottom: 1.2rem;
+    }
+
+    .config-block h3 {
+      font-family: 'Fraunces', serif;
+      font-size: 1rem;
+      margin-bottom: 1.2rem;
+      color: var(--texto);
+    }
+
+    .config-note {
+      background: rgba(200, 168, 75, .1);
+      border: 1px solid rgba(200, 168, 75, .25);
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      font-size: .84rem;
+      color: var(--dourado);
+      margin-bottom: 1.2rem;
+      line-height: 1.5;
+    }
+
+    .config-note a {
+      color: var(--verde-neon);
+      text-decoration: none;
+    }
+
+    /* ─── MOBILE ─── */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--texto);
+      font-size: 1.4rem;
+      cursor: pointer;
+      padding: .4rem;
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        transform: translateX(-100%);
+      }
+
+      .sidebar.open {
+        transform: translateX(0);
+        box-shadow: 4px 0 32px rgba(0, 0, 0, .7);
+      }
+
+      .main-content {
+        margin-left: 0;
+      }
+
+      .hamburger {
+        display: flex;
+      }
+
+      .dash-row {
+        grid-template-columns: 1fr;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .topbar {
+        padding: 0 1rem;
+      }
+
+      .page-content {
+        padding: 1rem;
+      }
+    }
+  </style>
 </head>
 
 <body>
 
-    <div class="toasts" id="toasts"></div>
-
-    <!-- LOGIN SCREEN -->
-    <div id="login-screen" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);
-  align-items:center;justify-content:center;padding:20px">
-        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:20px;
-    padding:36px;width:100%;max-width:400px">
-            <div style="font-family:'Clash Display',sans-serif;font-weight:700;font-size:1.4rem;
-      margin-bottom:4px;letter-spacing:-.03em">Prev<em style="font-style:normal;color:var(--yes)">ê</em>
-                <span style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.25);
-        color:#a855f7;font-size:.6rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-        padding:2px 8px;border-radius:50px;margin-left:8px;vertical-align:middle">Admin</span>
-            </div>
-            <p style="color:var(--muted);font-size:.82rem;margin-bottom:28px">Faça login para acessar o painel</p>
-            <div style="margin-bottom:14px">
-                <label style="display:block;font-size:.72rem;font-weight:600;text-transform:uppercase;
-        letter-spacing:.07em;color:var(--dim);margin-bottom:6px">E-mail</label>
-                <input class="input" id="adm-email" type="email" placeholder="admin@email.com"
-                    onkeydown="if(event.key==='Enter')doAdminLogin()">
-            </div>
-            <div style="margin-bottom:20px">
-                <label style="display:block;font-size:.72rem;font-weight:600;text-transform:uppercase;
-        letter-spacing:.07em;color:var(--dim);margin-bottom:6px">Senha</label>
-                <input class="input" id="adm-pass" type="password" placeholder="••••••••"
-                    onkeydown="if(event.key==='Enter')doAdminLogin()">
-            </div>
-            <button class="btn-submit" id="adm-login-btn" onclick="doAdminLogin()">Entrar no painel</button>
-            <p id="login-error" style="color:var(--no);font-size:.78rem;text-align:center;margin-top:12px;display:none">
-            </p>
-        </div>
+  <!-- ════════════════════════════════════════════════
+     TELA DE LOGIN
+════════════════════════════════════════════════ -->
+  <div id="login-screen">
+    <div class="login-box">
+      <div class="login-logo">
+        <div class="login-logo-icon">🌿</div>
+        <h1>ASPROC Admin</h1>
+        <p>Painel de Gerenciamento</p>
+      </div>
+      <div class="login-field">
+        <label>E-mail</label>
+        <input type="email" id="login-email" placeholder="admin@asproc.org.br" autocomplete="username">
+      </div>
+      <div class="login-field">
+        <label>Senha</label>
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-login" id="login-btn" onclick="doLogin()">Entrar no painel →</button>
+      <div class="login-error" id="login-error">E-mail ou senha incorretos. Verifique e tente novamente.</div>
     </div>
+  </div>
 
-    <!-- ACCESS DENIED SCREEN -->
-    <div id="denied-screen" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);
-  align-items:center;justify-content:center;padding:20px;text-align:center;flex-direction:column">
-        <div>
-            <div style="font-size:3rem;margin-bottom:16px">🚫</div>
-            <h2 style="font-family:'Clash Display',sans-serif;font-weight:700;font-size:1.4rem;margin-bottom:8px">Acesso
-                negado</h2>
-            <p style="color:var(--muted);font-size:.88rem;margin-bottom:24px">Sua conta não tem permissão de
-                administrador.</p>
-            <p style="color:var(--dim);font-size:.78rem;margin-bottom:20px;line-height:1.6">
-                Peça para um admin rodar no Supabase SQL Editor:<br>
-                <code style="background:var(--surface2);padding:6px 12px;border-radius:6px;font-size:.75rem;
-        color:var(--yes);display:inline-block;margin-top:8px;word-break:break-all">
-        UPDATE profiles SET is_admin = TRUE WHERE id = 'seu-uuid';
-      </code>
-            </p>
-            <button class="btn-submit" style="max-width:200px;margin:0 auto;display:block" onclick="doAdminLogout()">←
-                Sair da conta</button>
-        </div>
-    </div>
+  <!-- ════════════════════════════════════════════════
+     APP PRINCIPAL
+════════════════════════════════════════════════ -->
+  <div id="app" style="display:none;">
 
     <!-- SIDEBAR -->
-    <aside class="sidebar" style="display:none">
-        <div class="sb-logo">Prev<em>ê</em><span class="sb-badge">Admin</span></div>
-        <nav class="nav">
-            <button class="nav-item active" onclick="showPage('dashboard',this)"><span
-                    class="nav-icon">📊</span>Dashboard</button>
-            <button class="nav-item" onclick="showPage('votes',this)"><span class="nav-icon">🗳️</span>Votos
-                Pendentes</button>
-            <button class="nav-item" onclick="showPage('events',this)"><span class="nav-icon">🎯</span>Eventos</button>
-            <button class="nav-item" onclick="showPage('users',this)"><span class="nav-icon">👥</span>Usuários</button>
-            <button class="nav-item" onclick="showPage('financial',this)"><span
-                    class="nav-icon">💰</span>Financeiro</button>
-        </nav>
-        <div class="sb-bottom">
-            <a href="#" class="back-btn" onclick="handleBackBtn()">← Voltar ao site</a>
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">🌿</div>
+        <div class="brand-text">
+          <h2>ASPROC</h2>
+          <span>Painel Admin</span>
         </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">Principal</div>
+        <div class="nav-item active" onclick="goTo('dashboard',this)">
+          <span class="ni-icon">📊</span> Dashboard
+        </div>
+
+        <div class="nav-section">Conteúdo</div>
+        <div class="nav-item" onclick="goTo('noticias',this)">
+          <span class="ni-icon">📰</span> Notícias
+          <span class="nav-badge" id="badge-noticias">–</span>
+        </div>
+        <div class="nav-item" onclick="goTo('vagas',this)">
+          <span class="ni-icon">💼</span> Vagas
+          <span class="nav-badge" id="badge-vagas">–</span>
+        </div>
+        <div class="nav-item" onclick="goTo('avisos',this)">
+          <span class="ni-icon">📢</span> Avisos
+          <span class="nav-badge" id="badge-avisos">–</span>
+        </div>
+
+        <div class="nav-section">Candidaturas</div>
+        <div class="nav-item" onclick="goTo('candidaturas',this)">
+          <span class="ni-icon">📋</span> Candidaturas
+          <span class="nav-badge danger" id="badge-cand">–</span>
+        </div>
+
+        <div class="nav-section">Sistema</div>
+        <div class="nav-item" onclick="goTo('configuracoes',this)">
+          <span class="ni-icon">⚙️</span> Configurações
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar">A</div>
+          <div class="user-meta">
+            <strong id="user-name">Admin</strong>
+            <span>Administrador</span>
+          </div>
+        </div>
+        <button class="btn-logout" onclick="doLogout()">⏻ Sair</button>
+      </div>
     </aside>
 
-    <!-- CONTENT -->
-    <div class="content" style="display:none">
+    <!-- CONTEÚDO PRINCIPAL -->
+    <div class="main-content">
 
-        <!-- DASHBOARD -->
-        <div class="page active" id="p-dashboard">
-            <div class="page-title">Dashboard</div>
-            <div class="page-sub">Visão geral do sistema</div>
-            <div class="stat-grid" id="stat-grid">
-                <div class="spin"></div>
+      <!-- TOPBAR -->
+      <div class="topbar">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <div class="topbar-title">
+          <h1 id="topbar-title">Dashboard</h1>
+          <p id="topbar-sub">Visão geral do conteúdo publicado</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary" id="topbar-action-btn" onclick="openModal(currentSection)"
+            style="display:none;">+ Novo</button>
+          <a href="index_asproc.html" target="_blank" class="btn btn-secondary btn-sm">🔗 Ver Site</a>
+        </div>
+      </div>
+
+      <!-- PÁGINAS -->
+      <div class="page-content">
+
+        <!-- ── DASHBOARD ── -->
+        <section class="section active" id="sec-dashboard">
+          <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon verde">📰</div>
+              <div class="stat-body">
+                <div class="stat-num" id="stat-noticias">–</div>
+                <div class="stat-label">Notícias publicadas</div>
+              </div>
             </div>
-            <div class="table-wrap">
-                <div class="tw-header">
-                    <div>
-                        <div class="tw-title">Últimos votos</div>
-                        <div class="tw-sub">Pendentes de confirmação</div>
-                    </div>
-                    <button class="btn btn-sm btn-primary"
-                        onclick="showPage('votes',document.querySelector('.nav-item:nth-child(2)'))">Ver todos</button>
+            <div class="stat-card">
+              <div class="stat-icon azul">💼</div>
+              <div class="stat-body">
+                <div class="stat-num" id="stat-vagas">–</div>
+                <div class="stat-label">Vagas abertas</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon dourado">📢</div>
+              <div class="stat-body">
+                <div class="stat-num" id="stat-avisos">–</div>
+                <div class="stat-label">Avisos ativos</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon vermelho">📋</div>
+              <div class="stat-body">
+                <div class="stat-num" id="stat-cand">–</div>
+                <div class="stat-label">Candidaturas novas</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dash-row">
+            <div class="dash-card">
+              <h3>⚡ Atividade Recente</h3>
+              <div id="activity-feed">
+                <div class="loading">
+                  <div class="spinner"></div>
                 </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Evento</th>
-                            <th>Usuário</th>
-                            <th>Escolha</th>
-                            <th>Comprovante</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="dash-votes-table">
-                        <tr>
-                            <td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Carregando...</td>
-                        </tr>
-                    </tbody>
-                </table>
+              </div>
             </div>
-        </div>
+            <div class="dash-card">
+              <h3>🔗 Acesso Rápido</h3>
+              <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem;">
+                <button class="btn btn-primary"
+                  onclick="goTo('noticias', document.querySelector('[onclick*=noticias]')); openModal('noticias')">+
+                  Nova Notícia</button>
+                <button class="btn btn-secondary"
+                  onclick="goTo('vagas', document.querySelector('[onclick*=vagas]')); openModal('vagas')">+ Nova
+                  Vaga</button>
+                <button class="btn btn-secondary"
+                  onclick="goTo('avisos', document.querySelector('[onclick*=avisos]')); openModal('avisos')">+ Novo
+                  Aviso</button>
+                <a href="noticias.html" target="_blank" class="btn btn-secondary">🔗 Ver Notícias</a>
+                <a href="trabalhe-conosco.html" target="_blank" class="btn btn-secondary">🔗 Ver Vagas</a>
+                <a href="avisos.html" target="_blank" class="btn btn-secondary">🔗 Ver Avisos</a>
+              </div>
+            </div>
+          </div>
 
-        <!-- VOTES -->
-        <div class="page" id="p-votes">
-            <div class="page-title">Votos Pendentes</div>
-            <div class="page-sub">Confirme ou rejeite os pagamentos PIX</div>
-            <div class="bar-row">
-                <input class="search" id="vote-search" placeholder="Buscar usuário ou evento..."
-                    oninput="filterVotesTable()">
-                <select class="filter-sel" id="vote-status-filter" onchange="filterVotesTable()">
-                    <option value="all">Todos status</option>
-                    <option value="pending" selected>Pendentes</option>
-                    <option value="confirmed">Confirmados</option>
-                    <option value="rejected">Rejeitados</option>
-                </select>
-            </div>
-            <div class="table-wrap">
-                <div class="tw-header">
-                    <div>
-                        <div class="tw-title" id="votes-table-title">Votos</div>
-                    </div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Evento</th>
-                            <th>Usuário</th>
-                            <th>PIX</th>
-                            <th>Escolha</th>
-                            <th>Comprovante</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="votes-table"></tbody>
-                </table>
-            </div>
-        </div>
+          <div class="config-note">
+            ⚠️ <strong>Configure o Supabase</strong> antes de usar: vá em <strong>Configurações → Conexão
+              Supabase</strong> e insira sua URL e chave anon. Depois execute o SQL do arquivo
+            <code>supabase_setup.sql</code> no painel do Supabase.
+          </div>
+        </section>
 
-        <!-- EVENTS -->
-        <div class="page" id="p-events">
-            <div class="page-title">Eventos</div>
-            <div class="page-sub">Gerencie, resolva e crie eventos</div>
-            <div class="bar-row">
-                <button class="btn btn-sm btn-primary" onclick="openModal('createEventModal')"
-                    style="padding:9px 16px">＋ Novo Evento</button>
-                <select class="filter-sel" id="ev-status-filter" onchange="filterEventsTable()">
-                    <option value="all">Todos</option>
-                    <option value="active">Ativos</option>
-                    <option value="resolved">Resolvidos</option>
-                    <option value="closed">Encerrados</option>
-                </select>
+        <!-- ── NOTÍCIAS ── -->
+        <section class="section" id="sec-noticias">
+          <div class="table-wrap">
+            <div class="table-header">
+              <h3>📰 Notícias</h3>
+              <input class="search-input" type="text" placeholder="🔍 Buscar…"
+                oninput="filterTable('noticias-tbody',this.value)">
+              <select class="select-filter" onchange="filterByCat('noticias',this.value)">
+                <option value="">Todas categorias</option>
+                <option value="pirarucu">🐟 Pirarucu</option>
+                <option value="olea">🌿 Oleaginosas</option>
+                <option value="sanear">💧 Saneamento</option>
+                <option value="comercio">🛒 Comércio</option>
+                <option value="vagas">📋 Vagas</option>
+                <option value="geral">📌 Geral</option>
+              </select>
+              <button class="btn btn-primary" onclick="openModal('noticias')">+ Nova notícia</button>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Evento</th>
-                            <th>Categoria</th>
-                            <th>SIM</th>
-                            <th>NÃO</th>
-                            <th>Pool</th>
-                            <th>Prazo</th>
-                            <th>Status</th>
-                            <th>Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody id="events-table"></tbody>
-                </table>
+            <div id="noticias-loading" class="loading">
+              <div class="spinner"></div>
             </div>
-        </div>
+            <table id="noticias-table" style="display:none;">
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Categoria</th>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th>Destaque</th>
+                  <th style="text-align:right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="noticias-tbody"></tbody>
+            </table>
+            <div class="empty-state" id="noticias-empty" style="display:none;">
+              <div class="es-icon">📰</div>
+              <p>Nenhuma notícia encontrada.</p>
+            </div>
+          </div>
+        </section>
 
-        <!-- USERS -->
-        <div class="page" id="p-users">
-            <div class="page-title">Usuários</div>
-            <div class="page-sub">Todos os usuários cadastrados</div>
-            <div class="bar-row">
-                <input class="search" id="user-search" placeholder="Buscar nome ou e-mail..."
-                    oninput="filterUsersTable()">
+        <!-- ── VAGAS ── -->
+        <section class="section" id="sec-vagas">
+          <div class="table-wrap">
+            <div class="table-header">
+              <h3>💼 Vagas</h3>
+              <input class="search-input" type="text" placeholder="🔍 Buscar…"
+                oninput="filterTable('vagas-tbody',this.value)">
+              <select class="select-filter" onchange="filterByStatus('vagas',this.value)">
+                <option value="">Todos status</option>
+                <option value="aberta">Aberta</option>
+                <option value="encerrada">Encerrada</option>
+                <option value="suspensa">Suspensa</option>
+              </select>
+              <button class="btn btn-primary" onclick="openModal('vagas')">+ Nova vaga</button>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Usuário</th>
-                            <th>E-mail</th>
-                            <th>PIX cadastrado</th>
-                            <th>Votos</th>
-                            <th>Vitórias</th>
-                            <th>Ganhos</th>
-                            <th>Saldo</th>
-                            <th>Admin</th>
-                        </tr>
-                    </thead>
-                    <tbody id="users-table"></tbody>
-                </table>
+            <div id="vagas-loading" class="loading">
+              <div class="spinner"></div>
             </div>
-        </div>
+            <table id="vagas-table" style="display:none;">
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Local</th>
+                  <th>Regime</th>
+                  <th>Prazo</th>
+                  <th>Status</th>
+                  <th style="text-align:right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="vagas-tbody"></tbody>
+            </table>
+            <div class="empty-state" id="vagas-empty" style="display:none;">
+              <div class="es-icon">💼</div>
+              <p>Nenhuma vaga encontrada.</p>
+            </div>
+          </div>
+        </section>
 
-        <!-- FINANCIAL -->
-        <div class="page" id="p-financial">
-            <div class="page-title">Financeiro</div>
-            <div class="page-sub">Receitas, taxas e distribuição de prêmios</div>
-            <div class="stat-grid" id="fin-stat-grid">
-                <div class="spin"></div>
+        <!-- ── AVISOS ── -->
+        <section class="section" id="sec-avisos">
+          <div class="table-wrap">
+            <div class="table-header">
+              <h3>📢 Avisos</h3>
+              <input class="search-input" type="text" placeholder="🔍 Buscar…"
+                oninput="filterTable('avisos-tbody',this.value)">
+              <select class="select-filter" onchange="filterByTipo('avisos',this.value)">
+                <option value="">Todos tipos</option>
+                <option value="doc">📋 Documento</option>
+                <option value="urgente">🔴 Urgente</option>
+                <option value="info">ℹ️ Informativo</option>
+              </select>
+              <button class="btn btn-primary" onclick="openModal('avisos')">+ Novo aviso</button>
             </div>
-            <div class="table-wrap">
-                <div class="tw-header">
-                    <div class="tw-title">Transações de carteira</div>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Data</th>
-                            <th>Usuário</th>
-                            <th>Tipo</th>
-                            <th>Valor</th>
-                            <th>Evento</th>
-                        </tr>
-                    </thead>
-                    <tbody id="fin-table"></tbody>
-                </table>
+            <div id="avisos-loading" class="loading">
+              <div class="spinner"></div>
             </div>
-        </div>
+            <table id="avisos-table" style="display:none;">
+              <thead>
+                <tr>
+                  <th>Título</th>
+                  <th>Tipo</th>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th style="text-align:right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="avisos-tbody"></tbody>
+            </table>
+            <div class="empty-state" id="avisos-empty" style="display:none;">
+              <div class="es-icon">📢</div>
+              <p>Nenhum aviso encontrado.</p>
+            </div>
+          </div>
+        </section>
 
-    </div><!-- /content -->
+        <!-- ── CANDIDATURAS ── -->
+        <section class="section" id="sec-candidaturas">
+          <div class="table-wrap" style="margin-bottom:1rem;">
+            <div class="table-header">
+              <h3>📋 Candidaturas recebidas</h3>
+              <select class="select-filter" id="cand-status-filter" onchange="loadCandidaturas(this.value)">
+                <option value="">Todos status</option>
+                <option value="nova">Novas</option>
+                <option value="em_analise">Em análise</option>
+                <option value="aprovada">Aprovadas</option>
+                <option value="reprovada">Reprovadas</option>
+              </select>
+            </div>
+          </div>
+          <div id="cand-loading" class="loading">
+            <div class="spinner"></div>
+          </div>
+          <div id="cand-list"></div>
+          <div class="empty-state" id="cand-empty" style="display:none;">
+            <div class="es-icon">📋</div>
+            <p>Nenhuma candidatura encontrada.</p>
+          </div>
+        </section>
 
-    <!-- CREATE EVENT MODAL -->
-    <div class="overlay" id="createEventModal" onclick="bgClose(event,'createEventModal')">
-        <div class="modal">
-            <div class="mh">
-                <h2>Criar Evento</h2><button class="mcl" onclick="closeModal('createEventModal')">✕</button>
+        <!-- ── CONFIGURAÇÕES ── -->
+        <section class="section" id="sec-configuracoes">
+          <div class="config-note">
+            🔑 Configure sua conexão com o Supabase. As credenciais ficam salvas apenas neste navegador (localStorage).
+            <a href="https://supabase.com/dashboard" target="_blank">Acessar painel Supabase →</a>
+          </div>
+
+          <div class="config-block">
+            <h3>🔗 Conexão Supabase</h3>
+            <div class="form-grid">
+              <div class="field full">
+                <label>Supabase URL</label>
+                <input type="text" id="cfg-url" placeholder="https://xyzcompany.supabase.co">
+              </div>
+              <div class="field full">
+                <label>Anon Key (pública)</label>
+                <input type="text" id="cfg-key" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+              </div>
             </div>
-            <div class="form-group"><label class="label">Título *</label><input class="input" id="ce-title" type="text"
-                    placeholder="Pergunta do evento..."></div>
-            <div class="form-group"><label class="label">Descrição</label><input class="input" id="ce-desc" type="text"
-                    placeholder="Contexto..."></div>
-            <div class="form-group"><label class="label">Categoria</label>
-                <select class="select" id="ce-cat">
-                    <option>Política</option>
-                    <option>Esportes</option>
-                    <option>Economia</option>
-                    <option>Entretenimento</option>
-                    <option>Tecnologia</option>
-                    <option>Outros</option>
-                </select>
+            <div style="margin-top:1rem;display:flex;gap:.7rem;">
+              <button class="btn btn-primary" onclick="saveConfig()">💾 Salvar configuração</button>
+              <button class="btn btn-secondary" onclick="testConnection()">🔌 Testar conexão</button>
             </div>
-            <div class="form-group"><label class="label">Data de encerramento *</label><input class="input" id="ce-dead"
-                    type="datetime-local"></div>
-            <button class="btn-submit" onclick="adminCreateEvent()">Publicar Evento</button>
+          </div>
+
+          <div class="config-block">
+            <h3>📦 Banco de Dados</h3>
+            <p style="font-size:.86rem;color:var(--texto-dim);margin-bottom:1rem;">Execute o arquivo <code
+                style="background:var(--cinza);padding:.15rem .4rem;border-radius:4px;">supabase_setup.sql</code> no SQL
+              Editor do Supabase para criar as tabelas e importar os dados existentes do site.</p>
+            <a href="supabase_setup.sql" download class="btn btn-secondary">⬇ Baixar supabase_setup.sql</a>
+          </div>
+
+          <div class="config-block">
+            <h3>🌐 Integração com as páginas do site</h3>
+            <p style="font-size:.86rem;color:var(--texto-dim);margin-bottom:1rem;">Adicione o bloco abaixo no
+              <code>&lt;head&gt;</code> de cada página (<code>noticias.html</code>, <code>avisos.html</code>,
+              <code>trabalhe-conosco.html</code>) para que busquem dados do Supabase automaticamente:
+            </p>
+            <pre id="integration-snippet"
+              style="background:var(--cinza);border:1px solid var(--borda);border-radius:8px;padding:1rem;font-size:.78rem;overflow-x:auto;color:var(--verde-neon);white-space:pre-wrap;"></pre>
+            <button class="btn btn-secondary btn-sm" onclick="copySnippet()" style="margin-top:.7rem;">📋 Copiar
+              código</button>
+          </div>
+        </section>
+
+      </div><!-- /page-content -->
+    </div><!-- /main-content -->
+  </div><!-- /app -->
+
+  <!-- ════════════════════════════════════════════════
+     MODAIS
+════════════════════════════════════════════════ -->
+
+  <!-- Modal Notícia -->
+  <div class="modal-overlay" id="modal-noticias">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-noticias-title">Nova Notícia</h3>
+        <button class="modal-close" onclick="closeModal('noticias')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field full">
+            <label>Título *</label>
+            <input type="text" id="n-titulo" placeholder="Título da notícia">
+          </div>
+          <div class="field full">
+            <label>Resumo *</label>
+            <textarea id="n-resumo" placeholder="Texto curto que aparece nos cards (1-2 frases)"
+              style="min-height:80px;"></textarea>
+          </div>
+          <div class="field full">
+            <label>Conteúdo completo</label>
+            <textarea id="n-conteudo" placeholder="Texto completo da notícia..." style="min-height:180px;"></textarea>
+          </div>
+          <div class="field">
+            <label>Categoria *</label>
+            <select id="n-categoria">
+              <option value="geral">📌 Geral</option>
+              <option value="pirarucu">🐟 Pirarucu</option>
+              <option value="olea">🌿 Oleaginosas</option>
+              <option value="sanear">💧 Saneamento</option>
+              <option value="comercio">🛒 Comércio</option>
+              <option value="vagas">📋 Vagas</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Data de publicação *</label>
+            <input type="date" id="n-data">
+          </div>
+          <div class="field full">
+            <label>URL externa (link da notícia original)</label>
+            <input type="url" id="n-url" placeholder="https://asproc.org.br/noticia...">
+          </div>
+          <div class="field full">
+            <label>URL da imagem</label>
+            <input type="url" id="n-imagem" placeholder="https://...">
+          </div>
+          <div class="field" style="justify-content:flex-end;padding-top:.5rem;">
+            <label class="toggle-wrap">
+              <span class="toggle"><input type="checkbox" id="n-destaque"><span class="toggle-slider"></span></span>
+              <span class="toggle-label">Notícia em destaque</span>
+            </label>
+          </div>
+          <div class="field" style="justify-content:flex-end;padding-top:.5rem;">
+            <label class="toggle-wrap">
+              <span class="toggle"><input type="checkbox" id="n-publicado" checked><span
+                  class="toggle-slider"></span></span>
+              <span class="toggle-label">Publicada no site</span>
+            </label>
+          </div>
         </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('noticias')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveNoticia()">💾 Salvar notícia</button>
+      </div>
     </div>
+  </div>
 
-    <!-- RESOLVE EVENT MODAL -->
-    <div class="overlay" id="resolveModal" onclick="bgClose(event,'resolveModal')">
-        <div class="modal">
-            <div class="mh">
-                <h2>⚖️ Resolver Evento</h2><button class="mcl" onclick="closeModal('resolveModal')">✕</button>
-            </div>
-            <p id="rm-title" style="color:var(--dim);font-size:.88rem;line-height:1.6;margin-bottom:18px"></p>
-            <div id="rm-pool-info" style="margin-bottom:18px"></div>
-            <div class="resolve-btns">
-                <button class="rbtn rbtn-yes" onclick="doResolve('yes')">✅ SIM venceu — distribuir prêmios</button>
-                <button class="rbtn rbtn-no" onclick="doResolve('no')">❌ NÃO venceu — distribuir prêmios</button>
-            </div>
+  <!-- Modal Vaga -->
+  <div class="modal-overlay" id="modal-vagas">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-vagas-title">Nova Vaga</h3>
+        <button class="modal-close" onclick="closeModal('vagas')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field full">
+            <label>Título da vaga *</label>
+            <input type="text" id="v-titulo" placeholder="Ex: Assistente Técnico Rural">
+          </div>
+          <div class="field full">
+            <label>Descrição *</label>
+            <textarea id="v-descricao"
+              placeholder="Descrição detalhada da vaga, responsabilidades, perfil desejado..."></textarea>
+          </div>
+          <div class="field">
+            <label>Local *</label>
+            <input type="text" id="v-local" placeholder="Ex: Carauari/AM" value="Carauari/AM">
+          </div>
+          <div class="field">
+            <label>Regime *</label>
+            <select id="v-regime">
+              <option value="CLT">CLT</option>
+              <option value="PJ/Consultoria">PJ / Consultoria</option>
+              <option value="Voluntário">Voluntário</option>
+              <option value="Estágio">Estágio</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Carga horária</label>
+            <select id="v-carga">
+              <option value="Integral">Integral</option>
+              <option value="Parcial">Parcial</option>
+              <option value="Campo">Campo</option>
+              <option value="Remoto">Remoto</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Escolaridade mínima</label>
+            <input type="text" id="v-escolaridade" placeholder="Ex: Ensino Superior" value="Ensino Superior">
+          </div>
+          <div class="field">
+            <label>Prazo de inscrição</label>
+            <input type="date" id="v-prazo">
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="v-status">
+              <option value="aberta">✅ Aberta</option>
+              <option value="encerrada">❌ Encerrada</option>
+              <option value="suspensa">⏸ Suspensa</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label>URL do edital (PDF)</label>
+            <input type="url" id="v-edital" placeholder="https://...">
+          </div>
         </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('vagas')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveVaga()">💾 Salvar vaga</button>
+      </div>
     </div>
+  </div>
 
-    <!-- VOTE DETAIL MODAL -->
-    <div class="overlay" id="voteDetailModal" onclick="bgClose(event,'voteDetailModal')">
-        <div class="modal">
-            <div class="mh">
-                <h2>Detalhe do Voto</h2><button class="mcl" onclick="closeModal('voteDetailModal')">✕</button>
-            </div>
-            <div id="vd-content"></div>
-            <div class="action-group" id="vd-actions"></div>
+  <!-- Modal Aviso -->
+  <div class="modal-overlay" id="modal-avisos">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modal-avisos-title">Novo Aviso</h3>
+        <button class="modal-close" onclick="closeModal('avisos')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="field full">
+            <label>Título *</label>
+            <input type="text" id="a-titulo" placeholder="Título do aviso">
+          </div>
+          <div class="field full">
+            <label>Descrição *</label>
+            <textarea id="a-descricao" placeholder="Texto completo do aviso..."></textarea>
+          </div>
+          <div class="field">
+            <label>Tipo *</label>
+            <select id="a-tipo">
+              <option value="info">ℹ️ Informativo</option>
+              <option value="urgente">🔴 Urgente</option>
+              <option value="doc">📋 Documento</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Data de publicação *</label>
+            <input type="date" id="a-data">
+          </div>
+          <div class="field full">
+            <label>URL do documento (PDF)</label>
+            <input type="url" id="a-doc" placeholder="https://...">
+          </div>
+          <div class="field" style="justify-content:flex-end;padding-top:.5rem;">
+            <label class="toggle-wrap">
+              <span class="toggle"><input type="checkbox" id="a-publicado" checked><span
+                  class="toggle-slider"></span></span>
+              <span class="toggle-label">Publicado no site</span>
+            </label>
+          </div>
         </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('avisos')">Cancelar</button>
+        <button class="btn btn-primary" onclick="saveAviso()">💾 Salvar aviso</button>
+      </div>
     </div>
+  </div>
 
-    <script>
-        const SB_URL = 'https://bjaabqeqhkfoukmleldr.supabase.co';
-        const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJqYWFicWVxaGtmb3VrbWxlbGRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1MDQwMTEsImV4cCI6MjA4ODA4MDAxMX0.-hqHxchqQWYHFeSYS1ofz3X7YCV2C1Zlxv1QTZbdiuM';
+  <!-- Modal Candidatura -->
+  <div class="modal-overlay" id="modal-cand-detail">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-head">
+        <h3>Detalhes da Candidatura</h3>
+        <button class="modal-close" onclick="closeModal('cand-detail')">✕</button>
+      </div>
+      <div class="modal-body" id="cand-detail-body"></div>
+      <div class="modal-foot">
+        <button class="btn btn-secondary" onclick="closeModal('cand-detail')">Fechar</button>
+        <button class="btn btn-success btn-sm" id="cand-aprovar-btn">✅ Aprovar</button>
+        <button class="btn btn-danger btn-sm" id="cand-reprovar-btn">❌ Reprovar</button>
+      </div>
+    </div>
+  </div>
 
+  <!-- Toast container -->
+  <div id="toast-container"></div>
 
-        let sb, adminUser, adminProfile;
-        let allVotes = [], allEvents = [], allUsers = [], allTransactions = [];
-        let resolvingEv = null;
+  <!-- ════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════ -->
+  <script>
+    /* ══════════════════════════════════════════
+       CONFIG SUPABASE
+    ══════════════════════════════════════════ */
+    const CONFIG_KEY = 'asproc_admin_config';
 
-        // ─── INIT
-        async function init() {
-            if (SB_URL === 'YOUR_SUPABASE_URL') {
-                showLoginScreen();
-                document.getElementById('login-error').textContent = '⚠️ Configure SUPABASE_URL e SUPABASE_ANON_KEY no script.';
-                document.getElementById('login-error').style.display = 'block';
-                document.getElementById('adm-login-btn').disabled = true;
-                return;
-            }
-            sb = window.supabase.createClient(SB_URL, SB_KEY);
+    function getConfig() {
+      try {
+        return JSON.parse(localStorage.getItem(CONFIG_KEY)) || {};
+      } catch { return {}; }
+    }
 
-            // Show login while checking session
-            showLoginScreen();
+    function getSupabase() {
+      const cfg = getConfig();
+      return { url: cfg.url || '', key: cfg.key || '' };
+    }
 
-            const { data: { session } } = await sb.auth.getSession();
-            if (!session) return; // stays on login screen
+    // Snippet de integração para as páginas do site
+    document.getElementById('integration-snippet').textContent = `<!-- Cole no <head> de noticias.html, avisos.html e trabalhe-conosco.html -->
+<script>
+  const SUPABASE_URL = 'https://pajjntbnrmfweqrdpvpy.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBhampudGJucm1md2VxcmRwdnB5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzI3MDksImV4cCI6MjA4ODgwODcwOX0.a_krlTkjWT_mys_RpvzPRxyYpDn7eS9BB-OajLQepGM';
 
-            await handleSession(session);
+  async function fetchSupabase(table, params = '') {
+    const r = await fetch(SUPABASE_URL + '/rest/v1/' + table + '?' + params, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer ' + SUPABASE_KEY
+      }
+    });
+    return r.json();
+  }
+<\/script>`;
 
-            // React to future login/logout
-            sb.auth.onAuthStateChange(async (_evt, sess) => {
-                if (sess) await handleSession(sess);
-                else { adminUser = null; adminProfile = null; showLoginScreen(); }
-            });
+    /* ══════════════════════════════════════════
+       HELPERS DE API SUPABASE (REST)
+    ══════════════════════════════════════════ */
+    async function sbFetch(table, params = '', opts = {}) {
+      const { url, key } = getSupabase();
+      if (!url || !key) throw new Error('Supabase não configurado. Acesse Configurações.');
+
+      const headers = {
+        'apikey': key,
+        'Authorization': 'Bearer ' + key,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      };
+
+      const endpoint = `${url}/rest/v1/${table}${params ? '?' + params : ''}`;
+      const res = await fetch(endpoint, { headers, ...opts });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Erro ${res.status}`);
+      }
+      if (res.status === 204) return null;
+      return res.json();
+    }
+
+    async function sbSelect(table, params = '') {
+      return sbFetch(table, params || 'select=*&order=created_at.desc');
+    }
+
+    async function sbInsert(table, data) {
+      return sbFetch(table, '', { method: 'POST', body: JSON.stringify(data) });
+    }
+
+    async function sbUpdate(table, id, data) {
+      return sbFetch(table, `id=eq.${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+    }
+
+    async function sbDelete(table, id) {
+      return sbFetch(table, `id=eq.${id}`, { method: 'DELETE' });
+    }
+
+    async function sbCount(table, params = '') {
+      const { url, key } = getSupabase();
+      if (!url || !key) return 0;
+      const res = await fetch(`${url}/rest/v1/${table}?${params}&select=id`, {
+        headers: { 'apikey': key, 'Authorization': 'Bearer ' + key, 'Prefer': 'count=exact', 'Range': '0-0' }
+      });
+      const count = res.headers.get('Content-Range');
+      return count ? parseInt(count.split('/')[1]) || 0 : 0;
+    }
+
+    /* ══════════════════════════════════════════
+       AUTH (usa Supabase Auth)
+    ══════════════════════════════════════════ */
+    let currentUser = null;
+    let currentSection = 'dashboard';
+    let editingId = {};  // { noticias: null, vagas: null, avisos: null }
+
+    async function doLogin() {
+      const email = document.getElementById('login-email').value.trim();
+      const pass = document.getElementById('login-pass').value;
+      const btn = document.getElementById('login-btn');
+      const err = document.getElementById('login-error');
+      const { url, key } = getSupabase();
+
+      err.classList.remove('show');
+      btn.disabled = true;
+      btn.textContent = 'Entrando…';
+
+      try {
+        if (!url || !key) throw new Error('Configure o Supabase primeiro. Abra admin.html, vá em Configurações e salve suas credenciais.');
+
+        const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+          method: 'POST',
+          headers: { 'apikey': key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password: pass })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error_description || data.msg || 'Credenciais inválidas');
+
+        currentUser = data.user;
+        localStorage.setItem('asproc_token', data.access_token);
+        localStorage.setItem('asproc_user', JSON.stringify(data.user));
+
+        showApp(data.user);
+      } catch (e) {
+        err.textContent = e.message;
+        err.classList.add('show');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Entrar no painel →';
+      }
+    }
+
+    function showApp(user) {
+      document.getElementById('login-screen').classList.add('hide');
+      document.getElementById('app').style.display = 'flex';
+
+      const name = user.email.split('@')[0];
+      document.getElementById('user-name').textContent = name;
+      document.getElementById('user-avatar').textContent = name[0].toUpperCase();
+
+      initApp();
+    }
+
+    function doLogout() {
+      localStorage.removeItem('asproc_token');
+      localStorage.removeItem('asproc_user');
+      location.reload();
+    }
+
+    function checkSession() {
+      const token = localStorage.getItem('asproc_token');
+      const userStr = localStorage.getItem('asproc_user');
+      if (token && userStr) {
+        try {
+          const user = JSON.parse(userStr);
+          currentUser = user;
+          showApp(user);
+          return;
+        } catch { }
+      }
+      // Sem sessão: mostrar login
+      document.getElementById('login-screen').style.display = 'flex';
+    }
+
+    // Handle Enter key on login
+    document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+    document.getElementById('login-email').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    /* ══════════════════════════════════════════
+       NAVEGAÇÃO
+    ══════════════════════════════════════════ */
+    const sectionTitles = {
+      dashboard: ['Dashboard', 'Visão geral do conteúdo publicado'],
+      noticias: ['Notícias', 'Gerencie as publicações do site'],
+      vagas: ['Vagas', 'Gerencie os processos seletivos'],
+      avisos: ['Avisos', 'Gerencie os comunicados oficiais'],
+      candidaturas: ['Candidaturas', 'Analise as candidaturas recebidas'],
+      configuracoes: ['Configurações', 'Configure a integração com o Supabase'],
+    };
+
+    function goTo(section, el) {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+
+      document.getElementById('sec-' + section).classList.add('active');
+      if (el) el.classList.add('active');
+
+      const [title, sub] = sectionTitles[section] || [section, ''];
+      document.getElementById('topbar-title').textContent = title;
+      document.getElementById('topbar-sub').textContent = sub;
+
+      const showBtn = ['noticias', 'vagas', 'avisos'].includes(section);
+      const actionBtn = document.getElementById('topbar-action-btn');
+      actionBtn.style.display = showBtn ? 'flex' : 'none';
+      if (showBtn) {
+        actionBtn.textContent = `+ Novo(a)`;
+        actionBtn.onclick = () => openModal(section);
+      }
+
+      currentSection = section;
+      loadSection(section);
+      closeSidebar();
+    }
+
+    /* ══════════════════════════════════════════
+       INICIALIZAÇÃO
+    ══════════════════════════════════════════ */
+    function initApp() {
+      loadConfig();
+      loadDashboard();
+      loadSection('noticias');
+      loadSection('vagas');
+      loadSection('avisos');
+      loadCandidaturas();
+    }
+
+    function loadConfig() {
+      const cfg = getConfig();
+      document.getElementById('cfg-url').value = cfg.url || '';
+      document.getElementById('cfg-key').value = cfg.key || '';
+    }
+
+    function saveConfig() {
+      const url = document.getElementById('cfg-url').value.trim();
+      const key = document.getElementById('cfg-key').value.trim();
+      localStorage.setItem(CONFIG_KEY, JSON.stringify({ url, key }));
+      toast('Configuração salva!', 'success');
+    }
+
+    async function testConnection() {
+      try {
+        const data = await sbSelect('noticias', 'select=id&limit=1');
+        toast('✅ Conexão com Supabase OK!', 'success');
+      } catch (e) {
+        toast('❌ Falha: ' + e.message, 'error');
+      }
+    }
+
+    /* ══════════════════════════════════════════
+       DASHBOARD
+    ══════════════════════════════════════════ */
+    async function loadDashboard() {
+      try {
+        const [nCount, vCount, aCount, cCount] = await Promise.all([
+          sbCount('noticias', 'publicado=eq.true'),
+          sbCount('vagas', 'status=eq.aberta'),
+          sbCount('avisos', 'publicado=eq.true'),
+          sbCount('candidaturas', 'status=eq.nova'),
+        ]);
+        document.getElementById('stat-noticias').textContent = nCount;
+        document.getElementById('stat-vagas').textContent = vCount;
+        document.getElementById('stat-avisos').textContent = aCount;
+        document.getElementById('stat-cand').textContent = cCount;
+        document.getElementById('badge-noticias').textContent = nCount;
+        document.getElementById('badge-vagas').textContent = vCount;
+        document.getElementById('badge-avisos').textContent = aCount;
+        document.getElementById('badge-cand').textContent = cCount;
+
+        // Feed de atividade recente
+        const recentes = await sbSelect('noticias', 'select=titulo,created_at&order=created_at.desc&limit=5');
+        const feed = document.getElementById('activity-feed');
+        if (recentes && recentes.length) {
+          feed.innerHTML = recentes.map(n => `
+        <div class="activity-item">
+          <div class="activity-dot"></div>
+          <div>
+            <div class="activity-text"><strong>${escHtml(n.titulo)}</strong> publicada</div>
+            <div class="activity-time">${formatDate(n.created_at)}</div>
+          </div>
+        </div>`).join('');
+        } else {
+          feed.innerHTML = '<p style="font-size:.85rem;color:var(--texto-dim)">Nenhuma atividade ainda.</p>';
         }
+      } catch (e) {
+        document.getElementById('activity-feed').innerHTML = `<p style="font-size:.82rem;color:var(--texto-dim)">Configure o Supabase para ver estatísticas.</p>`;
+      }
+    }
 
-        async function handleSession(session) {
-            adminUser = session.user;
-            const { data: prof } = await sb.from('profiles').select('*').eq('id', adminUser.id).single();
-            adminProfile = prof;
-            if (!prof?.is_admin) { showAccessDenied(); return; }
-            hideLoginScreen();
-            await loadAll();
-            renderDashboard();
+    /* ══════════════════════════════════════════
+       SEÇÕES GENÉRICAS
+    ══════════════════════════════════════════ */
+    function loadSection(section) {
+      if (section === 'noticias') loadNoticias();
+      if (section === 'vagas') loadVagas();
+      if (section === 'avisos') loadAvisos();
+      if (section === 'candidaturas') loadCandidaturas();
+    }
+
+    /* ══════════════════════════════════════════
+       NOTÍCIAS
+    ══════════════════════════════════════════ */
+    let allNoticias = [];
+
+    async function loadNoticias() {
+      showLoading('noticias');
+      try {
+        allNoticias = await sbSelect('noticias', 'select=*&order=data_pub.desc,created_at.desc') || [];
+        renderNoticias(allNoticias);
+      } catch (e) {
+        showError('noticias', e.message);
+      }
+    }
+
+    function renderNoticias(list) {
+      const tbody = document.getElementById('noticias-tbody');
+      const table = document.getElementById('noticias-table');
+      const empty = document.getElementById('noticias-empty');
+      const loading = document.getElementById('noticias-loading');
+
+      loading.style.display = 'none';
+
+      if (!list.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+      table.style.display = 'table'; empty.style.display = 'none';
+
+      tbody.innerHTML = list.map(n => `
+    <tr data-search="${escSearch(n.titulo + ' ' + n.resumo)}">
+      <td class="td-title">
+        ${escHtml(n.titulo)}
+        <div class="subtitle">${escHtml(n.resumo?.substring(0, 80))}…</div>
+      </td>
+      <td>${catBadge(n.categoria)}</td>
+      <td style="white-space:nowrap">${fmtDate(n.data_pub)}</td>
+      <td>${n.publicado ? '<span class="badge badge-verde">✅ Publicada</span>' : '<span class="badge badge-cinza">⏸ Rascunho</span>'}</td>
+      <td>${n.destaque ? '<span class="badge badge-dourado">⭐ Sim</span>' : '<span style="color:var(--texto-dim);font-size:.8rem">—</span>'}</td>
+      <td class="td-actions">
+        ${n.url_externa ? `<a href="${escHtml(n.url_externa)}" target="_blank" class="btn btn-secondary btn-sm">🔗</a>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="editNoticia('${n.id}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem('noticias','${n.id}',loadNoticias)">🗑</button>
+      </td>
+    </tr>`).join('');
+    }
+
+    function filterByCat(section, val) {
+      if (section === 'noticias') {
+        renderNoticias(val ? allNoticias.filter(n => n.categoria === val) : allNoticias);
+      }
+    }
+
+    function editNoticia(id) {
+      const n = allNoticias.find(x => x.id === id);
+      if (!n) return;
+      editingId.noticias = id;
+      document.getElementById('modal-noticias-title').textContent = 'Editar Notícia';
+      document.getElementById('n-titulo').value = n.titulo || '';
+      document.getElementById('n-resumo').value = n.resumo || '';
+      document.getElementById('n-conteudo').value = n.conteudo || '';
+      document.getElementById('n-categoria').value = n.categoria || 'geral';
+      document.getElementById('n-data').value = n.data_pub || '';
+      document.getElementById('n-url').value = n.url_externa || '';
+      document.getElementById('n-imagem').value = n.imagem_url || '';
+      document.getElementById('n-destaque').checked = !!n.destaque;
+      document.getElementById('n-publicado').checked = !!n.publicado;
+      openModal('noticias');
+    }
+
+    async function saveNoticia() {
+      const data = {
+        titulo: document.getElementById('n-titulo').value.trim(),
+        resumo: document.getElementById('n-resumo').value.trim(),
+        conteudo: document.getElementById('n-conteudo').value.trim(),
+        categoria: document.getElementById('n-categoria').value,
+        data_pub: document.getElementById('n-data').value || new Date().toISOString().split('T')[0],
+        url_externa: document.getElementById('n-url').value.trim() || null,
+        imagem_url: document.getElementById('n-imagem').value.trim() || null,
+        destaque: document.getElementById('n-destaque').checked,
+        publicado: document.getElementById('n-publicado').checked,
+      };
+
+      if (!data.titulo || !data.resumo) { toast('Preencha título e resumo.', 'error'); return; }
+
+      try {
+        if (editingId.noticias) {
+          await sbUpdate('noticias', editingId.noticias, data);
+          toast('Notícia atualizada!', 'success');
+        } else {
+          await sbInsert('noticias', data);
+          toast('Notícia publicada!', 'success');
         }
+        closeModal('noticias');
+        loadNoticias();
+        loadDashboard();
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
 
-        async function loadAll() {
-            const [v, e, u, t] = await Promise.all([
-                sb.from('votes').select('*,profiles(username,email,pix_key),events(title,category)').order('created_at', { ascending: false }),
-                sb.from('events').select('*').order('created_at', { ascending: false }),
-                sb.from('profiles').select('*').order('created_at', { ascending: false }),
-                sb.from('wallet_transactions').select('*,profiles(username),events(title)').order('created_at', { ascending: false }).limit(100),
-            ]);
-            allVotes = v.data || [];
-            allEvents = e.data || [];
-            allUsers = u.data || [];
-            allTransactions = t.data || [];
+    /* ══════════════════════════════════════════
+       VAGAS
+    ══════════════════════════════════════════ */
+    let allVagas = [];
+
+    async function loadVagas() {
+      showLoading('vagas');
+      try {
+        allVagas = await sbSelect('vagas', 'select=*&order=created_at.desc') || [];
+        renderVagas(allVagas);
+      } catch (e) { showError('vagas', e.message); }
+    }
+
+    function renderVagas(list) {
+      const tbody = document.getElementById('vagas-tbody');
+      const table = document.getElementById('vagas-table');
+      const empty = document.getElementById('vagas-empty');
+      const loading = document.getElementById('vagas-loading');
+
+      loading.style.display = 'none';
+
+      if (!list.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+      table.style.display = 'table'; empty.style.display = 'none';
+
+      tbody.innerHTML = list.map(v => `
+    <tr data-search="${escSearch(v.titulo + ' ' + v.local)}">
+      <td class="td-title">${escHtml(v.titulo)}<div class="subtitle">${escHtml(v.escolaridade || '')}</div></td>
+      <td>${escHtml(v.local)}</td>
+      <td>${escHtml(v.regime)}</td>
+      <td style="white-space:nowrap">${v.prazo ? fmtDate(v.prazo) : '—'}</td>
+      <td>${statusBadge(v.status)}</td>
+      <td class="td-actions">
+        <button class="btn btn-secondary btn-sm" onclick="editVaga('${v.id}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem('vagas','${v.id}',loadVagas)">🗑</button>
+      </td>
+    </tr>`).join('');
+    }
+
+    function filterByStatus(section, val) {
+      if (section === 'vagas') renderVagas(val ? allVagas.filter(v => v.status === val) : allVagas);
+    }
+
+    function editVaga(id) {
+      const v = allVagas.find(x => x.id === id);
+      if (!v) return;
+      editingId.vagas = id;
+      document.getElementById('modal-vagas-title').textContent = 'Editar Vaga';
+      document.getElementById('v-titulo').value = v.titulo || '';
+      document.getElementById('v-descricao').value = v.descricao || '';
+      document.getElementById('v-local').value = v.local || '';
+      document.getElementById('v-regime').value = v.regime || 'CLT';
+      document.getElementById('v-carga').value = v.carga_horaria || 'Integral';
+      document.getElementById('v-escolaridade').value = v.escolaridade || '';
+      document.getElementById('v-prazo').value = v.prazo || '';
+      document.getElementById('v-status').value = v.status || 'aberta';
+      document.getElementById('v-edital').value = v.edital_url || '';
+      openModal('vagas');
+    }
+
+    async function saveVaga() {
+      const data = {
+        titulo: document.getElementById('v-titulo').value.trim(),
+        descricao: document.getElementById('v-descricao').value.trim(),
+        local: document.getElementById('v-local').value.trim(),
+        regime: document.getElementById('v-regime').value,
+        carga_horaria: document.getElementById('v-carga').value,
+        escolaridade: document.getElementById('v-escolaridade').value.trim(),
+        prazo: document.getElementById('v-prazo').value || null,
+        status: document.getElementById('v-status').value,
+        edital_url: document.getElementById('v-edital').value.trim() || null,
+      };
+
+      if (!data.titulo || !data.descricao) { toast('Preencha título e descrição.', 'error'); return; }
+
+      try {
+        if (editingId.vagas) {
+          await sbUpdate('vagas', editingId.vagas, data);
+          toast('Vaga atualizada!', 'success');
+        } else {
+          await sbInsert('vagas', data);
+          toast('Vaga publicada!', 'success');
         }
+        closeModal('vagas');
+        loadVagas();
+        loadDashboard();
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
 
-        // ─── PAGES
-        function showPage(id, btn) {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-            document.getElementById('p-' + id).classList.add('active');
-            if (btn) btn.classList.add('active');
-            const renders = { dashboard: renderDashboard, votes: renderVotes, events: renderEvents, users: renderUsers, financial: renderFinancial };
-            renders[id]?.();
+    /* ══════════════════════════════════════════
+       AVISOS
+    ══════════════════════════════════════════ */
+    let allAvisos = [];
+
+    async function loadAvisos() {
+      showLoading('avisos');
+      try {
+        allAvisos = await sbSelect('avisos', 'select=*&order=data_pub.desc,created_at.desc') || [];
+        renderAvisos(allAvisos);
+      } catch (e) { showError('avisos', e.message); }
+    }
+
+    function renderAvisos(list) {
+      const tbody = document.getElementById('avisos-tbody');
+      const table = document.getElementById('avisos-table');
+      const empty = document.getElementById('avisos-empty');
+      const loading = document.getElementById('avisos-loading');
+
+      loading.style.display = 'none';
+
+      if (!list.length) { table.style.display = 'none'; empty.style.display = 'block'; return; }
+      table.style.display = 'table'; empty.style.display = 'none';
+
+      tbody.innerHTML = list.map(a => `
+    <tr data-search="${escSearch(a.titulo + ' ' + a.descricao)}">
+      <td class="td-title">${escHtml(a.titulo)}<div class="subtitle">${escHtml(a.descricao?.substring(0, 70))}…</div></td>
+      <td>${tipoBadge(a.tipo)}</td>
+      <td style="white-space:nowrap">${fmtDate(a.data_pub)}</td>
+      <td>${a.publicado ? '<span class="badge badge-verde">✅ Publicado</span>' : '<span class="badge badge-cinza">⏸ Oculto</span>'}</td>
+      <td class="td-actions">
+        ${a.doc_url ? `<a href="${escHtml(a.doc_url)}" target="_blank" class="btn btn-secondary btn-sm">📄</a>` : ''}
+        <button class="btn btn-secondary btn-sm" onclick="editAviso('${a.id}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem('avisos','${a.id}',loadAvisos)">🗑</button>
+      </td>
+    </tr>`).join('');
+    }
+
+    function filterByTipo(section, val) {
+      if (section === 'avisos') renderAvisos(val ? allAvisos.filter(a => a.tipo === val) : allAvisos);
+    }
+
+    function editAviso(id) {
+      const a = allAvisos.find(x => x.id === id);
+      if (!a) return;
+      editingId.avisos = id;
+      document.getElementById('modal-avisos-title').textContent = 'Editar Aviso';
+      document.getElementById('a-titulo').value = a.titulo || '';
+      document.getElementById('a-descricao').value = a.descricao || '';
+      document.getElementById('a-tipo').value = a.tipo || 'info';
+      document.getElementById('a-data').value = a.data_pub || '';
+      document.getElementById('a-doc').value = a.doc_url || '';
+      document.getElementById('a-publicado').checked = !!a.publicado;
+      openModal('avisos');
+    }
+
+    async function saveAviso() {
+      const data = {
+        titulo: document.getElementById('a-titulo').value.trim(),
+        descricao: document.getElementById('a-descricao').value.trim(),
+        tipo: document.getElementById('a-tipo').value,
+        data_pub: document.getElementById('a-data').value || new Date().toISOString().split('T')[0],
+        doc_url: document.getElementById('a-doc').value.trim() || null,
+        publicado: document.getElementById('a-publicado').checked,
+      };
+
+      if (!data.titulo || !data.descricao) { toast('Preencha título e descrição.', 'error'); return; }
+
+      try {
+        if (editingId.avisos) {
+          await sbUpdate('avisos', editingId.avisos, data);
+          toast('Aviso atualizado!', 'success');
+        } else {
+          await sbInsert('avisos', data);
+          toast('Aviso publicado!', 'success');
         }
+        closeModal('avisos');
+        loadAvisos();
+        loadDashboard();
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
 
-        // ─── DASHBOARD
-        function renderDashboard() {
-            const pending = allVotes.filter(v => v.payment_status === 'pending').length;
-            const confirmed = allVotes.filter(v => v.payment_status === 'confirmed').length;
-            const totalFee = allVotes.filter(v => v.payment_status === 'confirmed').reduce((a, v) => a + parseFloat(v.platform_fee || 0), 0);
-            const pool = allVotes.filter(v => v.payment_status === 'confirmed').reduce((a, v) => a + parseFloat(v.pool_amount || 0), 0);
+    /* ══════════════════════════════════════════
+       CANDIDATURAS
+    ══════════════════════════════════════════ */
+    let allCandidaturas = [];
+    let detailCandId = null;
 
-            document.getElementById('stat-grid').innerHTML = `
-    ${sc('Votos pendentes', pending, '⏳', 'y', 'Aguardando confirmação')}
-    ${sc('Votos confirmados', confirmed, '✅', 'g', 'Pagamentos validados')}
-    ${sc('Taxas coletadas', 'R$' + totalFee.toFixed(2).replace('.', ','), '💰', 'b', 'Receita da plataforma')}
-    ${sc('Pool em jogo', 'R$' + pool.toFixed(2).replace('.', ','), '🎯', 'r', 'Total distribuível')}
-    ${sc('Eventos ativos', allEvents.filter(e => e.status === 'active').length, '🔥', 'g', 'Votações abertas')}
-    ${sc('Total usuários', allUsers.length, '👥', 'b', 'Cadastrados')}`;
+    async function loadCandidaturas(statusFilter = '') {
+      document.getElementById('cand-loading').style.display = 'flex';
+      document.getElementById('cand-list').innerHTML = '';
+      document.getElementById('cand-empty').style.display = 'none';
 
-            const pending_v = allVotes.filter(v => v.payment_status === 'pending').slice(0, 8);
-            document.getElementById('dash-votes-table').innerHTML = pending_v.length ?
-                pending_v.map(v => voteRow(v)).join('') :
-                `<tr><td colspan="6" class="empty-row">Nenhum voto pendente 🎉</td></tr>`;
-        }
+      try {
+        const params = statusFilter
+          ? `select=*&status=eq.${statusFilter}&order=created_at.desc`
+          : 'select=*&order=created_at.desc';
+        allCandidaturas = await sbSelect('candidaturas', params) || [];
+        renderCandidaturas(allCandidaturas);
+      } catch (e) {
+        document.getElementById('cand-loading').style.display = 'none';
+        document.getElementById('cand-empty').style.display = 'block';
+      }
+    }
 
-        function sc(label, val, icon, cls, sub) {
-            return `<div class="scard ${cls}"><div class="sc-icon">${icon}</div>
-    <div class="sc-label">${label}</div>
-    <div class="sc-val">${val}</div>
-    <div class="sc-sub">${sub}</div></div>`;
-        }
+    function renderCandidaturas(list) {
+      document.getElementById('cand-loading').style.display = 'none';
+      const container = document.getElementById('cand-list');
 
-        // ─── VOTES TABLE
-        function renderVotes() {
-            filterVotesTable();
-        }
-        function filterVotesTable() {
-            const q = document.getElementById('vote-search')?.value.toLowerCase() || '';
-            const st = document.getElementById('vote-status-filter')?.value || 'pending';
-            let vts = allVotes;
-            if (st !== 'all') vts = vts.filter(v => v.payment_status === st);
-            if (q) vts = vts.filter(v =>
-                (v.profiles?.username || '').toLowerCase().includes(q) ||
-                (v.events?.title || '').toLowerCase().includes(q));
-            document.getElementById('votes-table-title').textContent = `${vts.length} votos`;
-            document.getElementById('votes-table').innerHTML = vts.length ?
-                vts.map(v => voteRow(v, true)).join('') :
-                `<tr><td colspan="8" class="empty-row">Nenhum voto encontrado</td></tr>`;
-        }
+      if (!list.length) { document.getElementById('cand-empty').style.display = 'block'; return; }
 
-        function voteRow(v, full = false) {
-            const date = new Date(v.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-            const bMap = { pending: 'badge-pending', confirmed: 'badge-confirmed', rejected: 'badge-rejected' };
-            const bTxt = { pending: 'Pendente', confirmed: 'Confirmado', rejected: 'Rejeitado' };
-            const actions = v.payment_status === 'pending' ?
-                `<div class="action-group">
-      <button class="btn btn-sm btn-confirm" onclick='openVoteDetail(${JSON.stringify(v).replace(/"/g, '&quot;')})'>Ver</button>
-      <button class="btn btn-sm btn-confirm" onclick="quickConfirm('${v.id}')">✓ Confirmar</button>
-      <button class="btn btn-sm btn-reject" onclick="quickReject('${v.id}')">✕ Rejeitar</button>
-    </div>` :
-                `<span style="font-size:.75rem;color:var(--muted)">${bTxt[v.payment_status]}</span>`;
+      container.innerHTML = list.map(c => `
+    <div class="cand-card">
+      <div class="cand-avatar">${(c.nome || '?')[0].toUpperCase()}</div>
+      <div class="cand-body">
+        <div class="cand-name">${escHtml(c.nome)}</div>
+        <div class="cand-meta">${escHtml(c.email)} · Vaga: <strong>${escHtml(c.vaga)}</strong> · ${formatDate(c.created_at)}</div>
+      </div>
+      <div class="cand-actions">
+        ${candStatusBadge(c.status)}
+        <button class="btn btn-secondary btn-sm" onclick="viewCandidatura('${c.id}')">👁 Ver</button>
+      </div>
+    </div>`).join('');
+    }
 
-            if (full) return `<tr>
-    <td style="color:var(--muted);font-size:.75rem">${date}</td>
-    <td class="td-truncate" title="${v.events?.title || ''}">${v.events?.title || '—'}</td>
-    <td>${v.profiles?.username || '—'}</td>
-    <td style="font-size:.72rem;color:var(--dim)">${v.profiles?.pix_key || '—'}</td>
-    <td><strong style="color:${v.choice === 'yes' ? 'var(--yes)' : 'var(--no)'}">${v.choice === 'yes' ? '✅ SIM' : '❌ NÃO'}</strong></td>
-    <td class="td-truncate" style="font-size:.75rem;color:var(--dim)" title="${v.pix_proof || ''}">${v.pix_proof || '—'}</td>
-    <td><span class="badge ${bMap[v.payment_status]}">${bTxt[v.payment_status]}</span></td>
-    <td>${actions}</td></tr>`;
+    function viewCandidatura(id) {
+      const c = allCandidaturas.find(x => x.id === id);
+      if (!c) return;
+      detailCandId = id;
 
-            // Short version for dashboard
-            return `<tr>
-    <td class="td-truncate">${v.events?.title || '—'}</td>
-    <td>${v.profiles?.username || '—'}</td>
-    <td><strong style="color:${v.choice === 'yes' ? 'var(--yes)' : 'var(--no)'}">${v.choice === 'yes' ? '✅ SIM' : '❌ NÃO'}</strong></td>
-    <td class="td-truncate" style="font-size:.75rem;color:var(--dim)">${v.pix_proof || '—'}</td>
-    <td><span class="badge ${bMap[v.payment_status]}">${bTxt[v.payment_status]}</span></td>
-    <td>${actions}</td></tr>`;
-        }
-
-        function openVoteDetail(v) {
-            document.getElementById('vd-content').innerHTML = `
-    <div class="vote-detail">
-      <div class="vd-row"><span>Evento</span><strong>${v.events?.title || '—'}</strong></div>
-      <div class="vd-row"><span>Usuário</span><strong>@${v.profiles?.username || '—'}</strong></div>
-      <div class="vd-row"><span>E-mail</span><strong>${v.profiles?.email || '—'}</strong></div>
-      <div class="vd-row"><span>Chave PIX do usuário</span><strong>${v.profiles?.pix_key || '—'}</strong></div>
-      <div class="divider"></div>
-      <div class="vd-row"><span>Escolha</span><strong style="color:${v.choice === 'yes' ? 'var(--yes)' : 'var(--no)'}">${v.choice === 'yes' ? '✅ SIM' : '❌ NÃO'}</strong></div>
-      <div class="vd-row"><span>Valor pago</span><strong>R$ ${parseFloat(v.amount_paid || 5).toFixed(2)}</strong></div>
-      <div class="vd-row"><span>Taxa plataforma</span><strong>R$ ${parseFloat(v.platform_fee || 1.90).toFixed(2)}</strong></div>
-      <div class="vd-row"><span>Entrada no pool</span><strong>R$ ${parseFloat(v.pool_amount || 3.10).toFixed(2)}</strong></div>
-      <div class="divider"></div>
-      <div class="vd-row"><span>Comprovante PIX</span></div>
-      <div style="background:var(--surface2);border-radius:8px;padding:10px;margin-top:6px;
-        font-family:monospace;font-size:.78rem;color:var(--yes);word-break:break-all">${v.pix_proof || '—'}</div>
-      <div class="vd-row" style="margin-top:8px"><span>Data</span><strong>${new Date(v.created_at).toLocaleString('pt-BR')}</strong></div>
+      document.getElementById('cand-detail-body').innerHTML = `
+    <div style="display:grid;gap:.8rem;">
+      <div><strong>Nome:</strong> ${escHtml(c.nome)}</div>
+      <div><strong>E-mail:</strong> <a href="mailto:${escHtml(c.email)}" style="color:var(--verde-neon)">${escHtml(c.email)}</a></div>
+      <div><strong>Telefone:</strong> ${c.telefone ? escHtml(c.telefone) : '—'}</div>
+      <div><strong>Vaga:</strong> ${escHtml(c.vaga)}</div>
+      <div><strong>Status:</strong> ${candStatusBadge(c.status)}</div>
+      <div><strong>Mensagem:</strong><br><div style="background:var(--cinza);border-radius:8px;padding:.8rem;margin-top:.4rem;font-size:.88rem;color:var(--texto-dim)">${escHtml(c.mensagem || '(sem mensagem)')}</div></div>
+      ${c.curriculo_url ? `<div><a href="${escHtml(c.curriculo_url)}" target="_blank" class="btn btn-secondary btn-sm">📄 Ver Currículo</a></div>` : ''}
+      <div style="font-size:.75rem;color:var(--texto-dim)">Recebida em ${formatDate(c.created_at)}</div>
     </div>`;
 
-            const acts = document.getElementById('vd-actions');
-            if (v.payment_status === 'pending') {
-                acts.innerHTML = `
-      <button class="btn btn-sm btn-confirm" style="flex:1;padding:10px" onclick="quickConfirm('${v.id}');closeModal('voteDetailModal')">✅ Confirmar pagamento</button>
-      <button class="btn btn-sm btn-reject" style="flex:1;padding:10px" onclick="quickReject('${v.id}');closeModal('voteDetailModal')">✕ Rejeitar</button>`;
-            } else {
-                acts.innerHTML = `<p style="color:var(--muted);font-size:.8rem">Voto já processado.</p>`;
-            }
-            openModal('voteDetailModal');
+      document.getElementById('cand-aprovar-btn').onclick = () => updateCandStatus(id, 'aprovada');
+      document.getElementById('cand-reprovar-btn').onclick = () => updateCandStatus(id, 'reprovada');
+      openModal('cand-detail');
+    }
+
+    async function updateCandStatus(id, status) {
+      try {
+        await sbUpdate('candidaturas', id, { status });
+        toast(`Candidatura ${status === 'aprovada' ? 'aprovada' : 'reprovada'}!`, status === 'aprovada' ? 'success' : 'info');
+        closeModal('cand-detail');
+        loadCandidaturas();
+        loadDashboard();
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+    }
+
+    /* ══════════════════════════════════════════
+       DELETE GENÉRICO
+    ══════════════════════════════════════════ */
+    async function deleteItem(table, id, reloadFn) {
+      if (!confirm('Tem certeza que deseja excluir este item? Esta ação não pode ser desfeita.')) return;
+      try {
+        await sbDelete(table, id);
+        toast('Item excluído.', 'info');
+        reloadFn();
+        loadDashboard();
+      } catch (e) { toast('Erro ao excluir: ' + e.message, 'error'); }
+    }
+
+    /* ══════════════════════════════════════════
+       MODAIS
+    ══════════════════════════════════════════ */
+    function openModal(name) {
+      // Resetar IDs de edição se for novo
+      if (!editingId[name]) {
+        document.getElementById('modal-' + name + '-title').textContent = {
+          noticias: 'Nova Notícia', vagas: 'Nova Vaga', avisos: 'Novo Aviso'
+        }[name] || 'Novo';
+        clearForm(name);
+      }
+      document.getElementById('modal-' + name).classList.add('open');
+    }
+
+    function closeModal(name) {
+      document.getElementById('modal-' + name).classList.remove('open');
+      editingId[name] = null;
+    }
+
+    function clearForm(name) {
+      if (name === 'noticias') {
+        ['n-titulo', 'n-resumo', 'n-conteudo', 'n-url', 'n-imagem'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('n-categoria').value = 'geral';
+        document.getElementById('n-data').value = new Date().toISOString().split('T')[0];
+        document.getElementById('n-destaque').checked = false;
+        document.getElementById('n-publicado').checked = true;
+      }
+      if (name === 'vagas') {
+        ['v-titulo', 'v-descricao', 'v-edital'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('v-local').value = 'Carauari/AM';
+        document.getElementById('v-regime').value = 'CLT';
+        document.getElementById('v-carga').value = 'Integral';
+        document.getElementById('v-escolaridade').value = 'Ensino Superior';
+        document.getElementById('v-prazo').value = '';
+        document.getElementById('v-status').value = 'aberta';
+      }
+      if (name === 'avisos') {
+        ['a-titulo', 'a-descricao', 'a-doc'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('a-tipo').value = 'info';
+        document.getElementById('a-data').value = new Date().toISOString().split('T')[0];
+        document.getElementById('a-publicado').checked = true;
+      }
+    }
+
+    // Fechar modal clicando fora
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) {
+          const id = overlay.id.replace('modal-', '');
+          closeModal(id);
         }
+      });
+    });
 
-        async function quickConfirm(voteId) {
-            const { data, error } = await sb.rpc('confirm_vote', { p_vote_id: voteId, p_admin_id: adminUser.id });
-            if (error) { toast('Erro: ' + error.message, 'e'); return; }
-            if (data?.error) { toast('Erro: ' + data.error, 'e'); return; }
-            toast('Voto confirmado! ✅', 's');
-            await loadAll(); renderDashboard(); filterVotesTable();
-        }
+    /* ══════════════════════════════════════════
+       FILTRO DE TABELA (BUSCA)
+    ══════════════════════════════════════════ */
+    function filterTable(tbodyId, query) {
+      const tbody = document.getElementById(tbodyId);
+      const q = query.toLowerCase();
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const text = (tr.dataset.search || tr.textContent).toLowerCase();
+        tr.style.display = text.includes(q) ? '' : 'none';
+      });
+    }
 
-        async function quickReject(voteId) {
-            const { error } = await sb.from('votes').update({ payment_status: 'rejected' }).eq('id', voteId);
-            if (error) { toast('Erro: ' + error.message, 'e'); return; }
-            toast('Voto rejeitado.', 'e');
-            await loadAll(); renderDashboard(); filterVotesTable();
-        }
+    /* ══════════════════════════════════════════
+       SIDEBAR MOBILE
+    ══════════════════════════════════════════ */
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+    }
+    function closeSidebar() {
+      document.getElementById('sidebar').classList.remove('open');
+    }
 
-        // ─── EVENTS TABLE
-        function renderEvents() { filterEventsTable(); }
-        function filterEventsTable() {
-            const st = document.getElementById('ev-status-filter')?.value || 'all';
-            let evs = allEvents;
-            if (st !== 'all') evs = evs.filter(e => e.status === st);
+    /* ══════════════════════════════════════════
+       TOAST
+    ══════════════════════════════════════════ */
+    function toast(msg, type = 'info') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      document.getElementById('toast-container').appendChild(el);
+      setTimeout(() => el.remove(), 3500);
+    }
 
-            document.getElementById('events-table').innerHTML = evs.length ?
-                evs.map(ev => {
-                    const pool = (parseFloat(ev.pool_yes || 0) + parseFloat(ev.pool_no || 0)).toFixed(2).replace('.', ',');
-                    const dead = ev.deadline ? new Date(ev.deadline).toLocaleDateString('pt-BR') : '—';
-                    const bMap = { active: 'badge-active', resolved: 'badge-resolved', closed: 'badge-closed', cancelled: 'badge-closed' };
-                    const bTxt = { active: 'Ativo', resolved: 'Resolvido', closed: 'Encerrado', cancelled: 'Cancelado' };
-                    const actions = ev.status === 'active' ? `
-        <div class="action-group">
-          <button class="btn btn-sm btn-resolve" onclick="openResolve('${ev.id}')">⚖️ Resolver</button>
-          <button class="btn btn-sm btn-ghost" style="color:var(--no);border-color:rgba(255,61,90,.2)" onclick="closeEv('${ev.id}')">🔒 Encerrar</button>
-        </div>` : `<span style="font-size:.75rem;color:var(--muted)">${bTxt[ev.status]}</span>`;
-                    return `<tr>
-        <td class="td-truncate" title="${ev.title}">${ev.title}</td>
-        <td style="font-size:.78rem;color:var(--dim)">${ev.category}</td>
-        <td style="color:var(--yes);font-weight:600">${ev.votes_yes}</td>
-        <td style="color:var(--no);font-weight:600">${ev.votes_no}</td>
-        <td style="color:var(--gold);font-weight:600">R$${pool}</td>
-        <td style="font-size:.78rem;color:var(--dim)">${dead}</td>
-        <td><span class="badge ${bMap[ev.status] || 'badge-closed'}">${bTxt[ev.status] || ev.status}</span></td>
-        <td>${actions}</td></tr>`;
-                }).join('') :
-                `<tr><td colspan="8" class="empty-row">Nenhum evento</td></tr>`;
-        }
+    /* ══════════════════════════════════════════
+       UI HELPERS
+    ══════════════════════════════════════════ */
+    function showLoading(section) {
+      document.getElementById(section + '-loading').style.display = 'flex';
+      document.getElementById(section + '-table').style.display = 'none';
+      document.getElementById(section + '-empty').style.display = 'none';
+    }
 
-        function openResolve(evId) {
-            const ev = allEvents.find(e => e.id === evId);
-            if (!ev) return;
-            resolvingEv = ev;
-            document.getElementById('rm-title').textContent = ev.title;
-            const pool = (parseFloat(ev.pool_yes || 0) + parseFloat(ev.pool_no || 0)).toFixed(2).replace('.', ',');
-            document.getElementById('rm-pool-info').innerHTML = `
-    <div class="vote-detail">
-      <div class="vd-row"><span>Pool total</span><strong style="color:var(--gold)">R$ ${pool}</strong></div>
-      <div class="vd-row"><span>Votos SIM</span><strong style="color:var(--yes)">${ev.votes_yes}</strong></div>
-      <div class="vd-row"><span>Votos NÃO</span><strong style="color:var(--no)">${ev.votes_no}</strong></div>
-      <div class="vd-row"><span>Prêmio por vencedor (SIM)</span><strong>${ev.votes_yes > 0 ? 'R$ ' + ((parseFloat(ev.pool_yes || 0) + parseFloat(ev.pool_no || 0)) / ev.votes_yes).toFixed(2) : '—'}</strong></div>
-      <div class="vd-row"><span>Prêmio por vencedor (NÃO)</span><strong>${ev.votes_no > 0 ? 'R$ ' + ((parseFloat(ev.pool_yes || 0) + parseFloat(ev.pool_no || 0)) / ev.votes_no).toFixed(2) : '—'}</strong></div>
-    </div>`;
-            openModal('resolveModal');
-        }
+    function showError(section, msg) {
+      document.getElementById(section + '-loading').style.display = 'none';
+      document.getElementById(section + '-empty').style.display = 'block';
+      document.getElementById(section + '-empty').innerHTML = `<div class="es-icon">⚠️</div><p>${escHtml(msg)}</p>`;
+    }
 
-        async function doResolve(result) {
-            if (!resolvingEv) return;
-            const { data, error } = await sb.rpc('resolve_event', { p_event_id: resolvingEv.id, p_result: result });
-            if (error) { toast('Erro: ' + error.message, 'e'); return; }
-            if (data?.error) { toast(data.error, 'e'); return; }
-            toast(`Evento resolvido! ${data.winner_count} vencedores — R$${parseFloat(data.prize_each || 0).toFixed(2)} cada 🏆`, 's', 6000);
-            closeModal('resolveModal');
-            resolvingEv = null;
-            await loadAll(); renderEvents();
-        }
+    function escHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function escSearch(str) { return (str || '').toLowerCase().replace(/"/g, ''); }
 
-        async function closeEv(evId) {
-            if (!confirm('Encerrar votações deste evento?')) return;
-            const { error } = await sb.from('events').update({ status: 'closed' }).eq('id', evId);
-            if (error) { toast('Erro: ' + error.message, 'e'); return; }
-            toast('Evento encerrado.', 's');
-            await loadAll(); renderEvents();
-        }
+    function fmtDate(d) {
+      if (!d) return '—';
+      try {
+        const dt = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+        return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' });
+      } catch { return d; }
+    }
 
-        // ─── CREATE EVENT
-        async function adminCreateEvent() {
-            const title = document.getElementById('ce-title').value.trim();
-            const desc = document.getElementById('ce-desc').value.trim();
-            const cat = document.getElementById('ce-cat').value;
-            const dead = document.getElementById('ce-dead').value;
-            if (!title || !dead) { toast('Preencha título e data.', 'e'); return; }
-            const { error } = await sb.from('events').insert({ title, description: desc, category: cat, deadline: new Date(dead).toISOString(), created_by: adminUser.id });
-            if (error) { toast('Erro: ' + error.message, 'e'); return; }
-            toast('Evento criado! ✅', 's');
-            closeModal('createEventModal');
-            document.getElementById('ce-title').value = '';
-            await loadAll(); renderEvents();
-        }
+    function formatDate(d) {
+      if (!d) return '';
+      try {
+        return new Date(d).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch { return d; }
+    }
 
-        // ─── USERS TABLE
-        function renderUsers() { filterUsersTable(); }
-        function filterUsersTable() {
-            const q = document.getElementById('user-search')?.value.toLowerCase() || '';
-            let us = allUsers;
-            if (q) us = us.filter(u => (u.username || '').toLowerCase().includes(q) || (u.full_name || '').toLowerCase().includes(q));
-            document.getElementById('users-table').innerHTML = us.length ?
-                us.map(u => `<tr>
-      <td><strong>@${u.username || '—'}</strong><br><span style="font-size:.72rem;color:var(--muted)">${u.full_name || ''}</span></td>
-      <td style="font-size:.78rem;color:var(--dim)">${u.id}</td>
-      <td style="font-size:.78rem;color:${u.pix_key ? 'var(--yes)' : 'var(--muted)'}">${u.pix_key || 'não cadastrado'}</td>
-      <td style="font-weight:600">${u.total_votes || 0}</td>
-      <td style="color:var(--yes);font-weight:600">${u.total_wins || 0}</td>
-      <td style="color:var(--gold);font-weight:600">R$ ${parseFloat(u.total_earned || 0).toFixed(2).replace('.', ',')}</td>
-      <td style="color:var(--gold);font-weight:600">R$ ${parseFloat(u.balance || 0).toFixed(2).replace('.', ',')}</td>
-      <td>${u.is_admin ? '<span class="badge badge-confirmed">Admin</span>' : '<button class="btn btn-sm btn-ghost" onclick="toggleAdmin(\'' + u.id + '\',true)">Dar admin</button>'}</td>
-    </tr>`).join('') :
-                `<tr><td colspan="8" class="empty-row">Nenhum usuário</td></tr>`;
-        }
+    function catBadge(cat) {
+      const map = { pirarucu: 'badge-azul', olea: 'badge-verde', sanear: 'badge-azul', comercio: 'badge-terra', vagas: 'badge-dourado', geral: 'badge-cinza' };
+      const label = { pirarucu: '🐟 Pirarucu', olea: '🌿 Oleaginosas', sanear: '💧 Saneamento', comercio: '🛒 Comércio', vagas: '📋 Vagas', geral: '📌 Geral' };
+      return `<span class="badge ${map[cat] || 'badge-cinza'}">${label[cat] || cat}</span>`;
+    }
 
-        async function toggleAdmin(userId, val) {
-            if (!confirm('Promover este usuário a admin?')) return;
-            await sb.from('profiles').update({ is_admin: val }).eq('id', userId);
-            toast('Permissão atualizada.', 's');
-            await loadAll(); renderUsers();
-        }
+    function statusBadge(s) {
+      const map = { aberta: 'badge-verde', encerrada: 'badge-vermelho', suspensa: 'badge-cinza' };
+      const label = { aberta: '✅ Aberta', encerrada: '❌ Encerrada', suspensa: '⏸ Suspensa' };
+      return `<span class="badge ${map[s] || 'badge-cinza'}">${label[s] || s}</span>`;
+    }
 
-        // ─── FINANCIAL
-        function renderFinancial() {
-            const confVotes = allVotes.filter(v => v.payment_status === 'confirmed');
-            const totalInflow = confVotes.reduce((a, v) => a + parseFloat(v.amount_paid || 0), 0);
-            const totalFee = confVotes.reduce((a, v) => a + parseFloat(v.platform_fee || 0), 0);
-            const totalPool = confVotes.reduce((a, v) => a + parseFloat(v.pool_amount || 0), 0);
-            const totalPrizes = allTransactions.filter(t => t.type === 'prize').reduce((a, t) => a + parseFloat(t.amount || 0), 0);
+    function tipoBadge(t) {
+      const map = { doc: 'badge-azul', urgente: 'badge-vermelho', info: 'badge-cinza' };
+      const label = { doc: '📋 Documento', urgente: '🔴 Urgente', info: 'ℹ️ Info' };
+      return `<span class="badge ${map[t] || 'badge-cinza'}">${label[t] || t}</span>`;
+    }
 
-            document.getElementById('fin-stat-grid').innerHTML = `
-    ${sc('Entrada total (PIX)', 'R$' + totalInflow.toFixed(2).replace('.', ','), '📥', 'g', 'Soma de todos os votos confirmados')}
-    ${sc('Receita da plataforma', 'R$' + totalFee.toFixed(2).replace('.', ','), '💎', 'b', 'Taxas de R$1,90 × votos')}
-    ${sc('Pool acumulado', 'R$' + totalPool.toFixed(2).replace('.', ','), '🎯', 'y', 'R$3,10 × votos confirmados')}
-    ${sc('Prêmios distribuídos', 'R$' + totalPrizes.toFixed(2).replace('.', ','), '🏆', 'r', 'Total pago aos vencedores')}`;
+    function candStatusBadge(s) {
+      const map = { nova: 'badge-dourado', em_analise: 'badge-azul', aprovada: 'badge-verde', reprovada: 'badge-vermelho' };
+      const label = { nova: '🆕 Nova', em_analise: '🔍 Em análise', aprovada: '✅ Aprovada', reprovada: '❌ Reprovada' };
+      return `<span class="badge ${map[s] || 'badge-cinza'}">${label[s] || s}</span>`;
+    }
 
-            document.getElementById('fin-table').innerHTML = allTransactions.length ?
-                allTransactions.map(t => {
-                    const tMap = { prize: '🏆 Prêmio', deposit: '💰 Depósito', withdrawal: '💸 Saque', refund: '↩️ Reembolso' };
-                    const date = new Date(t.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
-                    return `<tr>
-        <td style="font-size:.75rem;color:var(--muted)">${date}</td>
-        <td>@${t.profiles?.username || '—'}</td>
-        <td>${tMap[t.type] || t.type}</td>
-        <td style="color:var(--gold);font-weight:700">R$ ${parseFloat(t.amount || 0).toFixed(2).replace('.', ',')}</td>
-        <td class="td-truncate" style="font-size:.78rem;color:var(--dim)">${t.events?.title || '—'}</td></tr>`;
-                }).join('') :
-                `<tr><td colspan="5" class="empty-row">Nenhuma transação ainda</td></tr>`;
-        }
+    function copySnippet() {
+      const text = document.getElementById('integration-snippet').textContent;
+      navigator.clipboard.writeText(text).then(() => toast('Código copiado!', 'success')).catch(() => toast('Não foi possível copiar.', 'error'));
+    }
 
-        // ─── SCREEN HELPERS
-        function showLoginScreen() {
-            document.getElementById('login-screen').style.display = 'flex';
-            document.getElementById('login-error').style.display = 'none';
-            // Hide main app layout
-            document.querySelector('.sidebar').style.display = 'none';
-            document.querySelector('.content').style.display = 'none';
-        }
-
-        function hideLoginScreen() {
-            document.getElementById('login-screen').style.display = 'none';
-            document.querySelector('.sidebar').style.display = 'flex';
-            document.querySelector('.content').style.display = 'block';
-        }
-
-        function showAccessDenied() {
-            document.getElementById('denied-screen').style.display = 'flex';
-            document.querySelector('.sidebar').style.display = 'none';
-            document.querySelector('.content').style.display = 'none';
-        }
-
-        async function doAdminLogin() {
-            const email = document.getElementById('adm-email').value.trim();
-            const pass = document.getElementById('adm-pass').value;
-            const errEl = document.getElementById('login-error');
-            const btn = document.getElementById('adm-login-btn');
-            if (!email || !pass) { errEl.textContent = 'Preencha e-mail e senha.'; errEl.style.display = 'block'; return; }
-            btn.disabled = true; btn.textContent = 'Entrando...';
-            const { error } = await sb.auth.signInWithPassword({ email, password: pass });
-            btn.disabled = false; btn.textContent = 'Entrar no painel';
-            if (error) { errEl.textContent = 'Credenciais inválidas.'; errEl.style.display = 'block'; }
-            // onAuthStateChange will call init() again automatically
-        }
-
-        async function doAdminLogout() {
-            await sb.auth.signOut();
-            adminUser = null; adminProfile = null;
-            document.getElementById('denied-screen').style.display = 'none';
-            showLoginScreen();
-        }
-
-        function handleBackBtn() {
-            // Try to go back in history, fallback to just showing a toast
-            if (document.referrer && !document.referrer.includes('admin')) {
-                window.history.back();
-            } else {
-                toast('Abra o index.html no mesmo servidor ou hospedagem.', 'w', 4000);
-            }
-        }
-
-        // ─── UTILS
-        function openModal(id) { document.getElementById(id).classList.add('open'); }
-        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-        function bgClose(e, id) { if (e.target.id === id) closeModal(id); }
-        function toast(msg, type = 's', dur = 3500) {
-            const c = document.getElementById('toasts');
-            const el = document.createElement('div');
-            el.className = `toast ${type}`;
-            el.textContent = msg;
-            c.appendChild(el);
-            setTimeout(() => el.remove(), dur);
-        }
-
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
+    /* ══════════════════════════════════════════
+       INICIALIZAR
+    ══════════════════════════════════════════ */
+    checkSession();
+  </script>
 </body>
 
 </html>
