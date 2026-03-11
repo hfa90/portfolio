@@ -1092,14 +1092,16 @@
                     return;
                 }
                 const ext = file.name.split(".").pop();
-                const fileName = `curriculos/${Date.now()}_${nome.replace(/\s+/g, "_")}.${ext}`;
+                const nomeSeguro = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_\-]/g, "_");
+                const fileName = `curriculos/${Date.now()}_${nomeSeguro}.${ext}`;
+                // Supabase Storage: usar PUT com upsert para upload público
                 const uploadUrl = `${SUPABASE_URL}/storage/v1/object/candidaturas/${fileName}`;
                 fetch(uploadUrl, {
-                    method: "POST",
+                    method: "PUT",
                     headers: {
                         "apikey": SUPABASE_KEY,
                         "Authorization": "Bearer " + SUPABASE_KEY,
-                        "Content-Type": file.type,
+                        "Content-Type": file.type || "application/octet-stream",
                         "x-upsert": "true"
                     },
                     body: file
@@ -1107,8 +1109,12 @@
                     const publicUrl = r.ok
                         ? `${SUPABASE_URL}/storage/v1/object/public/candidaturas/${fileName}`
                         : null;
+                    if (!r.ok) console.warn("[ASPROC] Upload do currículo falhou, enviando sem arquivo.");
                     doSubmit(publicUrl);
-                }).catch(() => doSubmit(null));
+                }).catch(err => {
+                    console.warn("[ASPROC] Erro no upload:", err);
+                    doSubmit(null); // envia a candidatura mesmo sem o currículo
+                });
             } else {
                 doSubmit(null);
             }
