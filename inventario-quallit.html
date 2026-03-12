@@ -5237,6 +5237,8 @@
                         <div class="page-actions">
                             <button class="btn btn-ghost" onclick="loadDashboard()">🔄 Atualizar</button>
                             <button class="btn btn-outline" onclick="openAlertConfig()">⚙️ Config Alertas</button>
+                            <button class="btn btn-outline" onclick="openExecReportModal()"
+                                style="border-color:rgba(124,58,237,.5);color:#a78bfa">📄 Relatório</button>
                             <button class="btn btn-accent" onclick="openModal('m-new-cd')">+ Novo CD</button>
                         </div>
                     </div>
@@ -7324,6 +7326,173 @@
             } else {
                 _paBadgeUpdate(); // restaura badge ao fechar
             }
+        }
+
+
+        // ══════════════════════════════════════════════════════════════
+        // 📄 RELATÓRIO EXECUTIVO — Copilot + fallback local
+        // ══════════════════════════════════════════════════════════════
+        let _execRepText = '';
+
+        function openExecReportModal() {
+            _execRepText = '';
+            const prev = document.getElementById('exec-rep-preview');
+            const load = document.getElementById('exec-rep-loading');
+            const pdf = document.getElementById('btn-exec-rep-pdf');
+            const gen = document.getElementById('btn-exec-rep-gen');
+            if (prev) prev.style.display = 'none';
+            if (load) load.style.display = 'none';
+            if (pdf) pdf.style.display = 'none';
+            if (gen) gen.disabled = false;
+            const dest = document.getElementById('exec-rep-dest');
+            if (dest) dest.value = '';
+            openModal('m-exec-report');
+        }
+
+        async function generateExecReportPreview() {
+            const dest = (document.getElementById('exec-rep-dest')?.value || '').trim() || 'Diretoria de TI';
+            const sections = [...document.querySelectorAll('#exec-rep-sections input:checked')].map(c => c.value);
+            const snap = _buildExecSnap(itemsCache, cdsCache);
+
+            document.getElementById('exec-rep-loading').style.display = 'block';
+            document.getElementById('exec-rep-preview').style.display = 'none';
+            document.getElementById('btn-exec-rep-gen').disabled = true;
+            document.getElementById('btn-exec-rep-pdf').style.display = 'none';
+
+            const prompt = `Você é um consultor sênior de TI. Gere um RELATÓRIO EXECUTIVO profissional em português para: "${dest}".
+DADOS (${new Date().toLocaleDateString('pt-BR')}): Total=${snap.total}, Ativos=${snap.ativos} (${snap.health}%), Manutenção=${snap.manut}, Inativos=${snap.inativos}, Obsoletos+5a=${snap.obsoletos}, Idade média=${snap.avgAge}a, Valor total=R$${snap.totalValue.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}, Custo manutenções=R$${snap.maintCost.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}, Garantias 90d=${snap.warranty90}, Substituição 1a=${snap.proj1ano}, CDs inativos=${snap.cdInativo}/${cdsCache.length}, Reinc.=${snap.reincidentes}.
+SEÇÕES: ${sections.join(', ')}. Tom executivo, máximo 500 palavras. Inclua: SUMÁRIO EXECUTIVO${sections.includes('kpis') ? ', INDICADORES-CHAVE' : ''}${sections.includes('alertas') ? ', PONTOS CRÍTICOS' : ''}${sections.includes('projecao') ? ', PROJEÇÃO FINANCEIRA' : ''}${sections.includes('recomendacoes') ? ', RECOMENDAÇÕES' : ''}${sections.includes('cds') ? ', PERFORMANCE DOS CDs' : ''}.`;
+
+            try {
+                const resp = await fetch(`${SB_URL}/functions/v1/ai-proxy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SB_KEY}`, 'apikey': SB_KEY },
+                    body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })
+                });
+                if (!resp.ok) throw new Error('API indisponível');
+                const data = await resp.json();
+                _execRepText = data?.content?.[0]?.text || '';
+                if (!_execRepText) throw new Error('Resposta vazia');
+            } catch {
+                _execRepText = _buildExecNarrativeLocal(snap, sections, dest);
+            }
+
+            document.getElementById('exec-rep-loading').style.display = 'none';
+            document.getElementById('exec-rep-preview-body').textContent = _execRepText;
+            document.getElementById('exec-rep-preview').style.display = 'block';
+            document.getElementById('btn-exec-rep-pdf').style.display = 'inline-flex';
+            document.getElementById('btn-exec-rep-gen').disabled = false;
+        }
+
+        function _buildExecSnap(items, cds) {
+            const now = new Date(), in90 = new Date(now.getTime() + 90 * 86400000);
+            const TMAP = { '< 1 ano': 0.5, '1-2 anos': 1.5, '2-3 anos': 2.5, '3-5 anos': 4, '> 5 anos': 6 };
+            let totalAge = 0, ageN = 0;
+            items.forEach(i => { const m = TMAP[i.tempo_uso]; if (m) { totalAge += m; ageN++; } });
+            const withVal = items.filter(i => parseFloat(i.valor_equipamento) > 0);
+            const totalValue = withVal.reduce((s, i) => s + (parseFloat(i.valor_equipamento) || 0), 0);
+            const avgPrice = withVal.length ? totalValue / withVal.length : 2500;
+            const proj1ano = items.filter(i => { const b = TMAP[i.tempo_uso]; return b !== undefined && (b + 1) >= 5; }).length;
+            return {
+                total: items.length,
+                ativos: items.filter(i => i.status === 'Ativo').length,
+                manut: items.filter(i => i.status === 'Manutenção').length,
+                inativos: items.filter(i => i.status === 'Inativo').length,
+                obsoletos: items.filter(i => i.tempo_uso === '> 5 anos').length,
+                health: items.length ? Math.round(items.filter(i => i.status === 'Ativo').length / items.length * 100) : 0,
+                avgAge: ageN ? (totalAge / ageN).toFixed(1) : '?',
+                totalValue, avgPrice, proj1ano,
+                maintCost: items.reduce((s, i) => s + (Array.isArray(i.maint_history) ? i.maint_history.reduce((ss, m) => ss + (parseFloat(m.cost) || 0), 0) : 0), 0),
+                warranty90: items.filter(i => { if (!i.garantia_ate) return false; const d = new Date(i.garantia_ate + 'T12:00:00'); return d >= now && d <= in90; }).length,
+                cdInativo: cds.filter(cd => !cd.last_access || (now - new Date(cd.last_access)) / 86400000 > 30).length,
+                reincidentes: items.filter(i => Array.isArray(i.maint_history) && i.maint_history.length >= 3).length
+            };
+        }
+
+        function _buildExecNarrativeLocal(s, sections, dest) {
+            const date = new Date().toLocaleDateString('pt-BR');
+            let t = `RELATÓRIO EXECUTIVO DE TI\nDestinatário: ${dest}\nData: ${date}\n\n`;
+            t += `SUMÁRIO EXECUTIVO\n`;
+            t += `O parque conta com ${s.total} equipamentos (health score ${s.health}%). `;
+            t += s.health >= 80 ? 'Inventário em boa condição. ' : s.health >= 55 ? 'Situação requer atenção. ' : 'Situação crítica, ação imediata necessária. ';
+            t += `Idade média de ${s.avgAge} anos, com ${s.obsoletos} unidades acima da vida útil.\n\n`;
+            if (sections.includes('kpis')) {
+                t += `INDICADORES-CHAVE\n• Ativos: ${s.ativos} (${s.health}%) | Manutenção: ${s.manut} | Inativos: ${s.inativos}\n`;
+                t += `• Obsoletos (+5a): ${s.obsoletos}\n`;
+                if (s.totalValue > 0) t += `• Valor estimado: R$ ${s.totalValue.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}\n`;
+                t += `• Custo manutenções: R$ ${s.maintCost.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}\n\n`;
+            }
+            if (sections.includes('alertas')) {
+                t += `PONTOS CRÍTICOS\n`;
+                if (s.warranty90 > 0) t += `• ${s.warranty90} garantia(s) vencendo em 90 dias\n`;
+                if (s.obsoletos > 0) t += `• ${s.obsoletos} equipamentos com +5 anos em uso ativo\n`;
+                if (s.reincidentes > 0) t += `• ${s.reincidentes} item(ns) com 3+ manutenções\n`;
+                if (s.cdInativo > 0) t += `• ${s.cdInativo} CD(s) sem acesso há +30 dias\n\n`;
+            }
+            if (sections.includes('projecao')) {
+                t += `PROJEÇÃO FINANCEIRA\n`;
+                t += `• 12 meses: ${s.proj1ano} equipamentos — R$ ${(s.proj1ano * s.avgPrice).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}\n`;
+                t += `• 36 meses: ${s.obsoletos} equipamentos — R$ ${(s.obsoletos * s.avgPrice).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}\n\n`;
+            }
+            if (sections.includes('recomendacoes')) {
+                t += `RECOMENDAÇÕES\n`; let n = 1;
+                if (s.warranty90 > 0) t += `${n++}. Acionar fornecedores para ${s.warranty90} garantia(s) vencendo\n`;
+                if (s.obsoletos > 0) t += `${n++}. Iniciar substituição dos ${s.obsoletos} equipamentos obsoletos\n`;
+                if (s.reincidentes > 0) t += `${n++}. Descartar ${s.reincidentes} item(ns) com manutenções recorrentes\n`;
+                if (s.cdInativo > 0) t += `${n++}. Regularizar acesso dos ${s.cdInativo} CD(s) inativos\n`;
+                t += `${n}. Implementar ciclo trimestral de inventário por QR Code\n`;
+            }
+            return t;
+        }
+
+        function generateExecReportPDF() {
+            if (!_execRepText) return toast('Gere a prévia primeiro', 'error');
+            const dest = (document.getElementById('exec-rep-dest')?.value || '').trim() || 'Diretoria de TI';
+            const snap = _buildExecSnap(itemsCache, cdsCache);
+            const hc = snap.health >= 80 ? '#22c55e' : snap.health >= 55 ? '#f59e0b' : '#ef4444';
+            const now = new Date();
+            const fmtBRL = v => v >= 1000000 ? 'R$ ' + (v / 1000000).toFixed(1) + 'M' : v >= 1000 ? 'R$ ' + (v / 1000).toFixed(0) + 'k' : 'R$ ' + v.toFixed(0);
+
+            const bodyHtml = _execRepText.split('\n').map(line => {
+                line = line.trim(); if (!line) return '<br>';
+                if (/^[A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ][A-ZÁÉÍÓÚÂÊÎÔÛÃÕÇ\s\-]{4,}$/.test(line))
+                    return `<h3 style="font-size:11px;font-weight:700;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:18px 0 7px;padding-bottom:5px;border-bottom:2px solid #e2e8f0">${line}</h3>`;
+                if (line.startsWith('•') || /^\d+\./.test(line))
+                    return `<div style="margin:4px 0 4px 14px;font-size:12.5px;color:#334155">${line}</div>`;
+                return `<p style="margin:5px 0;font-size:12.5px;color:#334155;line-height:1.65">${line}</p>`;
+            }).join('');
+
+            const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Relatório Executivo — QuallitIT</title><style>
+*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#1e293b}
+.cover{background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:44px 48px 32px}
+.brand{font-size:26px;font-weight:800;letter-spacing:-0.5px}.brand span{color:#0ea5e9}
+.rep-title{font-size:17px;font-weight:600;opacity:.85;margin:14px 0 4px}.rep-dest{font-size:12px;opacity:.5}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:20px 48px;background:#f8fafc;border-bottom:1px solid #e2e8f0}
+.kpi{background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:10px 14px}
+.kpi-l{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.7px;font-weight:600}
+.kpi-v{font-size:20px;font-weight:700;font-family:monospace;margin-top:3px}
+.body{padding:24px 48px 32px}.footer{text-align:center;font-size:10px;color:#94a3b8;padding:14px 48px;border-top:1px solid #e2e8f0}
+@media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}}
+</style></head><body>
+<div class="cover"><div class="brand">Quallit<span>IT</span></div><div class="rep-title">Relatório Executivo de TI</div><div class="rep-dest">${dest} · ${now.toLocaleDateString('pt-BR')}</div></div>
+<div class="kpis">
+  <div class="kpi"><div class="kpi-l">Total</div><div class="kpi-v">${snap.total}</div></div>
+  <div class="kpi"><div class="kpi-l">Health Score</div><div class="kpi-v" style="color:${hc}">${snap.health}%</div></div>
+  <div class="kpi"><div class="kpi-l">Obsoletos +5a</div><div class="kpi-v" style="color:#ef4444">${snap.obsoletos}</div></div>
+  <div class="kpi"><div class="kpi-l">Manutenção</div><div class="kpi-v" style="color:#f59e0b">${snap.manut}</div></div>
+  <div class="kpi"><div class="kpi-l">Garantias 90d</div><div class="kpi-v" style="color:#f59e0b">${snap.warranty90}</div></div>
+  <div class="kpi"><div class="kpi-l">Valor Parque</div><div class="kpi-v" style="color:#0ea5e9">${fmtBRL(snap.totalValue)}</div></div>
+</div>
+<div class="body">${bodyHtml}</div>
+<div class="footer">Gerado pelo Quallit IT Copilot · ${now.toLocaleString('pt-BR')}</div>
+<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
+</body></html>`;
+
+            const win = window.open('', '_blank');
+            if (!win) return toast('Permita pop-ups para gerar o PDF', 'error');
+            win.document.write(html); win.document.close();
+            closeModal('m-exec-report');
+            toast('PDF aberto — use Ctrl+P para salvar', 'success');
         }
 
         // ── Merge seguro de item no cache ─────────────────────────────
@@ -9715,25 +9884,6 @@ Regras:
             <div class="footer">QuallitIT — Sistema de Inventário de TI — ${now}</div>
             <script>window.onload=()=>{window.print()}<\/script>
             
-    <!-- ══ PROACTIVE ALERTS PANEL ══ -->
-    <div id="proactive-panel" class="proactive-panel">
-        <div class="proactive-panel-header">
-            <div>
-                <div class="proactive-panel-title">🔔 Alertas Proativos</div>
-                <div class="proactive-panel-sub" id="pa-subtitle">Verificando...</div>
-            </div>
-            <button class="proactive-panel-close" onclick="toggleProactivePanel()">×</button>
-        </div>
-        <div class="proactive-panel-body" id="pa-body">
-            <div class="pa-loading"><div class="pa-spinner"></div> Verificando alertas...</div>
-        </div>
-        <div class="proactive-panel-footer">
-            <span class="pa-last-check" id="pa-last-check"></span>
-            <button class="btn btn-ghost btn-sm" onclick="runProactiveCheck()">🔄 Verificar agora</button>
-        </div>
-    </div>
-    <!-- ══ END PROACTIVE ALERTS PANEL ══ -->
-
 </body></html>`;
 
             const win = window.open('', '_blank', 'width=900,height=700');
@@ -14061,6 +14211,93 @@ Regras de resposta:
             });
         })();
     </script>
+
+    <!-- ══ EXECUTIVE REPORT MODAL ══ -->
+    <div class="modal-overlay" id="m-exec-report">
+        <div class="modal modal-lg" style="max-width:660px">
+            <div class="modal-header">
+                <div class="modal-title">📄 Relatório Executivo — 1 Clique</div>
+                <button class="modal-close" onclick="closeModal('m-exec-report')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:16px;font-size:13px;color:var(--text2);line-height:1.6">
+                    O Copilot analisa os dados do inventário e gera um relatório narrativo em PDF com diagnóstico,
+                    alertas e recomendações para a diretoria.
+                </div>
+                <div class="form-group" style="margin-bottom:14px">
+                    <label>Destinatário / Contexto</label>
+                    <input id="exec-rep-dest" class="form-input" placeholder="Ex: Diretoria de TI — Reunião Q2 2025"
+                        style="font-size:13px">
+                </div>
+                <div class="form-group" style="margin-bottom:14px">
+                    <label style="margin-bottom:10px;display:block">Seções a incluir</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="exec-rep-sections">
+                        <label
+                            style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><input
+                                type="checkbox" value="kpis" checked> 📊 KPIs Executivos</label>
+                        <label
+                            style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><input
+                                type="checkbox" value="alertas" checked> ⚠️ Alertas Críticos</label>
+                        <label
+                            style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><input
+                                type="checkbox" value="projecao" checked> 📈 Projeção Financeira</label>
+                        <label
+                            style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><input
+                                type="checkbox" value="recomendacoes" checked> 💡 Recomendações</label>
+                        <label
+                            style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg3)"><input
+                                type="checkbox" value="cds"> 👥 Ranking de CDs</label>
+                    </div>
+                </div>
+                <div id="exec-rep-loading" style="display:none;padding:18px;text-align:center;color:var(--text3)">
+                    <div style="display:inline-flex;align-items:center;gap:10px;font-size:13px">
+                        <div
+                            style="width:18px;height:18px;border:2px solid var(--border2);border-top-color:#7c3aed;border-radius:50%;animation:spin .7s linear infinite">
+                        </div>
+                        Copilot analisando o inventário...
+                    </div>
+                </div>
+                <div id="exec-rep-preview"
+                    style="display:none;margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+                    <div
+                        style="padding:8px 14px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:1.2px;font-family:var(--mono)">
+                        📝 Prévia — gerada pelo Copilot</div>
+                    <div id="exec-rep-preview-body"
+                        style="padding:14px;font-size:12px;color:var(--text2);line-height:1.7;max-height:260px;overflow-y:auto;white-space:pre-wrap;font-family:var(--mono)">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-exec-report')">Cancelar</button>
+                <button class="btn btn-outline" id="btn-exec-rep-gen" onclick="generateExecReportPreview()">✨ Gerar
+                    Prévia</button>
+                <button class="btn btn-accent" id="btn-exec-rep-pdf" onclick="generateExecReportPDF()"
+                    style="display:none">📄 Exportar PDF</button>
+            </div>
+        </div>
+    </div>
+    <!-- ══ END EXECUTIVE REPORT MODAL ══ -->
+
+    <!-- ══ PROACTIVE ALERTS PANEL ══ -->
+    <div id="proactive-panel" class="proactive-panel">
+        <div class="proactive-panel-header">
+            <div>
+                <div class="proactive-panel-title">🔔 Alertas Proativos</div>
+                <div class="proactive-panel-sub" id="pa-subtitle">Verificando...</div>
+            </div>
+            <button class="proactive-panel-close" onclick="toggleProactivePanel()">×</button>
+        </div>
+        <div class="proactive-panel-body" id="pa-body">
+            <div class="pa-loading">
+                <div class="pa-spinner"></div> Verificando alertas...
+            </div>
+        </div>
+        <div class="proactive-panel-footer">
+            <span class="pa-last-check" id="pa-last-check"></span>
+            <button class="btn btn-ghost btn-sm" onclick="runProactiveCheck()">🔄 Verificar agora</button>
+        </div>
+    </div>
+    <!-- ══ END PROACTIVE ALERTS PANEL ══ -->
 
 </body>
 
