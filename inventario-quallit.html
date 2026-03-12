@@ -4761,6 +4761,7 @@
                                         <th>Categoria</th>
                                         <th>Tipo Base</th>
                                         <th>Total Itens</th>
+                                        <th>Visibilidade</th>
                                         <th>Tipo</th>
                                         <th>Ações</th>
                                     </tr>
@@ -5516,9 +5517,9 @@
             </div>
             <div class="modal-body">
                 <div class="form-group"><label>Nome *</label><input type="text" id="cat-name-inp"
-                        placeholder="Ex: Impressoras Térmicas"></div>
+                        placeholder="Ex: Tablets"></div>
                 <div class="form-group"><label>Ícone (emoji)</label><input type="text" id="cat-icon-inp"
-                        placeholder="🖨️" maxlength="4"></div>
+                        placeholder="📱" maxlength="4"></div>
                 <div class="form-group"><label>Tipo Base (define campos)</label>
                     <select id="cat-base-inp">
                         <option value="geral">Geral</option>
@@ -5528,6 +5529,27 @@
                         <option value="monitores">Monitor</option>
                         <option value="perifericos">Periférico</option>
                     </select>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:6px">
+                        🔒 Restringir a CDs específicos
+                        <span style="font-size:10px;color:var(--text3);font-weight:400">(deixe em branco para
+                            todos)</span>
+                    </label>
+                    <div id="cat-cd-checkboxes" style="
+                        background:var(--bg3);
+                        border:1px solid var(--border2);
+                        border-radius:8px;
+                        padding:10px 12px;
+                        max-height:160px;
+                        overflow-y:auto;
+                        display:flex;
+                        flex-direction:column;
+                        gap:6px;
+                        margin-top:4px;
+                    ">
+                        <span style="font-size:11px;color:var(--text3)">Carregando CDs...</span>
+                    </div>
                 </div>
                 <div class="form-group"><label>Descrição</label><textarea id="cat-desc-inp"
                         placeholder="Descrição opcional..."></textarea></div>
@@ -6976,10 +6998,47 @@
                 }).join('');
                 document.getElementById('tb-cats').innerHTML = catsCache.map(c => {
                     const cnt = items.filter(it => it.category === c.id).length;
-                    return `<tr><td>${c.icon} ${c.name}</td><td style="color:var(--text3);font-size:12px">${c.type}</td><td>${cnt}</td><td><span class="badge ${c.is_default ? 'badge-cd' : 'badge-active'}">${c.is_default ? 'Padrão' : 'Personalizada'}</span></td><td>${!c.is_default ? `<button class="btn btn-danger btn-sm" onclick="deleteCat('${c.id}')">🗑️</button>` : '—'}</td></tr>`;
+                    // Resolve CD names for restricted cats
+                    let visLabel = '<span style="font-size:11px;color:var(--green);font-weight:600">🌐 Todos os CDs</span>';
+                    if (!c.is_default && Array.isArray(c.cd_ids) && c.cd_ids.length > 0) {
+                        const names = c.cd_ids.map(id => {
+                            const cd = cdsCache.find(x => x.id === id);
+                            return cd ? (cd.cd || cd.name) : id;
+                        });
+                        visLabel = `<span style="font-size:11px;color:var(--accent);font-weight:600">🔒 ${names.join(', ')}</span>`;
+                    }
+                    const editBtn = !c.is_default ? `<button class="btn btn-ghost btn-sm" onclick="openEditCatModal('${c.id}')" title="Editar restrições">✏️</button>` : '';
+                    const delBtn = !c.is_default ? `<button class="btn btn-danger btn-sm" onclick="deleteCat('${c.id}')">🗑️</button>` : '—';
+                    return `<tr>
+                        <td>${c.icon} ${c.name}</td>
+                        <td style="color:var(--text3);font-size:12px">${c.type}</td>
+                        <td>${cnt}</td>
+                        <td>${c.is_default ? '<span style="font-size:11px;color:var(--text3)">Padrão</span>' : visLabel}</td>
+                        <td><span class="badge ${c.is_default ? 'badge-cd' : 'badge-active'}">${c.is_default ? 'Padrão' : 'Personalizada'}</span></td>
+                        <td><div class="action-btns">${editBtn}${delBtn}</div></td>
+                    </tr>`;
                 }).join('');
                 setLoad(false);
             } catch (e) { setLoad(false); toast('Erro: ' + e.message, 'error'); }
+        }
+
+        // Popula checkboxes de CDs no modal de categoria
+        function _populateCatCdCheckboxes(selectedIds = []) {
+            const wrap = document.getElementById('cat-cd-checkboxes');
+            if (!wrap) return;
+            if (!cdsCache.length) {
+                wrap.innerHTML = '<span style="font-size:11px;color:var(--text3)">Nenhum CD cadastrado</span>';
+                return;
+            }
+            wrap.innerHTML = cdsCache.map(cd => {
+                const checked = selectedIds.includes(cd.id) ? 'checked' : '';
+                return `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text)">
+                    <input type="checkbox" value="${cd.id}" ${checked}
+                        style="accent-color:var(--accent);width:15px;height:15px;cursor:pointer">
+                    <span style="font-weight:600;color:var(--accent2)">${cd.cd || cd.name}</span>
+                    <span style="font-size:11px;color:var(--text3)">${cd.name || ''}</span>
+                </label>`;
+            }).join('');
         }
 
         async function createCategory() {
@@ -6987,10 +7046,15 @@
             if (!name) return toast('Informe o nome', 'error');
             const id = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
             if (catsCache.find(c => c.id === id)) return toast('Categoria já existe', 'error');
+
+            // Collect selected CDs
+            const checked = [...document.querySelectorAll('#cat-cd-checkboxes input[type=checkbox]:checked')];
+            const cd_ids = checked.map(cb => cb.value);
+
             setBtn('btn-save-cat', true, 'Criando...');
             try {
-                await DB.post('categories', { id, name, icon, type: base, description: desc, is_default: false });
-                catsCache.push({ id, name, icon, type: base, description: desc, is_default: false });
+                await DB.post('categories', { id, name, icon, type: base, description: desc, is_default: false, cd_ids: cd_ids.length ? cd_ids : null });
+                catsCache.push({ id, name, icon, type: base, description: desc, is_default: false, cd_ids: cd_ids.length ? cd_ids : null });
                 closeModal('m-new-cat');
                 ['cat-name-inp', 'cat-icon-inp', 'cat-desc-inp'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
                 renderCustomNav();
@@ -6998,6 +7062,63 @@
                 toast(`Categoria "${name}" criada!`, 'success');
             } catch (e) { toast('Erro: ' + e.message, 'error'); }
             finally { setBtn('btn-save-cat', false, 'Criar Categoria'); }
+        }
+
+        // Abre modal para editar restrições de CDs de uma categoria existente
+        function openEditCatModal(catId) {
+            const cat = catsCache.find(c => c.id === catId);
+            if (!cat) return;
+            // Reutiliza o modal de criação no modo edição
+            const modal = document.getElementById('m-new-cat');
+            modal.querySelector('.modal-title').textContent = `Editar: ${cat.icon} ${cat.name}`;
+            const nameInp = document.getElementById('cat-name-inp');
+            const iconInp = document.getElementById('cat-icon-inp');
+            const baseInp = document.getElementById('cat-base-inp');
+            const descInp = document.getElementById('cat-desc-inp');
+            if (nameInp) { nameInp.value = cat.name; nameInp.readOnly = true; nameInp.style.opacity = '.5'; }
+            if (iconInp) { iconInp.value = cat.icon || ''; iconInp.readOnly = true; iconInp.style.opacity = '.5'; }
+            if (baseInp) { baseInp.value = cat.type || 'geral'; baseInp.disabled = true; baseInp.style.opacity = '.5'; }
+            if (descInp) descInp.value = cat.description || '';
+            _populateCatCdCheckboxes(cat.cd_ids || []);
+            const saveBtn = document.getElementById('btn-save-cat');
+            if (saveBtn) {
+                saveBtn.textContent = 'Salvar Alterações';
+                saveBtn.onclick = () => saveEditCat(catId);
+            }
+            openModal('m-new-cat');
+        }
+
+        async function saveEditCat(catId) {
+            const checked = [...document.querySelectorAll('#cat-cd-checkboxes input[type=checkbox]:checked')];
+            const cd_ids = checked.map(cb => cb.value);
+            const desc = g('cat-desc-inp');
+            setBtn('btn-save-cat', true, 'Salvando...');
+            try {
+                await DB.patch('categories', `?id=eq.${catId}`, { cd_ids: cd_ids.length ? cd_ids : null, description: desc });
+                const cat = catsCache.find(c => c.id === catId);
+                if (cat) { cat.cd_ids = cd_ids.length ? cd_ids : null; cat.description = desc; }
+                closeModal('m-new-cat');
+                _resetCatModal();
+                renderCustomNav();
+                loadCatsPage();
+                toast('Categoria atualizada!', 'success');
+            } catch (e) { toast('Erro: ' + e.message, 'error'); }
+            finally { setBtn('btn-save-cat', false, 'Salvar Alterações'); }
+        }
+
+        function _resetCatModal() {
+            const modal = document.getElementById('m-new-cat');
+            if (!modal) return;
+            modal.querySelector('.modal-title').textContent = 'Nova Categoria';
+            ['cat-name-inp', 'cat-icon-inp'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.value = ''; el.readOnly = false; el.style.opacity = ''; }
+            });
+            const baseInp = document.getElementById('cat-base-inp');
+            if (baseInp) { baseInp.value = 'geral'; baseInp.disabled = false; baseInp.style.opacity = ''; }
+            const saveBtn = document.getElementById('btn-save-cat');
+            if (saveBtn) { saveBtn.textContent = 'Criar Categoria'; saveBtn.onclick = createCategory; }
+            _populateCatCdCheckboxes([]);
         }
 
         async function deleteCat(catId) {
@@ -7554,7 +7675,34 @@
 
         function renderCustomNav() {
             const nav = document.getElementById('custom-nav'); if (!nav) return;
-            nav.innerHTML = catsCache.filter(c => !c.is_default).map(c => `<button class="nav-item" id="ni-cat-${c.id}" onclick="goCategory('${c.id}')"><span class="nav-icon">${c.icon}</span>${c.name}</button>`).join('');
+            // Filtra categorias customizadas visíveis para o usuário atual
+            const visibleCats = catsCache.filter(c => {
+                if (c.is_default) return false;
+                // Sem restrição = visível para todos
+                if (!c.cd_ids || c.cd_ids.length === 0) return true;
+                // Admin vê tudo
+                if (ROLE === 'admin') return true;
+                // CD só vê se estiver na lista
+                return ME && c.cd_ids.includes(ME.id);
+            });
+            nav.innerHTML = visibleCats.map(c => `<button class="nav-item" id="ni-cat-${c.id}" onclick="goCategory('${c.id}')"><span class="nav-icon">${c.icon}</span>${c.name}</button>`).join('');
+        }
+
+        // Popula checkboxes ao abrir modal de nova categoria
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('[onclick*="m-new-cat"]') || (e.target.getAttribute && e.target.getAttribute('onclick') || '').includes('m-new-cat')) {
+                // pequeno delay para o modal estar no DOM
+                setTimeout(() => { _populateCatCdCheckboxes([]); _resetCatModal(); }, 50);
+            }
+        });
+
+        // Helper: retorna categorias visíveis para o usuário atual
+        function getVisibleCats() {
+            return catsCache.filter(c => {
+                if (!c.cd_ids || c.cd_ids.length === 0) return true;
+                if (ROLE === 'admin') return true;
+                return ME && c.cd_ids.includes(ME.id);
+            });
         }
 
         // ============================================================
@@ -7688,7 +7836,7 @@
             editingId = null;
             document.getElementById('add-item-title').textContent = 'Adicionar Equipamento';
             const sel = document.getElementById('item-cat');
-            sel.innerHTML = '<option value="">Selecione...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            sel.innerHTML = '<option value="">Selecione...</option>' + getVisibleCats().map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
             if (pre || currentCat) { sel.value = pre || currentCat; renderItemForm(); }
             else document.getElementById('item-form-fields').innerHTML = '';
             resetPhotoUI(null);
@@ -7913,7 +8061,7 @@ Regras:
             editingId = itemId; currentCat = catId;
             document.getElementById('add-item-title').textContent = 'Editar Equipamento';
             const sel = document.getElementById('item-cat');
-            sel.innerHTML = '<option value="">Selecione...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            sel.innerHTML = '<option value="">Selecione...</option>' + getVisibleCats().map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
             sel.value = catId; renderItemForm();
             const item = itemsCache.find(i => i.id === itemId);
             resetPhotoUI(item?.photo_b64 || null);
@@ -8984,7 +9132,7 @@ Regras:
             document.getElementById('imp-preview').style.display = 'none';
             document.getElementById('imp-file').value = '';
             const sel = document.getElementById('imp-cat');
-            sel.innerHTML = '<option value="">Selecione...</option>' + catsCache.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+            sel.innerHTML = '<option value="">Selecione...</option>' + getVisibleCats().map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
             if (currentCat) sel.value = currentCat;
             openModal('m-import');
         }
