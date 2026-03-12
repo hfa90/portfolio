@@ -1386,7 +1386,7 @@
               <h3>🔗 Acesso Rápido</h3>
               <div style="display:flex;flex-direction:column;gap:.6rem;margin-top:.5rem;">
                 <button class="btn btn-primary"
-                  onclick="goTo('noticias', document.querySelector('[onclick*=noticias]')); openModal('noticias')">+
+                  onclick="goTo('noticias', document.querySelector('[onclick*=noticias]')); openNewsEditorNew()">+
                   Nova Notícia</button>
                 <button class="btn btn-secondary"
                   onclick="goTo('vagas', document.querySelector('[onclick*=vagas]')); openModal('vagas')">+ Nova
@@ -1424,7 +1424,7 @@
                 <option value="vagas">📋 Vagas</option>
                 <option value="geral">📌 Geral</option>
               </select>
-              <button class="btn btn-primary" onclick="openModal('noticias')">+ Nova notícia</button>
+              <button class="btn btn-primary" onclick="openNewsEditorNew()">+ Nova notícia</button>
             </div>
             <div id="noticias-loading" class="loading">
               <div class="spinner"></div>
@@ -1602,69 +1602,669 @@
      MODAIS
 ════════════════════════════════════════════════ -->
 
-  <!-- Modal Notícia -->
-  <div class="modal-overlay" id="modal-noticias">
-    <div class="modal">
-      <div class="modal-head">
-        <h3 id="modal-noticias-title">Nova Notícia</h3>
-        <button class="modal-close" onclick="closeModal('noticias')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-grid">
-          <div class="field full">
-            <label>Título *</label>
-            <input type="text" id="n-titulo" placeholder="Título da notícia">
-          </div>
-          <div class="field full">
-            <label>Resumo *</label>
-            <textarea id="n-resumo" placeholder="Texto curto que aparece nos cards (1-2 frases)"
-              style="min-height:80px;"></textarea>
-          </div>
-          <div class="field full">
-            <label>Conteúdo completo</label>
-            <textarea id="n-conteudo" placeholder="Texto completo da notícia..." style="min-height:180px;"></textarea>
-          </div>
-          <div class="field">
-            <label>Categoria *</label>
-            <select id="n-categoria">
-              <option value="geral">📌 Geral</option>
-              <option value="pirarucu">🐟 Pirarucu</option>
-              <option value="olea">🌿 Oleaginosas</option>
-              <option value="sanear">💧 Saneamento</option>
-              <option value="comercio">🛒 Comércio</option>
-              <option value="vagas">📋 Vagas</option>
+  <!-- ════════════ EDITOR PROFISSIONAL DE NOTÍCIA (fullscreen) ════════════ -->
+  <div id="news-editor-overlay"
+    style="display:none; position:fixed; inset:0; background:var(--painel-bg); z-index:1500; overflow-y:auto;">
+    <style>
+      /* ── EDITOR LAYOUT ── */
+      .ne-topbar {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: var(--escuro);
+        border-bottom: 1px solid var(--borda);
+        display: flex;
+        align-items: center;
+        gap: .8rem;
+        padding: .7rem 1.4rem;
+        flex-wrap: wrap;
+      }
+
+      .ne-topbar-title {
+        font-family: 'Fraunces', serif;
+        font-size: 1.1rem;
+        flex: 1;
+      }
+
+      .ne-body {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        min-height: calc(100vh - 58px);
+      }
+
+      @media(max-width:900px) {
+        .ne-body {
+          grid-template-columns: 1fr;
+        }
+
+        .ne-preview-panel {
+          display: none;
+        }
+      }
+
+      /* ── EDITOR PRINCIPAL ── */
+      .ne-editor-panel {
+        padding: 2rem;
+        border-right: 1px solid var(--borda);
+        display: flex;
+        flex-direction: column;
+        gap: 1.2rem;
+      }
+
+      .ne-title-input {
+        font-family: 'Fraunces', serif;
+        font-size: 1.9rem;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid var(--borda);
+        color: var(--texto);
+        outline: none;
+        padding: .5rem 0;
+        width: 100%;
+        transition: border-color .2s;
+        line-height: 1.3;
+      }
+
+      .ne-title-input:focus {
+        border-bottom-color: var(--verde-neon);
+      }
+
+      .ne-title-input::placeholder {
+        color: var(--texto-dim);
+        opacity: .5;
+      }
+
+      .ne-resumo-input {
+        background: rgba(255, 255, 255, .04);
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: .75rem 1rem;
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: .95rem;
+        outline: none;
+        width: 100%;
+        resize: none;
+        min-height: 80px;
+        transition: border-color .2s;
+      }
+
+      .ne-resumo-input:focus {
+        border-color: var(--verde-neon);
+      }
+
+      .ne-resumo-input::placeholder {
+        color: var(--texto-dim);
+        opacity: .5;
+      }
+
+      /* ── RICH TEXT TOOLBAR ── */
+      .rte-wrap {
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .rte-toolbar {
+        background: var(--cinza2);
+        border-bottom: 1px solid var(--borda);
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        padding: .45rem .6rem;
+        flex-wrap: wrap;
+      }
+
+      .rte-toolbar .sep {
+        width: 1px;
+        height: 20px;
+        background: var(--borda);
+        margin: 0 4px;
+      }
+
+      .rte-btn {
+        background: none;
+        border: none;
+        color: var(--texto-dim);
+        width: 30px;
+        height: 30px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: .9rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background .15s, color .15s;
+        position: relative;
+      }
+
+      .rte-btn:hover,
+      .rte-btn.active {
+        background: rgba(123, 201, 92, .15);
+        color: var(--verde-neon);
+      }
+
+      .rte-btn[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: -28px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: var(--escuro);
+        color: var(--texto);
+        font-size: .68rem;
+        padding: .2rem .5rem;
+        border-radius: 4px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 999;
+        border: 1px solid var(--borda);
+      }
+
+      .rte-select {
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        color: var(--texto);
+        border-radius: 6px;
+        padding: .2rem .4rem;
+        font-size: .78rem;
+        cursor: pointer;
+        outline: none;
+        font-family: 'DM Sans', sans-serif;
+      }
+
+      .rte-color-btn {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: 2px solid var(--borda);
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+      }
+
+      #rte-color-picker {
+        position: absolute;
+        opacity: 0;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        cursor: pointer;
+      }
+
+      .rte-body {
+        min-height: 420px;
+        padding: 1.4rem 1.6rem;
+        background: var(--card-bg);
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: 1rem;
+        line-height: 1.75;
+        outline: none;
+      }
+
+      .rte-body:empty::before {
+        content: 'Escreva o conteúdo completo da notícia aqui…';
+        color: var(--texto-dim);
+        opacity: .4;
+        pointer-events: none;
+      }
+
+      .rte-body img {
+        max-width: 100%;
+        border-radius: 8px;
+        margin: .5rem 0;
+      }
+
+      .rte-body blockquote {
+        border-left: 4px solid var(--verde-neon);
+        margin: 1rem 0;
+        padding: .5rem 1rem;
+        background: rgba(123, 201, 92, .06);
+        border-radius: 0 6px 6px 0;
+        color: var(--texto-dim);
+        font-style: italic;
+      }
+
+      .rte-body table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: .8rem 0;
+      }
+
+      .rte-body table td,
+      .rte-body table th {
+        border: 1px solid var(--borda);
+        padding: .4rem .7rem;
+        font-size: .88rem;
+      }
+
+      .rte-body table th {
+        background: var(--cinza2);
+        font-weight: 700;
+      }
+
+      .rte-body h1,
+      .rte-body h2,
+      .rte-body h3 {
+        font-family: 'Fraunces', serif;
+        margin: .8rem 0 .4rem;
+      }
+
+      /* image resize toolbar (inline) */
+      .img-toolbar {
+        display: inline-flex;
+        gap: 4px;
+        background: var(--escuro);
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        padding: .2rem .4rem;
+        margin: .3rem 0;
+        vertical-align: middle;
+      }
+
+      .img-toolbar button {
+        background: none;
+        border: none;
+        color: var(--texto-dim);
+        cursor: pointer;
+        font-size: .75rem;
+        padding: .15rem .35rem;
+        border-radius: 4px;
+      }
+
+      .img-toolbar button:hover {
+        background: rgba(123, 201, 92, .15);
+        color: var(--verde-neon);
+      }
+
+      /* ── SIDEBAR DO EDITOR ── */
+      .ne-preview-panel {
+        background: var(--escuro);
+        padding: 1.6rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1.2rem;
+        overflow-y: auto;
+      }
+
+      .ne-panel-section {
+        display: flex;
+        flex-direction: column;
+        gap: .5rem;
+      }
+
+      .ne-panel-label {
+        font-size: .7rem;
+        font-weight: 700;
+        letter-spacing: .1em;
+        text-transform: uppercase;
+        color: var(--texto-dim);
+        opacity: .7;
+      }
+
+      .ne-panel-input {
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        border-radius: 7px;
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: .85rem;
+        padding: .6rem .9rem;
+        outline: none;
+        width: 100%;
+        transition: border-color .2s;
+      }
+
+      .ne-panel-input:focus {
+        border-color: var(--verde-neon);
+      }
+
+      .ne-panel-select {
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        border-radius: 7px;
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: .85rem;
+        padding: .6rem .9rem;
+        outline: none;
+        width: 100%;
+        cursor: pointer;
+      }
+
+      .ne-img-preview {
+        width: 100%;
+        aspect-ratio: 16/9;
+        border-radius: 8px;
+        object-fit: cover;
+        border: 1px solid var(--borda);
+        background: var(--cinza);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--texto-dim);
+        font-size: .82rem;
+        overflow: hidden;
+      }
+
+      .ne-img-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .ne-toggle-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: .5rem .7rem;
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        border-radius: 7px;
+      }
+
+      .ne-toggle-row span {
+        font-size: .85rem;
+      }
+
+      .ne-preview-card {
+        background: var(--card-bg);
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: 1rem;
+        font-size: .8rem;
+        color: var(--texto-dim);
+        min-height: 80px;
+      }
+
+      .ne-preview-card strong {
+        color: var(--texto);
+        font-family: 'Fraunces', serif;
+        font-size: .95rem;
+        display: block;
+        margin-bottom: .4rem;
+      }
+
+      .ne-divider {
+        height: 1px;
+        background: var(--borda);
+        margin: .3rem 0;
+      }
+
+      /* ── FONT SIZE PICKER ── */
+      .rte-font-size {
+        width: 52px;
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        color: var(--texto);
+        border-radius: 6px;
+        padding: .2rem .4rem;
+        font-size: .78rem;
+        cursor: pointer;
+        outline: none;
+        font-family: 'DM Sans', sans-serif;
+        text-align: center;
+      }
+
+      /* ── LINK POPUP ── */
+      .rte-link-popup {
+        position: fixed;
+        z-index: 2000;
+        background: var(--card-bg);
+        border: 1px solid var(--borda);
+        border-radius: 10px;
+        padding: 1rem;
+        box-shadow: var(--shadow);
+        display: none;
+        min-width: 280px;
+      }
+
+      .rte-link-popup input {
+        width: 100%;
+        background: var(--cinza);
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        color: var(--texto);
+        font-family: 'DM Sans', sans-serif;
+        font-size: .85rem;
+        padding: .5rem .8rem;
+        outline: none;
+        margin-bottom: .6rem;
+      }
+
+      .rte-link-popup input:focus {
+        border-color: var(--verde-neon);
+      }
+    </style>
+
+    <!-- TOPBAR -->
+    <div class="ne-topbar">
+      <button class="btn btn-secondary btn-sm" onclick="closeNewsEditor()">← Voltar</button>
+      <span class="ne-topbar-title" id="ne-topbar-title">Nova Notícia</span>
+      <button class="btn btn-secondary btn-sm" onclick="previewNoticiaPage()">👁 Preview</button>
+      <button class="btn btn-success btn-sm" onclick="downloadNoticiaPage()">⬇ Baixar HTML</button>
+      <button class="btn btn-primary" onclick="saveNoticia()">💾 Salvar notícia</button>
+    </div>
+
+    <div class="ne-body">
+      <!-- EDITOR PRINCIPAL -->
+      <div class="ne-editor-panel">
+        <input class="ne-title-input" id="n-titulo" type="text" placeholder="Título da notícia…"
+          oninput="updatePreview()">
+        <textarea class="ne-resumo-input" id="n-resumo" placeholder="Resumo (1-2 frases para os cards do site)…"
+          oninput="updatePreview()" rows="3"></textarea>
+
+        <!-- Rich Text Editor -->
+        <div class="rte-wrap">
+          <div class="rte-toolbar" id="rte-toolbar">
+            <!-- Parágrafo / Heading -->
+            <select class="rte-select" id="rte-block" onchange="rteBlock(this.value)" title="Estilo do bloco">
+              <option value="p">Parágrafo</option>
+              <option value="h1">Título 1</option>
+              <option value="h2">Título 2</option>
+              <option value="h3">Título 3</option>
+              <option value="h4">Título 4</option>
+              <option value="blockquote">Citação</option>
+              <option value="pre">Código</option>
             </select>
+
+            <!-- Font family -->
+            <select class="rte-select" id="rte-font" onchange="rteExec('fontName', this.value)" title="Fonte">
+              <option value="DM Sans, sans-serif">DM Sans</option>
+              <option value="Fraunces, serif">Fraunces</option>
+              <option value="Georgia, serif">Georgia</option>
+              <option value="Arial, sans-serif">Arial</option>
+              <option value="'Courier New', monospace">Courier</option>
+              <option value="'Times New Roman', serif">Times New Roman</option>
+            </select>
+
+            <!-- Font size -->
+            <input type="number" class="rte-font-size" id="rte-fontsize" value="16" min="8" max="72"
+              onchange="rteFontSize(this.value)" title="Tamanho da fonte (px)">
+
+            <div class="sep"></div>
+
+            <!-- Formatação básica -->
+            <button class="rte-btn" onclick="rteExec('bold')" title="Negrito (Ctrl+B)"><b>B</b></button>
+            <button class="rte-btn" onclick="rteExec('italic')" title="Itálico (Ctrl+I)"><i>I</i></button>
+            <button class="rte-btn" onclick="rteExec('underline')" title="Sublinhado (Ctrl+U)"><u>U</u></button>
+            <button class="rte-btn" onclick="rteExec('strikeThrough')" title="Tachado"><s>S</s></button>
+            <button class="rte-btn" onclick="rteExec('superscript')" title="Sobrescrito">x²</button>
+            <button class="rte-btn" onclick="rteExec('subscript')" title="Subscrito">x₂</button>
+
+            <div class="sep"></div>
+
+            <!-- Alinhamento -->
+            <button class="rte-btn" onclick="rteExec('justifyLeft')" title="Alinhar à esquerda">⬅</button>
+            <button class="rte-btn" onclick="rteExec('justifyCenter')" title="Centralizar">☰</button>
+            <button class="rte-btn" onclick="rteExec('justifyRight')" title="Alinhar à direita">➡</button>
+            <button class="rte-btn" onclick="rteExec('justifyFull')" title="Justificar">☷</button>
+
+            <div class="sep"></div>
+
+            <!-- Listas -->
+            <button class="rte-btn" onclick="rteExec('insertUnorderedList')" title="Lista com marcadores">• ≡</button>
+            <button class="rte-btn" onclick="rteExec('insertOrderedList')" title="Lista numerada">1. ≡</button>
+            <button class="rte-btn" onclick="rteExec('indent')" title="Aumentar recuo">→|</button>
+            <button class="rte-btn" onclick="rteExec('outdent')" title="Diminuir recuo">|←</button>
+
+            <div class="sep"></div>
+
+            <!-- Cor de texto e fundo -->
+            <div class="rte-color-btn" title="Cor do texto"
+              style="background:linear-gradient(135deg,#fff 50%,#e74c3c 50%)">
+              <input type="color" id="rte-fgcolor" value="#e8f0e8" onchange="rteExec('foreColor',this.value)"
+                title="Cor do texto">
+            </div>
+            <div class="rte-color-btn" title="Realce" style="background:linear-gradient(135deg,#fff 50%,#f1c40f 50%)">
+              <input type="color" id="rte-bgcolor" value="#f1c40f" onchange="rteExec('hiliteColor',this.value)"
+                title="Realçar texto">
+            </div>
+
+            <div class="sep"></div>
+
+            <!-- Imagem, link, tabela -->
+            <button class="rte-btn" onclick="rteInsertImage()" title="Inserir imagem 🖼">🖼</button>
+            <button class="rte-btn" onclick="rteInsertLink()" title="Inserir link 🔗">🔗</button>
+            <button class="rte-btn" onclick="rteExec('unlink')" title="Remover link">🚫🔗</button>
+            <button class="rte-btn" onclick="rteInsertTable()" title="Inserir tabela ⊞">⊞</button>
+            <button class="rte-btn" onclick="rteInsertDivider()" title="Linha horizontal">—</button>
+
+            <div class="sep"></div>
+
+            <!-- Desfazer/Refazer -->
+            <button class="rte-btn" onclick="rteExec('undo')" title="Desfazer (Ctrl+Z)">↩</button>
+            <button class="rte-btn" onclick="rteExec('redo')" title="Refazer (Ctrl+Y)">↪</button>
+            <button class="rte-btn" onclick="rteClearFormat()" title="Limpar formatação">✕A</button>
           </div>
-          <div class="field">
-            <label>Data de publicação *</label>
-            <input type="date" id="n-data">
-          </div>
-          <div class="field full">
-            <label>URL externa (link da notícia original)</label>
-            <input type="url" id="n-url" placeholder="https://asproc.org.br/noticia...">
-          </div>
-          <div class="field full">
-            <label>URL da imagem</label>
-            <input type="url" id="n-imagem" placeholder="https://...">
-          </div>
-          <div class="field" style="justify-content:flex-end;padding-top:.5rem;">
-            <label class="toggle-wrap">
-              <span class="toggle"><input type="checkbox" id="n-destaque"><span class="toggle-slider"></span></span>
-              <span class="toggle-label">Notícia em destaque</span>
-            </label>
-          </div>
-          <div class="field" style="justify-content:flex-end;padding-top:.5rem;">
-            <label class="toggle-wrap">
-              <span class="toggle"><input type="checkbox" id="n-publicado" checked><span
-                  class="toggle-slider"></span></span>
-              <span class="toggle-label">Publicada no site</span>
-            </label>
+
+          <div id="n-rte-body" class="rte-body" contenteditable="true" oninput="syncRteToHidden(); updatePreview();"
+            onkeyup="updateRteToolbarState();" onmouseup="updateRteToolbarState();"
+            onselectionchange="updateRteToolbarState();">
           </div>
         </div>
+
+        <!-- campo hidden que guarda o HTML do RTE -->
+        <textarea id="n-conteudo" style="display:none;"></textarea>
       </div>
-      <div class="modal-foot">
-        <button class="btn btn-secondary" onclick="closeModal('noticias')">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveNoticia()">💾 Salvar notícia</button>
+
+      <!-- PAINEL LATERAL -->
+      <div class="ne-preview-panel">
+        <div class="ne-panel-section">
+          <div class="ne-panel-label">Metadados</div>
+          <select class="ne-panel-select" id="n-categoria">
+            <option value="geral">📌 Geral</option>
+            <option value="pirarucu">🐟 Pirarucu</option>
+            <option value="olea">🌿 Oleaginosas</option>
+            <option value="sanear">💧 Saneamento</option>
+            <option value="comercio">🛒 Comércio</option>
+            <option value="vagas">📋 Vagas</option>
+          </select>
+          <input type="date" class="ne-panel-input" id="n-data">
+          <input type="text" class="ne-panel-input" id="n-autor" placeholder="Autor (opcional)">
+          <input type="text" class="ne-panel-input" id="n-tags" placeholder="Tags: borracha, amazônia…">
+        </div>
+
+        <div class="ne-divider"></div>
+
+        <div class="ne-panel-section">
+          <div class="ne-panel-label">Imagem de capa</div>
+          <div class="ne-img-preview" id="ne-img-preview">
+            <span>Sem imagem</span>
+          </div>
+          <input type="url" class="ne-panel-input" id="n-imagem" placeholder="URL da imagem…"
+            oninput="updateImgPreview()">
+
+          <!-- Controles de imagem -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.3rem;">
+            <div>
+              <div class="ne-panel-label" style="margin-bottom:.3rem;">Largura</div>
+              <select class="ne-panel-select" id="n-img-largura" style="font-size:.78rem;">
+                <option value="100%">100% (full)</option>
+                <option value="80%">80%</option>
+                <option value="60%">60%</option>
+                <option value="50%">50%</option>
+                <option value="400px">400px</option>
+                <option value="300px">300px</option>
+                <option value="200px">200px</option>
+              </select>
+            </div>
+            <div>
+              <div class="ne-panel-label" style="margin-bottom:.3rem;">Posição</div>
+              <select class="ne-panel-select" id="n-img-align" style="font-size:.78rem;">
+                <option value="center">Centro</option>
+                <option value="left">Esquerda</option>
+                <option value="right">Direita</option>
+                <option value="none">Sem float</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="ne-divider"></div>
+
+        <div class="ne-panel-section">
+          <div class="ne-panel-label">Publicação</div>
+          <div class="ne-toggle-row">
+            <span>⭐ Destaque</span>
+            <label class="toggle-wrap" style="margin:0;">
+              <span class="toggle"><input type="checkbox" id="n-destaque"><span class="toggle-slider"></span></span>
+            </label>
+          </div>
+          <div class="ne-toggle-row">
+            <span>🌐 Publicada</span>
+            <label class="toggle-wrap" style="margin:0;">
+              <span class="toggle"><input type="checkbox" id="n-publicado" checked><span
+                  class="toggle-slider"></span></span>
+            </label>
+          </div>
+          <input type="url" class="ne-panel-input" id="n-url" placeholder="URL externa (opcional)">
+          <input type="text" class="ne-panel-input" id="n-slug" placeholder="Slug: noticia-sobre-borracha"
+            oninput="this.value=slugify(this.value)">
+        </div>
+
+        <div class="ne-divider"></div>
+
+        <!-- Preview do card -->
+        <div class="ne-panel-section">
+          <div class="ne-panel-label">Preview do card</div>
+          <div class="ne-preview-card" id="ne-card-preview">
+            <strong id="ne-prev-titulo">Título da notícia…</strong>
+            <span id="ne-prev-resumo" style="font-size:.78rem;display:block;margin-top:.2rem;">Resumo aparecerá
+              aqui…</span>
+          </div>
+        </div>
+
+        <div class="ne-divider"></div>
+
+        <!-- Configurações da página gerada -->
+        <div class="ne-panel-section">
+          <div class="ne-panel-label">Página HTML gerada</div>
+          <div style="font-size:.75rem;color:var(--texto-dim);line-height:1.5;">
+            Ao salvar, uma página <code
+              style="background:var(--cinza);padding:.1rem .3rem;border-radius:3px;">.html</code> completa e
+            independente será gerada automaticamente para esta notícia.
+          </div>
+          <select class="ne-panel-select" id="n-page-template" style="font-size:.78rem;">
+            <option value="article">Artigo padrão ASPROC</option>
+            <option value="editorial">Editorial (amplo)</option>
+            <option value="compact">Compacto (sem sidebar)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Link popup -->
+    <div class="rte-link-popup" id="rte-link-popup">
+      <div style="font-size:.8rem;font-weight:700;margin-bottom:.5rem;color:var(--verde-neon);">🔗 Inserir link</div>
+      <input type="url" id="rte-link-url" placeholder="https://...">
+      <input type="text" id="rte-link-text" placeholder="Texto do link">
+      <div style="display:flex;gap:.5rem;">
+        <button class="btn btn-primary btn-sm" onclick="rteConfirmLink()">Inserir</button>
+        <button class="btn btn-secondary btn-sm"
+          onclick="document.getElementById('rte-link-popup').style.display='none'">Cancelar</button>
       </div>
     </div>
   </div>
@@ -2237,32 +2837,27 @@
       const n = allNoticias.find(x => x.id === id);
       if (!n) return;
       editingId.noticias = id;
-      document.getElementById('modal-noticias-title').textContent = 'Editar Notícia';
+      document.getElementById('ne-topbar-title').textContent = 'Editar Notícia';
       document.getElementById('n-titulo').value = n.titulo || '';
       document.getElementById('n-resumo').value = n.resumo || '';
       document.getElementById('n-conteudo').value = n.conteudo || '';
+      document.getElementById('n-rte-body').innerHTML = n.conteudo || '';
       document.getElementById('n-categoria').value = n.categoria || 'geral';
       document.getElementById('n-data').value = n.data_pub || '';
       document.getElementById('n-url').value = n.url_externa || '';
       document.getElementById('n-imagem').value = n.imagem_url || '';
       document.getElementById('n-destaque').checked = !!n.destaque;
       document.getElementById('n-publicado').checked = !!n.publicado;
-      openModal('noticias');
+      document.getElementById('n-slug').value = n.slug || slugify(n.titulo || '');
+      document.getElementById('n-autor').value = n.autor || '';
+      document.getElementById('n-tags').value = n.tags || '';
+      updateImgPreview(); updatePreview();
+      openNewsEditor();
     }
 
     async function saveNoticia() {
-      const data = {
-        titulo: document.getElementById('n-titulo').value.trim(),
-        resumo: document.getElementById('n-resumo').value.trim(),
-        conteudo: document.getElementById('n-conteudo').value.trim(),
-        categoria: document.getElementById('n-categoria').value,
-        data_pub: document.getElementById('n-data').value || new Date().toISOString().split('T')[0],
-        url_externa: document.getElementById('n-url').value.trim() || null,
-        imagem_url: document.getElementById('n-imagem').value.trim() || null,
-        destaque: document.getElementById('n-destaque').checked,
-        publicado: document.getElementById('n-publicado').checked,
-      };
-
+      syncRteToHidden();
+      const data = getNoticiaData();
       if (!data.titulo || !data.resumo) { toast('Preencha título e resumo.', 'error'); return; }
 
       try {
@@ -2273,9 +2868,11 @@
           await sbInsert('noticias', data);
           toast('Notícia publicada!', 'success');
         }
-        closeModal('noticias');
+        closeNewsEditor();
         loadNoticias();
         loadDashboard();
+        // Auto-download the generated page
+        downloadNoticiaPage(data);
       } catch (e) { toast('Erro: ' + e.message, 'error'); }
     }
 
@@ -2541,11 +3138,11 @@
        MODAIS
     ══════════════════════════════════════════ */
     function openModal(name) {
+      if (name === 'noticias') { openNewsEditorNew(); return; }
       // Resetar IDs de edição se for novo
       if (!editingId[name]) {
-        document.getElementById('modal-' + name + '-title').textContent = {
-          noticias: 'Nova Notícia', vagas: 'Nova Vaga', avisos: 'Novo Aviso'
-        }[name] || 'Novo';
+        const titleEl = document.getElementById('modal-' + name + '-title');
+        if (titleEl) titleEl.textContent = { vagas: 'Nova Vaga', avisos: 'Novo Aviso' }[name] || 'Novo';
         clearForm(name);
       }
       document.getElementById('modal-' + name).classList.add('open');
@@ -2692,6 +3289,396 @@
     /* ══════════════════════════════════════════
        INICIALIZAR
     ══════════════════════════════════════════ */
+
+    /* ══════════════════════════════════════════════════════
+       EDITOR PROFISSIONAL DE NOTÍCIAS
+    ══════════════════════════════════════════════════════ */
+
+    // ── Abrir / fechar ──
+    function openNewsEditorNew() {
+      editingId.noticias = null;
+      document.getElementById('ne-topbar-title').textContent = 'Nova Notícia';
+      document.getElementById('n-titulo').value = '';
+      document.getElementById('n-resumo').value = '';
+      document.getElementById('n-conteudo').value = '';
+      document.getElementById('n-rte-body').innerHTML = '';
+      document.getElementById('n-categoria').value = 'geral';
+      document.getElementById('n-data').value = new Date().toISOString().split('T')[0];
+      document.getElementById('n-url').value = '';
+      document.getElementById('n-imagem').value = '';
+      document.getElementById('n-destaque').checked = false;
+      document.getElementById('n-publicado').checked = true;
+      document.getElementById('n-slug').value = '';
+      document.getElementById('n-autor').value = '';
+      document.getElementById('n-tags').value = '';
+      document.getElementById('ne-img-preview').innerHTML = '<span>Sem imagem</span>';
+      updatePreview();
+      openNewsEditor();
+    }
+
+    function openNewsEditor() {
+      document.getElementById('news-editor-overlay').style.display = 'block';
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('n-titulo').focus(), 100);
+    }
+
+    function closeNewsEditor() {
+      document.getElementById('news-editor-overlay').style.display = 'none';
+      document.body.style.overflow = '';
+      editingId.noticias = null;
+    }
+
+    // ── Helpers ──
+    function slugify(str) {
+      return (str || '').toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '').trim()
+        .replace(/\s+/g, '-').replace(/-+/g, '-').substring(0, 80);
+    }
+
+    function updatePreview() {
+      const t = document.getElementById('n-titulo').value || 'Título da notícia…';
+      const r = document.getElementById('n-resumo').value || 'Resumo aparecerá aqui…';
+      document.getElementById('ne-prev-titulo').textContent = t;
+      document.getElementById('ne-prev-resumo').textContent = r;
+      // Auto-slug
+      const slugEl = document.getElementById('n-slug');
+      if (!slugEl.dataset.manual) slugEl.value = slugify(document.getElementById('n-titulo').value);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const slugEl = document.getElementById('n-slug');
+      if (slugEl) slugEl.addEventListener('input', () => { slugEl.dataset.manual = '1'; });
+    });
+
+    function updateImgPreview() {
+      const url = document.getElementById('n-imagem').value.trim();
+      const prev = document.getElementById('ne-img-preview');
+      if (url) {
+        prev.innerHTML = `<img src="${url}" onerror="this.parentElement.innerHTML='<span>Imagem inválida</span>'">`;
+      } else {
+        prev.innerHTML = '<span>Sem imagem</span>';
+      }
+    }
+
+    function syncRteToHidden() {
+      document.getElementById('n-conteudo').value = document.getElementById('n-rte-body').innerHTML;
+    }
+
+    // ── Rich Text Editor Commands ──
+    function rteExec(cmd, val) {
+      document.getElementById('n-rte-body').focus();
+      document.execCommand(cmd, false, val || null);
+      syncRteToHidden();
+    }
+
+    function rteFontSize(px) {
+      // Use a span with inline style as execCommand fontSize is limited
+      document.getElementById('n-rte-body').focus();
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) {
+        const range = sel.getRangeAt(0);
+        const span = document.createElement('span');
+        span.style.fontSize = px + 'px';
+        range.surroundContents(span);
+        sel.removeAllRanges();
+      } else {
+        document.execCommand('fontSize', false, '7');
+        document.querySelectorAll('#n-rte-body font[size="7"]').forEach(f => {
+          f.removeAttribute('size');
+          f.style.fontSize = px + 'px';
+          f.outerHTML = f.outerHTML.replace('<font', '<span').replace('</font>', '</span>');
+        });
+      }
+      syncRteToHidden();
+    }
+
+    function rteBlock(tag) {
+      document.getElementById('n-rte-body').focus();
+      if (tag === 'blockquote') {
+        document.execCommand('formatBlock', false, 'blockquote');
+      } else if (tag === 'pre') {
+        document.execCommand('formatBlock', false, 'pre');
+      } else {
+        document.execCommand('formatBlock', false, tag);
+      }
+      syncRteToHidden();
+    }
+
+    function rteClearFormat() {
+      rteExec('removeFormat');
+      rteExec('formatBlock', 'p');
+    }
+
+    function rteInsertDivider() {
+      document.getElementById('n-rte-body').focus();
+      document.execCommand('insertHTML', false, '<hr style="border:none;border-top:1px solid rgba(123,201,92,.3);margin:1.5rem 0;">');
+      syncRteToHidden();
+    }
+
+    function rteInsertTable() {
+      const rows = parseInt(prompt('Número de linhas:', '3') || '3');
+      const cols = parseInt(prompt('Número de colunas:', '3') || '3');
+      if (!rows || !cols) return;
+      let html = '<table style="border-collapse:collapse;width:100%;margin:.8rem 0;">';
+      html += '<thead><tr>' + Array(cols).fill(0).map((_, i) => `<th style="border:1px solid #444;padding:.4rem .7rem;background:#2a3a2a;">Coluna ${i + 1}</th>`).join('') + '</tr></thead>';
+      html += '<tbody>';
+      for (let r = 0; r < rows - 1; r++) {
+        html += '<tr>' + Array(cols).fill(0).map(() => '<td style="border:1px solid #444;padding:.4rem .7rem;">Célula</td>').join('') + '</tr>';
+      }
+      html += '</tbody></table>';
+      document.getElementById('n-rte-body').focus();
+      document.execCommand('insertHTML', false, html);
+      syncRteToHidden();
+    }
+
+    function rteInsertImage() {
+      const url = prompt('URL da imagem:');
+      if (!url) return;
+      const w = prompt('Largura (ex: 100%, 400px):', '100%') || '100%';
+      const align = prompt('Alinhamento (center, left, right):', 'center') || 'center';
+      let style = `max-width:${w};display:block;`;
+      if (align === 'center') style += 'margin:1rem auto;';
+      else if (align === 'left') style += `float:left;margin:0 1rem 1rem 0;`;
+      else if (align === 'right') style += `float:right;margin:0 0 1rem 1rem;`;
+      const html = `<img src="${url}" style="${style}border-radius:8px;" alt="">`;
+      document.getElementById('n-rte-body').focus();
+      document.execCommand('insertHTML', false, html);
+      syncRteToHidden();
+    }
+
+    let savedRangeForLink = null;
+    function rteInsertLink() {
+      const sel = window.getSelection();
+      const popup = document.getElementById('rte-link-popup');
+      document.getElementById('rte-link-text').value = sel ? sel.toString() : '';
+      document.getElementById('rte-link-url').value = '';
+      if (sel && !sel.isCollapsed) savedRangeForLink = sel.getRangeAt(0).cloneRange();
+      popup.style.display = 'block';
+      popup.style.top = '120px'; popup.style.right = '30px';
+      document.getElementById('rte-link-url').focus();
+    }
+
+    function rteConfirmLink() {
+      const url = document.getElementById('rte-link-url').value.trim();
+      const text = document.getElementById('rte-link-text').value.trim();
+      if (!url) return;
+      document.getElementById('rte-link-popup').style.display = 'none';
+      document.getElementById('n-rte-body').focus();
+      if (savedRangeForLink) {
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(savedRangeForLink);
+        savedRangeForLink = null;
+      }
+      if (text) {
+        document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" style="color:#7bc95c">${text}</a>`);
+      } else {
+        document.execCommand('createLink', false, url);
+        // Style last inserted link
+        setTimeout(() => {
+          document.querySelectorAll('#n-rte-body a:not([style])').forEach(a => a.style.color = '#7bc95c');
+        }, 50);
+      }
+      syncRteToHidden();
+    }
+
+    function updateRteToolbarState() {
+      const cmds = ['bold', 'italic', 'underline', 'strikeThrough', 'justifyLeft', 'justifyCenter', 'justifyRight', 'justifyFull'];
+      const btns = document.querySelectorAll('#rte-toolbar .rte-btn');
+      // simple: check bold/italic/underline
+      try {
+        if (document.queryCommandState('bold')) btns[0] && btns[0].classList.add('active');
+        else btns[0] && btns[0].classList.remove('active');
+      } catch (e) { }
+    }
+
+    // ── Gerar página HTML da notícia ──
+    function buildNoticiaPageHTML(data) {
+      var template = document.getElementById('n-page-template') ? document.getElementById('n-page-template').value : 'article';
+      var imgW = document.getElementById('n-img-largura') ? document.getElementById('n-img-largura').value : '100%';
+      var imgAlign = document.getElementById('n-img-align') ? document.getElementById('n-img-align').value : 'center';
+
+      var imgStyle = 'max-width:' + imgW + ';display:block;';
+      if (imgAlign === 'center') imgStyle += 'margin:1.5rem auto;';
+      else if (imgAlign === 'left') imgStyle += 'float:left;margin:0 1.5rem 1rem 0;';
+      else if (imgAlign === 'right') imgStyle += 'float:right;margin:0 0 1rem 1.5rem;';
+
+      var imgTag = data.imagem_url ? '<img src="' + data.imagem_url + '" alt="' + (data.titulo || '').replace(/"/g, '&quot;') + '" style="' + imgStyle + 'border-radius:10px;">' : '';
+      var isWide = template === 'editorial';
+      var noSidebar = template === 'compact';
+      var maxWidth = isWide ? '900px' : '760px';
+
+      var sidebarHTML = '';
+      if (!noSidebar) {
+        sidebarHTML = '<aside style="width:300px;flex-shrink:0;">'
+          + '<div style="background:#f7f7f7;border-radius:10px;padding:1.4rem;position:sticky;top:2rem;">'
+          + '<h3 style="font-family:\'Fraunces\',Georgia,serif;font-size:1.1rem;color:#2d6a2d;margin:0 0 .8rem;border-bottom:2px solid #7bc95c;padding-bottom:.5rem;">Leia tamb\u00e9m</h3>'
+          + '<p style="font-size:.85rem;color:#666;line-height:1.5;">Mais conte\u00fado em breve.</p>'
+          + '</div></aside>';
+      }
+
+      var articleStyle = noSidebar ? 'flex:1;' : 'flex:1;min-width:0;';
+      var catLbl = catLabel(data.categoria);
+      var dateFmt = formatDateBR(data.data_pub);
+      var autorTag = data.autor ? '<span>\u270d\ufe0f ' + data.autor + '</span>' : '';
+      var ogImg = data.imagem_url ? '<meta property="og:image" content="' + data.imagem_url + '">' : '';
+      var tagsHTML = '';
+      if (data.tags) {
+        var tagItems = data.tags.split(',').map(function (t) {
+          t = t.trim();
+          return '<a href="noticias.html?tag=' + encodeURIComponent(t) + '" style="background:#e8f0e0;padding:.15rem .5rem;border-radius:4px;margin:.15rem;display:inline-block;color:#2d6a2d;">' + t + '</a>';
+        }).join('');
+        tagsHTML = '<div style="margin-top:1rem;font-size:.82rem;color:#666;">\ud83c\udff7 Tags: ' + tagItems + '</div>';
+      }
+
+      var shareUrl = 'window.location.href';
+      var titleEnc = encodeURIComponent(data.titulo || '');
+      var shareHTML = '<div class="article-share">'
+        + '<strong style="font-size:.88rem;color:#444;">Compartilhar:</strong>'
+        + '<a class="share-btn wa" href="https://wa.me/?text=' + titleEnc + '%20%E2%80%93%20" onclick="this.href=\'https://wa.me/?text=\'+encodeURIComponent(document.title+\' \'+window.location.href)" target="_blank">\ud83d\udcf1 WhatsApp</a>'
+        + '<a class="share-btn fb" href="https://www.facebook.com/sharer/sharer.php?u=" onclick="this.href=\'https://www.facebook.com/sharer/sharer.php?u=\'+encodeURIComponent(window.location.href)" target="_blank">\ud83d\udc4d Facebook</a>'
+        + '<a class="share-btn tw" href="https://twitter.com/intent/tweet" onclick="this.href=\'https://twitter.com/intent/tweet?text=\'+encodeURIComponent(document.title)+\'&url=\'+encodeURIComponent(window.location.href)" target="_blank">\ud83d\udc26 Twitter</a>'
+        + '<button class="share-btn copy" onclick="navigator.clipboard.writeText(window.location.href).then(function(){this.textContent=\'\u2705 Copiado!\'},function(){}).bind(this)">\ud83d\udd17 Copiar link</button>'
+        + '</div>';
+
+      var year = new Date().getFullYear();
+
+      var html = '<!DOCTYPE html>\n'
+        + '<html lang="pt-BR">\n'
+        + '<head>\n'
+        + '<meta charset="UTF-8">\n'
+        + '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        + '<title>' + (data.titulo || 'Not\u00edcia') + ' \u2013 ASPROC</title>\n'
+        + '<meta name="description" content="' + (data.resumo || '').replace(/"/g, '&quot;') + '">\n'
+        + ogImg + '\n'
+        + '<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;1,9..144,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">\n'
+        + '<style>\n'
+        + '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}\n'
+        + 'html{scroll-behavior:smooth;}\n'
+        + 'body{font-family:\'DM Sans\',sans-serif;background:#f5f0e8;color:#1a1a1a;line-height:1.7;}\n'
+        + 'a{color:#2d6a2d;text-decoration:none;}a:hover{text-decoration:underline;}\n'
+        + '.site-nav{background:#fff;border-bottom:1px solid #e0ddd6;padding:.9rem 2rem;display:flex;align-items:center;gap:1.2rem;position:sticky;top:0;z-index:100;box-shadow:0 1px 8px rgba(0,0,0,.06);}\n'
+        + '.site-nav .brand{font-family:\'Fraunces\',serif;font-size:1.15rem;font-weight:700;color:#2d6a2d;flex:1;}\n'
+        + '.site-nav a{font-size:.85rem;color:#555;font-weight:500;}\n'
+        + '.site-nav a:hover{color:#2d6a2d;}\n'
+        + '.article-hero{background:linear-gradient(135deg,#2d6a2d 0%,#4a9e3f 100%);color:#fff;padding:3rem 2rem 2.5rem;}\n'
+        + '.article-hero-inner{max-width:' + maxWidth + ';margin:0 auto;}\n'
+        + '.article-meta{display:flex;align-items:center;gap:.7rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.82rem;opacity:.85;}\n'
+        + '.article-meta .cat-badge{background:rgba(255,255,255,.18);border-radius:99px;padding:.2rem .75rem;font-weight:600;}\n'
+        + '.article-hero h1{font-family:\'Fraunces\',serif;font-size:clamp(1.6rem,4vw,2.5rem);font-weight:700;line-height:1.25;margin-bottom:1rem;}\n'
+        + '.article-hero .resumo{font-size:1.05rem;opacity:.9;max-width:680px;line-height:1.6;}\n'
+        + '.article-wrap{max-width:' + (isWide || noSidebar ? maxWidth : '1100px') + ';margin:0 auto;padding:2.5rem 1.5rem;display:flex;gap:2.5rem;align-items:flex-start;}\n'
+        + '.article-body{' + articleStyle + 'font-size:1.02rem;line-height:1.8;color:#2a2a2a;}\n'
+        + '.article-body h1,.article-body h2,.article-body h3,.article-body h4{font-family:\'Fraunces\',serif;color:#2d6a2d;margin:1.8rem 0 .6rem;}\n'
+        + '.article-body h1{font-size:1.9rem;}.article-body h2{font-size:1.5rem;}.article-body h3{font-size:1.25rem;}\n'
+        + '.article-body p{margin:.8rem 0;}\n'
+        + '.article-body img{max-width:100%;border-radius:10px;margin:1rem 0;}\n'
+        + '.article-body blockquote{border-left:4px solid #7bc95c;padding:.6rem 1.2rem;margin:1.2rem 0;background:#f0f7f0;border-radius:0 8px 8px 0;color:#444;font-style:italic;}\n'
+        + '.article-body hr{border:none;border-top:1px solid #d9d5cc;margin:2rem 0;}\n'
+        + '.article-body table{border-collapse:collapse;width:100%;margin:1rem 0;}\n'
+        + '.article-body table td,.article-body table th{border:1px solid #d0ccc0;padding:.45rem .75rem;font-size:.92rem;}\n'
+        + '.article-body table th{background:#e8f0e0;font-weight:700;}\n'
+        + '.article-body ul,.article-body ol{padding-left:1.4rem;margin:.8rem 0;}\n'
+        + '.article-body li{margin:.3rem 0;}\n'
+        + '.article-body a{color:#2d6a2d;font-weight:500;}\n'
+        + '.article-body pre{background:#1e2e1e;color:#7bc95c;padding:1rem 1.2rem;border-radius:8px;overflow-x:auto;font-size:.88rem;}\n'
+        + '.article-share{display:flex;align-items:center;gap:.8rem;margin:2rem 0;padding:1.2rem 0;border-top:1px solid #e0ddd6;border-bottom:1px solid #e0ddd6;flex-wrap:wrap;}\n'
+        + '.share-btn{display:inline-flex;align-items:center;gap:.4rem;padding:.45rem .9rem;border-radius:7px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;color:#fff;text-decoration:none;}\n'
+        + '.share-btn.wa{background:#25d366;}.share-btn.fb{background:#1877f2;}.share-btn.tw{background:#1da1f2;}.share-btn.copy{background:#555;}\n'
+        + '.article-footer{background:#2d6a2d;color:rgba(255,255,255,.75);padding:2rem;text-align:center;font-size:.82rem;margin-top:3rem;}\n'
+        + '.article-footer a{color:#7bc95c;}\n'
+        + '@media(max-width:700px){.article-wrap{flex-direction:column;}aside{width:100% !important;}.article-hero{padding:2rem 1rem 1.5rem;}}\n'
+        + '</style>\n'
+        + '</head>\n'
+        + '<body>\n'
+        + '<nav class="site-nav"><div class="brand">\ud83c\udf3f ASPROC</div>'
+        + '<a href="index_asproc.html">In\u00edcio</a>'
+        + '<a href="noticias.html">Not\u00edcias</a>'
+        + '<a href="trabalhe-conosco.html">Vagas</a>'
+        + '<a href="avisos.html">Avisos</a></nav>\n'
+        + '<header class="article-hero"><div class="article-hero-inner">'
+        + '<div class="article-meta">'
+        + '<span class="cat-badge">' + catLbl + '</span>'
+        + '<span>\ud83d\udcc5 ' + dateFmt + '</span>'
+        + autorTag
+        + '</div>'
+        + '<h1>' + (data.titulo || '') + '</h1>'
+        + '<p class="resumo">' + (data.resumo || '') + '</p>'
+        + '</div></header>\n'
+        + '<div class="article-wrap">'
+        + '<article class="article-body">'
+        + imgTag
+        + (data.conteudo || '')
+        + shareHTML
+        + tagsHTML
+        + '<div style="margin-top:2.5rem;padding-top:1rem;border-top:1px solid #e0ddd6;">'
+        + '<a href="noticias.html" style="display:inline-flex;align-items:center;gap:.4rem;background:#2d6a2d;color:#fff;padding:.55rem 1.2rem;border-radius:8px;font-weight:600;font-size:.88rem;">\u2190 Todas as not\u00edcias</a>'
+        + '</div>'
+        + '</article>'
+        + sidebarHTML
+        + '</div>\n'
+        + '<footer class="article-footer">'
+        + '<p>\u00a9 ' + year + ' ASPROC \u2013 Associa\u00e7\u00e3o dos Produtores Rurais de Carauari</p>'
+        + '<p style="margin-top:.4rem;"><a href="index_asproc.html">Site</a> \u00b7 <a href="noticias.html">Not\u00edcias</a> \u00b7 <a href="avisos.html">Avisos</a></p>'
+        + '</footer>\n'
+        + '</body>\n</html>';
+
+      return html;
+    }
+
+    function catLabel(cat) {
+      const m = { pirarucu: '🐟 Pirarucu', olea: '🌿 Oleaginosas', sanear: '💧 Saneamento', comercio: '🛒 Comércio', vagas: '📋 Vagas', geral: '📌 Geral' };
+      return m[cat] || '📌 Geral';
+    }
+
+    function formatDateBR(d) {
+      if (!d) return '';
+      try {
+        const dt = new Date(d + (d.includes('T') ? '' : 'T00:00:00'));
+        return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+      } catch { return d; }
+    }
+
+    function getNoticiaData() {
+      return {
+        titulo: document.getElementById('n-titulo').value.trim(),
+        resumo: document.getElementById('n-resumo').value.trim(),
+        conteudo: document.getElementById('n-conteudo').value.trim(),
+        categoria: document.getElementById('n-categoria').value,
+        data_pub: document.getElementById('n-data').value || new Date().toISOString().split('T')[0],
+        url_externa: document.getElementById('n-url').value.trim() || null,
+        imagem_url: document.getElementById('n-imagem').value.trim() || null,
+        destaque: document.getElementById('n-destaque').checked,
+        publicado: document.getElementById('n-publicado').checked,
+        slug: document.getElementById('n-slug').value || slugify(document.getElementById('n-titulo').value),
+        autor: document.getElementById('n-autor').value.trim() || null,
+        tags: document.getElementById('n-tags').value.trim() || null,
+      };
+    }
+
+    function previewNoticiaPage() {
+      syncRteToHidden();
+      const data = getNoticiaData();
+      const html = buildNoticiaPageHTML(data);
+      const blob = new Blob([html], { type: 'text/html' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    }
+
+    function downloadNoticiaPage(dataOverride) {
+      syncRteToHidden();
+      const data = dataOverride || getNoticiaData();
+      const html = buildNoticiaPageHTML(data);
+      const slug = data.slug || slugify(data.titulo) || 'noticia';
+      const blob = new Blob([html], { type: 'text/html' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `noticia-${slug}.html`;
+      a.click();
+      if (!dataOverride) toast(`✅ Página "noticia-${slug}.html" baixada!`, 'success');
+    }
+
     checkSession();
   </script>
 </body>
