@@ -7074,11 +7074,21 @@
         async function loadDashboard() {
             setLoad(true);
             try {
+                // Query principal: apenas campos necessários para KPIs básicos, tabela de CDs e gráficos.
+                // Exclui photo_b64, observacoes, valor_equipamento, maint_history (campos pesados
+                // que só o painel executivo precisa), reduzindo o payload da requisição.
+                const MAIN_FIELDS = [
+                    'id', 'cd_id', 'category', 'fabricante', 'equipamento', 'modelo',
+                    'status', 'tempo_uso', 'departamento', 'numero_serie', 'ns_patrimonio',
+                    'patrimonio', 'created_at', 'tags'
+                ].join(',');
+
                 const [cds, items] = await Promise.all([
                     DB.get('cd_users', '?select=*&order=created_at.desc'),
-                    DB.get('inventory_items', '?select=*&order=created_at.desc')
+                    DB.get('inventory_items', `?select=${MAIN_FIELDS}&order=created_at.desc`)
                 ]);
                 cdsCache = cds; itemsCache = items;
+
                 document.getElementById('s-cds').textContent = cds.length;
                 document.getElementById('s-items').textContent = items.length;
                 document.getElementById('s-manut').textContent = items.filter(i => i.status === 'Manutenção').length;
@@ -7087,9 +7097,52 @@
                 renderDashCDs(cds, items);
                 renderCharts(items);
                 renderAlerts(cds, items);
-                renderExecutiveDashboard(cds, items);
                 setLoad(false);
+
+                // Painel executivo: query própria e separada, roda em paralelo sem bloquear a UI.
+                // Mostra skeleton nos KPIs enquanto a segunda query não retorna.
+                _execDashboardSkeleton();
+                loadExecutiveDashboard(cds).catch(e => {
+                    console.warn('[Executive Dashboard] Erro na query:', e.message);
+                    const sec = document.getElementById('exec-dashboard-section');
+                    if (sec) {
+                        const err = document.createElement('div');
+                        err.style.cssText = 'padding:10px 0;font-size:12px;color:var(--red)';
+                        err.textContent = '⚠️ Erro ao carregar painel executivo: ' + e.message;
+                        sec.appendChild(err);
+                    }
+                });
             } catch (e) { setLoad(false); toast('Erro: ' + e.message, 'error'); }
+        }
+
+        // ── QUERY DEDICADA DO PAINEL EXECUTIVO ──────────────────────────────
+        // Busca diretamente do Supabase apenas os campos que o painel gerencial precisa.
+        // Dados frescos, independentes do itemsCache, payload mínimo (~15% do select=*).
+        async function loadExecutiveDashboard(cds) {
+            const EXEC_FIELDS = [
+                'id', 'cd_id', 'category',
+                'status',             // health score e distribuição por status
+                'tempo_uso',          // risco (+5 anos), idade média, projeção de substituição
+                'valor_equipamento',  // valor total do parque e custo estimado de troca
+                'maint_history',      // custo acumulado de manutenção por categoria
+                'garantia_ate',       // garantias vencendo nos próximos 90 dias
+                'created_at'          // evolução mensal — gráfico dos últimos 12 meses
+            ].join(',');
+
+            const execItems = await DB.get('inventory_items', `?select=${EXEC_FIELDS}&order=created_at.desc`);
+            renderExecutiveDashboard(cds, execItems);
+        }
+
+        // Coloca os KPI cards em estado de loading enquanto a query exec não retorna
+        function _execDashboardSkeleton() {
+            const KPI_IDS = [
+                'exec-kpi-valor', 'exec-kpi-health', 'exec-kpi-risk',
+                'exec-kpi-manut-cost', 'exec-kpi-warranty', 'exec-kpi-age'
+            ];
+            KPI_IDS.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) { el.textContent = '…'; el.style.opacity = '.35'; }
+            });
         }
 
         function renderDashCDs(cds, items) {
@@ -7194,6 +7247,13 @@
 
         function renderExecutiveDashboard(cds, items) {
             if (!items || !items.length) return;
+
+            // Restaura opacidade dos KPIs (estavam em modo skeleton)
+            ['exec-kpi-valor', 'exec-kpi-health', 'exec-kpi-risk',
+                'exec-kpi-manut-cost', 'exec-kpi-warranty', 'exec-kpi-age'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.style.opacity = '';
+                });
 
             const TEMPO_MEDIAN = { '< 1 ano': 0.5, '1-2 anos': 1.5, '2-3 anos': 2.5, '3-5 anos': 4, '> 5 anos': 6 };
             const AVG_PRICE_FALLBACK = 2500;
