@@ -2248,6 +2248,11 @@
                             <input class="form-input" id="settingsName" type="text" placeholder="SnapFood"
                                 value="SnapFood">
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">Endereço (para mensagens WhatsApp)</label>
+                            <input class="form-input" id="settingsAddress" type="text"
+                                placeholder="Rua Exemplo, 123 — Bairro, Cidade">
+                        </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">Taxa de entrega (R$)</label>
@@ -2263,6 +2268,50 @@
                             <input class="form-input" id="settingsPass" type="password" placeholder="Nova senha">
                         </div>
                         <button class="btn btn-primary" onclick="saveBusinessSettings()">Salvar configurações</button>
+                    </div>
+
+                    <div
+                        style="background:var(--info-bg);border:1px solid #b3d4f5;border-radius:var(--radius);padding:20px;margin-bottom:16px">
+                        <h3 style="font-family:'Syne',sans-serif;font-weight:700;margin-bottom:8px;color:var(--info)">
+                            📋 SQL de configuração — Supabase</h3>
+                        <p style="font-size:12px;color:var(--ink2);margin-bottom:12px">Execute no SQL Editor do Supabase
+                            para criar/atualizar as tabelas necessárias:</p>
+                        <pre
+                            style="background:#1a1a18;color:#c9f7be;border-radius:8px;padding:14px;font-size:11px;overflow-x:auto;line-height:1.6;white-space:pre-wrap">-- Habilitar Realtime nas tabelas
+alter publication supabase_realtime add table orders;
+
+-- Tabela de fidelidade
+create table if not exists loyalty_customers (
+  id bigserial primary key,
+  name text not null,
+  phone text not null unique,
+  points integer default 0,
+  total_orders integer default 0,
+  total_spent numeric default 0,
+  total_redeemed integer default 0,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- Histórico de pontos (opcional)
+create table if not exists loyalty_history (
+  id bigserial primary key,
+  customer_id bigint references loyalty_customers(id),
+  order_id bigint,
+  points_earned integer,
+  balance_after integer,
+  description text,
+  created_at timestamptz default now()
+);
+
+-- RLS: permitir leitura/escrita anônima (ajuste conforme sua política)
+alter table loyalty_customers enable row level security;
+create policy "allow_all" on loyalty_customers for all using (true) with check (true);
+alter table loyalty_history enable row level security;
+create policy "allow_all" on loyalty_history for all using (true) with check (true);</pre>
+                        <button class="btn btn-secondary" style="margin-top:10px;font-size:12px"
+                            onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>showToast('✅ SQL copiado!','success'))">📋
+                            Copiar SQL</button>
                     </div>
 
                     <div
@@ -2369,6 +2418,7 @@
                                 <th>Pontos</th>
                                 <th>Progresso</th>
                                 <th>Pedidos</th>
+                                <th>Gasto Total</th>
                                 <th>Ações</th>
                             </tr>
                         </thead>
@@ -2545,11 +2595,18 @@
             <div class="wa-body">
                 <div style="font-size:13px;color:var(--ink2);margin-bottom:14px">Selecione o template de mensagem:</div>
                 <div class="wa-template-tabs">
-                    <button class="wa-tab active" onclick="selectWaTemplate('preparing', this)">🍳 Preparando</button>
-                    <button class="wa-tab" onclick="selectWaTemplate('delivering', this)">🛵 Saindo</button>
-                    <button class="wa-tab" onclick="selectWaTemplate('delivered', this)">🏠 Entregue</button>
-                    <button class="wa-tab" onclick="selectWaTemplate('ready', this)">✅ Pronto p/ retirada</button>
-                    <button class="wa-tab" onclick="selectWaTemplate('custom', this)">✏️ Personalizado</button>
+                    <button class="wa-tab active" data-tpl="preparing" onclick="selectWaTemplate('preparing', this)">🍳
+                        Preparando</button>
+                    <button class="wa-tab" data-tpl="delivering" onclick="selectWaTemplate('delivering', this)">🛵
+                        Saindo</button>
+                    <button class="wa-tab" data-tpl="delivered" onclick="selectWaTemplate('delivered', this)">🏠
+                        Entregue</button>
+                    <button class="wa-tab" data-tpl="ready" onclick="selectWaTemplate('ready', this)">✅ Pronto p/
+                        retirada</button>
+                    <button class="wa-tab" data-tpl="loyalty" onclick="selectWaTemplate('loyalty', this)">⭐
+                        Pontos</button>
+                    <button class="wa-tab" data-tpl="custom" onclick="selectWaTemplate('custom', this)">✏️
+                        Personalizado</button>
                 </div>
                 <div class="wa-preview" id="waPreview">Carregando...</div>
                 <div id="waCustomSection" style="display:none;margin-bottom:14px">
@@ -2636,6 +2693,7 @@
             const savedPass = localStorage.getItem('admin_pass');
             if (savedPass) adminPass = savedPass;
 
+            // Restaurar campos de settings
             if (savedUrl) {
                 document.getElementById('loginUrl').value = savedUrl;
                 document.getElementById('settingsUrl').value = savedUrl;
@@ -2644,6 +2702,12 @@
                 document.getElementById('loginKey').value = savedKey;
                 document.getElementById('settingsKey').value = savedKey;
             }
+            const savedName = localStorage.getItem('business_name');
+            const savedAddress = localStorage.getItem('business_address');
+            const savedTime = localStorage.getItem('delivery_time');
+            if (savedName) { document.getElementById('settingsName').value = savedName; }
+            if (savedAddress) { document.getElementById('settingsAddress').value = savedAddress; }
+            if (savedTime) { document.getElementById('settingsTime').value = savedTime; }
 
             const session = sessionStorage.getItem('admin_session');
             if (session === 'ok') {
@@ -2707,17 +2771,38 @@
         }
 
         // ===== REALTIME =====
+        let _realtimeChannel = null;
+        let _pollingInterval = null;
+        let _lastOrderCount = 0;
+        let _knownOrderIds = new Set();
+
         function setupRealtime() {
             if (!sb) return;
-            sb.channel('orders-changes')
+
+            // Solicitar permissão de notificação do navegador
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            // Guardar IDs já conhecidos para evitar falso-positivo no primeiro load
+            setTimeout(() => {
+                _knownOrderIds = new Set(allOrders.map(o => o.id));
+                _lastOrderCount = allOrders.length;
+            }, 2000);
+
+            // Canal Realtime principal
+            _realtimeChannel = sb.channel('orders-realtime-v2', {
+                config: { broadcast: { self: false } }
+            })
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
                     const order = payload.new;
+                    if (_knownOrderIds.has(order.id)) return; // deduplicação
+                    _knownOrderIds.add(order.id);
                     allOrders.unshift(order);
                     triggerNewOrderAlert(order);
                     if (currentPage === 'dashboard') loadDashboard();
                     if (currentPage === 'orders') renderOrders(allOrders);
                     updatePendingBadge();
-                    // auto-award loyalty points
                     awardLoyaltyPoints(order);
                 })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
@@ -2729,52 +2814,118 @@
                     updatePendingBadge();
                 })
                 .subscribe((status) => {
+                    const badge = document.getElementById('liveBadge');
                     if (status === 'SUBSCRIBED') {
-                        document.getElementById('liveBadge').style.display = 'inline-flex';
+                        badge.style.display = 'inline-flex';
+                        badge.title = 'Realtime ativo';
+                        // Parar polling se realtime conectou
+                        if (_pollingInterval) { clearInterval(_pollingInterval); _pollingInterval = null; }
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        badge.style.display = 'none';
+                        startPollingFallback();
                     }
                 });
         }
 
+        // Polling fallback caso Realtime falhe (verifica a cada 15s)
+        function startPollingFallback() {
+            if (_pollingInterval) return;
+            console.warn('[SnapFood] Realtime indisponível — usando polling a cada 15s');
+            _pollingInterval = setInterval(async () => {
+                if (!sb) return;
+                const { data } = await sb.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+                if (!data) return;
+                const newOrders = data.filter(o => !_knownOrderIds.has(o.id));
+                newOrders.forEach(order => {
+                    _knownOrderIds.add(order.id);
+                    allOrders.unshift(order);
+                    triggerNewOrderAlert(order);
+                    awardLoyaltyPoints(order);
+                });
+                // Sync updates
+                data.forEach(o => {
+                    const idx = allOrders.findIndex(x => x.id == o.id);
+                    if (idx >= 0 && allOrders[idx].status !== o.status) allOrders[idx] = o;
+                });
+                if (newOrders.length > 0) {
+                    if (currentPage === 'dashboard') loadDashboard();
+                    if (currentPage === 'orders') renderOrders(allOrders);
+                    updatePendingBadge();
+                }
+            }, 15000);
+        }
+
         // ===== AUDIO NOTIFICATION =====
+        let _audioCtx = null;
+        function getAudioCtx() {
+            if (!_audioCtx || _audioCtx.state === 'closed') {
+                _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (_audioCtx.state === 'suspended') _audioCtx.resume();
+            return _audioCtx;
+        }
+
         function playNotificationSound() {
             try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const playTone = (freq, start, dur, vol = 0.4) => {
+                const ctx = getAudioCtx();
+                const playTone = (freq, start, dur, vol = 0.5, type = 'sine') => {
                     const o = ctx.createOscillator();
                     const g = ctx.createGain();
                     o.connect(g); g.connect(ctx.destination);
                     o.frequency.value = freq;
-                    o.type = 'sine';
+                    o.type = type;
                     g.gain.setValueAtTime(0, ctx.currentTime + start);
                     g.gain.linearRampToValueAtTime(vol, ctx.currentTime + start + 0.02);
                     g.gain.linearRampToValueAtTime(0, ctx.currentTime + start + dur);
                     o.start(ctx.currentTime + start);
                     o.stop(ctx.currentTime + start + dur + 0.05);
                 };
-                playTone(880, 0, 0.15);
-                playTone(1100, 0.18, 0.15);
-                playTone(1320, 0.36, 0.25);
-            } catch (e) { }
+                // Sequência de 3 beeps + vibração mobile
+                playTone(880, 0, 0.18, 0.5);
+                playTone(1100, 0.22, 0.18, 0.5);
+                playTone(1320, 0.44, 0.28, 0.55);
+                playTone(880, 0.80, 0.18, 0.45);
+                playTone(1320, 1.02, 0.30, 0.55);
+                if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 400]);
+            } catch (e) { console.warn('Audio error:', e); }
         }
+
+        // Desbloquear AudioContext no primeiro clique
+        document.addEventListener('click', () => { try { getAudioCtx(); } catch (e) { } }, { once: true });
 
         // ===== NEW ORDER ALERT =====
         let alertOrderId = null;
+        let _blinkInterval = null;
         function triggerNewOrderAlert(order) {
             alertOrderId = order.id;
             playNotificationSound();
+
             const body = document.getElementById('alertBody');
             let items = [];
             try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch (e) { }
             body.innerHTML = `<strong>${order.customer_name}</strong> fez um pedido via <strong>${typeIcon(order.order_type)} ${order.order_type}</strong>.<br>
                 ${items.length} item(ns) · <strong style="color:var(--brand)">R$ ${Number(order.total).toFixed(2).replace('.', ',')}</strong>`;
-            const alert = document.getElementById('newOrderAlert');
-            alert.classList.add('show');
-            // Flash title
+            const alertEl = document.getElementById('newOrderAlert');
+            alertEl.classList.add('show');
+
+            // Notificação do sistema operacional
+            if ('Notification' in window && Notification.permission === 'granted') {
+                const notif = new Notification('🔔 Novo pedido — SnapFood!', {
+                    body: `${order.customer_name} · R$ ${Number(order.total).toFixed(2).replace('.', ',')} · ${order.order_type}`,
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><text y="28" font-size="28">🍔</text></svg>',
+                    tag: 'new-order-' + order.id,
+                    requireInteraction: true
+                });
+                notif.onclick = () => { window.focus(); viewAlertOrder(); notif.close(); };
+            }
+
+            // Flash title (limpar anterior antes)
+            if (_blinkInterval) clearInterval(_blinkInterval);
             const origTitle = document.title;
             let blink = 0;
-            const blinkInterval = setInterval(() => {
+            _blinkInterval = setInterval(() => {
                 document.title = blink++ % 2 === 0 ? '🔔 NOVO PEDIDO!' : origTitle;
-                if (blink > 10) { clearInterval(blinkInterval); document.title = origTitle; }
+                if (blink > 20) { clearInterval(_blinkInterval); document.title = origTitle; }
             }, 600);
         }
 
@@ -3188,17 +3339,27 @@
             const order = allOrders.find(o => o.id == currentOrderId);
             if (!order) return;
 
+            const oldStatus = order.status;
             order.status = newStatus;
 
             if (!isDemoMode && sb) {
                 const { error } = await sb.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', currentOrderId);
-                if (error) { showToast('Erro ao atualizar status', 'error'); return; }
+                if (error) { showToast('Erro ao atualizar status', 'error'); order.status = oldStatus; return; }
             }
 
-            showToast('✅ Status atualizado para: ' + statusLabel(newStatus), 'success');
+            showToast('✅ Status: ' + statusLabel(newStatus), 'success');
+            renderStatusActions(newStatus);
             renderOrders(allOrders);
             renderRecentOrders(allOrders.slice(0, 8));
             updatePendingBadge();
+
+            // Sugerir WhatsApp automaticamente para status relevantes de delivery
+            if (order.order_type === 'delivery' && order.customer_phone) {
+                if (['preparing', 'delivering', 'delivered'].includes(newStatus)) {
+                    const tplMap = { preparing: 'Preparando', delivering: 'Saindo para entrega', delivered: 'Entregue' };
+                    showToast(`💬 Avisar cliente no WhatsApp? (${tplMap[newStatus]})`, 'info', () => openWaModal(currentOrderId, newStatus), 5000);
+                }
+            }
         }
 
         async function deleteOrder() {
@@ -3610,7 +3771,13 @@
 
         function saveBusinessSettings() {
             const pass = document.getElementById('settingsPass').value;
+            const name = document.getElementById('settingsName').value.trim();
+            const address = document.getElementById('settingsAddress').value.trim();
+            const time = document.getElementById('settingsTime').value;
             if (pass) { adminPass = pass; localStorage.setItem('admin_pass', pass); }
+            if (name) localStorage.setItem('business_name', name);
+            if (address) localStorage.setItem('business_address', address);
+            if (time) localStorage.setItem('delivery_time', time);
             showToast('✅ Configurações salvas!', 'success');
         }
 
@@ -3653,22 +3820,133 @@
         // ===== WHATSAPP =====
         let waCurrentOrder = null;
         let waCurrentTemplate = 'preparing';
+        const _businessName = () => localStorage.getItem('business_name') || 'SnapFood';
 
         const WA_TEMPLATES = {
-            preparing: (o) => `Olá, *${o.customer_name}*! 😊\n\nSeu pedido *${o.order_number || '#' + o.id}* já está sendo preparado com todo carinho pela nossa equipe! 🍳\n\nAssim que estiver pronto, avisaremos. Obrigado pela preferência!\n\n*SnapFood* 🍽️`,
-            delivering: (o) => `Olá, *${o.customer_name}*! 🛵\n\nUa-uhu! Seu pedido *${o.order_number || '#' + o.id}* saiu para entrega e já está a caminho! 🎉\n\nFique de olho, chega em breve!\n\n*SnapFood* 🍽️`,
-            delivered: (o) => `Olá, *${o.customer_name}*! 🏠\n\nSeu pedido *${o.order_number || '#' + o.id}* foi entregue! Esperamos que aproveite muito. 😋\n\nObrigado pela preferência! Sua satisfação é nossa maior recompensa. ⭐\n\n*SnapFood* 🍽️`,
-            ready: (o) => `Olá, *${o.customer_name}*! ✅\n\nSeu pedido *${o.order_number || '#' + o.id}* está pronto e aguardando sua retirada! 🎉\n\nNos vemos em breve!\n\n*SnapFood* 🍽️`,
-            custom: (o) => document.getElementById('waCustomText').value || '',
+            preparing: (o) => {
+                const nome = o.customer_name.split(' ')[0];
+                const ped = o.order_number || '#' + o.id;
+                return (
+                    `🍽️ *${_businessName()}* — Atualização do Pedido
+
+Olá, *${nome}*! 😊
+
+Ótima notícia! Seu pedido *${ped}* acaba de entrar na cozinha e já está sendo preparado com todo o carinho da nossa equipe. 🍳✨
+
+⏱️ Tempo estimado: *${localStorage.getItem('delivery_time') || 35} min*
+
+Assim que ficar pronto, você será o(a) primeiro(a) a saber! 🔔
+
+Obrigado por escolher a *${_businessName()}*! ❤️`
+                );
+            },
+
+            delivering: (o) => {
+                const nome = o.customer_name.split(' ')[0];
+                const ped = o.order_number || '#' + o.id;
+                return (
+                    `🛵 *${_businessName()}* — Pedido a Caminho!
+
+Olá, *${nome}*! 🎉
+
+Seu pedido *${ped}* acabou de sair para entrega e já está voando até você! 🚀
+
+📍 Endereço de entrega:
+${o.address || 'Endereço cadastrado'}
+
+🕐 Chegada estimada: *em breve!*
+
+Fique de olho na porta — nosso entregador está chegando! 🏠
+
+Qualquer dúvida, estamos aqui. Bom apetite! 😋
+*${_businessName()}* ❤️`
+                );
+            },
+
+            delivered: (o) => {
+                const nome = o.customer_name.split(' ')[0];
+                const ped = o.order_number || '#' + o.id;
+                const tier = (() => { try { const c = allCustomers?.find(c => c.phone?.replace(/\D/g, '') === o.customer_phone?.replace(/\D/g, '')); return c ? getTier(c.points || 0) : null; } catch (e) { return null; } })();
+                const pontosGanhos = Math.floor(Number(o.total) * (loyaltySettings.ptsPerReal || 1));
+                return (
+                    `🏠 *${_businessName()}* — Pedido Entregue! ✅
+
+Olá, *${nome}*! 😍
+
+Seu pedido *${ped}* foi entregue com sucesso! Esperamos que você aproveite muito cada mordida. 🤤
+
+${tier ? `⭐ *+${pontosGanhos} pontos* adicionados ao seu programa de fidelidade!\nNível atual: *${tierEmoji(tier.key)} ${tier.name}*` : `⭐ Sabia que temos um *programa de fidelidade*?\nA cada pedido você acumula pontos e ganha descontos! 🎁`}
+
+Sua satisfação é tudo pra gente! Se puder, deixa uma avaliação — significa muito. 💛
+
+Até o próximo pedido! 👋
+*${_businessName()}* ❤️`
+                );
+            },
+
+            ready: (o) => {
+                const nome = o.customer_name.split(' ')[0];
+                const ped = o.order_number || '#' + o.id;
+                return (
+                    `✅ *${_businessName()}* — Pedido Pronto!
+
+Olá, *${nome}*! 🎊
+
+Seu pedido *${ped}* está PRONTO e quentinho te esperando aqui! 🔥
+
+📍 Retire em nosso estabelecimento:
+${localStorage.getItem('business_address') || 'Nosso endereço'}
+
+Venha buscar quando puder — está fresquinho! 😋
+
+Obrigado pela preferência!
+*${_businessName()}* ❤️`
+                );
+            },
+
+            loyalty: (o) => {
+                const nome = o.customer_name.split(' ')[0];
+                try {
+                    const c = allCustomers?.find(c => c.phone?.replace(/\D/g, '') === o.customer_phone?.replace(/\D/g, ''));
+                    if (!c) return `Olá *${nome}*! Você ainda não está no nosso programa de fidelidade. Entre em contato para se cadastrar! *${_businessName()}* ❤️`;
+                    const tier = getTier(c.points || 0);
+                    const nextTierIdx = loyaltySettings.tiers.findIndex(t => t.key === tier.key) + 1;
+                    const nextTier = loyaltySettings.tiers[nextTierIdx];
+                    const faltam = nextTier ? (nextTier.min - (c.points || 0)) : 0;
+                    return (
+                        `⭐ *${_businessName()}* — Seu Saldo de Pontos
+
+Olá, *${nome}*! 😊
+
+Aqui está seu resumo de fidelidade:
+
+${tierEmoji(tier.key)} Nível atual: *${tier.name}*
+💫 Pontos acumulados: *${(c.points || 0).toLocaleString('pt-BR')} pts*
+🎁 Total de pedidos: *${c.total_orders || 0}*
+${nextTier ? `\n📈 Faltam apenas *${faltam} pontos* para chegar ao nível *${tierEmoji(nextTier.key)} ${nextTier.name}*!` : '\n🏆 Você está no *nível máximo*! Parabéns!'}
+
+Continue pedindo e acumule ainda mais recompensas! 🚀
+
+*${_businessName()}* ❤️`
+                    );
+                } catch (e) { return `Olá *${nome}*! Obrigado pela sua fidelidade! *${_businessName()}* ❤️`; }
+            },
+
+            custom: () => document.getElementById('waCustomText').value || '',
         };
 
-        function openWaModal() {
-            const order = allOrders.find(o => o.id == currentOrderId);
+        function openWaModal(orderId = null, autoTemplate = null) {
+            const id = orderId || currentOrderId;
+            const order = allOrders.find(o => o.id == id);
             if (!order) return;
             waCurrentOrder = order;
-            waCurrentTemplate = 'preparing';
-            document.querySelectorAll('.wa-tab').forEach((t, i) => t.classList.toggle('active', i === 0));
-            document.getElementById('waCustomSection').style.display = 'none';
+            waCurrentTemplate = autoTemplate || 'preparing';
+
+            // Ativar tab correta
+            document.querySelectorAll('.wa-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tpl === waCurrentTemplate);
+            });
+            document.getElementById('waCustomSection').style.display = waCurrentTemplate === 'custom' ? 'block' : 'none';
             updateWaPreview();
             document.getElementById('waModalOverlay').classList.add('open');
         }
@@ -3694,7 +3972,8 @@
         function sendWhatsApp() {
             if (!waCurrentOrder) return;
             const msg = WA_TEMPLATES[waCurrentTemplate]?.(waCurrentOrder) || '';
-            const phone = waCurrentOrder.customer_phone.replace(/\D/g, '');
+            const phone = (waCurrentOrder.customer_phone || '').replace(/\D/g, '');
+            if (!phone) { showToast('❌ Sem número de telefone', 'error'); return; }
             const intlPhone = phone.startsWith('55') ? phone : '55' + phone;
             const url = `https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`;
             window.open(url, '_blank');
@@ -3764,13 +4043,14 @@
                 !search || c.name.toLowerCase().includes(search) || c.phone.includes(search)
             );
             const tbody = document.getElementById('loyalCustomersBody');
-            if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--ink3)">Nenhum cliente cadastrado</td></tr>'; return; }
+            if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--ink3)">Nenhum cliente cadastrado</td></tr>'; return; }
 
             tbody.innerHTML = filtered.map(c => {
                 const tier = getTier(c.points || 0);
                 const nextTierIdx = loyaltySettings.tiers.findIndex(t => t.key === tier.key) + 1;
                 const nextTier = loyaltySettings.tiers[nextTierIdx];
                 const progress = nextTier ? Math.min(100, Math.round(((c.points - tier.min) / (nextTier.min - tier.min)) * 100)) : 100;
+                const discountAvailable = Math.floor((c.points || 0) / loyaltySettings.ptsToRedeem);
                 return `
                 <tr>
                     <td>
@@ -3781,16 +4061,21 @@
                     </td>
                     <td>${c.phone}</td>
                     <td><span class="tier-badge tier-${tier.key}">${tierEmoji(tier.key)} ${tier.name}</span></td>
-                    <td><span class="points-badge">⭐ ${(c.points || 0).toLocaleString('pt-BR')}</span></td>
+                    <td>
+                        <span class="points-badge">⭐ ${(c.points || 0).toLocaleString('pt-BR')}</span>
+                        ${discountAvailable > 0 ? `<div style="font-size:10px;color:var(--success);font-weight:700;margin-top:2px">🎁 R$ ${discountAvailable},00 resgatável</div>` : ''}
+                    </td>
                     <td style="min-width:120px">
                         <div style="font-size:11px;color:var(--ink3);margin-bottom:2px">${nextTier ? (c.points || 0) + '/' + nextTier.min + ' p/ ' + tierEmoji(nextTier.key) : '🏆 Nível máximo'}</div>
                         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${progress}%"></div></div>
                     </td>
                     <td style="font-size:13px;font-weight:600">${c.total_orders || 0}</td>
+                    <td style="font-size:13px;font-weight:600;color:var(--success)">R$ ${Number(c.total_spent || 0).toFixed(2).replace('.', ',')}</td>
                     <td>
                         <div style="display:flex;gap:6px">
                             <button class="add-points-btn" onclick="openAddCustomerModal(${c.id})">+ Pontos</button>
-                            <button class="btn btn-secondary btn-icon" onclick="openWaForCustomer(${c.id})" style="font-size:14px">💬</button>
+                            ${discountAvailable > 0 ? `<button class="btn btn-success" style="font-size:11px;padding:5px 8px" onclick="redeemPoints(${c.id})" title="Resgatar pontos">🎁</button>` : ''}
+                            <button class="btn btn-secondary btn-icon" onclick="openWaForCustomer(${c.id})" style="font-size:14px" title="Enviar WhatsApp">💬</button>
                         </div>
                     </td>
                 </tr>`;
@@ -3856,38 +4141,88 @@
 
         async function awardLoyaltyPoints(order) {
             if (!order?.customer_phone) return;
-            const pts = Math.floor(Number(order.total) * loyaltySettings.ptsPerReal);
+            const phoneClean = order.customer_phone.replace(/\D/g, '');
+            const basePoints = Math.floor(Number(order.total) * loyaltySettings.ptsPerReal);
+
             if (!isDemoMode && sb) {
-                const { data: existing } = await sb.from('loyalty_customers')
-                    .select('*').eq('phone', order.customer_phone.replace(/\D/g, '')).single();
-                if (existing) {
-                    await sb.from('loyalty_customers').update({
-                        points: (existing.points || 0) + pts,
-                        total_orders: (existing.total_orders || 0) + 1,
-                        total_spent: (existing.total_spent || 0) + Number(order.total),
-                        updated_at: new Date().toISOString()
-                    }).eq('id', existing.id);
-                } else {
-                    await sb.from('loyalty_customers').insert({
-                        name: order.customer_name,
-                        phone: order.customer_phone.replace(/\D/g, ''),
-                        points: pts,
-                        total_orders: 1,
-                        total_spent: Number(order.total),
-                        total_redeemed: 0
-                    });
-                }
+                try {
+                    const { data: existing } = await sb.from('loyalty_customers')
+                        .select('*').eq('phone', phoneClean).maybeSingle();
+
+                    if (existing) {
+                        // Calcular bônus por tier
+                        const tier = getTier(existing.points || 0);
+                        const bonus = tier.bonus || 0;
+                        const totalPts = Math.round(basePoints * (1 + bonus / 100));
+                        const newPoints = (existing.points || 0) + totalPts;
+                        const oldTier = getTier(existing.points || 0);
+                        const newTier = getTier(newPoints);
+
+                        await sb.from('loyalty_customers').update({
+                            points: newPoints,
+                            total_orders: (existing.total_orders || 0) + 1,
+                            total_spent: (existing.total_spent || 0) + Number(order.total),
+                            updated_at: new Date().toISOString()
+                        }).eq('id', existing.id);
+
+                        // Gravar histórico de pontos (tabela loyalty_history se existir)
+                        try {
+                            await sb.from('loyalty_history').insert({
+                                customer_id: existing.id,
+                                order_id: order.id,
+                                points_earned: totalPts,
+                                balance_after: newPoints,
+                                description: `Pedido ${order.order_number || '#' + order.id}`,
+                                created_at: new Date().toISOString()
+                            });
+                        } catch (e) { /* tabela history opcional */ }
+
+                        // Notificar upgrade de nível
+                        if (newTier.key !== oldTier.key) {
+                            showToast(`🎉 ${order.customer_name} subiu para ${tierEmoji(newTier.key)} ${newTier.name}!`, 'success', null, 5000);
+                        }
+
+                        // Atualizar lista local
+                        const idx = allCustomers.findIndex(c => c.id == existing.id);
+                        if (idx >= 0) {
+                            allCustomers[idx].points = newPoints;
+                            allCustomers[idx].total_orders = (existing.total_orders || 0) + 1;
+                        }
+                    } else {
+                        // Novo cliente — cadastrar automaticamente
+                        const { data: novo } = await sb.from('loyalty_customers').insert({
+                            name: order.customer_name,
+                            phone: phoneClean,
+                            points: basePoints,
+                            total_orders: 1,
+                            total_spent: Number(order.total),
+                            total_redeemed: 0,
+                            created_at: new Date().toISOString()
+                        }).select().single();
+                        if (novo) allCustomers.push(novo);
+                        showToast(`⭐ Novo cliente fidelidade: ${order.customer_name} (+${basePoints} pts)`, 'success');
+                    }
+
+                    if (currentPage === 'loyalty') { renderLoyaltyStats(); renderLoyalCustomers(allCustomers); }
+                } catch (e) { console.warn('Loyalty error:', e); }
             }
         }
 
         function openWaForCustomer(id) {
+            // Criar order-like do cliente para usar o modal bonito
             const c = allCustomers.find(c => c.id == id);
             if (!c) return;
-            const tier = getTier(c.points || 0);
-            const msg = `Olá, *${c.name}*! 😊\n\nVocê tem *${(c.points || 0).toLocaleString('pt-BR')} pontos* no nosso programa de fidelidade. Nível atual: *${tierEmoji(tier.key)} ${tier.name}*! ⭐\n\nContinue pedindo e acumule ainda mais pontos para ganhar descontos!\n\n*SnapFood* 🍽️`;
-            const phone = c.phone.replace(/\D/g, '');
-            const intlPhone = phone.startsWith('55') ? phone : '55' + phone;
-            window.open(`https://wa.me/${intlPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+            // Encontrar último pedido do cliente
+            const lastOrder = allOrders.find(o => o.customer_phone?.replace(/\D/g, '') === c.phone?.replace(/\D/g, ''))
+                || { id: '—', order_number: '—', customer_name: c.name, customer_phone: c.phone, total: 0, order_type: '' };
+            waCurrentOrder = { ...lastOrder, customer_name: c.name, customer_phone: c.phone };
+            waCurrentTemplate = 'loyalty';
+            document.querySelectorAll('.wa-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.tpl === 'loyalty');
+            });
+            document.getElementById('waCustomSection').style.display = 'none';
+            updateWaPreview();
+            document.getElementById('waModalOverlay').classList.add('open');
         }
 
         function loadLoyaltySettings() {
@@ -3922,13 +4257,52 @@
             showToast('✅ Configurações do programa salvas!', 'success');
         }
 
-        function showToast(msg, type = '') {
+        async function redeemPoints(id) {
+            const c = allCustomers.find(c => c.id == id);
+            if (!c) return;
+            const discountAvailable = Math.floor((c.points || 0) / loyaltySettings.ptsToRedeem);
+            if (!confirm(`Resgatar ${discountAvailable * loyaltySettings.ptsToRedeem} pontos por R$ ${discountAvailable},00 de desconto para ${c.name}?`)) return;
+
+            const ptsUsed = discountAvailable * loyaltySettings.ptsToRedeem;
+            const newPoints = (c.points || 0) - ptsUsed;
+
+            if (!isDemoMode && sb) {
+                const { error } = await sb.from('loyalty_customers').update({
+                    points: newPoints,
+                    total_redeemed: (c.total_redeemed || 0) + discountAvailable,
+                    updated_at: new Date().toISOString()
+                }).eq('id', id);
+                if (error) { showToast('Erro ao resgatar: ' + error.message, 'error'); return; }
+
+                try {
+                    await sb.from('loyalty_history').insert({
+                        customer_id: id, order_id: null,
+                        points_earned: -ptsUsed,
+                        balance_after: newPoints,
+                        description: `Resgate: R$ ${discountAvailable},00 de desconto`,
+                        created_at: new Date().toISOString()
+                    });
+                } catch (e) { }
+            }
+
+            const idx = allCustomers.findIndex(c => c.id == id);
+            if (idx >= 0) { allCustomers[idx].points = newPoints; allCustomers[idx].total_redeemed = (c.total_redeemed || 0) + discountAvailable; }
+            renderLoyaltyStats(); renderLoyalCustomers(allCustomers);
+            showToast(`🎁 ${ptsUsed} pontos resgatados = R$ ${discountAvailable},00 de desconto!`, 'success');
+        }
+
+        function showToast(msg, type = '', callback = null, duration = 3200) {
             const c = document.getElementById('toastContainer');
             const t = document.createElement('div');
             t.className = 'toast ' + type;
             t.textContent = msg;
+            if (callback) {
+                t.style.cursor = 'pointer';
+                t.style.borderLeft = '4px solid #25D366';
+                t.addEventListener('click', () => { callback(); t.remove(); });
+            }
             c.appendChild(t);
-            setTimeout(() => t.remove(), 3200);
+            setTimeout(() => { if (t.parentNode) t.remove(); }, duration);
         }
     </script>
 </body>

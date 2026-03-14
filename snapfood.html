@@ -1401,24 +1401,34 @@
             display: flex;
             justify-content: space-between;
             position: relative;
-            margin: 32px 0;
+            margin: 28px 0 20px;
             padding: 0 16px;
         }
 
-        .track-bar::before {
-            content: '';
+        .track-bar-line {
             position: absolute;
-            top: 16px;
-            left: 50px;
-            right: 50px;
-            height: 2px;
+            top: 15px;
+            left: 52px;
+            right: 52px;
+            height: 3px;
             background: var(--surface3);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .track-bar-progress {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success), #3ecf8e);
+            border-radius: 99px;
+            width: 0%;
+            transition: width 0.8s cubic-bezier(.4, 0, .2, 1);
         }
 
         .track-step {
             text-align: center;
             position: relative;
             z-index: 1;
+            flex: 1;
         }
 
         .track-dot {
@@ -1426,25 +1436,125 @@
             height: 32px;
             border-radius: 50%;
             background: var(--surface2);
-            border: 2px solid var(--surface3);
+            border: 2.5px solid var(--surface3);
             margin: 0 auto 8px;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 14px;
-            transition: all 0.5s;
+            transition: all 0.5s cubic-bezier(.4, 0, .2, 1);
         }
 
         .track-dot.done {
             background: var(--success);
             border-color: var(--success);
+            color: white;
+            box-shadow: 0 0 0 4px rgba(29, 158, 117, 0.15);
+        }
+
+        .track-dot.active {
+            background: #FFF4F0;
+            border-color: var(--brand);
+            color: var(--brand);
+            box-shadow: 0 0 0 4px rgba(232, 66, 10, 0.12);
+            animation: pulseDot 1.8s infinite;
+        }
+
+        @keyframes pulseDot {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 4px rgba(232, 66, 10, 0.12);
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(232, 66, 10, 0.06);
+            }
         }
 
         .track-step small {
             font-size: 11px;
             color: var(--ink3);
             display: block;
-            max-width: 60px;
+            font-weight: 500;
+        }
+
+        .track-step small.active-label {
+            color: var(--brand);
+            font-weight: 700;
+        }
+
+        .track-step small.done-label {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .status-card {
+            background: var(--surface2);
+            border-radius: 12px;
+            padding: 14px 18px;
+            margin: 0 0 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            border: 1.5px solid var(--surface3);
+            transition: all 0.4s;
+        }
+
+        .status-card.status-pending {
+            background: #FAEEDA;
+            border-color: #f5d4a0;
+        }
+
+        .status-card.status-confirmed {
+            background: #EAF3DE;
+            border-color: #c0dd97;
+        }
+
+        .status-card.status-preparing {
+            background: #FFF4F0;
+            border-color: #f5c4b3;
+        }
+
+        .status-card.status-ready {
+            background: #EAF3DE;
+            border-color: #c0dd97;
+        }
+
+        .status-card.status-delivering {
+            background: #E6F1FB;
+            border-color: #b3d4f5;
+        }
+
+        .status-card.status-delivered {
+            background: #EAF3DE;
+            border-color: #c0dd97;
+        }
+
+        .status-card.status-cancelled {
+            background: #FCEBEB;
+            border-color: #f7c1c1;
+        }
+
+        .status-card-icon {
+            font-size: 26px;
+            flex-shrink: 0;
+        }
+
+        .status-card-text {
+            flex: 1;
+        }
+
+        .status-card-label {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .status-card-sub {
+            font-size: 12px;
+            color: var(--ink3);
+            margin-top: 2px;
         }
 
         /* ===== CONFIG MODAL ===== */
@@ -1968,38 +2078,52 @@
         <!-- Success Screen -->
         <div class="checkout-inner" id="successContent" style="display:none;">
             <div class="success-screen">
-                <div class="success-icon">✅</div>
-                <h2>Pedido confirmado!</h2>
-                <p>Seu pedido foi recebido com sucesso.</p>
+                <div class="success-icon" id="successIcon">✅</div>
+                <h2 id="successTitle">Pedido confirmado!</h2>
+                <p id="successSubtitle">Seu pedido foi recebido. Aguarde a confirmação.</p>
 
                 <div class="order-number">
                     <small>Número do pedido</small>
                     <strong id="orderNumberDisplay">#0000</strong>
                 </div>
 
-                <div class="track-bar">
-                    <div class="track-step">
-                        <div class="track-dot done" id="step1">✓</div>
-                        <small>Recebido</small>
-                    </div>
-                    <div class="track-step">
-                        <div class="track-dot" id="step2">🍳</div>
-                        <small>Preparando</small>
-                    </div>
-                    <div class="track-step">
-                        <div class="track-dot" id="step3">🛵</div>
-                        <small>A caminho</small>
-                    </div>
-                    <div class="track-step">
-                        <div class="track-dot" id="step4">🏠</div>
-                        <small>Entregue</small>
+                <!-- Card de status atual -->
+                <div class="status-card status-pending" id="statusCard">
+                    <div class="status-card-icon" id="statusCardIcon">⏳</div>
+                    <div class="status-card-text">
+                        <div class="status-card-label" id="statusCardLabel">Aguardando confirmação</div>
+                        <div class="status-card-sub" id="statusCardSub">O restaurante irá confirmar em breve</div>
                     </div>
                 </div>
 
-                <p style="font-size:14px; color:var(--ink3);">Tempo estimado: <strong style="color:var(--ink)">25–40
-                        minutos</strong></p>
+                <!-- Barra de progresso -->
+                <div class="track-bar">
+                    <div class="track-bar-line">
+                        <div class="track-bar-progress" id="trackProgress"></div>
+                    </div>
+                    <div class="track-step">
+                        <div class="track-dot done" id="step1">✓</div>
+                        <small class="done-label">Recebido</small>
+                    </div>
+                    <div class="track-step">
+                        <div class="track-dot" id="step2">🍳</div>
+                        <small id="step2Label">Preparando</small>
+                    </div>
+                    <div class="track-step">
+                        <div class="track-dot" id="step3">🛵</div>
+                        <small id="step3Label">A caminho</small>
+                    </div>
+                    <div class="track-step">
+                        <div class="track-dot" id="step4">🏠</div>
+                        <small id="step4Label">Entregue</small>
+                    </div>
+                </div>
 
-                <button class="confirm-btn" style="max-width:300px; margin:20px auto 0;" onclick="resetOrder()">
+                <p style="font-size:13px;color:var(--ink3);margin-bottom:8px" id="trackingNote">
+                    🔄 Atualizando em tempo real...
+                </p>
+
+                <button class="confirm-btn" style="max-width:300px; margin:16px auto 0;" onclick="resetOrder()">
                     Fazer novo pedido
                 </button>
             </div>
@@ -2519,31 +2643,180 @@
 
             if (!isDemoMode && sb) {
                 try {
-                    const { error } = await sb.from('orders').insert(orderData);
-                    if (error) console.error('Erro ao salvar pedido:', error);
+                    const { data: inserted, error } = await sb
+                        .from('orders')
+                        .insert({ ...orderData, order_number: 'PED-' + orderNum })
+                        .select()
+                        .single();
+                    if (error) {
+                        console.error('Erro ao salvar pedido:', error);
+                        showToast('❌ Erro ao registrar pedido. Tente novamente.', 'error');
+                        return;
+                    }
+                    currentOrderDbId = inserted.id;
+                    currentOrderNumber = inserted.order_number || ('#' + orderNum);
+                    setupOrderTracking(inserted.id);
                 } catch (e) {
                     console.error(e);
+                    showToast('❌ Erro de conexão. Tente novamente.', 'error');
+                    return;
                 }
+            } else {
+                // Demo mode — simular tracking
+                currentOrderDbId = null;
+                currentOrderNumber = '#' + orderNum;
+                simulateDemoTracking();
             }
 
-            // Show success
-            document.getElementById('orderNumberDisplay').textContent = '#' + orderNum;
+            document.getElementById('orderNumberDisplay').textContent = currentOrderNumber;
             document.getElementById('checkoutContent').style.display = 'none';
             document.getElementById('successContent').style.display = 'block';
-
-            // Animate tracking steps
-            setTimeout(() => document.getElementById('step2').classList.add('done'), 2000);
-            setTimeout(() => document.getElementById('step3').classList.add('done'), 4000);
+            applyStatusToTracker('pending');
 
             cart = [];
             updateCartUI();
         }
 
+        // ===== ORDER TRACKING STATE =====
+        let currentOrderDbId = null;
+        let currentOrderNumber = '';
+        let _trackingChannel = null;
+
+        // Mapeamento status -> posição na barra + textos
+        const STATUS_MAP = {
+            pending: { step: 0, progress: '0%', icon: '⏳', label: 'Aguardando confirmação', sub: 'O restaurante irá confirmar em breve', card: 'status-pending' },
+            confirmed: { step: 1, progress: '10%', icon: '✅', label: 'Pedido confirmado!', sub: 'Estamos preparando tudo para você', card: 'status-confirmed' },
+            preparing: { step: 1, progress: '40%', icon: '🍳', label: 'Preparando seu pedido', sub: 'Nossa equipe está cozinhando com carinho ❤️', card: 'status-preparing' },
+            ready: { step: 2, progress: '65%', icon: '✔️', label: 'Pedido pronto!', sub: 'Pronto para retirada ou saindo em breve', card: 'status-ready' },
+            delivering: { step: 2, progress: '75%', icon: '🛵', label: 'Saiu para entrega!', sub: 'Seu pedido está a caminho — fique de olho! 🏠', card: 'status-delivering' },
+            delivered: { step: 3, progress: '100%', icon: '🏠', label: 'Pedido entregue! 🎉', sub: 'Bom apetite! Obrigado pela preferência ❤️', card: 'status-delivered' },
+            cancelled: { step: -1, progress: '0%', icon: '❌', label: 'Pedido cancelado', sub: 'Entre em contato conosco para mais informações', card: 'status-cancelled' },
+        };
+
+        function applyStatusToTracker(status) {
+            const s = STATUS_MAP[status] || STATUS_MAP['pending'];
+
+            // Status card
+            const card = document.getElementById('statusCard');
+            card.className = 'status-card ' + s.card;
+            document.getElementById('statusCardIcon').textContent = s.icon;
+            document.getElementById('statusCardLabel').textContent = s.label;
+            document.getElementById('statusCardSub').textContent = s.sub;
+
+            // Progress bar
+            document.getElementById('trackProgress').style.width = s.progress;
+
+            // Dots
+            const dots = ['step1', 'step2', 'step3', 'step4'];
+            const labels = ['step2Label', 'step3Label', 'step4Label'];
+            const names = ['Recebido', 'Preparando', 'A caminho', 'Entregue'];
+
+            dots.forEach((id, i) => {
+                const el = document.getElementById(id);
+                el.classList.remove('done', 'active');
+                if (status === 'cancelled') return;
+                if (i <= s.step) el.classList.add('done');
+                else if (i === s.step + 1) el.classList.add('active');
+            });
+
+            // Labels
+            labels.forEach((id, i) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.className = '';
+                el.textContent = names[i + 1];
+                if (i + 1 <= s.step) el.className = 'done-label';
+                else if (i + 1 === s.step + 1) el.className = 'active-label';
+            });
+
+            // Ícones dos dots não-feitos
+            const dotIcons = ['✓', '🍳', '🛵', '🏠'];
+            dots.forEach((id, i) => {
+                const el = document.getElementById(id);
+                el.textContent = el.classList.contains('done') ? '✓' : dotIcons[i];
+            });
+
+            // Nota de tracking
+            const note = document.getElementById('trackingNote');
+            if (status === 'delivered') {
+                note.textContent = '✅ Entregue com sucesso!';
+                note.style.color = 'var(--success)';
+            } else if (status === 'cancelled') {
+                note.textContent = '❌ Pedido cancelado';
+                note.style.color = 'var(--danger, #C0392B)';
+            } else {
+                note.textContent = '🔄 Atualizando em tempo real...';
+                note.style.color = '';
+            }
+        }
+
+        function setupOrderTracking(orderId) {
+            // Cancelar canal anterior se existir
+            if (_trackingChannel) {
+                try { sb.removeChannel(_trackingChannel); } catch (e) { }
+                _trackingChannel = null;
+            }
+
+            // Escutar mudanças de status em tempo real
+            _trackingChannel = sb.channel('order-tracking-' + orderId)
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'orders',
+                    filter: `id=eq.${orderId}`
+                }, (payload) => {
+                    const newStatus = payload.new?.status;
+                    if (!newStatus) return;
+                    applyStatusToTracker(newStatus);
+
+                    // Notificação visual
+                    const s = STATUS_MAP[newStatus];
+                    if (s) showToast(s.icon + ' ' + s.label, newStatus === 'cancelled' ? 'error' : 'success');
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('[SnapFood] Tracking ativo para pedido', orderId);
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        // Fallback: polling a cada 10s
+                        startTrackingPolling(orderId);
+                    }
+                });
+        }
+
+        let _trackPolling = null;
+        function startTrackingPolling(orderId) {
+            if (_trackPolling) return;
+            _trackPolling = setInterval(async () => {
+                if (!sb || !orderId) return;
+                try {
+                    const { data } = await sb.from('orders').select('status').eq('id', orderId).single();
+                    if (data?.status) applyStatusToTracker(data.status);
+                    if (data?.status === 'delivered' || data?.status === 'cancelled') {
+                        clearInterval(_trackPolling); _trackPolling = null;
+                    }
+                } catch (e) { }
+            }, 10000);
+        }
+
+        function simulateDemoTracking() {
+            // No modo demo, apenas mostra o estado inicial sem avançar
+            applyStatusToTracker('pending');
+            document.getElementById('trackingNote').textContent = '🎭 Modo demo — status controlado pelo admin';
+        }
+
         function resetOrder() {
+            // Limpar canal de tracking
+            if (_trackingChannel && sb) {
+                try { sb.removeChannel(_trackingChannel); } catch (e) { }
+                _trackingChannel = null;
+            }
+            if (_trackPolling) { clearInterval(_trackPolling); _trackPolling = null; }
+            currentOrderDbId = null;
+
             document.getElementById('checkoutOverlay').classList.remove('open');
-            document.getElementById('step2').classList.remove('done');
-            document.getElementById('step3').classList.remove('done');
-            document.getElementById('step4').classList.remove('done');
+            document.getElementById('checkoutContent').style.display = 'block';
+            document.getElementById('successContent').style.display = 'none';
+            applyStatusToTracker('pending');
             showToast('✨ Pronto para um novo pedido!');
         }
 
