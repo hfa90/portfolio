@@ -3823,14 +3823,49 @@
         }
 
         // ===== DATA LOADING =====
+        let _deliveryFee = 4.99; // padrão, sobrescrito pelo banco
+
         async function loadData() {
             try {
-                await Promise.all([loadCategories(), loadProducts()]);
+                await Promise.all([loadAppSettings(), loadCategories(), loadProducts()]);
             } catch (e) {
                 console.error('Erro ao carregar dados:', e);
                 showToast('Erro ao carregar dados. Verifique a estrutura do banco.', 'error');
                 loadDemoData();
             }
+        }
+
+        async function loadAppSettings() {
+            if (isDemoMode || !sb) return;
+            try {
+                const { data, error } = await sb.from('app_settings').select('key, value');
+                if (error || !data) return;
+                const map = {};
+                data.forEach(r => { map[r.key] = r.value; });
+
+                // Taxa de entrega
+                if (map['delivery_fee']) {
+                    _deliveryFee = parseFloat(map['delivery_fee']) || 4.99;
+                    localStorage.setItem('delivery_fee', map['delivery_fee']);
+                } else {
+                    _deliveryFee = parseFloat(localStorage.getItem('delivery_fee')) || 4.99;
+                }
+
+                // Nome do negócio
+                if (map['business_name']) {
+                    localStorage.setItem('business_name', map['business_name']);
+                    document.title = map['business_name'] + ' — Delivery & Presencial';
+                    const logoEls = document.querySelectorAll('.logo-text');
+                    logoEls.forEach(el => el.textContent = map['business_name']);
+                }
+
+                // Tempo estimado
+                if (map['delivery_time']) {
+                    localStorage.setItem('delivery_time', map['delivery_time']);
+                    const heroBadge = document.querySelector('.hero-badge');
+                    if (heroBadge) heroBadge.innerHTML = `<div class="pulse-dot"></div> Aberto agora · Entrega em ${map['delivery_time']} min`;
+                }
+            } catch (e) { console.warn('[SnapFood] loadAppSettings:', e); }
         }
 
         async function loadCategories() {
@@ -4365,7 +4400,7 @@
             countEl.classList.toggle('visible', count > 0);
 
             const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-            const delivery = cartMode === 'delivery' ? 4.99 : 0;
+            const delivery = cartMode === 'delivery' ? _deliveryFee : 0;
             const total = subtotal + delivery;
 
             document.getElementById('subtotalVal').textContent = formatPrice(subtotal);
@@ -4447,7 +4482,7 @@
 
         function renderCheckoutSummary() {
             const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-            const delivery = selectedOrderType === 'delivery' ? 4.99 : 0;
+            const delivery = selectedOrderType === 'delivery' ? _deliveryFee : 0;
             const total = subtotal + delivery;
 
             document.getElementById('checkoutSummary').innerHTML = cart.map(i => `
@@ -4498,7 +4533,7 @@
             }
 
             const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-            const delivery = selectedOrderType === 'delivery' ? 4.99 : 0;
+            const delivery = selectedOrderType === 'delivery' ? _deliveryFee : 0;
             const total = subtotal + delivery;
             const orderNum = Math.floor(Math.random() * 9000) + 1000;
 
@@ -4535,6 +4570,17 @@
                     }
                     currentOrderDbId = inserted.id;
                     currentOrderNumber = inserted.order_number || ('#' + orderNum);
+
+                    // Gravar status inicial no histórico
+                    try {
+                        await sb.from('order_status_history').insert({
+                            order_id: inserted.id,
+                            status: 'pending',
+                            note: 'Pedido criado pelo cliente',
+                            created_at: new Date().toISOString()
+                        });
+                    } catch (e) { /* tabela opcional */ }
+
                     setupOrderTracking(inserted.id);
                 } catch (e) {
                     console.error(e);

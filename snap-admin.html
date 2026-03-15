@@ -1810,6 +1810,10 @@
             background: var(--warning);
         }
 
+        .toast.info {
+            background: var(--info);
+        }
+
         @keyframes toastIn {
             from {
                 opacity: 0;
@@ -3613,8 +3617,18 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
                 })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
                     const updated = payload.new;
-                    const idx = allOrders.findIndex(o => o.id == updated.id);
-                    if (idx >= 0) allOrders[idx] = updated;
+                    // Se status final, garantir que sai da lista ativa
+                    if (updated.status === 'delivered' || updated.status === 'cancelled') {
+                        const idx = allOrders.findIndex(o => o.id == updated.id);
+                        if (idx >= 0) {
+                            allOrders.splice(idx, 1);
+                            allHistory = [updated, ...allHistory.filter(o => o.id != updated.id)];
+                        }
+                    } else {
+                        const idx = allOrders.findIndex(o => o.id == updated.id);
+                        if (idx >= 0) allOrders[idx] = updated;
+                        else allOrders.unshift(updated); // reapareceu (ex: cancelado → ativo novamente)
+                    }
                     if (currentPage === 'dashboard') renderRecentOrders(allOrders.slice(0, 8));
                     if (currentPage === 'orders') renderOrders(allOrders);
                     updatePendingBadge();
@@ -4006,13 +4020,16 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
         // ===== ORDERS =====
         async function loadOrders() {
             if (!isDemoMode && sb) {
-                const { data } = await sb.from('orders')
+                const { data, error } = await sb.from('orders')
                     .select('*')
                     .not('status', 'in', '("delivered","cancelled")')
                     .order('created_at', { ascending: false });
-                if (data) allOrders = data;
+                if (!error && data) {
+                    allOrders = data;
+                    // Sincronizar _knownOrderIds
+                    data.forEach(o => _knownOrderIds.add(o.id));
+                }
             } else {
-                // Demo: filtrar apenas ativos
                 allOrders = (window._demoOrdersAll || allOrders)
                     .filter(o => !['delivered', 'cancelled'].includes(o.status));
             }
@@ -4061,7 +4078,8 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
 
         // ===== ORDER DRAWER =====
         function openOrderDrawer(id) {
-            const order = allOrders.find(o => o.id == id);
+            // Buscar em allOrders e também em allHistory (caso pedido já finalizado)
+            const order = allOrders.find(o => o.id == id) || allHistory.find(o => o.id == id);
             if (!order) return;
             currentOrderId = id;
 
@@ -4204,6 +4222,16 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
             if (!isDemoMode && sb) {
                 const { error } = await sb.from('orders').update(updateData).eq('id', currentOrderId);
                 if (error) { showToast('Erro ao confirmar: ' + error.message, 'error'); return; }
+
+                // Gravar histórico de status
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: currentOrderId,
+                        status: 'delivered',
+                        note: `Entrega confirmada. Pagamento: ${payment}`,
+                        created_at: now
+                    });
+                } catch (e) { /* tabela opcional */ }
             }
 
             // Atualizar localmente
@@ -4246,24 +4274,67 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
             if (!order) return;
 
             const oldStatus = order.status;
+            if (oldStatus === newStatus) return; // nenhuma mudança
+
+            // Atualizar localmente de imediato (otimistic update)
             order.status = newStatus;
 
             if (!isDemoMode && sb) {
-                const { error } = await sb.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', currentOrderId);
-                if (error) { showToast('Erro ao atualizar status', 'error'); order.status = oldStatus; return; }
+                const now = new Date().toISOString();
+                const updatePayload = { status: newStatus, updated_at: now };
+
+                // Se confirmando, registrar confirmed_at
+                if (newStatus === 'confirmed') updatePayload.confirmed_at = now;
+
+                const { error } = await sb.from('orders')
+                    .update(updatePayload)
+                    .eq('id', currentOrderId);
+
+                if (error) {
+                    showToast('❌ Erro ao atualizar status: ' + error.message, 'error');
+                    order.status = oldStatus; // reverter
+                    document.getElementById('drawerStatusSelect').value = oldStatus;
+                    renderStatusActions(oldStatus);
+                    return;
+                }
+
+                // Gravar histórico de status na tabela order_status_history
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: currentOrderId,
+                        status: newStatus,
+                        note: `Status alterado de ${oldStatus} para ${newStatus}`,
+                        created_at: now
+                    });
+                } catch (e) { /* tabela opcional */ }
             }
 
-            showToast('✅ Status: ' + statusLabel(newStatus), 'success');
-            renderStatusActions(newStatus);
+            // Se status final (delivered/cancelled), remover da lista ativa e mover para histórico
+            if (newStatus === 'delivered' || newStatus === 'cancelled') {
+                allOrders = allOrders.filter(o => o.id != currentOrderId);
+                allHistory = [order, ...allHistory.filter(o => o.id != currentOrderId)];
+
+                // Pontuar fidelidade se entregue
+                if (newStatus === 'delivered') await awardLoyaltyPoints(order);
+
+                closeDrawer(null, true);
+                showToast(newStatus === 'delivered' ? '🏠 Pedido entregue! Movido para histórico.' : '✕ Pedido cancelado. Movido para histórico.', 'success');
+            } else {
+                showToast('✅ Status: ' + statusLabel(newStatus), 'success');
+                renderStatusActions(newStatus);
+            }
+
             renderOrders(allOrders);
             renderRecentOrders(allOrders.slice(0, 8));
             updatePendingBadge();
 
             // Sugerir WhatsApp automaticamente para status relevantes de delivery
             if (order.order_type === 'delivery' && order.customer_phone) {
-                if (['preparing', 'delivering', 'delivered'].includes(newStatus)) {
-                    const tplMap = { preparing: 'Preparando', delivering: 'Saindo para entrega', delivered: 'Entregue' };
-                    showToast(`💬 Avisar cliente no WhatsApp? (${tplMap[newStatus]})`, 'info', () => openWaModal(currentOrderId, newStatus), 5000);
+                if (['preparing', 'delivering'].includes(newStatus)) {
+                    const tplMap = { preparing: 'Preparando', delivering: 'Saindo para entrega' };
+                    setTimeout(() => {
+                        showToast(`💬 Avisar cliente no WhatsApp? (${tplMap[newStatus]})`, 'info', () => openWaModal(currentOrderId, newStatus), 5000);
+                    }, 500);
                 }
             }
         }
@@ -5595,46 +5666,64 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
         }
 
         async function loadSettingsPage() {
-            // 1. Tentar carregar do banco
-            let dbSettings = {};
+            // 1. Carregar do localStorage primeiro (mais rápido, evita tela em branco)
+            const localUrl = localStorage.getItem('sb_url') || '';
+            const localKey = localStorage.getItem('sb_key') || '';
+            const localName = localStorage.getItem('business_name') || '';
+            const localAddr = localStorage.getItem('business_address') || '';
+            const localTime = localStorage.getItem('delivery_time') || '';
+            const localFee = localStorage.getItem('delivery_fee') || '';
+
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+            setVal('settingsUrl', localUrl);
+            setVal('settingsKey', localKey);
+            setVal('settingsName', localName);
+            setVal('settingsAddress', localAddr);
+            setVal('settingsTime', localTime);
+            setVal('settingsDelivery', localFee);
+
+            // 2. Lock automático se URL e key estiverem gravadas
+            const locked = localStorage.getItem('conn_locked') === '1';
+            if (locked && localUrl && localKey) lockConnFields();
+
+            // 3. Tentar carregar do banco (em background, sem bloquear renderização)
             if (sb) {
                 try {
-                    const { data } = await sb.from('app_settings').select('key, value');
-                    if (data) data.forEach(r => { dbSettings[r.key] = r.value; });
-                } catch (e) { console.warn('loadSettingsPage DB:', e); }
+                    const { data, error } = await sb.from('app_settings').select('key, value');
+                    if (!error && data && data.length) {
+                        const dbMap = {};
+                        data.forEach(r => { dbMap[r.key] = r.value; });
+
+                        // Sobrescrever com valores do banco (mais recentes)
+                        if (dbMap['sb_url']) setVal('settingsUrl', dbMap['sb_url']);
+                        if (dbMap['sb_key']) setVal('settingsKey', dbMap['sb_key']);
+                        if (dbMap['business_name']) setVal('settingsName', dbMap['business_name']);
+                        if (dbMap['business_address']) setVal('settingsAddress', dbMap['business_address']);
+                        if (dbMap['delivery_time']) setVal('settingsTime', dbMap['delivery_time']);
+                        if (dbMap['delivery_fee']) setVal('settingsDelivery', dbMap['delivery_fee']);
+
+                        // Atualizar localStorage com valores do banco
+                        Object.entries(dbMap).forEach(([k, v]) => {
+                            if (v && ['sb_url', 'sb_key', 'business_name', 'business_address', 'delivery_time', 'delivery_fee'].includes(k)) {
+                                localStorage.setItem(k, v);
+                            }
+                        });
+
+                        // Lock se ambos sb_url e sb_key estão no banco
+                        if (dbMap['sb_url'] && dbMap['sb_key']) lockConnFields();
+                    }
+                } catch (e) { console.warn('[Settings] Erro ao carregar do banco:', e); }
             }
 
-            // 2. Fallback para localStorage
-            const get = (k) => dbSettings[k] || localStorage.getItem(k) || '';
-
-            const url = get('sb_url');
-            const key = get('sb_key');
-            const name = get('business_name');
-            const addr = get('business_address');
-            const time = get('delivery_time');
-            const fee = get('delivery_fee');
-
-            if (url) { const el = document.getElementById('settingsUrl'); if (el) el.value = url; }
-            if (key) { const el = document.getElementById('settingsKey'); if (el) el.value = key; }
-            if (name) { const el = document.getElementById('settingsName'); if (el) el.value = name; }
-            if (addr) { const el = document.getElementById('settingsAddress'); if (el) el.value = addr; }
-            if (time) { const el = document.getElementById('settingsTime'); if (el) el.value = time; }
-            if (fee) { const el = document.getElementById('settingsDelivery'); if (el) el.value = fee; }
-
-            // 3. Lock automático se URL e key estiverem gravadas
-            const locked = localStorage.getItem('conn_locked') === '1'
-                || (dbSettings['sb_url'] && dbSettings['sb_key']);
-            if (locked && url && key) lockConnFields();
-
-            // 4. Zona de entrega
+            // 4. Zona de entrega do localStorage
             try {
                 const zone = JSON.parse(localStorage.getItem('delivery_zone') || '{}');
                 if (zone.enabled !== undefined) {
                     const ze = document.getElementById('zoneEnabled');
                     if (ze) { ze.checked = zone.enabled; toggleZoneFields(); }
-                    if (zone.lat) { const el = document.getElementById('zoneLat'); if (el) el.value = zone.lat; }
-                    if (zone.lng) { const el = document.getElementById('zoneLng'); if (el) el.value = zone.lng; }
-                    if (zone.radiusKm) { const el = document.getElementById('zoneRadius'); if (el) el.value = zone.radiusKm; }
+                    if (zone.lat) setVal('zoneLat', zone.lat);
+                    if (zone.lng) setVal('zoneLng', zone.lng);
+                    if (zone.radiusKm) setVal('zoneRadius', zone.radiusKm);
                 }
             } catch (e) { }
         }
@@ -5815,18 +5904,21 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             document.getElementById('histDetailOverlay').classList.remove('open');
         }
 
-        // ===== TOAST CONTAINER FIX =====
-        const t = document.createElement('div');
-        t.className = 'toast ' + type;
-        t.textContent = msg;
-        if (callback) {
-            t.style.cursor = 'pointer';
-            t.style.borderLeft = '4px solid #25D366';
-            t.addEventListener('click', () => { callback(); t.remove(); });
+        // ===== SHOW TOAST =====
+        function showToast(msg, type = 'success', callback = null, duration = 3500) {
+            const c = document.getElementById('toastContainer');
+            if (!c) return;
+            const t = document.createElement('div');
+            t.className = 'toast ' + type;
+            t.textContent = msg;
+            if (callback) {
+                t.style.cursor = 'pointer';
+                t.style.borderLeft = '4px solid #25D366';
+                t.addEventListener('click', () => { callback(); t.remove(); });
+            }
+            c.appendChild(t);
+            setTimeout(() => { if (t.parentNode) t.remove(); }, duration);
         }
-
-        c.appendChild(t);
-        setTimeout(() => { if (t.parentNode) t.remove(); }, duration);
 
     </script>
 </body>
