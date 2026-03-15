@@ -3216,7 +3216,8 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
             <div class="drawer-footer" style="flex-direction:column;gap:10px">
                 <div class="status-actions-grid" id="statusActionsGrid"></div>
                 <div style="display:flex;gap:8px">
-                    <select class="status-select" id="drawerStatusSelect" onchange="updateOrderStatus()" style="flex:1">
+                    <select class="status-select" id="drawerStatusSelect" onchange="updateOrderStatus(this.value)"
+                        style="flex:1">
                         <option value="pending">⏳ Pendente</option>
                         <option value="confirmed">✅ Confirmado</option>
                         <option value="preparing">🍳 Preparando</option>
@@ -3617,16 +3618,23 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
                 })
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
                     const updated = payload.new;
+                    const existingIdx = allOrders.findIndex(o => o.id == updated.id);
+                    const existing = existingIdx >= 0 ? allOrders[existingIdx] : null;
+
+                    // Ignorar evento do Realtime se o dado local já é mais recente
+                    // (evita sobrescrever o optimistic update com dado stale do banco)
+                    if (existing && existing.updated_at && updated.updated_at) {
+                        if (new Date(existing.updated_at) > new Date(updated.updated_at)) return;
+                    }
+
                     // Se status final, garantir que sai da lista ativa
                     if (updated.status === 'delivered' || updated.status === 'cancelled') {
-                        const idx = allOrders.findIndex(o => o.id == updated.id);
-                        if (idx >= 0) {
-                            allOrders.splice(idx, 1);
+                        if (existingIdx >= 0) {
+                            allOrders.splice(existingIdx, 1);
                             allHistory = [updated, ...allHistory.filter(o => o.id != updated.id)];
                         }
                     } else {
-                        const idx = allOrders.findIndex(o => o.id == updated.id);
-                        if (idx >= 0) allOrders[idx] = updated;
+                        if (existingIdx >= 0) allOrders[existingIdx] = updated;
                         else allOrders.unshift(updated); // reapareceu (ex: cancelado → ativo novamente)
                     }
                     if (currentPage === 'dashboard') renderRecentOrders(allOrders.slice(0, 8));
@@ -4166,9 +4174,10 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
                 openDeliveryConfirm();
                 return;
             }
+            // Atualiza o select visualmente e chama com o valor explícito
             document.getElementById('drawerStatusSelect').value = newStatus;
             renderStatusActions(newStatus);
-            await updateOrderStatus();
+            await updateOrderStatus(newStatus);
         }
 
         // ── Popup de confirmação de entrega ──
@@ -4268,16 +4277,21 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
             }
         }
 
-        async function updateOrderStatus() {
-            const newStatus = document.getElementById('drawerStatusSelect').value;
+        async function updateOrderStatus(newStatus) {
+            // Aceita o status como parâmetro (via quickSetStatus) ou lê do select (via onchange)
+            if (newStatus === undefined) {
+                newStatus = document.getElementById('drawerStatusSelect').value;
+            }
+
             const order = allOrders.find(o => o.id == currentOrderId);
             if (!order) return;
 
             const oldStatus = order.status;
             if (oldStatus === newStatus) return; // nenhuma mudança
 
-            // Atualizar localmente de imediato (otimistic update)
+            // Atualizar localmente de imediato (optimistic update)
             order.status = newStatus;
+            document.getElementById('drawerStatusSelect').value = newStatus;
 
             if (!isDemoMode && sb) {
                 const now = new Date().toISOString();
@@ -4286,16 +4300,24 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
                 // Se confirmando, registrar confirmed_at
                 if (newStatus === 'confirmed') updatePayload.confirmed_at = now;
 
-                const { error } = await sb.from('orders')
+                const { data: updatedRows, error } = await sb.from('orders')
                     .update(updatePayload)
-                    .eq('id', currentOrderId);
+                    .eq('id', currentOrderId)
+                    .select(); // garante retorno do dado confirmado pelo banco
 
                 if (error) {
                     showToast('❌ Erro ao atualizar status: ' + error.message, 'error');
-                    order.status = oldStatus; // reverter
+                    // Reverter localmente
+                    order.status = oldStatus;
                     document.getElementById('drawerStatusSelect').value = oldStatus;
                     renderStatusActions(oldStatus);
                     return;
+                }
+
+                // Sincronizar o objeto em memória com o dado confirmado pelo banco
+                if (updatedRows && updatedRows.length > 0) {
+                    const idx = allOrders.findIndex(o => o.id == currentOrderId);
+                    if (idx >= 0) allOrders[idx] = { ...allOrders[idx], ...updatedRows[0] };
                 }
 
                 // Gravar histórico de status na tabela order_status_history
