@@ -2947,11 +2947,39 @@ create table if not exists loyalty_history (
   created_at timestamptz default now()
 );
 
--- RLS: permitir leitura/escrita anônima (ajuste conforme sua política)
+-- ⚠️ RLS OBRIGATÓRIO — Execute este bloco completo
+-- Sem estas policies, o UPDATE de status NÃO funciona (falha silenciosa)
+alter table orders enable row level security;
+drop policy if exists "allow_all" on orders;
+create policy "allow_all" on orders for all using (true) with check (true);
+
+alter table order_status_history enable row level security;
+drop policy if exists "allow_all" on order_status_history;
+create policy "allow_all" on order_status_history for all using (true) with check (true);
+
+alter table products enable row level security;
+drop policy if exists "allow_all" on products;
+create policy "allow_all" on products for all using (true) with check (true);
+
+alter table categories enable row level security;
+drop policy if exists "allow_all" on categories;
+create policy "allow_all" on categories for all using (true) with check (true);
+
 alter table loyalty_customers enable row level security;
+drop policy if exists "allow_all" on loyalty_customers;
 create policy "allow_all" on loyalty_customers for all using (true) with check (true);
+
 alter table loyalty_history enable row level security;
-create policy "allow_all" on loyalty_history for all using (true) with check (true);</pre>
+drop policy if exists "allow_all" on loyalty_history;
+create policy "allow_all" on loyalty_history for all using (true) with check (true);
+
+alter table loyalty_transactions enable row level security;
+drop policy if exists "allow_all" on loyalty_transactions;
+create policy "allow_all" on loyalty_transactions for all using (true) with check (true);
+
+alter table app_settings enable row level security;
+drop policy if exists "allow_all" on app_settings;
+create policy "allow_all" on app_settings for all using (true) with check (true);</pre>
                         <button class="btn btn-secondary" style="margin-top:10px;font-size:12px"
                             onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>showToast('✅ SQL copiado!','success'))">📋
                             Copiar SQL</button>
@@ -3575,10 +3603,94 @@ create policy "allow_all" on loyalty_history for all using (true) with check (tr
                 loadDashboard();
                 setupRealtime();
                 if (showLogin) showToast('✅ Conectado ao Supabase!', 'success');
+                // Diagnóstico de RLS: testa se UPDATE na tabela orders está funcionando
+                checkOrdersRLS();
             } catch (e) {
                 document.getElementById('loginError').style.display = 'block';
                 document.getElementById('loginError').textContent = '❌ Erro ao conectar: ' + e.message;
             }
+        }
+
+        // ===== DIAGNÓSTICO DE RLS =====
+        async function checkOrdersRLS() {
+            if (!sb) return;
+            try {
+                // Tenta buscar 1 pedido qualquer para testar SELECT
+                const { data: selectData, error: selectError } = await sb
+                    .from('orders').select('id, status').limit(1);
+
+                if (selectError) {
+                    showRLSWarning('SELECT bloqueado na tabela orders: ' + selectError.message);
+                    return;
+                }
+
+                if (!selectData || selectData.length === 0) return; // sem pedidos ainda, ok
+
+                const testId = selectData[0].id;
+                const currentStatus = selectData[0].status;
+
+                // Testa UPDATE sem mudar nada (mesmo valor)
+                const { data: updateData, error: updateError } = await sb
+                    .from('orders')
+                    .update({ updated_at: new Date().toISOString() })
+                    .eq('id', testId)
+                    .select('id');
+
+                if (updateError) {
+                    showRLSWarning('UPDATE bloqueado pelo RLS na tabela orders: ' + updateError.message);
+                    return;
+                }
+
+                // RLS silencioso: update não retornou nenhuma linha (bloqueado sem erro)
+                if (!updateData || updateData.length === 0) {
+                    showRLSWarning('UPDATE silenciosamente bloqueado pelo RLS (retornou 0 linhas sem erro). A tabela orders tem RLS ativo sem policy de UPDATE para anon/authenticated.');
+                    return;
+                }
+
+                console.log('[SnapFood] ✅ RLS OK — UPDATE na tabela orders funcionando corretamente.');
+            } catch (e) {
+                console.warn('[SnapFood] Erro no diagnóstico RLS:', e);
+            }
+        }
+
+        function showRLSWarning(detail) {
+            console.error('[SnapFood] ❌ PROBLEMA DE RLS:', detail);
+            // Banner de aviso persistente no topo
+            const existing = document.getElementById('rlsWarningBanner');
+            if (existing) return;
+            const banner = document.createElement('div');
+            banner.id = 'rlsWarningBanner';
+            banner.style.cssText = `
+                position: fixed; top: 0; left: 240px; right: 0; z-index: 9999;
+                background: #C0392B; color: white; padding: 12px 20px;
+                font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+                display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+            `;
+            banner.innerHTML = `
+                <span style="font-size:18px">🔒</span>
+                <div style="flex:1">
+                    <strong>PROBLEMA NO BANCO — RLS bloqueando UPDATE na tabela orders.</strong>
+                    Execute o SQL abaixo no Supabase para corrigir:
+                    <code style="background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:4px;margin-left:8px;font-size:12px">
+                        alter table orders enable row level security; create policy &quot;allow_all&quot; on orders for all using (true) with check (true);
+                    </code>
+                </div>
+                <button onclick="copyRLSSQL()"
+                    style="background:white;color:#C0392B;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:12px;white-space:nowrap">
+                    📋 Copiar SQL
+                </button>
+                <button onclick="this.parentElement.remove()"
+                    style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px">✕</button>
+            `;
+            document.body.appendChild(banner);
+            // Ajustar o topbar para não sobrepor
+            const topbar = document.querySelector('.topbar');
+            if (topbar) topbar.style.top = banner.offsetHeight + 'px';
+        }
+
+        function copyRLSSQL() {
+            const sql = 'alter table orders enable row level security;\ncreate policy "allow_all" on orders for all using (true) with check (true);';
+            navigator.clipboard.writeText(sql).then(() => showToast('✅ SQL copiado!', 'success'));
         }
 
         // ===== REALTIME =====
