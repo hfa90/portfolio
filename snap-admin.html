@@ -3542,6 +3542,33 @@ alter publication supabase_realtime add table orders;
                     </div>
                 </div>
 
+                <!-- ===== PAINEL ADMINISTRATIVO DE COMISSÕES ===== -->
+                <div style="background:var(--white);border:1px solid var(--surface3);border-radius:var(--radius);padding:20px;margin-bottom:24px"
+                    id="commissionSummaryPanel">
+                    <div
+                        style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+                        <div>
+                            <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:16px">📊 Painel de
+                                Comissões — Visão do Administrador</div>
+                            <div style="font-size:12px;color:var(--ink3);margin-top:2px">Quanto está sendo pago em taxas
+                                a cada funcionário no período selecionado</div>
+                        </div>
+                        <div style="display:flex;gap:6px;align-items:center">
+                            <span
+                                style="font-size:11px;padding:3px 8px;border-radius:100px;background:var(--success-bg);color:var(--success);border:1px solid #c0dd97;font-weight:700">✅
+                                = Pago/Creditado</span>
+                            <span
+                                style="font-size:11px;padding:3px 8px;border-radius:100px;background:var(--warning-bg);color:var(--warning);border:1px solid #f5d7a0;font-weight:700">⏳
+                                = Pendente</span>
+                        </div>
+                    </div>
+                    <div id="commissionSummaryBody"
+                        style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
+                        <div style="text-align:center;padding:20px;color:var(--ink3);font-size:13px;grid-column:1/-1">
+                            Carregando...</div>
+                    </div>
+                </div>
+
                 <!-- Config + Cadastro -->
                 <div class="staff-layout">
                     <!-- Config de taxas -->
@@ -3552,7 +3579,8 @@ alter publication supabase_realtime add table orders;
                         <div class="taxa-row" id="taxaServicoRow">
                             <div class="taxa-row-info">
                                 <div class="taxa-row-label">💼 Taxa de serviço (10%)</div>
-                                <div class="taxa-row-desc">Cobrar 10% sobre o pedido para distribuir aos funcionários
+                                <div class="taxa-row-desc">Cobrar 10% sobre pedidos <strong>presenciais</strong> para o
+                                    atendente. <em>Nunca cobrado em delivery.</em>
                                 </div>
                             </div>
                             <label class="toggle-switch">
@@ -4947,9 +4975,69 @@ alter publication supabase_realtime add table orders;
             <option value="">— Nenhum selecionado —</option>
             ${allStaff.filter(s => s.active && s.role === 'entregador').map(s => `<option value="${s.id}" ${(order.deliverer_id == s.id) ? 'selected' : ''}>${s.name}</option>`).join('')}
           </select>
-        </div>` : ''}
+        </div>` : `
+        <div class="detail-item" style="grid-column:1/-1;background:var(--surface2)">
+          <div class="detail-item-label" style="color:var(--ink3)">🛵 Entregador</div>
+          <div style="font-size:12px;color:var(--ink3);margin-top:3px">Não aplicável — pedido presencial/retirada não possui entregador</div>
+        </div>`}
       </div>
-      ${taxaServicoEnabled ? `<div style="margin-top:8px;padding:8px 10px;background:var(--success-bg);border-radius:8px;font-size:12px;color:var(--success)">💼 Taxa de serviço ativa: <strong>R$ ${(Number(order.total || 0) * 0.10).toFixed(2).replace('.', ',')}</strong> será creditada ao atendente</div>` : ''}
+      <!-- Painel de comissões -->
+      ${(() => {
+                    const isDelivery = order.order_type === 'delivery';
+                    const subtotal = Number(order.subtotal || order.total || 0);
+                    const deliveryFee = Number(order.delivery_fee || 0);
+                    const taxaServico10 = subtotal * 0.10;
+                    const taxaEntregaMotoVal = deliveryFee * motoFeePct / 100;
+                    const attendantObj = allStaff.find(s => s.id == order.attendant_id);
+                    const delivererObj = allStaff.find(s => s.id == order.deliverer_id);
+                    const isPaid = order.status === 'delivered';
+                    const statusColor = isPaid ? 'var(--success)' : 'var(--warning)';
+                    const statusBg = isPaid ? '#eaf3de' : '#faeeda';
+                    const statusBorder = isPaid ? '#c0dd97' : '#f5d7a0';
+                    const statusIcon = isPaid ? '✅ PAGO' : '⏳ PENDENTE';
+                    let html = `<div style="margin-top:10px;background:var(--surface);border:1px solid var(--surface3);border-radius:10px;overflow:hidden">
+          <div style="padding:10px 12px;background:var(--surface2);display:flex;align-items:center;justify-content:space-between">
+            <span style="font-weight:700;font-size:12px">💰 Comissões deste pedido</span>
+            <span style="padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;background:${statusBg};color:${statusColor};border:1px solid ${statusBorder}">${statusIcon}</span>
+          </div>`;
+                    if (!isDelivery) {
+                        if (taxaServicoEnabled) {
+                            html += `<div style="padding:10px 12px;border-bottom:1px solid var(--surface3)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:var(--success)">💼 Taxa de Serviço 10%</div>
+                  <div style="font-size:11px;color:var(--ink3);margin-top:2px">→ ${attendantObj ? `<strong>${attendantObj.name}</strong>` : '<em>Atendente não atribuído</em>'}</div>
+                  <div style="font-size:11px;color:var(--ink3)">Base: R$ ${subtotal.toFixed(2).replace('.', ',')} (subtotal presencial)</div>
+                </div>
+                <div style="text-align:right">
+                  <div style="font-size:16px;font-weight:800;color:var(--success)">R$ ${taxaServico10.toFixed(2).replace('.', ',')}</div>
+                  <div style="font-size:10px;padding:1px 6px;border-radius:100px;background:${statusBg};color:${statusColor};border:1px solid ${statusBorder};white-space:nowrap">${statusIcon}</div>
+                </div>
+              </div>
+            </div>`;
+                        } else {
+                            html += `<div style="padding:10px 12px;border-bottom:1px solid var(--surface3);font-size:12px;color:var(--ink3)">💼 Taxa de serviço desativada pelo administrador</div>`;
+                        }
+                        html += `<div style="padding:8px 12px;font-size:11px;color:var(--ink3)">🚫 Taxa de serviço <strong>não cobrada</strong> em delivery · Entregador: não se aplica a pedidos presenciais</div>`;
+                    } else {
+                        html += `<div style="padding:10px 12px;border-bottom:1px solid var(--surface3)">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-size:12px;font-weight:700;color:var(--warning)">🛵 Taxa de Entrega (${motoFeePct}% ao entregador)</div>
+                <div style="font-size:11px;color:var(--ink3);margin-top:2px">→ ${delivererObj ? `<strong>${delivererObj.name}</strong>` : '<em>Entregador não atribuído</em>'}</div>
+                <div style="font-size:11px;color:var(--ink3)">Taxa total: R$ ${deliveryFee.toFixed(2).replace('.', ',')} · Entregador recebe ${motoFeePct}%</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font-size:16px;font-weight:800;color:var(--warning)">R$ ${taxaEntregaMotoVal.toFixed(2).replace('.', ',')}</div>
+                <div style="font-size:10px;padding:1px 6px;border-radius:100px;background:${statusBg};color:${statusColor};border:1px solid ${statusBorder};white-space:nowrap">${statusIcon}</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:8px 12px;font-size:11px;color:var(--ink3)">🚫 Taxa de serviço (10%) <strong>nunca cobrada</strong> em pedidos delivery</div>`;
+                    }
+                    html += `</div>`;
+                    return html;
+                })()}
     </div>
   `;
 
@@ -5031,23 +5119,63 @@ alter publication supabase_realtime add table orders;
             if (!payment) { showToast('⚠️ Selecione a forma de pagamento recebida', 'error'); return; }
 
             const now = new Date().toISOString();
+            const isDelivery = order.order_type === 'delivery';
+            const subtotal = Number(order.subtotal || order.total || 0);
+            const deliveryFee = Number(order.delivery_fee || 0);
+
+            // Calcular comissões
+            const taxaServicoCreditada = (!isDelivery && taxaServicoEnabled) ? subtotal * 0.10 : 0;
+            const taxaEntregaCreditada = isDelivery ? deliveryFee * motoFeePct / 100 : 0;
+
             const updateData = {
                 status: 'delivered',
                 payment_method: payment,
                 delivered_at: now,
-                updated_at: now
+                updated_at: now,
+                service_fee_paid: !isDelivery && taxaServicoEnabled,
+                delivery_fee_paid: isDelivery,
             };
 
             if (!isDemoMode && sb) {
                 const { error } = await sb.from('orders').update(updateData).eq('id', currentOrderId);
                 if (error) { showToast('Erro ao confirmar: ' + error.message, 'error'); return; }
 
+                // Gravar comissão do atendente (taxa de serviço - só presencial)
+                if (taxaServicoCreditada > 0 && order.attendant_id) {
+                    try {
+                        await sb.from('staff_commissions').insert({
+                            staff_id: order.attendant_id,
+                            order_id: currentOrderId,
+                            type: 'taxa_servico',
+                            amount: taxaServicoCreditada,
+                            order_type: order.order_type,
+                            paid: true,
+                            created_at: now
+                        });
+                    } catch (e) { /* tabela opcional */ }
+                }
+
+                // Gravar comissão do entregador (taxa de entrega - só delivery)
+                if (taxaEntregaCreditada > 0 && order.deliverer_id) {
+                    try {
+                        await sb.from('staff_commissions').insert({
+                            staff_id: order.deliverer_id,
+                            order_id: currentOrderId,
+                            type: 'taxa_entrega',
+                            amount: taxaEntregaCreditada,
+                            order_type: order.order_type,
+                            paid: true,
+                            created_at: now
+                        });
+                    } catch (e) { /* tabela opcional */ }
+                }
+
                 // Gravar histórico de status
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: currentOrderId,
                         status: 'delivered',
-                        note: `Entrega confirmada. Pagamento: ${payment}`,
+                        note: `Entrega confirmada. Pagamento: ${payment}${taxaServicoCreditada > 0 ? ` | Taxa serviço creditada: R$ ${taxaServicoCreditada.toFixed(2)}` : ''}${taxaEntregaCreditada > 0 ? ` | Taxa entrega creditada: R$ ${taxaEntregaCreditada.toFixed(2)}` : ''}`,
                         created_at: now
                     });
                 } catch (e) { /* tabela opcional */ }
@@ -5069,7 +5197,17 @@ alter publication supabase_realtime add table orders;
             renderRecentOrders(allOrders.slice(0, 8));
             updatePendingBadge();
 
-            showToast('🏠 Entrega confirmada! Pedido movido para histórico.', 'success');
+            // Toast de confirmação com detalhes de comissões creditadas
+            let commMsg = '🏠 Entrega confirmada!';
+            if (taxaServicoCreditada > 0 && order.attendant_id) {
+                const name = allStaff.find(s => s.id == order.attendant_id)?.name || 'atendente';
+                commMsg += ` 💼 R$ ${taxaServicoCreditada.toFixed(2).replace('.', ',')} creditado para ${name}.`;
+            }
+            if (taxaEntregaCreditada > 0 && order.deliverer_id) {
+                const name = allStaff.find(s => s.id == order.deliverer_id)?.name || 'entregador';
+                commMsg += ` 🛵 R$ ${taxaEntregaCreditada.toFixed(2).replace('.', ',')} creditado para ${name}.`;
+            }
+            showToast(commMsg, 'success');
 
             // Sugerir WhatsApp
             if (order.customer_phone) {
@@ -6720,6 +6858,38 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     ? `<div>✅ Entregue em: ${new Date(deliveredAt).toLocaleString('pt-BR')}</div>` : ''}
             </div>
 
+            <!-- Comissões do pedido no histórico -->
+            ${(() => {
+                    const isDelivery = o.order_type === 'delivery';
+                    const subtotal = Number(o.subtotal || o.total || 0);
+                    const deliveryFee = Number(o.delivery_fee || 0);
+                    const taxaServico10 = subtotal * 0.10;
+                    const taxaEntregaVal = deliveryFee * motoFeePct / 100;
+                    const attendantObj = allStaff.find(s => s.id == o.attendant_id);
+                    const delivererObj = allStaff.find(s => s.id == o.deliverer_id);
+                    const isPaid = o.status === 'delivered';
+                    if (!attendantObj && !delivererObj) return '';
+                    let html = `<div style="margin-top:12px;background:var(--surface);border:1px solid var(--surface3);border-radius:10px;overflow:hidden">
+                    <div style="padding:8px 12px;background:var(--surface2);font-weight:700;font-size:12px;display:flex;align-items:center;justify-content:space-between">
+                        <span>💰 Comissões distribuídas</span>
+                        <span style="padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;${isPaid ? 'background:var(--success-bg);color:var(--success)' : 'background:var(--warning-bg);color:var(--warning)'}">${isPaid ? '✅ PAGO' : '⏳ PENDENTE'}</span>
+                    </div>`;
+                    if (!isDelivery && taxaServicoEnabled && attendantObj) {
+                        html += `<div style="padding:8px 12px;border-bottom:1px solid var(--surface3);display:flex;justify-content:space-between;align-items:center">
+                        <div style="font-size:12px"><div style="font-weight:700;color:var(--success)">💼 Taxa de Serviço (10%)</div><div style="color:var(--ink3);font-size:11px">${attendantObj.name}</div></div>
+                        <strong style="color:var(--success)">R$ ${taxaServico10.toFixed(2).replace('.', ',')}</strong>
+                    </div>`;
+                    }
+                    if (isDelivery && delivererObj) {
+                        html += `<div style="padding:8px 12px;display:flex;justify-content:space-between;align-items:center">
+                        <div style="font-size:12px"><div style="font-weight:700;color:var(--warning)">🛵 Taxa de Entrega (${motoFeePct}%)</div><div style="color:var(--ink3);font-size:11px">${delivererObj.name}</div></div>
+                        <strong style="color:var(--warning)">R$ ${taxaEntregaVal.toFixed(2).replace('.', ',')}</strong>
+                    </div>`;
+                    }
+                    html += `</div>`;
+                    return html;
+                })()}
+
             ${o.customer_phone ? `
             <div style="margin-top:16px">
                 <button class="btn btn-secondary" style="width:100%"
@@ -6875,10 +7045,38 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             }
 
             const total = myOrders.reduce((s, o) => s + Number(o.total || 0), 0);
-            const taxaServico = taxaServicoEnabled ? total * 0.10 : 0;
-            const deliveryFees = myOrders.filter(o => o.order_type === 'delivery').reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+
+            // Taxa de serviço: APENAS pedidos presenciais (nunca delivery)
+            const presencialOrders = myOrders.filter(o => o.order_type !== 'delivery');
+            const presencialTotal = presencialOrders.reduce((s, o) => s + Number(o.subtotal || o.total || 0), 0);
+            // Considerar apenas pedidos em que o cliente pagou a taxa (service_fee_paid = true ou pedido entregue presencialmente)
+            const taxaServicoOrdersPago = presencialOrders.filter(o => o.service_fee_paid === true || o.status === 'delivered');
+            const taxaServicoOrdersPendente = presencialOrders.filter(o => o.service_fee_paid !== true && o.status !== 'delivered' && o.status !== 'cancelled');
+            const totalPagoPresencial = taxaServicoOrdersPago.reduce((s, o) => s + Number(o.subtotal || o.total || 0), 0);
+            const totalPendentePresencial = taxaServicoOrdersPendente.reduce((s, o) => s + Number(o.subtotal || o.total || 0), 0);
+            const taxaServicoPago = taxaServicoEnabled ? totalPagoPresencial * 0.10 : 0;
+            const taxaServicoPendente = taxaServicoEnabled ? totalPendentePresencial * 0.10 : 0;
+            const taxaServico = taxaServicoPago + taxaServicoPendente;
+
+            // Taxa de entrega: apenas delivery, apenas para entregadores
+            const deliveryOrders = myOrders.filter(o => o.order_type === 'delivery');
+            const deliveryFees = deliveryOrders.reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+            // Separar pagas (entregues) de pendentes
+            const deliveryFeesPago = deliveryOrders.filter(o => o.status === 'delivered').reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+            const deliveryFeesPendente = deliveryOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
             const taxaEntregaMoto = deliveryFees * motoFeePct / 100;
-            return { count: myOrders.length, total, taxaServico, deliveryFees, taxaEntregaMoto };
+            const taxaEntregaMotoPago = deliveryFeesPago * motoFeePct / 100;
+            const taxaEntregaMotoPendente = deliveryFeesPendente * motoFeePct / 100;
+
+            return {
+                count: myOrders.length,
+                total,
+                presencialCount: presencialOrders.length,
+                deliveryCount: deliveryOrders.length,
+                taxaServico, taxaServicoPago, taxaServicoPendente,
+                deliveryFees, deliveryFeesPago, deliveryFeesPendente,
+                taxaEntregaMoto, taxaEntregaMotoPago, taxaEntregaMotoPendente
+            };
         }
 
         // ---- Load ----
@@ -6947,16 +7145,88 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             document.getElementById('staffKpiEntregadores').textContent = active.filter(s => s.role === 'entregador').length;
 
             const allSrc = [...(allOrders || []), ...(allHistory || [])].filter(o => orderInPeriod(o, staffPeriod));
-            const totalRevenue = allSrc.reduce((s, o) => s + Number(o.total || 0), 0);
-            const totalDelivery = allSrc.filter(o => o.order_type === 'delivery').reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
-            const taxaServico = taxaServicoEnabled ? totalRevenue * 0.10 : 0;
-            const motoShare = totalDelivery * motoFeePct / 100;
             const fmt = v => 'R$ ' + v.toFixed(2).replace('.', ',');
 
-            document.getElementById('staffKpiTaxaServico').textContent = taxaServicoEnabled ? fmt(taxaServico) : '—';
-            document.getElementById('staffKpiTaxaServicoSub').textContent = taxaServicoEnabled ? 'distribuir à equipe' : 'taxa desativada';
+            // Taxa de serviço: SOMENTE pedidos presenciais
+            const presencialOrders = allSrc.filter(o => o.order_type !== 'delivery');
+            const presencialPago = presencialOrders.filter(o => o.service_fee_paid === true || o.status === 'delivered');
+            const presencialPendente = presencialOrders.filter(o => o.service_fee_paid !== true && o.status !== 'delivered' && o.status !== 'cancelled');
+            const taxaServicoPagoTotal = presencialPago.reduce((s, o) => s + Number(o.subtotal || o.total || 0), 0) * 0.10;
+            const taxaServicoPendenteTotal = presencialPendente.reduce((s, o) => s + Number(o.subtotal || o.total || 0), 0) * 0.10;
+            const taxaServicoTotal = taxaServicoPagoTotal + taxaServicoPendenteTotal;
+
+            // Taxa de entrega
+            const deliveryOrders = allSrc.filter(o => o.order_type === 'delivery');
+            const deliveryPago = deliveryOrders.filter(o => o.status === 'delivered');
+            const deliveryPendente = deliveryOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled');
+            const motoSharePago = deliveryPago.reduce((s, o) => s + Number(o.delivery_fee || 0), 0) * motoFeePct / 100;
+            const motoSharePendente = deliveryPendente.reduce((s, o) => s + Number(o.delivery_fee || 0), 0) * motoFeePct / 100;
+            const motoShare = motoSharePago + motoSharePendente;
+
+            document.getElementById('staffKpiTaxaServico').textContent = taxaServicoEnabled ? fmt(taxaServicoTotal) : '—';
+            document.getElementById('staffKpiTaxaServicoSub').textContent = taxaServicoEnabled
+                ? `✅ ${fmt(taxaServicoPagoTotal)} pago · ⏳ ${fmt(taxaServicoPendenteTotal)} pendente`
+                : 'taxa desativada';
             document.getElementById('staffKpiTaxaEntrega').textContent = fmt(motoShare);
-            document.getElementById('staffKpiTaxaEntregaSub').textContent = motoFeePct + '% para motoqueiros';
+            document.getElementById('staffKpiTaxaEntregaSub').textContent = `✅ ${fmt(motoSharePago)} pago · ⏳ ${fmt(motoSharePendente)} pendente`;
+
+            // Refresh commission summary panel
+            renderCommissionSummary();
+        }
+
+        function renderCommissionSummary() {
+            const container = document.getElementById('commissionSummaryBody');
+            if (!container) return;
+            const fmt = v => 'R$ ' + v.toFixed(2).replace('.', ',');
+            const eligible = allStaff.filter(s => s.active && (s.role === 'atendente' || s.role === 'caixa' || s.role === 'entregador'));
+
+            if (!eligible.length) {
+                container.innerHTML = `<div style="text-align:center;padding:20px;color:var(--ink3);font-size:13px;grid-column:1/-1">Nenhum funcionário elegível cadastrado.</div>`;
+                return;
+            }
+
+            container.innerHTML = eligible.map(s => {
+                const stats = getStaffStats(s, staffPeriod);
+                const isEntregador = s.role === 'entregador';
+                const isAtendente = s.role === 'atendente' || s.role === 'caixa';
+
+                const taxaPago = isAtendente ? stats.taxaServicoPago : stats.taxaEntregaMotoPago;
+                const taxaPendente = isAtendente ? stats.taxaServicoPendente : stats.taxaEntregaMotoPendente;
+                const taxaTotal = taxaPago + taxaPendente;
+                const count = isAtendente ? stats.presencialCount : stats.deliveryCount;
+                const tipoTaxa = isAtendente ? '💼 Taxa Serviço 10%' : `🛵 Taxa Entrega ${motoFeePct}%`;
+                const tipoAtend = isAtendente ? `${stats.presencialCount} presencial(is)` : `${stats.deliveryCount} entrega(s)`;
+                const accentColor = isAtendente ? 'var(--success)' : 'var(--warning)';
+                const accentBg = isAtendente ? 'var(--success-bg)' : 'var(--warning-bg)';
+                const accentBorder = isAtendente ? '#c0dd97' : '#f5d7a0';
+                const showTaxa = isAtendente ? taxaServicoEnabled : true;
+
+                return `<div style="border:1px solid var(--surface3);border-radius:10px;overflow:hidden;cursor:pointer" onclick="openStaffDetail(${s.id})">
+                    <div style="padding:12px 14px;background:var(--surface);border-bottom:1px solid var(--surface3);display:flex;align-items:center;gap:10px">
+                        <span class="staff-badge ${roleBadgeClass(s.role)}">${roleLabel(s.role)}</span>
+                        <div style="flex:1;min-width:0">
+                            <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.name}</div>
+                            <div style="font-size:11px;color:var(--ink3)">${tipoAtend}</div>
+                        </div>
+                        <div style="font-size:11px;font-weight:700;color:${taxaTotal > 0 ? accentColor : 'var(--ink3)'}">${showTaxa ? fmt(taxaTotal) : '—'}</div>
+                    </div>
+                    ${showTaxa ? `
+                    <div style="display:grid;grid-template-columns:1fr 1fr">
+                        <div style="padding:10px 12px;border-right:1px solid var(--surface3)">
+                            <div style="font-size:10px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">✅ Pago</div>
+                            <div style="font-size:15px;font-weight:800;color:var(--success)">${fmt(taxaPago)}</div>
+                            <div style="font-size:10px;color:var(--ink3);margin-top:1px">já creditado</div>
+                        </div>
+                        <div style="padding:10px 12px">
+                            <div style="font-size:10px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px">⏳ Pendente</div>
+                            <div style="font-size:15px;font-weight:800;color:var(--warning)">${fmt(taxaPendente)}</div>
+                            <div style="font-size:10px;color:var(--ink3);margin-top:1px">em aberto</div>
+                        </div>
+                    </div>
+                    <div style="padding:6px 12px;background:var(--surface);border-top:1px solid var(--surface3);font-size:10px;color:var(--ink3)">${tipoTaxa}</div>
+                    ` : `<div style="padding:10px 12px;font-size:12px;color:var(--ink3)">Taxa de serviço desativada</div>`}
+                </div>`;
+            }).join('');
         }
 
         function renderAttendantHighlight() {
@@ -6983,7 +7253,13 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     <div style="margin-top:12px">
                         <div class="att-stat"><span>Atendimentos</span><strong>${s.stats.count}</strong></div>
                         <div class="att-stat"><span>Total vendas</span><strong>${fmt(s.stats.total)}</strong></div>
-                        <div class="att-stat"><span>Taxa serviço</span><strong style="color:var(--success)">${taxaServicoEnabled ? fmt(s.stats.taxaServico) : '—'}</strong></div>
+                        <div class="att-stat"><span>Taxa serviço</span>
+                            <span style="text-align:right">
+                                <strong style="color:var(--success)">${taxaServicoEnabled ? fmt(s.stats.taxaServico) : '—'}</strong>
+                                ${taxaServicoEnabled && s.stats.taxaServicoPago > 0 ? `<br><span style="font-size:10px;color:var(--success)">✅ ${fmt(s.stats.taxaServicoPago)} pago</span>` : ''}
+                                ${taxaServicoEnabled && s.stats.taxaServicoPendente > 0 ? `<br><span style="font-size:10px;color:var(--warning)">⏳ ${fmt(s.stats.taxaServicoPendente)} pendente</span>` : ''}
+                            </span>
+                        </div>
                     </div>
                     <div style="margin-top:10px;background:var(--surface3);border-radius:4px;height:4px;overflow:hidden">
                         <div style="width:100%;height:100%;display:flex">
@@ -7013,10 +7289,24 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 const countStr = stats ? `<strong>${stats.count}</strong>` : '<span style="color:var(--ink3)">—</span>';
                 const totalStr = stats ? fmt(stats.total) : '<span style="color:var(--ink3)">—</span>';
                 let taxaStr = '<span style="color:var(--ink3)">—</span>';
-                if (stats && (s.role === 'atendente' || s.role === 'caixa') && taxaServicoEnabled)
-                    taxaStr = `<span style="color:var(--success);font-weight:600">${fmt(stats.taxaServico)}</span>`;
-                if (stats && s.role === 'entregador')
-                    taxaStr = `<span style="color:#BA7517;font-weight:600">${fmt(stats.taxaEntregaMoto)}</span>`;
+                if (stats && (s.role === 'atendente' || s.role === 'caixa') && taxaServicoEnabled) {
+                    taxaStr = `<div style="line-height:1.4">
+                        <div style="font-weight:700;color:var(--success)">${fmt(stats.taxaServico)}</div>
+                        <div style="display:flex;gap:4px;margin-top:2px;flex-wrap:wrap">
+                            ${stats.taxaServicoPago > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:100px;background:var(--success-bg);color:var(--success);font-weight:700">✅ ${fmt(stats.taxaServicoPago)}</span>` : ''}
+                            ${stats.taxaServicoPendente > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:100px;background:var(--warning-bg);color:var(--warning);font-weight:700">⏳ ${fmt(stats.taxaServicoPendente)}</span>` : ''}
+                        </div>
+                    </div>`;
+                }
+                if (stats && s.role === 'entregador') {
+                    taxaStr = `<div style="line-height:1.4">
+                        <div style="font-weight:700;color:#BA7517">${fmt(stats.taxaEntregaMoto)}</div>
+                        <div style="display:flex;gap:4px;margin-top:2px;flex-wrap:wrap">
+                            ${stats.taxaEntregaMotoPago > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:100px;background:var(--success-bg);color:var(--success);font-weight:700">✅ ${fmt(stats.taxaEntregaMotoPago)}</span>` : ''}
+                            ${stats.taxaEntregaMotoPendente > 0 ? `<span style="font-size:10px;padding:1px 5px;border-radius:100px;background:var(--warning-bg);color:var(--warning);font-weight:700">⏳ ${fmt(stats.taxaEntregaMotoPendente)}</span>` : ''}
+                        </div>
+                    </div>`;
+                }
 
                 return `<tr onclick="openStaffDetail(${s.id})">
                     <td>
@@ -7188,13 +7478,29 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 deliverySection = `
                 <div style="background:var(--warning-bg);border:1px solid #f5d7a0;border-radius:10px;padding:16px;margin-top:14px">
                     <div style="font-weight:700;font-size:13px;color:var(--warning);margin-bottom:12px">🛵 Taxa de Entrega — ${periodLabel}</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-                        <div class="detail-item"><div class="detail-item-label">Entregas</div><div class="detail-item-value" style="font-size:22px;font-family:'Syne',sans-serif;color:var(--brand)">${stats.count}</div></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">
+                        <div class="detail-item"><div class="detail-item-label">Entregas</div><div class="detail-item-value" style="font-size:22px;font-family:'Syne',sans-serif;color:var(--brand)">${stats.deliveryCount}</div></div>
                         <div class="detail-item"><div class="detail-item-label">Taxa arrecadada</div><div class="detail-item-value">${fmt(stats.deliveryFees)}</div></div>
                         <div class="detail-item" style="background:#fef3e1"><div class="detail-item-label" style="color:var(--warning)">🛵 Para o moto (${motoFeePct}%)</div>
                             <div class="detail-item-value" style="color:var(--warning);font-size:18px">${fmt(stats.taxaEntregaMoto)}</div></div>
                     </div>
+                    <!-- Pago vs Pendente -->
+                    <div style="background:white;border-radius:8px;overflow:hidden;border:1px solid #f5d7a0">
+                        <div style="display:grid;grid-template-columns:1fr 1fr">
+                            <div style="padding:10px 12px;border-right:1px solid #f5d7a0">
+                                <div style="font-size:10px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">✅ PAGO / Creditado</div>
+                                <div style="font-size:16px;font-weight:800;color:var(--success)">${fmt(stats.taxaEntregaMotoPago)}</div>
+                                <div style="font-size:11px;color:var(--ink3);margin-top:2px">Pedidos entregues</div>
+                            </div>
+                            <div style="padding:10px 12px">
+                                <div style="font-size:10px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">⏳ PENDENTE</div>
+                                <div style="font-size:16px;font-weight:800;color:var(--warning)">${fmt(stats.taxaEntregaMotoPendente)}</div>
+                                <div style="font-size:11px;color:var(--ink3);margin-top:2px">Pedidos em andamento</div>
+                            </div>
+                        </div>
+                    </div>
                     ${motoFeePct < 100 ? `<div style="margin-top:8px;font-size:12px;color:var(--ink3);border-top:1px solid #f5d7a0;padding-top:8px">🏢 Empresa retém: <strong>${fmt(stats.deliveryFees - stats.taxaEntregaMoto)}</strong> (${100 - motoFeePct}%)</div>` : ''}
+                    <div style="margin-top:8px;font-size:11px;color:var(--ink3);border-top:1px solid #f5d7a0;padding-top:8px">ℹ️ Taxa de serviço (10%) <strong>não se aplica</strong> a entregadores</div>
                 </div>`;
             }
 
@@ -7205,13 +7511,29 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 <div style="background:${taxaServicoEnabled ? 'var(--success-bg)' : 'var(--surface2)'};border:1px solid ${taxaServicoEnabled ? '#c0dd97' : 'var(--surface3)'};border-radius:10px;padding:16px;margin-top:14px">
                     <div style="font-weight:700;font-size:13px;color:${taxaServicoEnabled ? 'var(--success)' : 'var(--ink3)'};margin-bottom:10px">💼 Taxa de Serviço 10% — ${periodLabel}</div>
                     ${taxaServicoEnabled
-                        ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                            <div class="detail-item"><div class="detail-item-label">Total vendas atendidas</div><div class="detail-item-value">${fmt(stats.total)}</div></div>
+                        ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+                            <div class="detail-item"><div class="detail-item-label">Atendimentos presenciais</div><div class="detail-item-value">${stats.presencialCount}</div></div>
                             <div class="detail-item" style="background:var(--success-bg)">
-                                <div class="detail-item-label" style="color:var(--success)">Valor a receber (10%)</div>
+                                <div class="detail-item-label" style="color:var(--success)">💼 Total a receber (10%)</div>
                                 <div class="detail-item-value" style="color:var(--success);font-size:18px">${fmt(stats.taxaServico)}</div>
                             </div>
-                           </div>`
+                           </div>
+                           <!-- Pago vs Pendente -->
+                           <div style="background:white;border-radius:8px;overflow:hidden;border:1px solid #c0dd97">
+                               <div style="display:grid;grid-template-columns:1fr 1fr">
+                                   <div style="padding:10px 12px;border-right:1px solid #c0dd97">
+                                       <div style="font-size:10px;font-weight:700;color:var(--success);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">✅ PAGO / Creditado</div>
+                                       <div style="font-size:16px;font-weight:800;color:var(--success)">${fmt(stats.taxaServicoPago)}</div>
+                                       <div style="font-size:11px;color:var(--ink3);margin-top:2px">Pedidos finalizados</div>
+                                   </div>
+                                   <div style="padding:10px 12px">
+                                       <div style="font-size:10px;font-weight:700;color:var(--warning);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">⏳ PENDENTE</div>
+                                       <div style="font-size:16px;font-weight:800;color:var(--warning)">${fmt(stats.taxaServicoPendente)}</div>
+                                       <div style="font-size:11px;color:var(--ink3);margin-top:2px">Pedidos em andamento</div>
+                                   </div>
+                               </div>
+                           </div>
+                           <div style="margin-top:8px;font-size:11px;color:var(--ink3);border-top:1px solid #c0dd97;padding-top:8px">ℹ️ Calculado sobre pedidos <strong>presenciais</strong> apenas — nunca sobre delivery</div>`
                         : '<div style="font-size:13px;color:var(--ink3)">Taxa de serviço está desativada pelo administrador.</div>'}
                 </div>`;
             }
