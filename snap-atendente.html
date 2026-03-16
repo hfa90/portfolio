@@ -12,7 +12,6 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="snap-commissions.js"></script>
     <style>
         :root {
             --brand: #E8420A;
@@ -2934,6 +2933,37 @@
             cursor: pointer;
             -webkit-appearance: none;
         }
+
+        /* ══ PENDING EDIT BADGE ══ */
+        .or-pending-edit {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #FEF3DC;
+            border: 1.5px solid #f0c96a;
+            border-radius: 100px;
+            padding: 2px 8px;
+            font-size: 10px;
+            font-weight: 700;
+            color: #7a5000;
+            margin-top: 4px;
+        }
+
+        @keyframes pendingPulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: .5;
+            }
+        }
+
+        .or-pending-edit {
+            animation: pendingPulse 1.8s ease-in-out infinite;
+        }
     </style>
 </head>
 
@@ -3486,9 +3516,6 @@
                 data.forEach(r => m[r.key] = r.value);
                 if (m.delivery_fee) delivFee = parseFloat(m.delivery_fee) || 5.00;
             } catch (e) { }
-
-            SnapCommissions.init(sb, { taxaServicoEnabled: false, motoFeePct: 100 });
-
         }
 
         async function loadCats() {
@@ -3957,6 +3984,7 @@
                 const items = parseItems(o.items);
                 const itTxt = items.map(i => `${i.qty}x ${i.name}`).join(', ');
                 const canCancel = ['pending', 'confirmed'].includes(o.status);
+                const pendingEdit = o.has_pending_edit;
                 return `<div class="or-card">
       <div>
         <div class="or-num">${o.order_number || '#' + o.id}</div>
@@ -3970,7 +3998,7 @@
       <div class="or-right">
         <span class="or-total">R$ ${fmt(o.total)}</span>
         <span class="or-status ${o.status}">${LABELS[o.status] || o.status}</span>
-        ${canCancel ? `<button class="or-cancel" onclick="cancelOrder(${o.id})">Cancelar</button><button class="or-edit-btn" onclick="closeOrders();loadOrderToEdit(${o.id})">✏️ Editar</button>` : ''}
+        ${canCancel ? `<button class="or-cancel" onclick="cancelOrder(${o.id})">Cancelar</button><button class="or-edit-btn" onclick="closeOrders();loadOrderToEdit(${o.id})">✏️ Editar</button>` : ''}${pendingEdit ? '<div class="or-pending-edit">⏳ Edição aguardando aprovação do admin</div>' : ''}
       </div>
     </div>`;
             }).join('');
@@ -4187,6 +4215,8 @@
             // Mostrar botões protegidos na topbar
             $('btnCheckout').style.display = 'flex';
             $('btnCommissions').style.display = 'flex';
+            // Escutar respostas do admin para solicitações de edição
+            listenEditRequestResults();
             // Register shift start (idempotent)
             await registerShiftStart();
             toast('✅ Olá, ' + currentAttendant.name + '!', 'success');
@@ -4587,27 +4617,82 @@
 
         async function saveEditOrder() {
             if (!editOrderId || !editOrderItems.length) { toast('Nenhum item para salvar', 'error'); return; }
-            const subtotal = editOrderItems.reduce((s, i) => s + i.price * i.qty, 0);
+
+            // Buscar itens originais do pedido para o diff
+            let itemsBefore = [];
             try {
+                const { data: orig } = await sb.from('orders').select('items').eq('id', editOrderId).single();
+                if (orig) {
+                    const raw = typeof orig.items === 'string' ? JSON.parse(orig.items) : (orig.items || []);
+                    itemsBefore = raw.map(i => ({
+                        id: i.id || 0, name: i.name || i.product_name || 'Item',
+                        qty: i.qty || i.quantity || 1, price: Number(i.price || i.unit_price || 0)
+                    }));
+                }
+            } catch (e) { }
+
+            // Gravar solicitação de edição no banco (admin irá aprovar)
+            try {
+                await sb.from('order_edit_requests').insert({
+                    order_id: editOrderId,
+                    requested_by: currentAttendant ? currentAttendant.id : null,
+                    items_before: JSON.stringify(itemsBefore),
+                    items_after: JSON.stringify(editOrderItems),
+                    status: 'pending',
+                    created_at: new Date().toISOString(),
+                });
+
+                // Marcar pedido como "tem edição pendente" (sinaliza pro admin)
                 await sb.from('orders').update({
-                    items: JSON.stringify(editOrderItems),
-                    subtotal,
-                    total: subtotal,
+                    has_pending_edit: true,
                     updated_at: new Date().toISOString(),
                 }).eq('id', editOrderId);
 
+                // Histórico
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: editOrderId, status: 'confirmed',
-                        note: 'Pedido editado pelo atendente — itens atualizados'
+                        note: '⏳ Edição solicitada pelo atendente ' + (currentAttendant ? currentAttendant.name : '') + ' — aguardando aprovação do admin.'
                     });
                 } catch (e) { }
 
-                toast('✅ Pedido atualizado com sucesso!', 'success');
+                toast('⏳ Solicitação enviada ao admin! Aguardando aprovação.', 'success');
                 haptic('success');
                 closeEditOrder();
                 loadTodayOrders();
-            } catch (e) { toast('Erro ao salvar: ' + e.message, 'error'); }
+
+            } catch (e) {
+                // Fallback: se tabela não existir ainda, salva diretamente com aviso
+                if (e.message && (e.message.includes('does not exist') || e.message.includes('relation'))) {
+                    toast('⚠️ Tabela order_edit_requests não criada. Execute o SQL no Admin.', 'error');
+                } else {
+                    toast('Erro ao enviar solicitação: ' + e.message, 'error');
+                }
+            }
+        }
+
+        /* ══════════════════════════════════════════
+           PAINEL DE EDIÇÃO PENDENTE (feedback ao atendente)
+        ══════════════════════════════════════════ */
+        /** Verifica se alguma solicitação pendente deste atendente foi aprovada/rejeitada */
+        function listenEditRequestResults() {
+            if (!sb || !currentAttendant) return;
+            sb.channel('edit-req-att-' + currentAttendant.id)
+                .on('postgres_changes', {
+                    event: 'UPDATE', schema: 'public', table: 'order_edit_requests'
+                }, (payload) => {
+                    const req = payload.new;
+                    if (req.requested_by !== currentAttendant.id) return;
+                    if (req.status === 'approved') {
+                        toast('✅ Admin aprovou sua edição! A cozinha foi notificada.', 'success');
+                        haptic('success');
+                        loadTodayOrders();
+                    } else if (req.status === 'rejected') {
+                        toast('✗ Admin recusou a edição. O pedido foi mantido como estava.', 'error');
+                        haptic('medium');
+                    }
+                })
+                .subscribe();
         }
 
         /* ══════════════════════════════════════════

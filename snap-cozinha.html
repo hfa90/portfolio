@@ -1239,10 +1239,119 @@
             color: var(--green);
             border-color: rgba(39, 214, 105, .25);
         }
+
+        /* ══ EDIT ALERT BANNER ══ */
+        .edit-alert-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            background: linear-gradient(135deg, #F5C518 0%, #E8A500 100%);
+            color: #1C1B19;
+            padding: 14px 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .2);
+            animation: slideDown .4s cubic-bezier(.22, 1, .36, 1);
+            transform-origin: top;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .edit-banner-ico {
+            font-size: 28px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .edit-banner-body {
+            flex: 1;
+        }
+
+        .edit-banner-title {
+            font-weight: 800;
+            font-size: 15px;
+        }
+
+        .edit-banner-sub {
+            font-size: 12px;
+            opacity: .8;
+            margin-top: 2px;
+        }
+
+        .edit-banner-close {
+            background: rgba(0, 0, 0, .12);
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        /* badge de edição no card do pedido */
+        .ac-edit-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #F5C518;
+            border-radius: 6px;
+            padding: 3px 10px;
+            font-size: 11px;
+            font-weight: 800;
+            color: #1C1B19;
+            margin: 6px 0 2px;
+            animation: pulseBadge 1.4s ease-in-out infinite;
+        }
+
+        @keyframes pulseBadge {
+
+            0%,
+            100% {
+                opacity: 1;
+                box-shadow: 0 0 0 0 rgba(245, 197, 24, .4);
+            }
+
+            50% {
+                opacity: .85;
+                box-shadow: 0 0 0 6px rgba(245, 197, 24, 0);
+            }
+        }
+
+        .ac.edited {
+            border: 2.5px solid #F5C518 !important;
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- ══ EDIT ALERT BANNER ══ -->
+    <div id="editAlertBanner" style="display:none" class="edit-alert-banner">
+        <div class="edit-banner-ico">✏️</div>
+        <div class="edit-banner-body">
+            <div class="edit-banner-title" id="editBannerTitle">Pedido alterado!</div>
+            <div class="edit-banner-sub" id="editBannerSub">Itens atualizados — verifique o card</div>
+        </div>
+        <button class="edit-banner-close" onclick="dismissEditBanner()">✕</button>
+    </div>
+
 
     <!-- LOGIN -->
     <div id="loginScreen">
@@ -1437,6 +1546,35 @@
         function onChange(p) {
             const o = p.new || p.old, s = o.status;
             if (p.eventType === 'DELETE') { purge(o.id); renderAll(); return; }
+
+            // ── Detectar edição aprovada pelo admin ──────────────────────────
+            if (p.eventType === 'UPDATE' && o.last_edited_at) {
+                const wasInActive = active.find(x => x.id === o.id);
+                const wasInQueue = queue.find(x => x.id === o.id);
+                if (wasInActive || wasInQueue) {
+                    // Atualizar o objeto na lista
+                    if (wasInActive) {
+                        active = active.map(x => x.id === o.id ? o : x);
+                        // Substituir card DOM com itens atualizados
+                        const oldCard = document.querySelector(`[data-oid="${o.id}"]`);
+                        if (oldCard) {
+                            stopTmr(o.id);
+                            const newCard = buildCard(o);
+                            oldCard.replaceWith(newCard);
+                            newCard.classList.add('edited');
+                            startTmr(o);
+                        }
+                    }
+                    if (wasInQueue) queue = queue.map(x => x.id === o.id ? o : x);
+                    // Banner de alerta visual + som
+                    showEditBanner(o);
+                    beep('urgent');
+                    flashTitle('✏️ PEDIDO ALTERADO!');
+                    renderAll(); updStats();
+                    return;
+                }
+            }
+
             if (s === 'preparing') {
                 const already = active.find(x => x.id === o.id);
                 queue = queue.filter(x => x.id !== o.id);
@@ -1452,6 +1590,25 @@
                 purge(o.id);
             }
             renderAll(); updStats();
+        }
+
+        let _editBannerTimer = null;
+        function showEditBanner(order) {
+            const num = order.order_number || '#' + order.id;
+            const name = order.customer_name || '';
+            const tl = { delivery: 'Delivery', presencial: 'Mesa', retirada: 'Retirada' }[order.order_type] || '';
+            document.getElementById('editBannerTitle').textContent = '✏️ Pedido ' + num + ' foi alterado!';
+            document.getElementById('editBannerSub').textContent =
+                name + (tl ? ' · ' + tl : '') + ' — Admin aprovou os novos itens. Verifique o card.';
+            const banner = document.getElementById('editAlertBanner');
+            banner.style.display = 'flex';
+            clearTimeout(_editBannerTimer);
+            _editBannerTimer = setTimeout(() => { banner.style.display = 'none'; }, 12000);
+        }
+
+        function dismissEditBanner() {
+            document.getElementById('editAlertBanner').style.display = 'none';
+            clearTimeout(_editBannerTimer);
         }
 
         function purge(id) {
@@ -1488,6 +1645,7 @@
       <div class="ti"><div class="ti-tag">Tempo de preparo</div><div class="ti-main" data-el>00:00</div><div class="ti-meta">Meta: <span>${Math.round(prepSec / 60)} min</span></div></div>
     </div>
     <div class="acp"><div class="acpf" data-bar style="width:0%"></div></div>
+    ${o.last_edited_at ? '<div class="ac-edit-badge">✏️ Itens alterados pelo admin</div>' : ''}
     <div class="ac-in">Entrou às ${fmtClock(o.created_at)}</div>
     <div class="aci"><div class="aci-t">Itens do pedido</div>${items.map(it => `<div class="ir"><div class="iq">${it.qty}x</div><div><div class="in-name">${esc(it.name)}</div>${it.obs ? `<div class="in-obs">📝 ${esc(it.obs)}</div>` : ''}</div></div>`).join('')}</div>
     ${notesHtml}${addrHtml}${tblHtml}

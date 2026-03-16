@@ -3448,7 +3448,32 @@
                             para criar/atualizar as tabelas necessárias:</p>
                         <pre
                             style="background:#1a1a18;color:#c9f7be;border-radius:8px;padding:14px;font-size:11px;overflow-x:auto;line-height:1.6;white-space:pre-wrap">-- Habilitar Realtime nas tabelas
+-- NOTA: se retornar erro 42710 "already member", pode ignorar — já está ativo.
 alter publication supabase_realtime add table orders;
+
+-- Tabela de solicitações de edição de pedidos (atendente → admin → cozinha)
+create table if not exists order_edit_requests (
+  id            bigint generated always as identity primary key,
+  order_id      bigint not null,
+  requested_by  integer references staff(id),   -- atendente que pediu
+  items_before  jsonb not null,                 -- snapshot dos itens originais
+  items_after   jsonb not null,                 -- itens solicitados
+  reason        text,                           -- motivo opcional
+  status        text not null default 'pending'
+                  check (status in ('pending','approved','rejected')),
+  reviewed_by   text,                           -- 'admin' ou nome
+  reviewed_at   timestamptz,
+  created_at    timestamptz default now()
+);
+create index if not exists idx_oer_order  on order_edit_requests(order_id);
+create index if not exists idx_oer_status on order_edit_requests(status);
+
+-- Habilitar Realtime na nova tabela (para admin receber alertas em tempo real)
+alter publication supabase_realtime add table order_edit_requests;
+
+-- Coluna de controle de edição na tabela orders
+alter table orders add column if not exists has_pending_edit boolean default false;
+alter table orders add column if not exists last_edited_at   timestamptz;
 
                         </pre>
                         <button class="btn btn-secondary" style="margin-top:10px;font-size:12px"
@@ -4301,6 +4326,7 @@ alter publication supabase_realtime add table orders;
                 document.getElementById('liveBadge').style.display = 'inline-flex';
                 loadDashboard();
                 setupRealtime();
+                setupEditRequestsRT(); // escuta solicitações de edição do atendente
                 if (showLogin) showToast('✅ Conectado ao Supabase!', 'success');
                 // Diagnóstico de RLS: testa se UPDATE na tabela orders está funcionando
                 checkOrdersRLS();
@@ -7630,7 +7656,180 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             renderStaffTable();
         }
 
+
+        // ===== ORDER EDIT REQUESTS — Aprovação de edições do atendente =====
+        let _pendingEditRequests = [];
+        let _currentEditRequest = null;
+
+        /** Escuta a tabela order_edit_requests via Realtime */
+        function setupEditRequestsRT() {
+            if (!sb) return;
+            sb.channel('edit-requests-admin')
+                .on('postgres_changes', {
+                    event: 'INSERT', schema: 'public', table: 'order_edit_requests'
+                }, (payload) => {
+                    const req = payload.new;
+                    if (req.status !== 'pending') return;
+                    _pendingEditRequests.push(req);
+                    showEditRequestAlert(req);
+                })
+                .subscribe();
+        }
+
+        /** Mostra o popup de aprovação com diff visual dos itens */
+        async function showEditRequestAlert(req) {
+            _currentEditRequest = req;
+
+            let orderNum = '#' + req.order_id, orderMeta = '', attName = 'Atendente';
+            try {
+                const { data: ord } = await sb.from('orders')
+                    .select('order_number,customer_name,order_type,table_number')
+                    .eq('id', req.order_id).single();
+                if (ord) {
+                    orderNum = ord.order_number || '#' + req.order_id;
+                    const tl = { presencial: '🪑 Mesa', delivery: '🛵 Delivery', retirada: '🏃 Retirada' };
+                    orderMeta = ord.customer_name + ' · ' + (tl[ord.order_type] || ord.order_type) +
+                        (ord.table_number ? ' ' + ord.table_number : '');
+                }
+                if (req.requested_by) {
+                    const { data: st } = await sb.from('staff').select('name').eq('id', req.requested_by).single();
+                    if (st) attName = st.name;
+                }
+            } catch (e) { }
+
+            document.getElementById('erOrderNum').textContent = orderNum;
+            document.getElementById('erOrderMeta').textContent = orderMeta;
+            document.getElementById('erAttChip').textContent = '👤 ' + attName;
+            document.getElementById('erHdrSub').textContent = attName + ' quer alterar ' + orderNum;
+
+            const parseItems = (raw) => {
+                if (!raw) return [];
+                return (typeof raw === 'string' ? JSON.parse(raw) : raw);
+            };
+            const before = parseItems(req.items_before);
+            const after = parseItems(req.items_after);
+
+            const fmtList = (items) => items.length
+                ? items.map(i => `<div class="er-diff-item">${i.qty}× ${i.name || '?'} <span style="color:var(--ink3);font-size:10px">R$ ${((+(i.price || 0)) * (+(i.qty || 1))).toFixed(2).replace('.', ',')}</span></div>`).join('')
+                : '<div style="font-size:12px;color:var(--ink3)">—</div>';
+
+            document.getElementById('erBefore').innerHTML = fmtList(before);
+            document.getElementById('erAfter').innerHTML = fmtList(after);
+
+            document.getElementById('editRequestModal').classList.add('open');
+            try { playNotificationSound(); } catch (e) { }
+        }
+
+        /** Admin APROVA — grava novos itens + notifica cozinha via last_edited_at */
+        async function approveEditRequest() {
+            if (!_currentEditRequest) return;
+            const req = _currentEditRequest;
+            const after = typeof req.items_after === 'string'
+                ? JSON.parse(req.items_after) : req.items_after || [];
+            const sub = after.reduce((s, i) => s + (+(i.price || 0)) * (+(i.qty || 1)), 0);
+            const now = new Date().toISOString();
+            try {
+                await sb.from('orders').update({
+                    items: JSON.stringify(after),
+                    subtotal: sub,
+                    total: sub,
+                    has_pending_edit: false,
+                    last_edited_at: now,
+                    updated_at: now,
+                }).eq('id', req.order_id);
+
+                await sb.from('order_edit_requests').update({
+                    status: 'approved', reviewed_by: 'admin', reviewed_at: now,
+                }).eq('id', req.id);
+
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: req.order_id, status: 'confirmed',
+                        note: '✅ Edição aprovada pelo admin. Itens atualizados — cozinha notificada.'
+                    });
+                } catch (e) { }
+
+                showToast('✅ Edição aprovada! Cozinha notificada automaticamente.', 'success');
+                _currentEditRequest = null;
+                _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
+                document.getElementById('editRequestModal').classList.remove('open');
+                loadOrders();
+            } catch (e) { showToast('❌ Erro ao aprovar: ' + (e.message || e), 'error'); }
+        }
+
+        /** Admin REJEITA — restaura itens originais e cancela a solicitação */
+        async function rejectEditRequest() {
+            if (!_currentEditRequest) return;
+            const req = _currentEditRequest;
+            const before = typeof req.items_before === 'string'
+                ? JSON.parse(req.items_before) : req.items_before || [];
+            const now = new Date().toISOString();
+            try {
+                await sb.from('orders').update({
+                    items: JSON.stringify(before),
+                    has_pending_edit: false,
+                    updated_at: now,
+                }).eq('id', req.order_id);
+
+                await sb.from('order_edit_requests').update({
+                    status: 'rejected', reviewed_by: 'admin', reviewed_at: now,
+                }).eq('id', req.id);
+
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: req.order_id, status: 'confirmed',
+                        note: '✗ Edição recusada pelo admin. Itens originais mantidos.'
+                    });
+                } catch (e) { }
+
+                showToast('✗ Edição recusada. Pedido mantido com itens originais.', 'warning');
+                _currentEditRequest = null;
+                _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
+                document.getElementById('editRequestModal').classList.remove('open');
+            } catch (e) { showToast('❌ Erro ao recusar: ' + (e.message || e), 'error'); }
+        }
+
+
     </script>
+
+    <!-- ══ EDIT REQUEST APPROVAL MODAL ══ -->
+    <div id="editRequestModal"
+        style="position:fixed;inset:0;z-index:9000;background:rgba(28,27,25,.65);backdrop-filter:blur(5px);display:none;align-items:center;justify-content:center;padding:20px;">
+        <div class="er-box">
+            <div class="er-hdr">
+                <div class="er-hdr-ico">✏️</div>
+                <div class="er-hdr-text">
+                    <div class="er-hdr-title">Solicitação de Edição de Pedido</div>
+                    <div class="er-hdr-sub" id="erHdrSub">Atendente quer alterar um pedido ativo</div>
+                </div>
+            </div>
+            <div class="er-body">
+                <div class="er-order-info">
+                    <div>
+                        <div class="er-order-num" id="erOrderNum">—</div>
+                        <div class="er-order-meta" id="erOrderMeta">—</div>
+                    </div>
+                    <span class="er-att-chip" id="erAttChip">Atendente</span>
+                </div>
+                <div class="er-diff-title">Diferença solicitada</div>
+                <div class="er-diff">
+                    <div class="er-diff-col before">
+                        <div class="er-diff-col-label">Antes</div>
+                        <div id="erBefore"></div>
+                    </div>
+                    <div class="er-diff-col after">
+                        <div class="er-diff-col-label">Depois</div>
+                        <div id="erAfter"></div>
+                    </div>
+                </div>
+                <div class="er-actions">
+                    <button class="er-btn-reject" onclick="rejectEditRequest()">✗ Recusar</button>
+                    <button class="er-btn-approve" onclick="approveEditRequest()">✓ Aprovar e notificar cozinha</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 
 </html>
