@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>SnapFood — Cozinha</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --brand: #E8420A;
+            --brand-light: #FF6B3D;
+            --brand-dark: #B83008;
+            --bg: #0F0E0D;
+            --surface: #1A1917;
+            --surface2: #242220;
+            --surface3: #2E2B29;
+            --border: rgba(255, 255, 255, 0.07);
+            --border2: rgba(255, 255, 255, 0.12);
+            --text: #F5F3EF;
+            --text2: rgba(245, 243, 239, 0.6);
+            --text3: rgba(245, 243, 239, 0.35);
+            --green: #2ECC71;
+            --green-bg: rgba(46, 204, 113, 0.12);
+            --yellow: #F1C40F;
+            --yellow-bg: rgba(241, 196, 15, 0.12);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --mono: 'DM Mono', monospace;
+            --sans: 'DM Sans', sans-serif;
+            --display: 'Syne', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* ===== LOGIN ===== */
+        #loginScreen {
+            position: fixed;
+            inset: 0;
+            background: var(--bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            padding: 24px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 400px;
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 32px 28px;
+        }
+
+        .login-logo {
+            font-family: var(--display);
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--brand);
+            margin-bottom: 6px;
+        }
+
+        .login-sub {
+            font-size: 13px;
+            color: var(--text2);
+            margin-bottom: 28px;
+        }
+
+        .field-label {
+            display: block;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 7px;
+        }
+
+        .field-input {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 13px;
+            padding: 11px 14px;
+            outline: none;
+            margin-bottom: 16px;
+            transition: border-color .2s;
+        }
+
+        .field-input:focus {
+            border-color: var(--brand);
+        }
+
+        .login-btn {
+            width: 100%;
+            background: var(--brand);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--display);
+            font-size: 15px;
+            font-weight: 700;
+            padding: 13px;
+            cursor: pointer;
+            transition: background .2s;
+        }
+
+        .login-btn:hover {
+            background: var(--brand-light);
+        }
+
+        .login-error {
+            background: rgba(232, 66, 10, 0.12);
+            border: 1px solid rgba(232, 66, 10, 0.3);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-size: 13px;
+            color: #FF8060;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        /* ===== HEADER ===== */
+        header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            height: 58px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        .header-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-logo {
+            font-family: var(--display);
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--brand);
+        }
+
+        .header-badge {
+            background: var(--surface3);
+            border: 1px solid var(--border2);
+            border-radius: 6px;
+            padding: 3px 9px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text2);
+            letter-spacing: .04em;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text3);
+            flex-shrink: 0;
+            transition: background .3s;
+        }
+
+        .conn-dot.on {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .5
+            }
+        }
+
+        .queue-badge {
+            background: var(--brand);
+            color: #fff;
+            border-radius: 20px;
+            padding: 3px 10px;
+            font-family: var(--mono);
+            font-size: 12px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .queue-badge.show {
+            display: inline-block;
+        }
+
+        /* ===== LAYOUT ===== */
+        .app {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* ===== TABS (mobile queue / active) ===== */
+        .tabs {
+            display: flex;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            gap: 0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--text2);
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 500;
+            padding: 12px 0;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: all .2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+        }
+
+        .tab-btn.active {
+            color: var(--brand);
+            border-bottom-color: var(--brand);
+        }
+
+        .tab-count {
+            background: var(--brand);
+            color: #fff;
+            border-radius: 10px;
+            padding: 1px 7px;
+            font-family: var(--mono);
+            font-size: 10px;
+        }
+
+        /* ===== COLUMNS ===== */
+        .columns {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 0;
+        }
+
+        .col {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Queue column */
+        .col-queue {
+            width: 280px;
+            flex-shrink: 0;
+            border-right: 1px solid var(--border);
+        }
+
+        /* Active column */
+        .col-active {
+            flex: 1;
+        }
+
+        /* Mobile: hide/show cols via tabs */
+        @media (max-width: 700px) {
+
+            .col-queue,
+            .col-active {
+                width: 100%;
+            }
+
+            .col-queue {
+                display: none;
+            }
+
+            .col-active {
+                display: flex;
+            }
+
+            .col-queue.mobile-show {
+                display: flex;
+            }
+
+            .col-active.mobile-hide {
+                display: none;
+            }
+
+            .tabs {
+                display: flex;
+            }
+        }
+
+        @media (min-width: 701px) {
+            .tabs {
+                display: none;
+            }
+
+            .col-queue,
+            .col-active {
+                display: flex;
+            }
+        }
+
+        .col-header {
+            padding: 14px 16px 10px;
+            font-family: var(--display);
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .col-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .col-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .col-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .col-scroll::-webkit-scrollbar-thumb {
+            background: var(--surface3);
+            border-radius: 2px;
+        }
+
+        /* ===== QUEUE CARD ===== */
+        .queue-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 12px 14px;
+            cursor: pointer;
+            transition: border-color .2s, background .2s;
+            position: relative;
+        }
+
+        .queue-card:hover {
+            border-color: var(--border2);
+            background: var(--surface2);
+        }
+
+        .queue-card.urgent {
+            border-color: rgba(232, 66, 10, 0.35);
+        }
+
+        .qc-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .qc-num {
+            font-family: var(--mono);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--brand);
+        }
+
+        .qc-wait {
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--text3);
+        }
+
+        .qc-wait.urgent {
+            color: var(--brand-light);
+        }
+
+        .qc-name {
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 4px;
+        }
+
+        .qc-items {
+            font-size: 11px;
+            color: var(--text3);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .qc-type {
+            display: inline-block;
+            margin-top: 7px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+
+        .qc-type.delivery {
+            background: rgba(100, 149, 237, 0.15);
+            color: #84AEFF;
+        }
+
+        .qc-type.presencial {
+            background: rgba(46, 204, 113, 0.12);
+            color: #5EE8A0;
+        }
+
+        .qc-type.retirada {
+            background: rgba(241, 196, 15, 0.12);
+            color: #F5D55A;
+        }
+
+        /* ===== ACTIVE ORDER CARD ===== */
+        .active-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .active-scroll::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .active-scroll::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .active-scroll::-webkit-scrollbar-thumb {
+            background: var(--surface3);
+            border-radius: 2px;
+        }
+
+        .order-card {
+            background: var(--surface);
+            border: 1px solid var(--border2);
+            border-radius: var(--radius);
+            overflow: hidden;
+            animation: slideIn .3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
+
+        .oc-header {
+            background: var(--surface2);
+            padding: 14px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .oc-order-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .oc-num {
+            font-family: var(--mono);
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--brand);
+        }
+
+        .oc-customer {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .oc-type-badge {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 5px;
+            flex-shrink: 0;
+        }
+
+        .oc-type-badge.delivery {
+            background: rgba(100, 149, 237, 0.15);
+            color: #84AEFF;
+        }
+
+        .oc-type-badge.presencial {
+            background: rgba(46, 204, 113, 0.12);
+            color: #5EE8A0;
+        }
+
+        .oc-type-badge.retirada {
+            background: rgba(241, 196, 15, 0.12);
+            color: #F5D55A;
+        }
+
+        /* Timer */
+        .oc-timer-row {
+            padding: 14px 18px 10px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .timer-ring-wrap {
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        .timer-ring {
+            transform: rotate(-90deg);
+        }
+
+        .timer-ring-bg {
+            fill: none;
+            stroke: var(--surface3);
+            stroke-width: 3;
+        }
+
+        .timer-ring-prog {
+            fill: none;
+            stroke: var(--green);
+            stroke-width: 3;
+            stroke-linecap: round;
+            transition: stroke-dashoffset .9s linear, stroke .5s;
+        }
+
+        .timer-text {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--mono);
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text);
+        }
+
+        .timer-info {
+            flex: 1;
+        }
+
+        .timer-label {
+            font-size: 11px;
+            color: var(--text3);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            margin-bottom: 3px;
+        }
+
+        .timer-elapsed {
+            font-family: var(--mono);
+            font-size: 22px;
+            font-weight: 500;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .timer-elapsed.warn {
+            color: var(--yellow);
+        }
+
+        .timer-elapsed.over {
+            color: var(--brand-light);
+        }
+
+        .timer-target {
+            font-size: 12px;
+            color: var(--text3);
+            margin-top: 4px;
+        }
+
+        /* Progress bar */
+        .oc-progress {
+            height: 3px;
+            background: var(--surface3);
+            position: relative;
+            margin: 0 18px 14px;
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .oc-progress-fill {
+            height: 100%;
+            border-radius: 2px;
+            background: var(--green);
+            transition: width 1s linear, background .5s;
+        }
+
+        /* Items list */
+        .oc-items {
+            padding: 0 18px 14px;
+        }
+
+        .oc-items-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text3);
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            margin-bottom: 10px;
+        }
+
+        .item-row {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 9px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .item-row:last-child {
+            border-bottom: none;
+        }
+
+        .item-qty {
+            background: var(--surface3);
+            border-radius: 6px;
+            padding: 4px 8px;
+            font-family: var(--mono);
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text);
+            flex-shrink: 0;
+            min-width: 34px;
+            text-align: center;
+        }
+
+        .item-details {
+            flex: 1;
+        }
+
+        .item-name {
+            font-size: 14px;
+            font-weight: 500;
+            line-height: 1.3;
+        }
+
+        .item-obs {
+            font-size: 12px;
+            color: var(--yellow);
+            margin-top: 3px;
+        }
+
+        /* Notes */
+        .oc-notes {
+            margin: 0 18px 14px;
+            background: rgba(241, 196, 15, 0.08);
+            border: 1px solid rgba(241, 196, 15, 0.2);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            font-size: 13px;
+            color: var(--yellow);
+        }
+
+        .oc-notes-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            opacity: .7;
+            margin-bottom: 4px;
+        }
+
+        /* Address */
+        .oc-address {
+            margin: 0 18px 14px;
+            font-size: 12px;
+            color: var(--text2);
+            display: flex;
+            gap: 6px;
+            align-items: flex-start;
+        }
+
+        /* Done button */
+        .oc-footer {
+            padding: 14px 18px;
+            border-top: 1px solid var(--border);
+        }
+
+        .btn-done {
+            width: 100%;
+            background: var(--green);
+            color: #0F0E0D;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--display);
+            font-size: 15px;
+            font-weight: 800;
+            padding: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: background .2s, transform .1s;
+        }
+
+        .btn-done:active {
+            transform: scale(.98);
+        }
+
+        .btn-done:hover {
+            background: #3ED67C;
+        }
+
+        .btn-done:disabled {
+            background: var(--surface3);
+            color: var(--text3);
+            cursor: not-allowed;
+        }
+
+        /* Empty state */
+        .empty-state {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px 20px;
+            text-align: center;
+        }
+
+        .empty-icon {
+            font-size: 44px;
+            opacity: .3;
+        }
+
+        .empty-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text2);
+        }
+
+        .empty-sub {
+            font-size: 13px;
+            color: var(--text3);
+            max-width: 220px;
+            line-height: 1.5;
+        }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 10px;
+            padding: 12px 20px;
+            font-size: 13px;
+            color: var(--text);
+            display: none;
+            opacity: 0;
+            transition: opacity .3s, transform .3s;
+            z-index: 200;
+            white-space: nowrap;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+
+        #toast.show {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Alert overlay */
+        #alertOverlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.85);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 300;
+            backdrop-filter: blur(4px);
+        }
+
+        #alertOverlay.show {
+            display: flex;
+            animation: fadeIn .2s;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0
+            }
+
+            to {
+                opacity: 1
+            }
+        }
+
+        .alert-box {
+            background: var(--surface);
+            border: 1px solid rgba(46, 204, 113, 0.3);
+            border-radius: 20px;
+            padding: 32px 28px;
+            max-width: 320px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .alert-icon {
+            font-size: 48px;
+            margin-bottom: 14px;
+        }
+
+        .alert-title {
+            font-family: var(--display);
+            font-size: 20px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            color: var(--green);
+        }
+
+        .alert-sub {
+            font-size: 14px;
+            color: var(--text2);
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .alert-order {
+            font-family: var(--mono);
+            font-size: 15px;
+            color: var(--brand);
+            margin-bottom: 20px;
+        }
+
+        .alert-btn {
+            background: var(--green);
+            color: #0F0E0D;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--display);
+            font-size: 14px;
+            font-weight: 800;
+            padding: 12px 28px;
+            cursor: pointer;
+            width: 100%;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- LOGIN -->
+    <div id="loginScreen">
+        <div class="login-box">
+            <div class="login-logo">🔥 SnapFood</div>
+            <div class="login-sub">Tela da Cozinha — Configure a conexão</div>
+            <div id="loginError" class="login-error"></div>
+            <label class="field-label">URL do Supabase</label>
+            <input class="field-input" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co">
+            <label class="field-label">Chave Anon (anon key)</label>
+            <input class="field-input" id="sbKey" type="text" placeholder="eyJ...">
+            <button class="login-btn" onclick="doConnect()">Entrar na Cozinha</button>
+        </div>
+    </div>
+
+    <!-- APP -->
+    <header>
+        <div class="header-brand">
+            <span class="header-logo">🔥</span>
+            <span class="header-badge">COZINHA</span>
+        </div>
+        <div class="header-right">
+            <span id="queueBadge" class="queue-badge"></span>
+            <span id="connDot" class="conn-dot"></span>
+        </div>
+    </header>
+
+    <!-- Mobile tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" id="tabActive" onclick="switchTab('active')">
+            🔥 Preparando <span id="activeCount" class="tab-count">0</span>
+        </button>
+        <button class="tab-btn" id="tabQueue" onclick="switchTab('queue')">
+            📋 Fila <span id="queueCount" class="tab-count">0</span>
+        </button>
+    </div>
+
+    <div class="app">
+        <div class="columns">
+            <!-- Queue column -->
+            <div class="col col-queue" id="colQueue">
+                <div class="col-header">📋 Fila de pedidos</div>
+                <div class="col-scroll" id="queueList">
+                    <div class="empty-state">
+                        <div class="empty-icon">🕐</div>
+                        <div class="empty-title">Sem pedidos na fila</div>
+                        <div class="empty-sub">Novos pedidos confirmados aparecerão aqui</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active column -->
+            <div class="col col-active" id="colActive">
+                <div class="col-header">🔥 Em preparação</div>
+                <div class="active-scroll" id="activeList">
+                    <div class="empty-state">
+                        <div class="empty-icon">✅</div>
+                        <div class="empty-title">Nenhum pedido em preparo</div>
+                        <div class="empty-sub">Pedidos com status "Preparando" aparecerão aqui automaticamente</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert overlay -->
+    <div id="alertOverlay">
+        <div class="alert-box">
+            <div class="alert-icon">✅</div>
+            <div class="alert-title">Pedido Pronto!</div>
+            <div id="alertSub" class="alert-sub"></div>
+            <div id="alertOrder" class="alert-order"></div>
+            <button class="alert-btn" onclick="dismissAlert()">Fechar</button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <script>
+        const { createClient } = supabase;
+        let sb = null;
+        let activeOrders = [];
+        let queueOrders = [];
+        let timers = {};
+        let alertSound = null;
+        let currentMobileTab = 'active';
+
+        // ===== AUDIO CONTEXT =====
+        function buildAlertSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                return ctx;
+            } catch (e) { return null; }
+        }
+
+        function playAlert() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const playNote = (freq, start, dur) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain); gain.connect(ctx.destination);
+                    osc.frequency.value = freq;
+                    osc.type = 'sine';
+                    gain.gain.setValueAtTime(0, ctx.currentTime + start);
+                    gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + start + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+                    osc.start(ctx.currentTime + start);
+                    osc.stop(ctx.currentTime + start + dur + 0.05);
+                };
+                playNote(880, 0, 0.15);
+                playNote(1100, 0.18, 0.15);
+                playNote(1320, 0.36, 0.25);
+                playNote(1100, 0.65, 0.15);
+                playNote(1320, 0.83, 0.3);
+            } catch (e) { }
+        }
+
+        // ===== CONNECT =====
+        window.addEventListener('load', () => {
+            const url = localStorage.getItem('kitchen_sb_url');
+            const key = localStorage.getItem('kitchen_sb_key');
+            if (url && key) {
+                document.getElementById('sbUrl').value = url;
+                document.getElementById('sbKey').value = key;
+                initSupabase(url, key);
+            }
+        });
+
+        function doConnect() {
+            const url = document.getElementById('sbUrl').value.trim();
+            const key = document.getElementById('sbKey').value.trim();
+            const err = document.getElementById('loginError');
+            if (!url || !key) {
+                err.style.display = 'block';
+                err.textContent = '❌ Preencha URL e chave do Supabase.';
+                return;
+            }
+            err.style.display = 'none';
+            localStorage.setItem('kitchen_sb_url', url);
+            localStorage.setItem('kitchen_sb_key', key);
+            initSupabase(url, key);
+        }
+
+        async function initSupabase(url, key) {
+            try {
+                sb = createClient(url, key);
+                // Test connection
+                const { error } = await sb.from('orders').select('id').limit(1);
+                if (error) throw error;
+
+                document.getElementById('loginScreen').style.display = 'none';
+                document.getElementById('connDot').classList.add('on');
+                await loadOrders();
+                setupRealtime();
+                showToast('✅ Cozinha conectada!');
+            } catch (e) {
+                const err = document.getElementById('loginError');
+                err.style.display = 'block';
+                err.textContent = '❌ Erro ao conectar: ' + (e.message || e);
+            }
+        }
+
+        // ===== LOAD ORDERS =====
+        async function loadOrders() {
+            if (!sb) return;
+            const { data, error } = await sb
+                .from('orders')
+                .select('*')
+                .in('status', ['preparing', 'confirmed'])
+                .order('created_at', { ascending: true });
+
+            if (error) { showToast('⚠ Erro ao carregar pedidos'); return; }
+
+            activeOrders = (data || []).filter(o => o.status === 'preparing');
+            queueOrders = (data || []).filter(o => o.status === 'confirmed');
+
+            renderActive();
+            renderQueue();
+            updateCounts();
+        }
+
+        // ===== REALTIME =====
+        function setupRealtime() {
+            sb.channel('kitchen-orders')
+                .on('postgres_changes', {
+                    event: '*', schema: 'public', table: 'orders'
+                }, handleRealtimeChange)
+                .subscribe();
+        }
+
+        function handleRealtimeChange(payload) {
+            const order = payload.new || payload.old;
+
+            if (payload.eventType === 'DELETE') {
+                removeFromAll(order.id);
+                renderAll();
+                return;
+            }
+
+            const status = order.status;
+
+            if (status === 'preparing') {
+                // Remove from queue, add to active if not already
+                queueOrders = queueOrders.filter(o => o.id !== order.id);
+                const exists = activeOrders.find(o => o.id === order.id);
+                if (!exists) {
+                    activeOrders.push(order);
+                    showToast('🔥 Novo pedido para preparar: ' + order.order_number);
+                    playBell();
+                } else {
+                    activeOrders = activeOrders.map(o => o.id === order.id ? order : o);
+                }
+            } else if (status === 'confirmed') {
+                activeOrders = activeOrders.filter(o => o.id !== order.id);
+                const exists = queueOrders.find(o => o.id === order.id);
+                if (!exists) queueOrders.push(order);
+                else queueOrders = queueOrders.map(o => o.id === order.id ? order : o);
+            } else {
+                // Other status (ready, delivered, cancelled etc) — remove from both
+                removeFromAll(order.id);
+            }
+
+            renderAll();
+        }
+
+        function removeFromAll(id) {
+            activeOrders = activeOrders.filter(o => o.id !== id);
+            queueOrders = queueOrders.filter(o => o.id !== id);
+            clearOrderTimer(id);
+        }
+
+        function renderAll() {
+            renderActive();
+            renderQueue();
+            updateCounts();
+        }
+
+        // ===== PLAY BELL (new order arrived in kitchen) =====
+        function playBell() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(600, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.4);
+                gain.gain.setValueAtTime(0.5, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                osc.start(); osc.stop(ctx.currentTime + 0.5);
+            } catch (e) { }
+        }
+
+        // ===== RENDER ACTIVE =====
+        function renderActive() {
+            const list = document.getElementById('activeList');
+            if (!activeOrders.length) {
+                list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">✅</div>
+      <div class="empty-title">Nenhum pedido em preparo</div>
+      <div class="empty-sub">Pedidos com status "Preparando" aparecerão aqui automaticamente</div>
+    </div>`;
+                return;
+            }
+
+            // Only re-render cards that don't exist yet
+            const existing = new Set([...list.querySelectorAll('[data-order-id]')].map(el => Number(el.dataset.orderId)));
+            const toRender = activeOrders.filter(o => !existing.has(o.id));
+            const toRemove = [...existing].filter(id => !activeOrders.find(o => o.id === id));
+
+            // Remove gone cards
+            toRemove.forEach(id => {
+                const el = list.querySelector(`[data-order-id="${id}"]`);
+                if (el) el.remove();
+                clearOrderTimer(id);
+            });
+
+            // If list had empty state, clear it
+            if (list.querySelector('.empty-state')) list.innerHTML = '';
+
+            // Add new cards
+            toRender.forEach(order => {
+                const card = buildActiveCard(order);
+                list.appendChild(card);
+                startTimer(order);
+            });
+        }
+
+        function buildActiveCard(order) {
+            const items = parseItems(order.items);
+            const prepTime = (order.estimated_time || guessPrepTime(items)) * 60; // seconds
+            const elapsed = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 1000);
+
+            const card = document.createElement('div');
+            card.className = 'order-card';
+            card.dataset.orderId = order.id;
+            card.dataset.prepTime = prepTime;
+            card.dataset.createdAt = order.created_at;
+
+            const typeLabel = { delivery: 'Delivery', presencial: 'Mesa', retirada: 'Retirada' }[order.order_type] || order.order_type;
+            const typeClass = order.order_type;
+
+            const notesHtml = order.notes ? `
+    <div class="oc-notes">
+      <div class="oc-notes-label">⚠ Observação do cliente</div>
+      ${escHtml(order.notes)}
+    </div>` : '';
+
+            const addressHtml = (order.order_type === 'delivery' && order.address) ? `
+    <div class="oc-address">📍 ${escHtml(order.address)}</div>` : '';
+
+            const tableHtml = (order.order_type === 'presencial' && order.table_number) ? `
+    <div class="oc-address">🪑 Mesa ${escHtml(order.table_number)}</div>` : '';
+
+            const circumference = 2 * Math.PI * 20;
+
+            card.innerHTML = `
+    <div class="oc-header">
+      <div class="oc-order-info">
+        <span class="oc-num">${order.order_number || '#' + order.id}</span>
+        <span class="oc-customer">${escHtml(order.customer_name)}</span>
+      </div>
+      <span class="oc-type-badge ${typeClass}">${typeLabel}</span>
+    </div>
+
+    <div class="oc-timer-row">
+      <div class="timer-ring-wrap">
+        <svg class="timer-ring" width="54" height="54" viewBox="0 0 54 54">
+          <circle class="timer-ring-bg" cx="27" cy="27" r="20"/>
+          <circle class="timer-ring-prog" cx="27" cy="27" r="20"
+            stroke-dasharray="${circumference}" stroke-dashoffset="${circumference}"/>
+        </svg>
+        <div class="timer-text" data-timer-display></div>
+      </div>
+      <div class="timer-info">
+        <div class="timer-label">Tempo de preparo</div>
+        <div class="timer-elapsed" data-elapsed>--:--</div>
+        <div class="timer-target">Meta: ${Math.round(prepTime / 60)} min</div>
+      </div>
+    </div>
+
+    <div class="oc-progress">
+      <div class="oc-progress-fill" data-progress style="width:0%"></div>
+    </div>
+
+    <div class="oc-items">
+      <div class="oc-items-title">Itens do pedido</div>
+      ${items.map(it => `
+        <div class="item-row">
+          <div class="item-qty">${it.qty}x</div>
+          <div class="item-details">
+            <div class="item-name">${escHtml(it.name)}</div>
+            ${it.obs ? `<div class="item-obs">📝 ${escHtml(it.obs)}</div>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>
+
+    ${notesHtml}
+    ${addressHtml}
+    ${tableHtml}
+
+    <div class="oc-footer">
+      <button class="btn-done" onclick="markReady(${order.id}, '${order.order_number}', '${escHtml(order.customer_name)}')">
+        ✅ Marcar como Pronto
+      </button>
+    </div>
+  `;
+
+            return card;
+        }
+
+        // ===== TIMERS =====
+        function startTimer(order) {
+            clearOrderTimer(order.id);
+            const card = () => document.querySelector(`[data-order-id="${order.id}"]`);
+            const prepTime = parseInt(card()?.dataset.prepTime || (order.estimated_time || guessPrepTime(parseItems(order.items))) * 60);
+            const createdAt = new Date(order.created_at).getTime();
+
+            const tick = () => {
+                const el = card();
+                if (!el) { clearOrderTimer(order.id); return; }
+
+                const elapsed = Math.floor((Date.now() - createdAt) / 1000);
+                const pct = Math.min(elapsed / prepTime, 1);
+
+                // Elapsed display
+                const elEl = el.querySelector('[data-elapsed]');
+                if (elEl) {
+                    elEl.textContent = formatTime(elapsed);
+                    elEl.className = 'timer-elapsed' + (elapsed > prepTime * 1.2 ? ' over' : elapsed > prepTime * 0.8 ? ' warn' : '');
+                }
+
+                // Ring
+                const circumference = 2 * Math.PI * 20;
+                const prog = el.querySelector('.timer-ring-prog');
+                if (prog) {
+                    prog.style.strokeDashoffset = circumference - (pct * circumference);
+                    prog.style.stroke = elapsed > prepTime ? '#E8420A' : elapsed > prepTime * 0.8 ? '#F1C40F' : '#2ECC71';
+                }
+
+                // Display (remaining or elapsed indicator)
+                const display = el.querySelector('[data-timer-display]');
+                if (display) {
+                    const remaining = prepTime - elapsed;
+                    display.textContent = remaining > 0 ? formatTime(remaining) : '+' + formatTime(-remaining);
+                    display.style.color = remaining < 0 ? '#E8420A' : remaining < 60 ? '#F1C40F' : 'var(--text)';
+                }
+
+                // Progress bar
+                const bar = el.querySelector('[data-progress]');
+                if (bar) {
+                    bar.style.width = (pct * 100) + '%';
+                    bar.style.background = elapsed > prepTime ? '#E8420A' : elapsed > prepTime * 0.8 ? '#F1C40F' : '#2ECC71';
+                }
+            };
+
+            tick();
+            timers[order.id] = setInterval(tick, 1000);
+        }
+
+        function clearOrderTimer(id) {
+            if (timers[id]) { clearInterval(timers[id]); delete timers[id]; }
+        }
+
+        function formatTime(secs) {
+            const s = Math.abs(secs);
+            const m = Math.floor(s / 60);
+            const ss = s % 60;
+            return String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+        }
+
+        function guessPrepTime(items) {
+            // base 20min, +5 per extra item
+            return Math.max(15, 20 + (items.length - 1) * 5);
+        }
+
+        // ===== RENDER QUEUE =====
+        function renderQueue() {
+            const list = document.getElementById('queueList');
+            if (!queueOrders.length) {
+                list.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">🕐</div>
+      <div class="empty-title">Sem pedidos na fila</div>
+      <div class="empty-sub">Pedidos confirmados aguardando preparo</div>
+    </div>`;
+                return;
+            }
+
+            list.innerHTML = queueOrders.map(order => {
+                const waitMin = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
+                const items = parseItems(order.items);
+                const itemsText = items.map(i => `${i.qty}x ${i.name}`).join(', ');
+                const typeClass = order.order_type;
+
+                return `<div class="queue-card ${waitMin > 15 ? 'urgent' : ''}">
+      <div class="qc-top">
+        <span class="qc-num">${order.order_number || '#' + order.id}</span>
+        <span class="qc-wait ${waitMin > 15 ? 'urgent' : ''}">⏱ ${waitMin}min</span>
+      </div>
+      <div class="qc-name">${escHtml(order.customer_name)}</div>
+      <div class="qc-items">${escHtml(itemsText)}</div>
+      <span class="qc-type ${typeClass}">${{ delivery: 'Delivery', presencial: 'Mesa', retirada: 'Retirada' }[order.order_type] || order.order_type}</span>
+    </div>`;
+            }).join('');
+        }
+
+        // ===== MARK READY =====
+        async function markReady(orderId, orderNum, customerName) {
+            const btn = document.querySelector(`[data-order-id="${orderId}"] .btn-done`);
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Atualizando...'; }
+
+            try {
+                const { error } = await sb
+                    .from('orders')
+                    .update({ status: 'ready', updated_at: new Date().toISOString() })
+                    .eq('id', orderId);
+
+                if (error) throw error;
+
+                // Log status history
+                await sb.from('order_status_history').insert({
+                    order_id: orderId,
+                    status: 'ready',
+                    note: 'Marcado como pronto pela cozinha'
+                });
+
+                // Remove from active
+                activeOrders = activeOrders.filter(o => o.id !== orderId);
+                clearOrderTimer(orderId);
+                const card = document.querySelector(`[data-order-id="${orderId}"]`);
+                if (card) card.remove();
+                if (!activeOrders.length) renderActive();
+
+                updateCounts();
+                playAlert();
+
+                // Show overlay
+                document.getElementById('alertSub').textContent = `${customerName} está esperando o pedido`;
+                document.getElementById('alertOrder').textContent = orderNum;
+                document.getElementById('alertOverlay').classList.add('show');
+
+            } catch (e) {
+                showToast('❌ Erro ao atualizar: ' + (e.message || e));
+                if (btn) { btn.disabled = false; btn.textContent = '✅ Marcar como Pronto'; }
+            }
+        }
+
+        function dismissAlert() {
+            document.getElementById('alertOverlay').classList.remove('show');
+        }
+
+        // ===== COUNTS =====
+        function updateCounts() {
+            document.getElementById('activeCount').textContent = activeOrders.length;
+            document.getElementById('queueCount').textContent = queueOrders.length;
+
+            const qb = document.getElementById('queueBadge');
+            const total = activeOrders.length + queueOrders.length;
+            if (total > 0) { qb.textContent = total + ' pedido' + (total > 1 ? 's' : ''); qb.classList.add('show'); }
+            else { qb.classList.remove('show'); }
+        }
+
+        // ===== MOBILE TABS =====
+        function switchTab(tab) {
+            currentMobileTab = tab;
+            const queue = document.getElementById('colQueue');
+            const active = document.getElementById('colActive');
+            const tabQ = document.getElementById('tabQueue');
+            const tabA = document.getElementById('tabActive');
+
+            if (tab === 'queue') {
+                queue.classList.add('mobile-show');
+                active.classList.add('mobile-hide');
+                tabQ.classList.add('active');
+                tabA.classList.remove('active');
+            } else {
+                queue.classList.remove('mobile-show');
+                active.classList.remove('mobile-hide');
+                tabA.classList.add('active');
+                tabQ.classList.remove('active');
+            }
+        }
+
+        // ===== HELPERS =====
+        function parseItems(items) {
+            if (!items) return [];
+            if (typeof items === 'string') { try { items = JSON.parse(items); } catch (e) { return []; } }
+            if (!Array.isArray(items)) return [];
+            return items.map(it => ({
+                qty: it.quantity || it.qty || 1,
+                name: it.name || it.product_name || 'Item',
+                obs: it.notes || it.obs || it.observation || ''
+            }));
+        }
+
+        function escHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        }
+    </script>
+</body>
+
+</html>
