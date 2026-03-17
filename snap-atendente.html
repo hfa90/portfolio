@@ -12,6 +12,7 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="snap-commissions.js"></script>
     <style>
         :root {
             --brand: #E8420A;
@@ -3489,6 +3490,20 @@
 
         async function initApp(url, key) {
             sb = createClient(url, key);
+            // Inicializar módulo de comissões e sincronizar loyalty_settings do banco
+            try {
+                const [cfgRes, loyRes] = await Promise.all([
+                    sb.from('staff_settings').select('taxa_servico_enabled,moto_fee_pct').limit(1),
+                    sb.from('app_settings').select('key,value').in('key', ['loyalty_settings'])
+                ]);
+                const cfg = cfgRes.data?.[0] || {};
+                if (typeof SnapCommissions !== 'undefined') {
+                    SnapCommissions.init(sb, { taxaServicoEnabled: cfg.taxa_servico_enabled ?? false, motoFeePct: cfg.moto_fee_pct ?? 100 });
+                }
+                // Sincronizar loyalty_settings do banco para localStorage
+                const lRow = loyRes.data?.find(r => r.key === 'loyalty_settings');
+                if (lRow?.value) { try { localStorage.setItem('loyalty_settings', lRow.value); } catch (e) { } }
+            } catch (e) { if (typeof SnapCommissions !== 'undefined') SnapCommissions.init(sb, {}); }
             const { error } = await sb.from('products').select('id').limit(1);
             if (error) throw error;
             lsSet('sb_url', url); lsSet('sb_key', key);
@@ -3860,11 +3875,7 @@
                 ? [$('f-street').value, $('f-neigh').value, $('f-comp').value].filter(Boolean).join(', ')
                 : null;
 
-            // Gerar order_number no mesmo formato do snapfood (PED-XXXX)
-            const _orderNum = 'PED-' + (Math.floor(Math.random() * 9000) + 1000);
-
             const payload = {
-                order_number: _orderNum,
                 customer_name: name,
                 customer_phone: phone.replace(/\D/g, ''),
                 customer_cpf: ($('f-cpf').value || '').replace(/\D/g, '') || null,
@@ -3902,20 +3913,24 @@
                         .eq('phone', phone.replace(/\D/g, ''))
                         .single();
                     if (lc) {
-                        const earned = Math.floor(total / 10); // 1pt per R$10
+                        // Usar ptsPerReal das loyalty_settings (localStorage sincronizado com DB)
+                        const _lsCfg = (() => { try { return JSON.parse(localStorage.getItem('loyalty_settings') || '{}'); } catch (e) { return {}; } })();
+                        const _ptsPerReal = _lsCfg.ptsPerReal || 1;
+                        const earned = Math.floor(total * _ptsPerReal);
+                        const newPoints = lc.points + earned;
                         await sb.from('loyalty_customers').update({
-                            points: lc.points + earned,
+                            points: newPoints,
                             total_orders: lc.total_orders + 1,
                             total_spent: Number(lc.total_spent) + total,
                             updated_at: new Date().toISOString()
                         }).eq('id', lc.id);
                         if (earned > 0) {
-                            // Usa loyalty_history (mesma tabela do admin e snapfood)
+                            // loyalty_history — tabela unificada com admin e snapfood
                             await sb.from('loyalty_history').insert({
                                 customer_id: lc.id,
                                 order_id: inserted.id,
                                 points_earned: earned,
-                                balance_after: lc.points + earned,
+                                balance_after: newPoints,
                                 description: `Pedido ${inserted.order_number || '#' + inserted.id}`,
                                 created_at: new Date().toISOString()
                             });
@@ -4466,11 +4481,7 @@
                 ? [$('f-street').value, $('f-neigh').value, $('f-comp').value].filter(Boolean).join(', ')
                 : null;
 
-            // Gerar order_number no mesmo formato do snapfood (PED-XXXX)
-            const _ckOrderNum = 'PED-' + (Math.floor(Math.random() * 9000) + 1000);
-
             const payload = {
-                order_number: _ckOrderNum,
                 customer_name: name,
                 customer_phone: phone.replace(/\D/g, ''),
                 customer_cpf: ($('f-cpf').value || '').replace(/\D/g, '') || null,
