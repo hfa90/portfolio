@@ -3420,6 +3420,13 @@
                             <input class="form-input" id="settingsAddress" type="text"
                                 placeholder="Rua Exemplo, 123 — Bairro, Cidade">
                         </div>
+                        <div class="form-group">
+                            <label class="form-label">WhatsApp do negócio <span
+                                    style="font-size:11px;color:var(--ink3)">(usado pelo cardápio online para envio de
+                                    pedidos)</span></label>
+                            <input class="form-input" id="settingsWhatsapp" type="tel" placeholder="5592999990000"
+                                maxlength="20">
+                        </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label class="form-label">Taxa de entrega (R$)</label>
@@ -3447,9 +3454,157 @@
                         <p style="font-size:12px;color:var(--ink2);margin-bottom:12px">Execute no SQL Editor do Supabase
                             para criar/atualizar as tabelas necessárias:</p>
                         <pre
-                            style="background:#1a1a18;color:#c9f7be;border-radius:8px;padding:14px;font-size:11px;overflow-x:auto;line-height:1.6;white-space:pre-wrap">-- Habilitar Realtime nas tabelas
+                            style="background:#1a1a18;color:#c9f7be;border-radius:8px;padding:14px;font-size:11px;overflow-x:auto;line-height:1.6;white-space:pre-wrap">-- ═══════════════════════════════════════════════════════════
+-- SNAPFOOD — SQL de configuração completo
+-- Execute no SQL Editor do Supabase para criar/atualizar todas
+-- as tabelas e habilitar Realtime.
+-- ═══════════════════════════════════════════════════════════
 
-                        </pre>
+-- 1. HABILITAR REALTIME ─────────────────────────────────────
+alter publication supabase_realtime add table orders;
+alter publication supabase_realtime add table order_edit_requests;
+
+-- 2. COLUNAS EXTRAS NA TABELA orders ───────────────────────
+alter table orders add column if not exists order_number       text;
+alter table orders add column if not exists attendant_id       bigint;
+alter table orders add column if not exists deliverer_id       bigint;
+alter table orders add column if not exists service_fee_paid   boolean default false;
+alter table orders add column if not exists delivery_fee_paid  boolean default false;
+alter table orders add column if not exists delivered_at       timestamptz;
+alter table orders add column if not exists last_edited_at     timestamptz;
+alter table orders add column if not exists has_pending_edit   boolean default false;
+alter table orders add column if not exists discount           numeric(10,2) default 0;
+alter table orders add column if not exists customer_cpf       text;
+
+-- 3. HISTÓRICO DE STATUS ────────────────────────────────────
+create table if not exists order_status_history (
+  id          bigserial primary key,
+  order_id    bigint not null references orders(id) on delete cascade,
+  status      text not null,
+  note        text,
+  created_at  timestamptz default now()
+);
+
+-- 4. SOLICITAÇÕES DE EDIÇÃO DE PEDIDO ──────────────────────
+create table if not exists order_edit_requests (
+  id           bigserial primary key,
+  order_id     bigint not null references orders(id) on delete cascade,
+  requested_by bigint,
+  items_before jsonb,
+  items_after  jsonb,
+  status       text not null default 'pending'
+                check (status in ('pending','approved','rejected')),
+  reviewed_by  text,
+  reviewed_at  timestamptz,
+  created_at   timestamptz default now()
+);
+alter table order_edit_requests enable row level security;
+create policy "allow_all" on order_edit_requests for all using (true) with check (true);
+
+-- 5. FUNCIONÁRIOS ───────────────────────────────────────────
+create table if not exists staff (
+  id         bigserial primary key,
+  name       text not null,
+  role       text not null check (role in ('atendente','caixa','cozinheiro','entregador','servicos_gerais')),
+  pin        text not null,
+  phone      text,
+  cpf        text,
+  active     boolean default true,
+  created_at timestamptz default now()
+);
+alter table staff enable row level security;
+create policy "allow_all" on staff for all using (true) with check (true);
+
+-- 6. TURNOS DE FUNCIONÁRIOS ────────────────────────────────
+create table if not exists staff_shifts (
+  id           bigserial primary key,
+  staff_id     bigint not null references staff(id) on delete cascade,
+  shift_date   date not null,
+  started_at   timestamptz default now(),
+  ended_at     timestamptz,
+  orders_count int default 0,
+  total_revenue numeric(10,2) default 0,
+  created_at   timestamptz default now()
+);
+alter table staff_shifts enable row level security;
+create policy "allow_all" on staff_shifts for all using (true) with check (true);
+
+-- 7. COMISSÕES DE FUNCIONÁRIOS ─────────────────────────────
+create table if not exists staff_commissions (
+  id         bigserial primary key,
+  staff_id   bigint not null references staff(id) on delete cascade,
+  order_id   bigint references orders(id) on delete set null,
+  type       text not null check (type in ('taxa_servico','taxa_entrega')),
+  amount     numeric(10,2) not null,
+  order_type text,
+  paid       boolean default true,
+  created_at timestamptz default now()
+);
+alter table staff_commissions enable row level security;
+create policy "allow_all" on staff_commissions for all using (true) with check (true);
+
+-- 8. CONFIGURAÇÕES DE TAXAS DE COMISSÃO ────────────────────
+create table if not exists staff_settings (
+  id                   bigserial primary key,
+  taxa_servico_enabled boolean default false,
+  moto_fee_pct         int default 100,
+  updated_at           timestamptz default now()
+);
+alter table staff_settings enable row level security;
+create policy "allow_all" on staff_settings for all using (true) with check (true);
+
+-- 9. PROGRAMA DE FIDELIDADE — CLIENTES ────────────────────
+create table if not exists loyalty_customers (
+  id             bigserial primary key,
+  name           text not null,
+  phone          text not null unique,
+  points         int default 0,
+  total_orders   int default 0,
+  total_spent    numeric(10,2) default 0,
+  total_redeemed int default 0,
+  created_at     timestamptz default now(),
+  updated_at     timestamptz default now()
+);
+alter table loyalty_customers enable row level security;
+create policy "allow_all" on loyalty_customers for all using (true) with check (true);
+
+-- 10. PROGRAMA DE FIDELIDADE — HISTÓRICO ──────────────────
+-- Tabela unificada usada por admin, atendente e snapfood
+create table if not exists loyalty_history (
+  id            bigserial primary key,
+  customer_id   bigint not null references loyalty_customers(id) on delete cascade,
+  order_id      bigint references orders(id) on delete set null,
+  points_earned int not null,       -- positivo = ganhou, negativo = resgatou
+  balance_after int,
+  description   text,
+  created_at    timestamptz default now()
+);
+alter table loyalty_history enable row level security;
+create policy "allow_all" on loyalty_history for all using (true) with check (true);
+
+-- 11. CONFIGURAÇÕES GERAIS DO APP ──────────────────────────
+create table if not exists app_settings (
+  id         bigserial primary key,
+  key        text not null unique,
+  value      text,
+  locked     boolean default false,
+  updated_at timestamptz default now()
+);
+alter table app_settings enable row level security;
+create policy "allow_all" on app_settings for all using (true) with check (true);
+
+-- Inserir configurações padrão (não sobrescreve se já existir)
+insert into app_settings (key, value) values
+  ('business_name',    'SnapFood'),
+  ('business_address', ''),
+  ('delivery_time',    '35'),
+  ('delivery_fee',     '4.99'),
+  ('business_whatsapp','')
+on conflict (key) do nothing;
+
+-- ═══════════════════════════════════════════════════════════
+-- FIM DO SCRIPT
+-- ═══════════════════════════════════════════════════════════</pre>
                         <button class="btn btn-secondary" style="margin-top:10px;font-size:12px"
                             onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent).then(()=>showToast('✅ SQL copiado!','success'))">📋
                             Copiar SQL</button>
@@ -5141,42 +5296,20 @@
                 const { error } = await sb.from('orders').update(updateData).eq('id', currentOrderId);
                 if (error) { showToast('Erro ao confirmar: ' + error.message, 'error'); return; }
 
-                // Gravar comissão do atendente (taxa de serviço - só presencial)
-                if (taxaServicoCreditada > 0 && order.attendant_id) {
-                    try {
-                        await sb.from('staff_commissions').insert({
-                            staff_id: order.attendant_id,
-                            order_id: currentOrderId,
-                            type: 'taxa_servico',
-                            amount: taxaServicoCreditada,
-                            order_type: order.order_type,
-                            paid: true,
-                            created_at: now
-                        });
-                    } catch (e) { /* tabela opcional */ }
-                }
-
-                // Gravar comissão do entregador (taxa de entrega - só delivery)
-                if (taxaEntregaCreditada > 0 && order.deliverer_id) {
-                    try {
-                        await sb.from('staff_commissions').insert({
-                            staff_id: order.deliverer_id,
-                            order_id: currentOrderId,
-                            type: 'taxa_entrega',
-                            amount: taxaEntregaCreditada,
-                            order_type: order.order_type,
-                            paid: true,
-                            created_at: now
-                        });
-                    } catch (e) { /* tabela opcional */ }
-                }
+                // Delegar crédito de comissões ao módulo SnapCommissions
+                const { serviceFeeAmount: _sf, deliveryFeeAmount: _df, errors: _ce } =
+                    await SnapCommissions.creditOrder({ ...order, ...updateData, id: currentOrderId });
+                if (_ce.length) console.warn('[SnapCommissions]', _ce);
+                // Atualizar variáveis locais para o toast final
+                if (_sf > 0) taxaServicoCreditada = _sf;
+                if (_df > 0) taxaEntregaCreditada = _df;
 
                 // Gravar histórico de status
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: currentOrderId,
                         status: 'delivered',
-                        note: `Entrega confirmada. Pagamento: ${payment}${taxaServicoCreditada > 0 ? ` | Taxa serviço creditada: R$ ${taxaServicoCreditada.toFixed(2)}` : ''}${taxaEntregaCreditada > 0 ? ` | Taxa entrega creditada: R$ ${taxaEntregaCreditada.toFixed(2)}` : ''}`,
+                        note: `Entrega confirmada. Pagamento: ${payment}${taxaServicoCreditada > 0 ? ` | Taxa serviço: R$ ${taxaServicoCreditada.toFixed(2)}` : ''}${taxaEntregaCreditada > 0 ? ` | Taxa entrega: R$ ${taxaEntregaCreditada.toFixed(2)}` : ''}`,
                         created_at: now
                     });
                 } catch (e) { /* tabela opcional */ }
@@ -5827,12 +5960,14 @@
             const address = document.getElementById('settingsAddress').value.trim();
             const time = document.getElementById('settingsTime').value;
             const fee = document.getElementById('settingsDelivery').value;
+            const whatsapp = (document.getElementById('settingsWhatsapp').value || '').replace(/\D/g, '');
 
             // Persistir localStorage
             if (name) { localStorage.setItem('business_name', name); }
             if (address) { localStorage.setItem('business_address', address); }
             if (time) { localStorage.setItem('delivery_time', time); }
             if (fee) { localStorage.setItem('delivery_fee', fee); }
+            if (whatsapp) { localStorage.setItem('sf_wa_number', whatsapp); }
 
             // Nova senha → gerar hash e salvar no banco
             if (pass) {
@@ -5847,6 +5982,7 @@
                     { key: 'business_address', value: address || '' },
                     { key: 'delivery_time', value: time || '35' },
                     { key: 'delivery_fee', value: fee || '4.99' },
+                    { key: 'business_whatsapp', value: whatsapp || '' },
                 ];
                 for (const row of rows) {
                     await sb.from('app_settings').upsert(row, { onConflict: 'key' });
@@ -6644,6 +6780,7 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             const localAddr = localStorage.getItem('business_address') || '';
             const localTime = localStorage.getItem('delivery_time') || '';
             const localFee = localStorage.getItem('delivery_fee') || '';
+            const localWa = localStorage.getItem('sf_wa_number') || '';
 
             const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
             setVal('settingsUrl', localUrl);
@@ -6652,6 +6789,7 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             setVal('settingsAddress', localAddr);
             setVal('settingsTime', localTime);
             setVal('settingsDelivery', localFee);
+            setVal('settingsWhatsapp', localWa);
 
             // 2. Lock automático se URL e key estiverem gravadas
             const locked = localStorage.getItem('conn_locked') === '1';
@@ -6672,13 +6810,16 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                         if (dbMap['business_address']) setVal('settingsAddress', dbMap['business_address']);
                         if (dbMap['delivery_time']) setVal('settingsTime', dbMap['delivery_time']);
                         if (dbMap['delivery_fee']) setVal('settingsDelivery', dbMap['delivery_fee']);
+                        if (dbMap['business_whatsapp']) setVal('settingsWhatsapp', dbMap['business_whatsapp']);
 
                         // Atualizar localStorage com valores do banco
                         Object.entries(dbMap).forEach(([k, v]) => {
-                            if (v && ['sb_url', 'sb_key', 'business_name', 'business_address', 'delivery_time', 'delivery_fee'].includes(k)) {
+                            if (v && ['sb_url', 'sb_key', 'business_name', 'business_address', 'delivery_time', 'delivery_fee', 'business_whatsapp'].includes(k)) {
                                 localStorage.setItem(k, v);
                             }
                         });
+                        // Sincronizar sf_wa_number para o snapfood
+                        if (dbMap['business_whatsapp']) localStorage.setItem('sf_wa_number', dbMap['business_whatsapp'].replace(/\D/g, ''));
 
                         // Lock se ambos sb_url e sb_key estão no banco
                         if (dbMap['sb_url'] && dbMap['sb_key']) lockConnFields();
