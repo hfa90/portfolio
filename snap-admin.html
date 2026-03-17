@@ -3448,32 +3448,6 @@
                             para criar/atualizar as tabelas necessárias:</p>
                         <pre
                             style="background:#1a1a18;color:#c9f7be;border-radius:8px;padding:14px;font-size:11px;overflow-x:auto;line-height:1.6;white-space:pre-wrap">-- Habilitar Realtime nas tabelas
--- NOTA: se retornar erro 42710 "already member", pode ignorar — já está ativo.
-alter publication supabase_realtime add table orders;
-
--- Tabela de solicitações de edição de pedidos (atendente → admin → cozinha)
-create table if not exists order_edit_requests (
-  id            bigint generated always as identity primary key,
-  order_id      bigint not null,
-  requested_by  integer references staff(id),   -- atendente que pediu
-  items_before  jsonb not null,                 -- snapshot dos itens originais
-  items_after   jsonb not null,                 -- itens solicitados
-  reason        text,                           -- motivo opcional
-  status        text not null default 'pending'
-                  check (status in ('pending','approved','rejected')),
-  reviewed_by   text,                           -- 'admin' ou nome
-  reviewed_at   timestamptz,
-  created_at    timestamptz default now()
-);
-create index if not exists idx_oer_order  on order_edit_requests(order_id);
-create index if not exists idx_oer_status on order_edit_requests(status);
-
--- Habilitar Realtime na nova tabela (para admin receber alertas em tempo real)
-alter publication supabase_realtime add table order_edit_requests;
-
--- Coluna de controle de edição na tabela orders
-alter table orders add column if not exists has_pending_edit boolean default false;
-alter table orders add column if not exists last_edited_at   timestamptz;
 
                         </pre>
                         <button class="btn btn-secondary" style="margin-top:10px;font-size:12px"
@@ -7110,6 +7084,21 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
         async function loadStaffPage() {
             generatePin();
             await loadTaxaSettings();
+            // Garante que o histórico de pedidos (delivered/cancelled) esteja carregado
+            // antes de calcular as comissões, pois as comissões creditadas ficam nesses pedidos.
+            if (!allHistory || allHistory.length === 0) {
+                if (!isDemoMode && sb) {
+                    try {
+                        const { data } = await sb.from('orders')
+                            .select('*')
+                            .in('status', ['delivered', 'cancelled'])
+                            .order('created_at', { ascending: false });
+                        if (data) allHistory = data;
+                    } catch (e) { /* silencioso */ }
+                } else {
+                    allHistory = (allOrders || []).filter(o => ['delivered', 'cancelled'].includes(o.status));
+                }
+            }
             await loadStaff();
         }
 
@@ -7147,9 +7136,7 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 } catch (e) { showToast('❌ Erro ao salvar: ' + e.message, 'error'); return; }
             }
             showToast('✅ Configurações de taxas salvas com sucesso!', 'success');
-            showToast('✅ Configurações de taxas salvas com sucesso!', 'success');
-            SnapCommissions.updateConfig({ taxaServicoEnabled, motoFeePct }); // ← ADICIONE AQUI
-            renderStaffKpis();
+            SnapCommissions.updateConfig({ taxaServicoEnabled, motoFeePct });
             renderStaffKpis();
             renderAttendantHighlight();
             renderStaffTable();
