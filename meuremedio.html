@@ -1,0 +1,1630 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MedAlert">
+<meta name="theme-color" content="#0a1628">
+<title>MedAlert – Controle de Medicamentos</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #060e1f;
+    --surface: #0d1e3a;
+    --surface2: #132540;
+    --border: rgba(99,179,255,0.12);
+    --accent: #3b9eff;
+    --accent2: #00d4aa;
+    --accent3: #ff6b6b;
+    --accent4: #ffd166;
+    --text: #e8f0ff;
+    --text2: #8ba3c7;
+    --text3: #4a6585;
+    --danger: #ff4757;
+    --success: #2ed573;
+    --glow: 0 0 30px rgba(59,158,255,0.25);
+    --r: 16px;
+    --r2: 24px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%; overflow: hidden;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── ALARM OVERLAY ── */
+  #alarm-overlay {
+    display: none;
+    position: fixed; inset: 0; z-index: 9999;
+    background: var(--bg);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    animation: alarmFlash 0.6s infinite alternate;
+  }
+  #alarm-overlay.active { display: flex; }
+  @keyframes alarmFlash {
+    from { background: #060e1f; }
+    to   { background: #1a0010; }
+  }
+  .alarm-pulse-ring {
+    position: absolute;
+    width: 220px; height: 220px;
+    border-radius: 50%;
+    border: 3px solid var(--danger);
+    animation: pulseRing 1s ease-out infinite;
+    opacity: 0;
+  }
+  .alarm-pulse-ring:nth-child(2) { animation-delay: 0.33s; }
+  .alarm-pulse-ring:nth-child(3) { animation-delay: 0.66s; }
+  @keyframes pulseRing {
+    0%   { transform: scale(0.4); opacity: 1; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .alarm-icon-wrap {
+    position: relative;
+    width: 140px; height: 140px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .alarm-icon-bg {
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,71,87,0.3) 0%, rgba(255,71,87,0.05) 70%);
+    display: flex; align-items: center; justify-content: center;
+    animation: iconBeat 0.6s ease-in-out infinite alternate;
+  }
+  @keyframes iconBeat {
+    from { transform: scale(1); box-shadow: 0 0 20px rgba(255,71,87,0.4); }
+    to   { transform: scale(1.08); box-shadow: 0 0 50px rgba(255,71,87,0.8); }
+  }
+  .alarm-emoji { font-size: 52px; animation: shake 0.5s ease-in-out infinite; }
+  @keyframes shake {
+    0%,100% { transform: rotate(0deg); }
+    20% { transform: rotate(-15deg); }
+    40% { transform: rotate(15deg); }
+    60% { transform: rotate(-10deg); }
+    80% { transform: rotate(10deg); }
+  }
+  .alarm-text-block { text-align: center; padding: 0 24px; }
+  .alarm-hora { font-family: 'Syne', sans-serif; font-size: 64px; font-weight: 800; color: var(--danger); line-height: 1; letter-spacing: -2px; animation: colorFlash 0.6s infinite alternate; }
+  @keyframes colorFlash {
+    from { color: #ff4757; text-shadow: 0 0 20px rgba(255,71,87,0.5); }
+    to   { color: #ff1744; text-shadow: 0 0 40px rgba(255,23,68,0.9); }
+  }
+  .alarm-nome { font-size: 20px; font-weight: 600; color: var(--text); margin-top: 4px; }
+  .alarm-remedio { font-size: 15px; color: var(--text2); margin-top: 2px; }
+  .alarm-dosagem-badge {
+    display: inline-block;
+    background: rgba(255,71,87,0.2);
+    border: 1px solid rgba(255,71,87,0.5);
+    border-radius: 30px;
+    padding: 6px 20px;
+    font-size: 16px; font-weight: 600;
+    color: #ff8a92;
+    margin-top: 12px;
+  }
+  .btn-tomar {
+    background: linear-gradient(135deg, #ff4757, #c0392b);
+    color: #fff;
+    border: none;
+    border-radius: 50px;
+    padding: 18px 52px;
+    font-size: 18px; font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    letter-spacing: 1px;
+    cursor: pointer;
+    box-shadow: 0 8px 30px rgba(255,71,87,0.5);
+    animation: btnPulse 1s ease-in-out infinite alternate;
+    transition: transform 0.1s;
+  }
+  .btn-tomar:active { transform: scale(0.96); }
+  @keyframes btnPulse {
+    from { box-shadow: 0 8px 20px rgba(255,71,87,0.4); }
+    to   { box-shadow: 0 8px 50px rgba(255,71,87,0.9); }
+  }
+  .alarm-snooze {
+    background: transparent;
+    color: var(--text3);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 10px 28px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .alarm-snooze:active { background: var(--surface); }
+
+  /* ── APP SHELL ── */
+  #app {
+    display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh;
+    max-width: 430px; margin: 0 auto;
+    position: relative;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    padding: 52px 24px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { font-size: 26px; }
+  .logo-text { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .header-actions { display: flex; gap: 8px; }
+  .icon-btn {
+    width: 40px; height: 40px;
+    border-radius: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  .icon-btn:active { transform: scale(0.92); background: var(--surface2); }
+
+  /* ── NAV TABS ── */
+  .nav-tabs {
+    display: flex;
+    margin: 0 24px 4px;
+    background: var(--surface);
+    border-radius: var(--r);
+    padding: 4px;
+    gap: 2px;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+  }
+  .nav-tab {
+    flex: 1; padding: 9px 4px;
+    border-radius: 12px;
+    border: none; background: transparent;
+    color: var(--text3);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .nav-tab .tab-icon { font-size: 18px; }
+  .nav-tab.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 15px rgba(59,158,255,0.4);
+  }
+
+  /* ── SCROLL CONTENT ── */
+  .content {
+    flex: 1; overflow-y: auto;
+    padding: 8px 0 100px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .content::-webkit-scrollbar { display: none; }
+
+  /* ── PAGE PANELS ── */
+  .page { display: none; padding: 0 24px; }
+  .page.active { display: block; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 20px;
+    margin-bottom: 14px;
+  }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .card-title { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; color: var(--text); }
+  .section-label { font-size: 12px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin: 20px 0 10px; }
+
+  /* ── FORM ELEMENTS ── */
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 7px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .field input, .field select {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    color: var(--text);
+    font-size: 16px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    -webkit-appearance: none;
+  }
+  .field input:focus, .field select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(59,158,255,0.15);
+  }
+  .field select option { background: #0d1e3a; }
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .field-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+
+  /* ── COLOR PICKER ── */
+  .color-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .color-dot {
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .color-dot.selected { border-color: white; transform: scale(1.15); }
+
+  /* ── BUTTONS ── */
+  .btn-primary {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent), #2176d4);
+    color: #fff;
+    border: none;
+    border-radius: var(--r);
+    padding: 16px;
+    font-size: 16px; font-weight: 700;
+    font-family: 'Syne', sans-serif;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(59,158,255,0.35);
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn-primary:active { transform: scale(0.98); }
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 12px 20px;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .btn-secondary:active { background: var(--surface); }
+
+  /* ── MED LIST ── */
+  .med-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .med-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 4px;
+    border-radius: 4px 0 0 4px;
+  }
+  .med-card:active { transform: scale(0.98); }
+  .med-avatar {
+    width: 52px; height: 52px;
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+  }
+  .med-info { flex: 1; min-width: 0; }
+  .med-name { font-family: 'Syne', sans-serif; font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .med-sub { font-size: 13px; color: var(--text2); margin-top: 3px; }
+  .med-tags { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .med-tag {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(59,158,255,0.12);
+    color: var(--accent);
+    border: 1px solid rgba(59,158,255,0.2);
+  }
+  .med-tag.green { background: rgba(0,212,170,0.12); color: var(--accent2); border-color: rgba(0,212,170,0.2); }
+  .med-tag.yellow { background: rgba(255,209,102,0.12); color: var(--accent4); border-color: rgba(255,209,102,0.2); }
+  .med-tag.red { background: rgba(255,71,87,0.12); color: var(--danger); border-color: rgba(255,71,87,0.2); }
+  .med-actions { display: flex; flex-direction: column; gap: 6px; }
+  .med-btn-del {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: rgba(255,71,87,0.12);
+    border: 1px solid rgba(255,71,87,0.25);
+    color: var(--danger);
+    font-size: 16px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .med-btn-del:active { background: rgba(255,71,87,0.25); }
+  .med-btn-pause {
+    width: 32px; height: 32px;
+    border-radius: 10px;
+    background: rgba(255,209,102,0.12);
+    border: 1px solid rgba(255,209,102,0.25);
+    color: var(--accent4);
+    font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+
+  /* ── TODAY VIEW ── */
+  .today-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .today-date { font-size: 14px; color: var(--text2); }
+  .today-stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .stat-num { font-family: 'Syne', sans-serif; font-size: 26px; font-weight: 800; }
+  .stat-lbl { font-size: 11px; color: var(--text3); margin-top: 3px; font-weight: 600; }
+  .timeline-item {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r2);
+    padding: 14px 16px;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+  .timeline-item.done { opacity: 0.5; }
+  .timeline-item.done::after {
+    content: '✓';
+    position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+    font-size: 20px; color: var(--success);
+    font-weight: 700;
+  }
+  .timeline-item.upcoming { border-color: rgba(59,158,255,0.3); box-shadow: 0 0 20px rgba(59,158,255,0.08); }
+  .tl-time { font-family: 'Syne', sans-serif; font-size: 18px; font-weight: 700; color: var(--accent); min-width: 52px; }
+  .tl-avatar { width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .tl-info { flex: 1; }
+  .tl-name { font-size: 15px; font-weight: 600; }
+  .tl-sub { font-size: 13px; color: var(--text2); margin-top: 2px; }
+
+  /* ── HISTORY ── */
+  .log-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .log-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .log-info { flex: 1; }
+  .log-title { font-size: 14px; font-weight: 600; }
+  .log-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .log-time { font-size: 12px; color: var(--text3); white-space: nowrap; }
+
+  /* ── SETTINGS ── */
+  .settings-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-label { font-size: 15px; font-weight: 500; }
+  .settings-sub { font-size: 12px; color: var(--text3); margin-top: 2px; }
+  .toggle {
+    width: 48px; height: 26px;
+    background: var(--border);
+    border-radius: 13px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: var(--accent); }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    top: 3px; left: 3px;
+    transition: transform 0.3s;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  .toggle.on::after { transform: translateX(22px); }
+
+  /* ── EMPTY STATE ── */
+  .empty-state {
+    text-align: center;
+    padding: 60px 24px;
+    color: var(--text3);
+  }
+  .empty-icon { font-size: 56px; margin-bottom: 16px; }
+  .empty-title { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 700; color: var(--text2); margin-bottom: 8px; }
+  .empty-sub { font-size: 14px; line-height: 1.5; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7); backdrop-filter: blur(8px);
+    z-index: 500; align-items: flex-end; justify-content: center;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 28px 28px 0 0;
+    padding: 28px 24px 40px;
+    width: 100%; max-width: 430px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    border-top: 1px solid var(--border);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 24px; }
+  .modal-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; margin-bottom: 24px; }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 12px 24px;
+    font-size: 14px; font-weight: 600;
+    color: var(--text);
+    z-index: 600;
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── PROGRESS RING ── */
+  .progress-ring-wrap { display: flex; align-items: center; justify-content: center; margin: 8px 0 20px; }
+  .progress-ring { transform: rotate(-90deg); }
+  .progress-ring-text { position: absolute; text-align: center; }
+  .progress-ring-pct { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent); }
+  .progress-ring-lbl { font-size: 11px; color: var(--text3); }
+
+  /* ── BACKUP BANNER ── */
+  .backup-banner {
+    display: none;
+    background: linear-gradient(135deg, rgba(0,212,170,0.15), rgba(59,158,255,0.1));
+    border: 1px solid rgba(0,212,170,0.3);
+    border-radius: var(--r2);
+    padding: 16px 20px;
+    margin: 0 24px 16px;
+    animation: bannerIn 0.4s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes bannerIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+  }
+  .backup-banner.show { display: block; }
+  .backup-banner-title { font-family: 'Syne', sans-serif; font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .backup-banner-sub { font-size: 13px; color: var(--text2); margin-bottom: 12px; }
+  .backup-banner-btns { display: flex; gap: 8px; }
+  .btn-restore {
+    background: var(--accent2);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer;
+  }
+  .btn-dismiss {
+    background: transparent;
+    color: var(--text3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* ── NEXT ALARM TICKER ── */
+  .next-alarm-bar {
+    margin: 12px 24px 4px;
+    background: linear-gradient(135deg, rgba(59,158,255,0.1), rgba(0,212,170,0.05));
+    border: 1px solid rgba(59,158,255,0.2);
+    border-radius: var(--r);
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+  }
+  .next-alarm-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent2); animation: blink 1.5s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.2; } }
+  .next-alarm-text { color: var(--text2); flex: 1; }
+  .next-alarm-time { font-family: 'Syne', sans-serif; font-weight: 700; color: var(--accent); }
+
+  /* ── RIPPLE ── */
+  .ripple { position: relative; overflow: hidden; }
+  .ripple::after {
+    content: '';
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    transform: scale(0);
+    animation: ripple 0.4s linear;
+    pointer-events: none;
+  }
+  @keyframes ripple {
+    to { transform: scale(4); opacity: 0; }
+  }
+
+  /* ── INSTALL BANNER ── */
+  #install-banner {
+    display: none;
+    position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+    width: 100%; max-width: 430px;
+    background: var(--surface2);
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    z-index: 400;
+    font-size: 14px;
+    align-items: center; gap: 12px;
+  }
+  #install-banner.show { display: flex; }
+  #install-banner .install-text { flex: 1; color: var(--text2); }
+  #install-banner .btn-install {
+    background: var(--accent);
+    color: #fff; border: none;
+    border-radius: 8px; padding: 8px 16px;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+
+  /* ── NOTIFICATION BADGE ── */
+  .badge {
+    position: absolute; top: -3px; right: -3px;
+    background: var(--danger);
+    color: #fff;
+    font-size: 10px; font-weight: 700;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── RESPONSIVE adjustments ── */
+  @media (min-height: 812px) { .header { padding-top: 60px; } }
+</style>
+</head>
+<body>
+
+<!-- ALARM OVERLAY -->
+<div id="alarm-overlay">
+  <div class="alarm-pulse-ring"></div>
+  <div class="alarm-pulse-ring"></div>
+  <div class="alarm-pulse-ring"></div>
+  <div class="alarm-icon-wrap">
+    <div class="alarm-icon-bg">
+      <span class="alarm-emoji">💊</span>
+    </div>
+  </div>
+  <div class="alarm-text-block">
+    <div class="alarm-hora" id="al-hora">08:00</div>
+    <div class="alarm-nome" id="al-nome">João Silva</div>
+    <div class="alarm-remedio" id="al-remedio">Omeprazol 20mg</div>
+    <div class="alarm-dosagem-badge" id="al-dose">1 comprimido</div>
+  </div>
+  <button class="btn-tomar ripple" onclick="confirmarTomada()">✅ TOMEI O REMÉDIO</button>
+  <button class="alarm-snooze" onclick="snoozeAlarme()">⏰ Lembrar em 10 min</button>
+</div>
+
+<!-- BACKUP BANNER -->
+<div class="backup-banner" id="backup-banner">
+  <div class="backup-banner-title">🗄️ Backup disponível!</div>
+  <div class="backup-banner-sub" id="backup-banner-sub">Encontramos um backup de ontem. Deseja restaurar?</div>
+  <div class="backup-banner-btns">
+    <button class="btn-restore" onclick="restaurarBackup()">Restaurar agora</button>
+    <button class="btn-dismiss" onclick="fecharBanner()">Ignorar</button>
+  </div>
+</div>
+
+<!-- NEXT ALARM BAR -->
+<div class="next-alarm-bar" id="next-alarm-bar" style="display:none">
+  <div class="next-alarm-dot"></div>
+  <div class="next-alarm-text">Próximo alarme:</div>
+  <div class="next-alarm-time" id="next-alarm-time">--:--</div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">
+      <span class="logo-icon">💊</span>
+      <span class="logo-text">MedAlert</span>
+    </div>
+    <div class="header-actions">
+      <div class="icon-btn" onclick="abrirBackup()" title="Backup">💾</div>
+      <div class="icon-btn" style="position:relative" onclick="irPara('page-hoje')" title="Alarmes ativos">
+        🔔
+        <span class="badge" id="badge-alarmes" style="display:none">0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- NAV TABS -->
+  <div class="nav-tabs">
+    <button class="nav-tab active ripple" onclick="irPara('page-hoje')" id="tab-hoje">
+      <span class="tab-icon">📋</span>Hoje
+    </button>
+    <button class="nav-tab ripple" onclick="irPara('page-meds')" id="tab-meds">
+      <span class="tab-icon">💊</span>Remédios
+    </button>
+    <button class="nav-tab ripple" onclick="irPara('page-add')" id="tab-add">
+      <span class="tab-icon">➕</span>Novo
+    </button>
+    <button class="nav-tab ripple" onclick="irPara('page-hist')" id="tab-hist">
+      <span class="tab-icon">📊</span>Histórico
+    </button>
+    <button class="nav-tab ripple" onclick="irPara('page-cfg')" id="tab-cfg">
+      <span class="tab-icon">⚙️</span>Config
+    </button>
+  </div>
+
+  <!-- SCROLL CONTENT -->
+  <div class="content">
+
+    <!-- PAGE: HOJE -->
+    <div class="page active" id="page-hoje">
+      <div style="height:12px"></div>
+      <div class="today-header">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-size:22px;font-weight:800">Olá! 👋</div>
+          <div class="today-date" id="today-date"></div>
+        </div>
+        <div style="font-size:32px" id="today-emoji">😊</div>
+      </div>
+      <div class="today-stats">
+        <div class="stat-box">
+          <div class="stat-num" id="stat-total" style="color:var(--accent)">0</div>
+          <div class="stat-lbl">Total hoje</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="stat-tomados" style="color:var(--success)">0</div>
+          <div class="stat-lbl">Tomados</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num" id="stat-pendentes" style="color:var(--accent4)">0</div>
+          <div class="stat-lbl">Pendentes</div>
+        </div>
+      </div>
+      <!-- Progress ring -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">Progresso do dia</span>
+          <span id="prog-texto" style="font-size:13px;color:var(--text2)">0 de 0</span>
+        </div>
+        <div style="background:var(--bg);border-radius:30px;height:10px;overflow:hidden">
+          <div id="prog-bar" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:30px;transition:width 0.6s ease"></div>
+        </div>
+      </div>
+      <div class="section-label">Agenda de hoje</div>
+      <div id="timeline-list">
+        <div class="empty-state">
+          <div class="empty-icon">📅</div>
+          <div class="empty-title">Nenhum medicamento</div>
+          <div class="empty-sub">Adicione medicamentos na aba <strong>Novo</strong> para começar</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: MEDS -->
+    <div class="page" id="page-meds">
+      <div style="height:12px"></div>
+      <div class="section-label">Medicamentos cadastrados</div>
+      <div id="meds-list">
+        <div class="empty-state">
+          <div class="empty-icon">💊</div>
+          <div class="empty-title">Nenhum medicamento</div>
+          <div class="empty-sub">Toque em <strong>Novo</strong> para adicionar seu primeiro medicamento</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: ADD -->
+    <div class="page" id="page-add">
+      <div style="height:12px"></div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:20px">➕ Novo medicamento</div>
+        <div class="field">
+          <label>Nome do paciente</label>
+          <input type="text" id="f-paciente" placeholder="Ex: João Silva" autocomplete="name">
+        </div>
+        <div class="field">
+          <label>Nome do medicamento</label>
+          <input type="text" id="f-nome" placeholder="Ex: Omeprazol 20mg">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Dosagem</label>
+            <input type="text" id="f-dose" placeholder="Ex: 1 comp.">
+          </div>
+          <div class="field">
+            <label>Vezes por dia</label>
+            <select id="f-freq">
+              <option value="1">1x por dia</option>
+              <option value="2">2x por dia</option>
+              <option value="3">3x por dia</option>
+              <option value="4">4x por dia</option>
+              <option value="6">6x por dia</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label>Horário do 1º alarme</label>
+          <input type="time" id="f-hora" value="08:00">
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Data início</label>
+            <input type="date" id="f-inicio">
+          </div>
+          <div class="field">
+            <label>Data fim</label>
+            <input type="date" id="f-fim">
+          </div>
+        </div>
+        <div class="field">
+          <label>Observações</label>
+          <input type="text" id="f-obs" placeholder="Ex: Tomar em jejum">
+        </div>
+        <div class="field">
+          <label>Cor / identificação</label>
+          <div class="color-row" id="color-row">
+            <div class="color-dot selected" style="background:#3b9eff" data-color="#3b9eff" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#00d4aa" data-color="#00d4aa" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#ff6b6b" data-color="#ff6b6b" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#ffd166" data-color="#ffd166" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#a29bfe" data-color="#a29bfe" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#fd79a8" data-color="#fd79a8" onclick="selecionarCor(this)"></div>
+            <div class="color-dot" style="background:#00b894" data-color="#00b894" onclick="selecionarCor(this)"></div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Ícone</label>
+          <div style="display:flex;gap:10px;flex-wrap:wrap" id="emoji-row">
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid var(--accent)" onclick="selecionarEmoji(this)" data-e="💊">💊</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="💉">💉</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="🩺">🩺</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="🫀">🫀</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="🧠">🧠</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="🦴">🦴</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="👁️">👁️</span>
+            <span style="font-size:26px;cursor:pointer;padding:4px;border-radius:8px;border:2px solid transparent" onclick="selecionarEmoji(this)" data-e="🌡️">🌡️</span>
+          </div>
+        </div>
+        <button class="btn-primary ripple" onclick="salvarMedicamento()" style="margin-top:8px">Salvar Medicamento</button>
+      </div>
+    </div>
+
+    <!-- PAGE: HISTORICO -->
+    <div class="page" id="page-hist">
+      <div style="height:12px"></div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📊 Histórico</span>
+          <button class="btn-secondary" onclick="limparHistorico()" style="font-size:12px;padding:6px 12px">Limpar</button>
+        </div>
+        <div id="hist-list"><div style="color:var(--text3);font-size:14px;text-align:center;padding:30px">Nenhum registro ainda</div></div>
+      </div>
+    </div>
+
+    <!-- PAGE: CONFIG -->
+    <div class="page" id="page-cfg">
+      <div style="height:12px"></div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:4px">⚙️ Configurações</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">🔔 Notificações</div>
+            <div class="settings-sub">Permitir notificações do navegador</div>
+          </div>
+          <div class="toggle on" id="tg-notif" onclick="toggleNotif()"></div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">🔊 Som contínuo</div>
+            <div class="settings-sub">Tocar alarme até confirmar</div>
+          </div>
+          <div class="toggle on" id="tg-som" onclick="toggleCfg('tg-som','somContinuo')"></div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">✨ Efeito piscante</div>
+            <div class="settings-sub">Piscar tela no alarme</div>
+          </div>
+          <div class="toggle on" id="tg-flash" onclick="toggleCfg('tg-flash','flashAtivo')"></div>
+        </div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label">💾 Backup automático</div>
+            <div class="settings-sub">Todo dia às 00:00 salvar backup .sql</div>
+          </div>
+          <div class="toggle on" id="tg-backup" onclick="toggleCfg('tg-backup','backupAuto')"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:16px">💾 Backup & Restauração</div>
+        <div style="display:grid;gap:10px">
+          <button class="btn-primary ripple" onclick="fazerBackup()">💾 Fazer Backup agora (.sql)</button>
+          <button class="btn-secondary ripple" onclick="document.getElementById('inp-restore').click()">📂 Restaurar de arquivo</button>
+          <input type="file" id="inp-restore" accept=".sql,.json,.txt" style="display:none" onchange="carregarBackup(event)">
+          <button class="btn-secondary ripple" onclick="exportarJSON()">📤 Exportar dados (JSON)</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:4px">⚠️ Dados</div>
+        <div class="settings-row">
+          <div>
+            <div class="settings-label" style="color:var(--danger)">Apagar tudo</div>
+            <div class="settings-sub">Remove todos os medicamentos e histórico</div>
+          </div>
+          <button class="btn-secondary" onclick="apagarTudo()" style="font-size:12px;padding:6px 12px;color:var(--danger);border-color:rgba(255,71,87,0.3)">Apagar</button>
+        </div>
+      </div>
+      <div style="text-align:center;color:var(--text3);font-size:12px;padding:16px 0 8px">MedAlert v2.0 · PWA · Dados salvos localmente</div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /app -->
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODAL BACKUP -->
+<div class="modal-overlay" id="modal-backup">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💾 Gerenciar Backup</div>
+    <p style="font-size:14px;color:var(--text2);margin-bottom:20px">O backup salva todos os seus dados em formato .sql que pode ser restaurado a qualquer momento.</p>
+    <div style="display:grid;gap:12px">
+      <button class="btn-primary ripple" onclick="fazerBackup();fecharModal('modal-backup')">💾 Salvar backup agora</button>
+      <button class="btn-secondary ripple" onclick="document.getElementById('inp-restore').click();fecharModal('modal-backup')">📂 Restaurar de arquivo .sql</button>
+      <button class="btn-secondary ripple" onclick="fecharModal('modal-backup')">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- INSTALL BANNER -->
+<div id="install-banner">
+  <span>📱</span>
+  <span class="install-text">Instale o MedAlert como app!</span>
+  <button class="btn-install" onclick="instalarPWA()">Instalar</button>
+  <span style="cursor:pointer;font-size:18px;color:var(--text3)" onclick="document.getElementById('install-banner').classList.remove('show')">✕</span>
+</div>
+
+<!-- SERVICE WORKER REGISTER -->
+<script>
+// ══════════════════════════════════════════════════════════
+//  MEDALERT — App Logic
+// ══════════════════════════════════════════════════════════
+
+const DB_KEY = 'medalert_data';
+const LOG_KEY = 'medalert_log';
+const CFG_KEY = 'medalert_cfg';
+const BACKUP_KEY = 'medalert_backup_meta';
+
+let dados = { medicamentos: [] };
+let log = [];
+let cfg = { somContinuo: true, flashAtivo: true, backupAuto: true };
+let alarmeAtual = null;
+let alarmeTimer = null;
+let audioCtx = null;
+let audioNode = null;
+let corSelecionada = '#3b9eff';
+let emojiSelecionado = '💊';
+let deferredPrompt = null;
+let alarmesProgramados = {};
+let checkInterval = null;
+
+// ── INIT ──────────────────────────────────────────────────
+function init() {
+  carregarDados();
+  atualizarUI();
+  atualizarDataHoje();
+  programarAlarmes();
+  verificarBackupPendente();
+  startCheckLoop();
+  requestNotifPermission();
+  // Set default dates
+  const hoje = new Date();
+  document.getElementById('f-inicio').value = formatDate(hoje);
+  const fim = new Date(hoje); fim.setMonth(fim.getMonth() + 1);
+  document.getElementById('f-fim').value = formatDate(fim);
+}
+
+function carregarDados() {
+  try {
+    const raw = localStorage.getItem(DB_KEY);
+    if (raw) dados = JSON.parse(raw);
+    const rawLog = localStorage.getItem(LOG_KEY);
+    if (rawLog) log = JSON.parse(rawLog);
+    const rawCfg = localStorage.getItem(CFG_KEY);
+    if (rawCfg) cfg = { ...cfg, ...JSON.parse(rawCfg) };
+  } catch(e) { console.error(e); }
+  sincronizarToggles();
+}
+
+function salvarDados() {
+  localStorage.setItem(DB_KEY, JSON.stringify(dados));
+  localStorage.setItem(LOG_KEY, JSON.stringify(log));
+  localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
+}
+
+function sincronizarToggles() {
+  document.getElementById('tg-som').classList.toggle('on', cfg.somContinuo);
+  document.getElementById('tg-flash').classList.toggle('on', cfg.flashAtivo);
+  document.getElementById('tg-backup').classList.toggle('on', cfg.backupAuto);
+}
+
+// ── NAVEGAÇÃO ─────────────────────────────────────────────
+function irPara(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  const tabMap = {'page-hoje':'tab-hoje','page-meds':'tab-meds','page-add':'tab-add','page-hist':'tab-hist','page-cfg':'tab-cfg'};
+  if (tabMap[pageId]) document.getElementById(tabMap[pageId]).classList.add('active');
+  atualizarUI();
+}
+
+// ── UI UPDATE ─────────────────────────────────────────────
+function atualizarUI() {
+  renderTimeline();
+  renderMedsList();
+  renderHistorico();
+  atualizarStats();
+  atualizarNextAlarm();
+}
+
+function atualizarDataHoje() {
+  const d = new Date();
+  const opts = { weekday:'long', day:'numeric', month:'long' };
+  document.getElementById('today-date').textContent = d.toLocaleDateString('pt-BR', opts);
+}
+
+function atualizarStats() {
+  const hoje = dataHoje();
+  const agendaHoje = getAgendaHoje();
+  const tomadosHoje = log.filter(l => l.data === hoje && l.acao === 'tomado').length;
+  const total = agendaHoje.length;
+  const pendentes = Math.max(0, total - tomadosHoje);
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-tomados').textContent = tomadosHoje;
+  document.getElementById('stat-pendentes').textContent = pendentes;
+  document.getElementById('prog-texto').textContent = `${tomadosHoje} de ${total}`;
+  const pct = total > 0 ? Math.round((tomadosHoje/total)*100) : 0;
+  document.getElementById('prog-bar').style.width = pct + '%';
+  document.getElementById('today-emoji').textContent = pct === 100 ? '🎉' : pct > 50 ? '😊' : pct > 0 ? '💪' : '😴';
+  const pendBadge = document.getElementById('badge-alarmes');
+  if (pendentes > 0) { pendBadge.style.display = 'flex'; pendBadge.textContent = pendentes; }
+  else { pendBadge.style.display = 'none'; }
+}
+
+function getAgendaHoje() {
+  const hoje = dataHoje();
+  const agora = new Date();
+  const itens = [];
+  dados.medicamentos.forEach(med => {
+    if (!med.ativo) return;
+    if (med.inicio && med.inicio > hoje) return;
+    if (med.fim && med.fim < hoje) return;
+    const horarios = calcularHorarios(med.hora, parseInt(med.freq));
+    horarios.forEach(h => {
+      itens.push({ ...med, horario: h });
+    });
+  });
+  itens.sort((a,b) => a.horario.localeCompare(b.horario));
+  return itens;
+}
+
+function renderTimeline() {
+  const agendaHoje = getAgendaHoje();
+  const hoje = dataHoje();
+  const tl = document.getElementById('timeline-list');
+  if (agendaHoje.length === 0) {
+    tl.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">Nenhum medicamento hoje</div><div class="empty-sub">Adicione medicamentos na aba <strong>Novo</strong></div></div>`;
+    return;
+  }
+  const agora = horaAgora();
+  tl.innerHTML = agendaHoje.map(item => {
+    const logKey = `${hoje}_${item.id}_${item.horario}`;
+    const tomado = log.some(l => l.key === logKey && l.acao === 'tomado');
+    const passado = item.horario < agora;
+    const cls = tomado ? 'done' : passado ? '' : 'upcoming';
+    return `<div class="timeline-item ${cls}">
+      <div class="tl-time">${item.horario}</div>
+      <div class="tl-avatar" style="background:${item.cor}22">${item.emoji}</div>
+      <div class="tl-info">
+        <div class="tl-name">${item.nome}</div>
+        <div class="tl-sub">${item.dose} · ${item.paciente}</div>
+        ${item.obs ? `<div style="font-size:11px;color:var(--text3);margin-top:2px">${item.obs}</div>` : ''}
+      </div>
+      ${!tomado ? `<button onclick="marcarTomado('${item.id}','${item.horario}')" style="background:rgba(0,212,170,0.15);border:1px solid rgba(0,212,170,0.3);color:var(--accent2);border-radius:10px;padding:6px 10px;font-size:12px;cursor:pointer;font-weight:600">✓ OK</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderMedsList() {
+  const el = document.getElementById('meds-list');
+  if (dados.medicamentos.length === 0) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">💊</div><div class="empty-title">Nenhum medicamento</div><div class="empty-sub">Toque em <strong>Novo</strong> para adicionar</div></div>`;
+    return;
+  }
+  el.innerHTML = dados.medicamentos.map(med => {
+    const horarios = calcularHorarios(med.hora, parseInt(med.freq));
+    return `<div class="med-card" style="border-left:4px solid ${med.cor}">
+      <div class="med-avatar" style="background:${med.cor}22">${med.emoji}</div>
+      <div class="med-info">
+        <div class="med-name">${med.nome}</div>
+        <div class="med-sub">👤 ${med.paciente}</div>
+        <div class="med-tags">
+          <span class="med-tag">${med.dose}</span>
+          <span class="med-tag green">${med.freq}x/dia</span>
+          <span class="med-tag yellow">⏰ ${horarios.join(', ')}</span>
+          ${!med.ativo ? '<span class="med-tag red">Pausado</span>' : ''}
+          ${med.fim ? `<span class="med-tag">até ${formatDateBR(med.fim)}</span>` : ''}
+        </div>
+      </div>
+      <div class="med-actions">
+        <button class="med-btn-del" onclick="deletarMed('${med.id}')">🗑</button>
+        <button class="med-btn-pause" onclick="pausarMed('${med.id}')" title="${med.ativo?'Pausar':'Ativar'}">${med.ativo?'⏸':'▶'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistorico() {
+  const el = document.getElementById('hist-list');
+  if (log.length === 0) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:14px;text-align:center;padding:30px">Nenhum registro ainda</div>';
+    return;
+  }
+  const sorted = [...log].reverse().slice(0, 100);
+  el.innerHTML = sorted.map(l => `
+    <div class="log-item">
+      <div class="log-dot" style="background:${l.acao==='tomado'?'var(--success)':l.acao==='snooze'?'var(--accent4)':'var(--danger)'}"></div>
+      <div class="log-info">
+        <div class="log-title">${l.nome}</div>
+        <div class="log-sub">${l.paciente || ''} · ${l.dose || ''}</div>
+      </div>
+      <div class="log-time">${l.hora}<br><span style="font-size:11px">${formatDateBR(l.data)}</span></div>
+    </div>
+  `).join('');
+}
+
+// ── MEDICAMENTO CRUD ──────────────────────────────────────
+function salvarMedicamento() {
+  const paciente = document.getElementById('f-paciente').value.trim();
+  const nome = document.getElementById('f-nome').value.trim();
+  const dose = document.getElementById('f-dose').value.trim();
+  const freq = document.getElementById('f-freq').value;
+  const hora = document.getElementById('f-hora').value;
+  const inicio = document.getElementById('f-inicio').value;
+  const fim = document.getElementById('f-fim').value;
+  const obs = document.getElementById('f-obs').value.trim();
+  if (!paciente || !nome || !dose || !hora) {
+    showToast('⚠️ Preencha todos os campos obrigatórios');
+    return;
+  }
+  const med = {
+    id: Date.now().toString(),
+    paciente, nome, dose, freq, hora, inicio, fim, obs,
+    cor: corSelecionada,
+    emoji: emojiSelecionado,
+    ativo: true,
+    criado: new Date().toISOString()
+  };
+  dados.medicamentos.push(med);
+  salvarDados();
+  programarAlarmes();
+  atualizarUI();
+  showToast('✅ Medicamento salvo com sucesso!');
+  limparFormulario();
+  irPara('page-hoje');
+}
+
+function deletarMed(id) {
+  if (!confirm('Remover este medicamento?')) return;
+  dados.medicamentos = dados.medicamentos.filter(m => m.id !== id);
+  salvarDados();
+  programarAlarmes();
+  atualizarUI();
+  showToast('🗑️ Medicamento removido');
+}
+
+function pausarMed(id) {
+  const med = dados.medicamentos.find(m => m.id === id);
+  if (med) { med.ativo = !med.ativo; salvarDados(); programarAlarmes(); atualizarUI(); showToast(med.ativo ? '▶ Ativado' : '⏸ Pausado'); }
+}
+
+function limparFormulario() {
+  ['f-paciente','f-nome','f-dose','f-obs'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-freq').value = '1';
+  document.getElementById('f-hora').value = '08:00';
+  corSelecionada = '#3b9eff';
+  emojiSelecionado = '💊';
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+  document.querySelector('.color-dot').classList.add('selected');
+  document.querySelectorAll('#emoji-row span').forEach((s,i) => s.style.borderColor = i===0?'var(--accent)':'transparent');
+}
+
+function selecionarCor(el) {
+  document.querySelectorAll('.color-dot').forEach(d => d.classList.remove('selected'));
+  el.classList.add('selected');
+  corSelecionada = el.dataset.color;
+}
+
+function selecionarEmoji(el) {
+  document.querySelectorAll('#emoji-row span').forEach(s => s.style.borderColor = 'transparent');
+  el.style.borderColor = 'var(--accent)';
+  emojiSelecionado = el.dataset.e;
+}
+
+function marcarTomado(medId, horario) {
+  const med = dados.medicamentos.find(m => m.id === medId);
+  if (!med) return;
+  const hoje = dataHoje();
+  const logKey = `${hoje}_${medId}_${horario}`;
+  if (log.some(l => l.key === logKey && l.acao === 'tomado')) { showToast('Já marcado!'); return; }
+  registrarLog(med, horario, 'tomado', logKey);
+  atualizarUI();
+  showToast('✅ Ótimo! Medicamento marcado!');
+}
+
+// ── ALARME ENGINE ─────────────────────────────────────────
+function calcularHorarios(horaBase, freq) {
+  const [h, m] = horaBase.split(':').map(Number);
+  const horarios = [];
+  const intervalo = Math.floor(24 / freq);
+  for (let i = 0; i < freq; i++) {
+    let nh = (h + intervalo * i) % 24;
+    horarios.push(`${String(nh).padStart(2,'0')}:${String(m).padStart(2,'0')}`);
+  }
+  return horarios;
+}
+
+function startCheckLoop() {
+  if (checkInterval) clearInterval(checkInterval);
+  checkInterval = setInterval(verificarAlarmes, 15000);
+  verificarAlarmes();
+}
+
+function verificarAlarmes() {
+  const agora = horaAgora();
+  const hoje = dataHoje();
+  const agenda = getAgendaHoje();
+  let nextTime = null;
+
+  agenda.forEach(item => {
+    const logKey = `${hoje}_${item.id}_${item.horario}`;
+    const jaTomado = log.some(l => l.key === logKey && (l.acao === 'tomado' || l.acao === 'snooze_ativo'));
+    if (jaTomado) return;
+    const diff = diffMinutos(agora, item.horario);
+    if (diff >= 0 && diff <= 1) {
+      if (!alarmesProgramados[logKey]) {
+        alarmesProgramados[logKey] = true;
+        dispararAlarme(item, logKey);
+      }
+    }
+    if (item.horario >= agora && (!nextTime || item.horario < nextTime)) {
+      nextTime = item.horario;
+    }
+  });
+  atualizarNextAlarm(nextTime);
+}
+
+function diffMinutos(h1, h2) {
+  const [hh1, mm1] = h1.split(':').map(Number);
+  const [hh2, mm2] = h2.split(':').map(Number);
+  return (hh2*60+mm2) - (hh1*60+mm1);
+}
+
+function dispararAlarme(item, logKey) {
+  alarmeAtual = { item, logKey };
+  const overlay = document.getElementById('alarm-overlay');
+  document.getElementById('al-hora').textContent = item.horario;
+  document.getElementById('al-nome').textContent = item.paciente;
+  document.getElementById('al-remedio').textContent = item.nome;
+  document.getElementById('al-dose').textContent = item.dose;
+  overlay.classList.add('active');
+  if (cfg.somContinuo) iniciarSom();
+  // Notification API
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(`💊 Hora do remédio! ${item.horario}`, {
+        body: `${item.paciente}: ${item.nome} - ${item.dose}`,
+        icon: 'icon-192.png',
+        requireInteraction: true,
+        tag: logKey
+      });
+    } catch(e) {}
+  }
+  // Vibrar
+  if ('vibrate' in navigator) {
+    const vib = () => { navigator.vibrate([500,200,500,200,500]); alarmeTimer = setTimeout(vib, 2500); };
+    vib();
+  }
+}
+
+function confirmarTomada() {
+  if (!alarmeAtual) return;
+  const { item, logKey } = alarmeAtual;
+  registrarLog(item, item.horario, 'tomado', logKey);
+  fecharAlarme();
+  atualizarUI();
+  showToast('✅ Ótimo! Remédio confirmado!');
+}
+
+function snoozeAlarme() {
+  if (!alarmeAtual) return;
+  const { item, logKey } = alarmeAtual;
+  registrarLog(item, item.horario, 'snooze', logKey);
+  fecharAlarme();
+  // Re-trigger in 10 minutes
+  const snoozeKey = logKey + '_snooze';
+  setTimeout(() => {
+    delete alarmesProgramados[logKey];
+    delete alarmesProgramados[snoozeKey];
+  }, 10 * 60 * 1000);
+  showToast('⏰ Lembrete em 10 minutos!');
+}
+
+function fecharAlarme() {
+  document.getElementById('alarm-overlay').classList.remove('active');
+  pararSom();
+  if (alarmeTimer) { clearTimeout(alarmeTimer); alarmeTimer = null; }
+  if ('vibrate' in navigator) navigator.vibrate(0);
+  alarmeAtual = null;
+}
+
+// ── AUDIO ENGINE ──────────────────────────────────────────
+function iniciarSom() {
+  pararSom();
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const tocar = () => {
+      const freqs = [880, 1109, 1319, 1760];
+      freqs.forEach((freq, i) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'square';
+        gain.gain.setValueAtTime(0, audioCtx.currentTime + i * 0.1);
+        gain.gain.linearRampToValueAtTime(0.15, audioCtx.currentTime + i * 0.1 + 0.05);
+        gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + i * 0.1 + 0.2);
+        osc.start(audioCtx.currentTime + i * 0.1);
+        osc.stop(audioCtx.currentTime + i * 0.1 + 0.25);
+      });
+      if (cfg.somContinuo && document.getElementById('alarm-overlay').classList.contains('active')) {
+        setTimeout(tocar, 1200);
+      }
+    };
+    tocar();
+  } catch(e) { console.error('Audio error:', e); }
+}
+
+function pararSom() {
+  if (audioCtx) { try { audioCtx.close(); } catch(e) {} audioCtx = null; }
+}
+
+// ── ALARME NEXT DISPLAY ───────────────────────────────────
+function programarAlarmes() {
+  alarmesProgramados = {};
+}
+
+function atualizarNextAlarm(nextTime) {
+  const bar = document.getElementById('next-alarm-bar');
+  if (nextTime) {
+    bar.style.display = 'flex';
+    document.getElementById('next-alarm-time').textContent = nextTime;
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+// ── LOG ───────────────────────────────────────────────────
+function registrarLog(med, horario, acao, logKey) {
+  log.push({
+    key: logKey,
+    id: med.id,
+    nome: med.nome,
+    paciente: med.paciente,
+    dose: med.dose,
+    horario,
+    acao,
+    data: dataHoje(),
+    hora: horaAgora()
+  });
+  salvarDados();
+}
+
+function limparHistorico() {
+  if (!confirm('Limpar todo o histórico?')) return;
+  log = [];
+  salvarDados();
+  renderHistorico();
+  showToast('🗑️ Histórico limpo');
+}
+
+// ── BACKUP ────────────────────────────────────────────────
+function gerarSQL() {
+  const ts = new Date().toISOString();
+  let sql = `-- MedAlert Backup\n-- Data: ${ts}\n-- Versão: 2.0\n\n`;
+  sql += `CREATE TABLE IF NOT EXISTS medicamentos (id TEXT, paciente TEXT, nome TEXT, dose TEXT, freq INTEGER, hora TEXT, inicio TEXT, fim TEXT, obs TEXT, cor TEXT, emoji TEXT, ativo INTEGER, criado TEXT);\n\n`;
+  sql += `DELETE FROM medicamentos;\n`;
+  dados.medicamentos.forEach(m => {
+    sql += `INSERT INTO medicamentos VALUES ('${esc(m.id)}','${esc(m.paciente)}','${esc(m.nome)}','${esc(m.dose)}','${m.freq}','${esc(m.hora)}','${esc(m.inicio||'')}','${esc(m.fim||'')}','${esc(m.obs||'')}','${esc(m.cor)}','${esc(m.emoji)}','${m.ativo?1:0}','${esc(m.criado||'')}');\n`;
+  });
+  sql += `\nCREATE TABLE IF NOT EXISTS log (key TEXT, nome TEXT, paciente TEXT, dose TEXT, horario TEXT, acao TEXT, data TEXT, hora TEXT);\n\n`;
+  sql += `DELETE FROM log;\n`;
+  log.forEach(l => {
+    sql += `INSERT INTO log VALUES ('${esc(l.key||'')}','${esc(l.nome)}','${esc(l.paciente||'')}','${esc(l.dose||'')}','${esc(l.horario||'')}','${esc(l.acao)}','${esc(l.data)}','${esc(l.hora)}');\n`;
+  });
+  sql += `\nCREATE TABLE IF NOT EXISTS config (key TEXT, value TEXT);\nDELETE FROM config;\n`;
+  Object.entries(cfg).forEach(([k,v]) => {
+    sql += `INSERT INTO config VALUES ('${esc(k)}','${esc(String(v))}');\n`;
+  });
+  sql += `\n-- END BACKUP\n`;
+  return sql;
+}
+
+function esc(str) { return String(str).replace(/'/g, "''"); }
+
+function fazerBackup() {
+  const sql = gerarSQL();
+  const blob = new Blob([sql], { type: 'text/plain' });
+  const a = document.createElement('a');
+  const d = new Date(); const ds = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  a.href = URL.createObjectURL(blob);
+  a.download = `medalert_backup_${ds}.sql`;
+  a.click();
+  // Save meta
+  localStorage.setItem(BACKUP_KEY, JSON.stringify({ data: dataHoje(), ts: new Date().toISOString() }));
+  showToast('💾 Backup salvo com sucesso!');
+}
+
+function exportarJSON() {
+  const blob = new Blob([JSON.stringify({ medicamentos: dados.medicamentos, log, cfg }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  const d = new Date(); const ds = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  a.href = URL.createObjectURL(blob);
+  a.download = `medalert_${ds}.json`;
+  a.click();
+  showToast('📤 JSON exportado!');
+}
+
+function carregarBackup(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const content = e.target.result;
+    if (file.name.endsWith('.json')) {
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed.medicamentos) {
+          dados.medicamentos = parsed.medicamentos;
+          if (parsed.log) log = parsed.log;
+          if (parsed.cfg) cfg = { ...cfg, ...parsed.cfg };
+          salvarDados();
+          programarAlarmes();
+          atualizarUI();
+          sincronizarToggles();
+          showToast('✅ Backup JSON restaurado!');
+        }
+      } catch(e) { showToast('❌ Arquivo JSON inválido'); }
+    } else {
+      // SQL parsing
+      const meds = parseSQLBackup(content);
+      if (meds !== null) {
+        dados.medicamentos = meds.meds;
+        if (meds.log) log = meds.log;
+        salvarDados();
+        programarAlarmes();
+        atualizarUI();
+        showToast('✅ Backup SQL restaurado!');
+      } else {
+        showToast('❌ Arquivo .sql inválido');
+      }
+    }
+    event.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function parseSQLBackup(sql) {
+  try {
+    const meds = [];
+    const logItems = [];
+    const insertMed = /INSERT INTO medicamentos VALUES \('([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)'\)/g;
+    let m;
+    while ((m = insertMed.exec(sql)) !== null) {
+      meds.push({ id:m[1], paciente:m[2], nome:m[3], dose:m[4], freq:m[5], hora:m[6], inicio:m[7], fim:m[8], obs:m[9], cor:m[10], emoji:m[11], ativo:m[12]==='1', criado:m[13] });
+    }
+    const insertLog = /INSERT INTO log VALUES \('([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)','([^']*)'\)/g;
+    while ((m = insertLog.exec(sql)) !== null) {
+      logItems.push({ key:m[1], nome:m[2], paciente:m[3], dose:m[4], horario:m[5], acao:m[6], data:m[7], hora:m[8] });
+    }
+    return { meds, log: logItems };
+  } catch(e) { return null; }
+}
+
+function restaurarBackup() {
+  document.getElementById('inp-restore').click();
+  fecharBanner();
+}
+
+function verificarBackupPendente() {
+  const meta = localStorage.getItem(BACKUP_KEY);
+  if (!meta) return;
+  try {
+    const { data } = JSON.parse(meta);
+    const ontem = dataOntem();
+    if (data === ontem) {
+      const banner = document.getElementById('backup-banner');
+      document.getElementById('backup-banner-sub').textContent = `Encontramos um backup de ${formatDateBR(ontem)}. Deseja restaurar seus dados?`;
+      banner.classList.add('show');
+    }
+  } catch(e) {}
+}
+
+function fecharBanner() {
+  document.getElementById('backup-banner').classList.remove('show');
+}
+
+function abrirBackup() {
+  document.getElementById('modal-backup').classList.add('active');
+}
+
+function fecharModal(id) {
+  document.getElementById(id).classList.remove('active');
+}
+
+// Backup automático às 00:00
+function agendarBackupAutomatico() {
+  const agora = new Date();
+  const amanha = new Date(agora);
+  amanha.setDate(amanha.getDate() + 1);
+  amanha.setHours(0, 0, 10, 0);
+  const ms = amanha - agora;
+  setTimeout(() => {
+    if (cfg.backupAuto) fazerBackup();
+    agendarBackupAutomatico();
+  }, ms);
+}
+
+// ── CONFIGURAÇÕES ─────────────────────────────────────────
+function toggleNotif() {
+  requestNotifPermission();
+}
+
+function toggleCfg(toggleId, cfgKey) {
+  cfg[cfgKey] = !cfg[cfgKey];
+  document.getElementById(toggleId).classList.toggle('on', cfg[cfgKey]);
+  salvarDados();
+}
+
+function requestNotifPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission().then(p => {
+      document.getElementById('tg-notif').classList.toggle('on', p === 'granted');
+    });
+  } else if ('Notification' in window) {
+    document.getElementById('tg-notif').classList.toggle('on', Notification.permission === 'granted');
+  }
+}
+
+function apagarTudo() {
+  if (!confirm('⚠️ Apagar TODOS os dados? Esta ação não pode ser desfeita!')) return;
+  dados = { medicamentos: [] };
+  log = [];
+  salvarDados();
+  programarAlarmes();
+  atualizarUI();
+  showToast('🗑️ Todos os dados apagados');
+}
+
+// ── UTILS ─────────────────────────────────────────────────
+function dataHoje() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function dataOntem() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function horaAgora() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function formatDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatDateBR(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function showToast(msg, dur=3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), dur);
+}
+
+// ── PWA INSTALL ───────────────────────────────────────────
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('install-banner').classList.add('show');
+});
+
+function instalarPWA() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(() => {
+      deferredPrompt = null;
+      document.getElementById('install-banner').classList.remove('show');
+    });
+  }
+}
+
+// ── SERVICE WORKER ────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(e => console.log('SW:', e));
+}
+
+// Prevent sleep on mobile (Wake Lock API)
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try { await navigator.wakeLock.request('screen'); } catch(e) {}
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') requestWakeLock();
+});
+
+// Click outside modal to close
+document.querySelectorAll('.modal-overlay').forEach(mo => {
+  mo.addEventListener('click', (e) => { if (e.target === mo) mo.classList.remove('active'); });
+});
+
+// Tap to wake audio context (mobile autoplay policy)
+document.addEventListener('touchstart', () => {
+  if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}, { once: false, passive: true });
+
+// ── START ─────────────────────────────────────────────────
+init();
+agendarBackupAutomatico();
+requestWakeLock();
+</script>
+</body>
+</html>
