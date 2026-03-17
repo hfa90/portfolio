@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>🛵 Entregador — SnapFood</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --brand: #E8420A;
+            --brand2: #FF6B3D;
+            --brand3: #B83008;
+            --brand-bg: #FFF4F0;
+            --ink: #1C1B19;
+            --ink2: #4A4845;
+            --ink3: #8C8A84;
+            --surface: #F6F5F2;
+            --surface2: #EDECEA;
+            --surface3: #E0DFDB;
+            --white: #FFFFFF;
+            --green: #1A9E6A;
+            --green-bg: #E6F4EE;
+            --green2: #137a52;
+            --yellow: #B87A10;
+            --yellow-bg: #FEF3DC;
+            --blue: #185FA5;
+            --blue-bg: #E6F1FB;
+            --red: #C0392B;
+            --red-bg: #FCEAEA;
+            --radius: 14px;
+            --radius-sm: 8px;
+            --sans: 'DM Sans', sans-serif;
+            --syne: 'Syne', sans-serif;
+            --shadow: 0 2px 12px rgba(0, 0, 0, .07);
+            --shadow-md: 0 4px 24px rgba(0, 0, 0, .11);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: var(--sans);
+            background: var(--surface);
+            color: var(--ink);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ═══════════ LOGIN ═══════════ */
+        #loginScreen {
+            position: fixed;
+            inset: 0;
+            background: var(--ink);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .lx {
+            width: 100%;
+            max-width: 360px;
+        }
+
+        .lx-brand {
+            font-family: var(--syne);
+            font-size: 26px;
+            font-weight: 800;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .lx-sub {
+            font-size: 13px;
+            color: rgba(255, 255, 255, .5);
+            margin-bottom: 28px;
+        }
+
+        .lx-err {
+            font-size: 13px;
+            color: #FF6B6B;
+            margin-bottom: 12px;
+            min-height: 18px;
+        }
+
+        .fld-l {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, .5);
+            margin-bottom: 6px;
+            letter-spacing: .4px;
+            text-transform: uppercase;
+        }
+
+        .fld-i {
+            width: 100%;
+            background: rgba(255, 255, 255, .07);
+            border: 1.5px solid rgba(255, 255, 255, .12);
+            border-radius: var(--radius-sm);
+            padding: 11px 14px;
+            font-family: var(--sans);
+            font-size: 14px;
+            color: #fff;
+            margin-bottom: 14px;
+            outline: none;
+            transition: border-color .2s;
+        }
+
+        .fld-i:focus {
+            border-color: var(--brand2);
+        }
+
+        .fld-hint {
+            font-size: 11px;
+            color: rgba(255, 255, 255, .3);
+            margin-bottom: 20px;
+        }
+
+        .lx-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--brand);
+            border: none;
+            border-radius: var(--radius-sm);
+            font-family: var(--syne);
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            transition: background .2s;
+            letter-spacing: .3px;
+        }
+
+        .lx-btn:hover {
+            background: var(--brand3);
+        }
+
+        /* ═══════════ TOPBAR ═══════════ */
+        #app {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .topbar {
+            background: var(--white);
+            border-bottom: 1.5px solid var(--surface3);
+            padding: 0 16px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .tb-logo {
+            font-size: 20px;
+        }
+
+        .tb-title {
+            font-family: var(--syne);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--ink);
+            flex: 1;
+        }
+
+        .tb-chip {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            background: var(--brand-bg);
+            border: 1.5px solid #ffd4c2;
+            border-radius: 100px;
+            padding: 4px 12px 4px 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--brand3);
+        }
+
+        .tb-avatar {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--brand);
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .tb-btn-ghost {
+            padding: 7px 13px;
+            border-radius: var(--radius-sm);
+            border: 1.5px solid var(--surface3);
+            background: transparent;
+            font-family: var(--sans);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink2);
+            cursor: pointer;
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .tb-btn-ghost:hover {
+            background: var(--surface2);
+        }
+
+        .conn-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #999;
+            flex-shrink: 0;
+            transition: background .3s;
+        }
+
+        .conn-dot.on {
+            background: var(--green);
+            box-shadow: 0 0 6px rgba(26, 158, 106, .5);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .5
+            }
+        }
+
+        /* ═══════════ DRIVER PICKER ═══════════ */
+        #driverScreen {
+            position: fixed;
+            inset: 0;
+            background: rgba(28, 27, 25, .7);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all .25s;
+        }
+
+        #driverScreen.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .ds-box {
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 100%;
+            max-width: 360px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: var(--shadow-md);
+        }
+
+        .ds-title {
+            font-family: var(--syne);
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .ds-sub {
+            font-size: 13px;
+            color: var(--ink3);
+            margin-bottom: 20px;
+        }
+
+        .ds-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 1.5px solid var(--surface3);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all .15s;
+            margin-bottom: 8px;
+        }
+
+        .ds-item:hover {
+            border-color: var(--brand);
+            background: var(--brand-bg);
+        }
+
+        .ds-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: var(--yellow-bg);
+            color: var(--yellow);
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .ds-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--ink);
+        }
+
+        .ds-role {
+            font-size: 11px;
+            color: var(--ink3);
+            margin-top: 1px;
+        }
+
+        /* PIN */
+        .pin-wrap {
+            display: none;
+        }
+
+        .pin-wrap.show {
+            display: block;
+        }
+
+        .pin-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--ink);
+            margin-bottom: 14px;
+            text-align: center;
+        }
+
+        .pin-dots {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 18px;
+        }
+
+        .pin-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2.5px solid var(--surface3);
+            background: transparent;
+            transition: all .15s;
+        }
+
+        .pin-dot.filled {
+            background: var(--brand);
+            border-color: var(--brand);
+        }
+
+        .pin-dot.error {
+            background: var(--red);
+            border-color: var(--red);
+        }
+
+        .pin-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .pin-key {
+            padding: 15px;
+            border-radius: var(--radius-sm);
+            border: 1.5px solid var(--surface3);
+            background: var(--surface);
+            font-family: var(--syne);
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--ink);
+            cursor: pointer;
+            transition: all .12s;
+            text-align: center;
+        }
+
+        .pin-key:hover {
+            background: var(--surface2);
+        }
+
+        .pin-key.del {
+            font-size: 14px;
+            color: var(--ink3);
+        }
+
+        .pin-err {
+            font-size: 12px;
+            color: var(--red);
+            text-align: center;
+            min-height: 16px;
+            margin-top: 8px;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        .pin-err.show {
+            opacity: 1;
+        }
+
+        .pin-back {
+            width: 100%;
+            margin-top: 12px;
+            padding: 10px;
+            border: none;
+            background: none;
+            font-family: var(--sans);
+            font-size: 13px;
+            color: var(--ink3);
+            cursor: pointer;
+        }
+
+        /* ═══════════ MAIN CONTENT ═══════════ */
+        .content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: var(--surface2);
+            border-radius: var(--radius-sm);
+            padding: 4px;
+            margin-bottom: 16px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 9px 8px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink3);
+            cursor: pointer;
+            transition: all .15s;
+            white-space: nowrap;
+        }
+
+        .tab-btn.active {
+            background: var(--white);
+            color: var(--ink);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+        }
+
+        /* KPIs strip */
+        .kpi-strip {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .kpi-card {
+            background: var(--white);
+            border-radius: var(--radius-sm);
+            padding: 14px 12px;
+            border: 1px solid var(--surface3);
+            text-align: center;
+        }
+
+        .kpi-val {
+            font-family: var(--syne);
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--ink);
+            line-height: 1;
+        }
+
+        .kpi-lbl {
+            font-size: 10px;
+            color: var(--ink3);
+            margin-top: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+        }
+
+        /* Order cards */
+        .order-card {
+            background: var(--white);
+            border-radius: var(--radius);
+            border: 1.5px solid var(--surface3);
+            margin-bottom: 12px;
+            overflow: hidden;
+            transition: box-shadow .2s;
+        }
+
+        .order-card:hover {
+            box-shadow: var(--shadow);
+        }
+
+        .order-card.priority {
+            border-color: var(--brand);
+        }
+
+        .oc-head {
+            padding: 14px 16px 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            border-bottom: 1px solid var(--surface2);
+        }
+
+        .oc-num {
+            font-family: var(--syne);
+            font-size: 16px;
+            font-weight: 800;
+            color: var(--ink);
+            flex: 1;
+        }
+
+        .oc-status {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 100px;
+            white-space: nowrap;
+        }
+
+        .oc-status.ready {
+            background: var(--green-bg);
+            color: var(--green);
+        }
+
+        .oc-status.delivering {
+            background: var(--blue-bg);
+            color: var(--blue);
+        }
+
+        .oc-body {
+            padding: 12px 16px;
+        }
+
+        .oc-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--ink2);
+            margin-bottom: 6px;
+        }
+
+        .oc-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .oc-row strong {
+            color: var(--ink);
+            font-weight: 600;
+        }
+
+        .oc-items {
+            font-size: 12px;
+            color: var(--ink3);
+            margin-top: 2px;
+            line-height: 1.5;
+        }
+
+        .oc-footer {
+            padding: 10px 16px 14px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 11px;
+            border-radius: var(--radius-sm);
+            border: none;
+            font-family: var(--sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all .18s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: var(--brand);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--brand3);
+            transform: translateY(-1px);
+            box-shadow: 0 3px 12px rgba(232, 66, 10, .3);
+        }
+
+        .btn-secondary {
+            background: var(--surface2);
+            color: var(--ink2);
+            border: 1px solid var(--surface3);
+        }
+
+        .btn-secondary:hover {
+            background: var(--surface3);
+        }
+
+        .btn-success {
+            background: var(--green);
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: var(--green2);
+            transform: translateY(-1px);
+        }
+
+        .btn-warning {
+            background: var(--yellow-bg);
+            color: var(--yellow);
+            border: 1px solid #f5d7a0;
+        }
+
+        .btn:disabled {
+            opacity: .5;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Empty state */
+        .empty {
+            text-align: center;
+            padding: 48px 24px;
+        }
+
+        .empty-ico {
+            font-size: 44px;
+            margin-bottom: 12px;
+        }
+
+        .empty-title {
+            font-family: var(--syne);
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .empty-sub {
+            font-size: 13px;
+            color: var(--ink3);
+        }
+
+        /* ═══════════ COMISSÕES PANEL ═══════════ */
+        #commissionsPanel {
+            position: fixed;
+            inset: 0;
+            background: rgba(28, 27, 25, .6);
+            backdrop-filter: blur(3px);
+            z-index: 300;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all .25s;
+        }
+
+        #commissionsPanel.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .cp-box {
+            background: var(--white);
+            border-radius: var(--radius) var(--radius) 0 0;
+            width: 100%;
+            max-width: 480px;
+            max-height: 88vh;
+            overflow-y: auto;
+            padding: 20px;
+            box-shadow: var(--shadow-md);
+            transform: translateY(40px);
+            transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+        }
+
+        #commissionsPanel.open .cp-box {
+            transform: translateY(0);
+        }
+
+        .cp-hdr {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .cp-hdr-title {
+            font-family: var(--syne);
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        .cp-hdr-sub {
+            font-size: 12px;
+            color: var(--ink3);
+            margin-top: 2px;
+        }
+
+        .cp-close {
+            background: var(--surface2);
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            font-size: 15px;
+            cursor: pointer;
+            color: var(--ink2);
+            flex-shrink: 0;
+        }
+
+        .cp-periods {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 16px;
+        }
+
+        .cp-period-btn {
+            padding: 6px 14px;
+            border-radius: 100px;
+            border: 1.5px solid var(--surface3);
+            background: transparent;
+            font-family: var(--sans);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--ink3);
+            cursor: pointer;
+            transition: all .15s;
+        }
+
+        .cp-period-btn.on {
+            background: var(--brand);
+            border-color: var(--brand);
+            color: #fff;
+        }
+
+        .cp-hero {
+            background: linear-gradient(135deg, var(--yellow-bg), #fff8ec);
+            border: 1.5px solid #f5d7a0;
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+
+        .cp-hero-lbl {
+            font-size: 11px;
+            color: var(--yellow);
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 4px;
+        }
+
+        .cp-hero-val {
+            font-family: var(--syne);
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--yellow);
+        }
+
+        .cp-hero-sub {
+            font-size: 12px;
+            color: var(--ink3);
+            margin-top: 4px;
+        }
+
+        .cp-split {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .cp-split-card {
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            border: 1.5px solid var(--surface3);
+        }
+
+        .cp-split-lbl {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            margin-bottom: 4px;
+        }
+
+        .cp-split-val {
+            font-family: var(--syne);
+            font-size: 18px;
+            font-weight: 800;
+        }
+
+        .cp-split-sub {
+            font-size: 10px;
+            color: var(--ink3);
+            margin-top: 2px;
+        }
+
+        .cp-hist-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--ink3);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 10px;
+        }
+
+        .cp-hist-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--surface2);
+        }
+
+        .cp-hist-row:last-child {
+            border-bottom: none;
+        }
+
+        .cp-hist-order {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .cp-hist-meta {
+            font-size: 11px;
+            color: var(--ink3);
+            margin-top: 2px;
+        }
+
+        .cp-hist-amt {
+            font-family: var(--syne);
+            font-size: 14px;
+            font-weight: 700;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .cp-empty {
+            text-align: center;
+            padding: 24px;
+            font-size: 13px;
+            color: var(--ink3);
+        }
+
+        /* ═══════════ CONFIRM DELIVERY MODAL ═══════════ */
+        #confirmModal {
+            position: fixed;
+            inset: 0;
+            background: rgba(28, 27, 25, .65);
+            backdrop-filter: blur(4px);
+            z-index: 400;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            opacity: 0;
+            visibility: hidden;
+            transition: all .25s;
+        }
+
+        #confirmModal.open {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .cm-box {
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 24px;
+            width: 100%;
+            max-width: 340px;
+            box-shadow: var(--shadow-md);
+        }
+
+        .cm-ico {
+            font-size: 36px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .cm-title {
+            font-family: var(--syne);
+            font-size: 17px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+
+        .cm-sub {
+            font-size: 13px;
+            color: var(--ink2);
+            text-align: center;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .cm-order {
+            background: var(--surface);
+            border-radius: var(--radius-sm);
+            padding: 12px;
+            margin-bottom: 18px;
+            font-size: 13px;
+        }
+
+        .cm-order strong {
+            display: block;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .cm-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* ═══════════ TOAST ═══════════ */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--ink);
+            color: #fff;
+            padding: 11px 20px;
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 9999;
+            transition: transform .3s, opacity .3s;
+            opacity: 0;
+            white-space: nowrap;
+            max-width: 90vw;
+        }
+
+        #toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        #toast.success {
+            background: var(--green);
+        }
+
+        #toast.error {
+            background: var(--red);
+        }
+
+        #toast.warning {
+            background: var(--yellow);
+        }
+
+        /* ═══════════ REFRESH BUTTON ═══════════ */
+        .refresh-fab {
+            position: fixed;
+            bottom: 24px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: var(--brand);
+            border: none;
+            border-radius: 50%;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(232, 66, 10, .35);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all .2s;
+        }
+
+        .refresh-fab:hover {
+            background: var(--brand3);
+            transform: scale(1.08);
+        }
+
+        .refresh-fab.spin {
+            animation: spin .6s linear;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ═══════════ SECTION HEADER ═══════════ */
+        .section-hdr {
+            font-family: var(--syne);
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--ink3);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin: 8px 0 10px;
+        }
+
+        /* ═══════════ HISTORY ITEM ═══════════ */
+        .hist-item {
+            background: var(--white);
+            border-radius: var(--radius-sm);
+            padding: 14px;
+            margin-bottom: 8px;
+            border: 1px solid var(--surface3);
+        }
+
+        .hist-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .hist-num {
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .hist-total {
+            font-family: var(--syne);
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--green);
+        }
+
+        .hist-meta {
+            font-size: 12px;
+            color: var(--ink3);
+        }
+
+        .hist-comissao {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--yellow);
+            background: var(--yellow-bg);
+            padding: 2px 8px;
+            border-radius: 100px;
+            display: inline-block;
+            margin-top: 4px;
+        }
+
+        @media (max-width: 480px) {
+            .kpi-strip {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+            }
+
+            .kpi-val {
+                font-size: 17px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ══════════════════════════════ LOGIN ══════════════════════════════ -->
+    <div id="loginScreen">
+        <div class="lx">
+            <div class="lx-brand">🛵 SnapFood</div>
+            <div class="lx-sub">App do Entregador — configure uma vez.</div>
+            <div id="lErr" class="lx-err"></div>
+            <label class="fld-l">URL do Supabase</label>
+            <input class="fld-i" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off"
+                autocorrect="off" spellcheck="false">
+            <label class="fld-l">Chave Anon</label>
+            <input class="fld-i" id="sbKey" type="text" placeholder="eyJ..." autocomplete="off" autocorrect="off"
+                spellcheck="false">
+            <p class="fld-hint">Mesmas credenciais do painel admin.</p>
+            <button class="lx-btn" onclick="doLogin()">Entrar →</button>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════ APP ══════════════════════════════ -->
+    <div id="app" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+
+        <!-- TOPBAR -->
+        <div class="topbar">
+            <span class="tb-logo">🛵</span>
+            <span class="tb-title">Entregas</span>
+            <div id="tbChip" class="tb-chip" style="display:none">
+                <div class="tb-avatar" id="tbAvatar">?</div>
+                <span id="tbName">—</span>
+            </div>
+            <div style="flex:1"></div>
+            <button class="tb-btn-ghost" id="btnComm" onclick="openCommissions()" style="display:none">💰
+                Ganhos</button>
+            <button class="tb-btn-ghost" id="btnShift" onclick="endShift()" style="display:none">⏹ Sair</button>
+            <div class="conn-dot" id="connDot"></div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <div class="content" id="mainContent">
+
+            <!-- KPI strip -->
+            <div class="kpi-strip" id="kpiStrip" style="display:none">
+                <div class="kpi-card">
+                    <div class="kpi-val" id="kpiPending">0</div>
+                    <div class="kpi-lbl">Pendentes</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-val" id="kpiDone">0</div>
+                    <div class="kpi-lbl">Hoje</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-val" id="kpiEarned" style="color:var(--yellow)">R$0</div>
+                    <div class="kpi-lbl">Ganhos</div>
+                </div>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs" id="tabsBar" style="display:none">
+                <button class="tab-btn active" id="tabPending" onclick="switchTab('pending',this)">🛵 Para
+                    entregar</button>
+                <button class="tab-btn" id="tabHistory" onclick="switchTab('history',this)">✅ Histórico</button>
+            </div>
+
+            <!-- Content panels -->
+            <div id="panelPending"></div>
+            <div id="panelHistory" style="display:none"></div>
+
+            <!-- Waiting state (before login) -->
+            <div id="waitingState" class="empty">
+                <div class="empty-ico">🛵</div>
+                <div class="empty-title">App do Entregador</div>
+                <div class="empty-sub">Faça login com as credenciais do Supabase<br>e selecione seu perfil para começar.
+                </div>
+            </div>
+
+        </div>
+
+        <!-- FAB Refresh -->
+        <button class="refresh-fab" id="refreshFab" onclick="refreshOrders()" style="display:none"
+            title="Atualizar pedidos">↻</button>
+    </div>
+
+    <!-- ══════════════════════════════ DRIVER PICKER ══════════════════════════════ -->
+    <div id="driverScreen">
+        <div class="ds-box">
+            <div class="ds-title">👋 Olá, entregador!</div>
+            <div class="ds-sub">Selecione seu nome para começar o expediente.</div>
+            <div id="dsList"></div>
+
+            <!-- PIN step -->
+            <div class="pin-wrap" id="pinStep">
+                <div class="pin-label" id="pinLabel">Digite seu PIN</div>
+                <div class="pin-dots" id="pinDots">
+                    <div class="pin-dot" id="pd0"></div>
+                    <div class="pin-dot" id="pd1"></div>
+                    <div class="pin-dot" id="pd2"></div>
+                    <div class="pin-dot" id="pd3"></div>
+                </div>
+                <div class="pin-grid">
+                    <button class="pin-key" onclick="pinKey('1')">1</button>
+                    <button class="pin-key" onclick="pinKey('2')">2</button>
+                    <button class="pin-key" onclick="pinKey('3')">3</button>
+                    <button class="pin-key" onclick="pinKey('4')">4</button>
+                    <button class="pin-key" onclick="pinKey('5')">5</button>
+                    <button class="pin-key" onclick="pinKey('6')">6</button>
+                    <button class="pin-key" onclick="pinKey('7')">7</button>
+                    <button class="pin-key" onclick="pinKey('8')">8</button>
+                    <button class="pin-key" onclick="pinKey('9')">9</button>
+                    <button class="pin-key" onclick="pinKey('0')" style="grid-column:2">0</button>
+                    <button class="pin-key del" onclick="pinDel()">⌫</button>
+                </div>
+                <div class="pin-err" id="pinErr"></div>
+                <button class="pin-back" onclick="pinBack()">← Voltar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════ CONFIRM DELIVERY MODAL ══════════════════════════════ -->
+    <div id="confirmModal">
+        <div class="cm-box">
+            <div class="cm-ico">🏠</div>
+            <div class="cm-title">Confirmar entrega</div>
+            <div class="cm-sub">O cliente recebeu o pedido e a entrega foi concluída?</div>
+            <div class="cm-order" id="cmOrder">
+                <strong id="cmNum">—</strong>
+                <span id="cmCustomer">—</span>
+            </div>
+            <div class="cm-actions">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancelar</button>
+                <button class="btn btn-success" id="cmConfirmBtn" onclick="doConfirmDelivery()">✅ Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════════════════════════ COMMISSIONS PANEL ══════════════════════════════ -->
+    <div id="commissionsPanel">
+        <div class="cp-box">
+            <div class="cp-hdr">
+                <div>
+                    <div class="cp-hdr-title">💰 Meus Ganhos</div>
+                    <div class="cp-hdr-sub" id="cpDriverName">—</div>
+                </div>
+                <button class="cp-close" onclick="closeCommissions()">✕</button>
+            </div>
+            <div class="cp-periods">
+                <button class="cp-period-btn on" onclick="setCpPeriod('today',this)">Hoje</button>
+                <button class="cp-period-btn" onclick="setCpPeriod('week',this)">Semana</button>
+                <button class="cp-period-btn" onclick="setCpPeriod('month',this)">Mês</button>
+            </div>
+            <div class="cp-hero">
+                <div class="cp-hero-lbl">🛵 Taxa de Entrega Acumulada</div>
+                <div class="cp-hero-val" id="cpTotal">R$ 0,00</div>
+                <div class="cp-hero-sub" id="cpHeroSub">0 entregas</div>
+            </div>
+            <div class="cp-split">
+                <div class="cp-split-card" style="border-color:var(--green)">
+                    <div class="cp-split-lbl" style="color:var(--green)">✅ Creditado</div>
+                    <div class="cp-split-val" style="color:var(--green)" id="cpPaid">R$ 0,00</div>
+                    <div class="cp-split-sub">já pago</div>
+                </div>
+                <div class="cp-split-card" style="border-color:var(--yellow)">
+                    <div class="cp-split-lbl" style="color:var(--yellow)">⏳ Pendente</div>
+                    <div class="cp-split-val" style="color:var(--yellow)" id="cpPending">R$ 0,00</div>
+                    <div class="cp-split-sub">em aberto</div>
+                </div>
+            </div>
+            <div class="cp-hist-title">Histórico de comissões</div>
+            <div id="cpHistory">
+                <div class="cp-empty">Carregando...</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script>
+        const { createClient } = supabase;
+        let sb = null;
+        let currentDriver = null;   // { id, name, pin, role }
+        let shiftId = null;
+        let allOrders = [];         // ready + delivering for this driver
+        let allHistory = [];        // delivered today
+        let cpPeriod = 'today';
+        let pendingConfirmId = null;
+        let motoFeePct = 100;
+
+        // ──────────────────────────────────────────────────
+        //  BOOT
+        // ──────────────────────────────────────────────────
+        window.addEventListener('DOMContentLoaded', () => {
+            const url = ls('sb_url'), key = ls('sb_key');
+            if (url && key) { $('sbUrl').value = url; $('sbKey').value = key; initApp(url, key); }
+        });
+
+        async function doLogin() {
+            const url = $('sbUrl').value.trim(), key = $('sbKey').value.trim();
+            if (!url || !key) { $('lErr').textContent = 'Preencha URL e chave.'; return; }
+            try { await initApp(url, key); }
+            catch (e) { $('lErr').textContent = '❌ ' + (e.message || e); }
+        }
+
+        async function initApp(url, key) {
+            sb = createClient(url, key);
+            // Quick connectivity test
+            const { error } = await sb.from('orders').select('id').limit(1);
+            if (error && error.code !== 'PGRST116') throw new Error(error.message);
+            lsSet('sb_url', url); lsSet('sb_key', key);
+            $('loginScreen').style.display = 'none';
+            $('app').style.display = 'flex';
+            $('connDot').classList.add('on');
+            // Load motoFeePct from staff_settings
+            try {
+                const { data } = await sb.from('staff_settings').select('moto_fee_pct').limit(1);
+                if (data && data.length) motoFeePct = data[0].moto_fee_pct ?? 100;
+            } catch (e) { }
+            openDriverScreen();
+        }
+
+        // ──────────────────────────────────────────────────
+        //  DRIVER PICKER + PIN
+        // ──────────────────────────────────────────────────
+        let pinEntry = '', selectedDriver = null;
+
+        async function openDriverScreen() {
+            pinEntry = ''; selectedDriver = null;
+            $('pinStep').classList.remove('show');
+            $('dsList').style.display = '';
+            try {
+                const { data } = await sb.from('staff')
+                    .select('id,name,role,pin')
+                    .eq('active', true)
+                    .eq('role', 'entregador');
+                renderDriverList(data || []);
+            } catch (e) { renderDriverList([]); }
+            $('driverScreen').classList.add('open');
+        }
+
+        function renderDriverList(list) {
+            const el = $('dsList');
+            if (!list.length) {
+                el.innerHTML = '<div style="text-align:center;padding:20px;font-size:13px;color:var(--ink3)">Nenhum entregador cadastrado.<br>Cadastre no painel admin.</div>';
+                return;
+            }
+            el.innerHTML = list.map(s => `
+        <div class="ds-item" onclick='selectDriver(${JSON.stringify(s)})'>
+            <div class="ds-avatar">${s.name[0].toUpperCase()}</div>
+            <div>
+                <div class="ds-name">${esc(s.name)}</div>
+                <div class="ds-role">🛵 Entregador</div>
+            </div>
+            <span style="font-size:18px;color:var(--ink3);margin-left:auto">›</span>
+        </div>`).join('');
+        }
+
+        function selectDriver(obj) {
+            selectedDriver = (typeof obj === 'string') ? JSON.parse(obj) : obj;
+            pinEntry = '';
+            updatePinDots();
+            $('pinLabel').textContent = 'PIN de ' + selectedDriver.name;
+            $('pinErr').classList.remove('show');
+            $('dsList').style.display = 'none';
+            $('pinStep').classList.add('show');
+        }
+
+        function pinKey(d) {
+            if (pinEntry.length >= 4) return;
+            pinEntry += d;
+            updatePinDots();
+            if (pinEntry.length === 4) setTimeout(checkPin, 120);
+        }
+        function pinDel() { pinEntry = pinEntry.slice(0, -1); updatePinDots(); }
+        function pinBack() {
+            pinEntry = '';
+            updatePinDots();
+            $('pinStep').classList.remove('show');
+            $('dsList').style.display = '';
+            $('pinErr').classList.remove('show');
+        }
+        function updatePinDots() {
+            for (let i = 0; i < 4; i++) {
+                $('pd' + i).className = 'pin-dot' + (i < pinEntry.length ? ' filled' : '');
+            }
+        }
+        async function checkPin() {
+            if (pinEntry !== selectedDriver.pin) {
+                for (let i = 0; i < 4; i++) $('pd' + i).className = 'pin-dot error';
+                const e = $('pinErr'); e.textContent = '❌ PIN incorreto.'; e.classList.add('show');
+                setTimeout(() => { pinEntry = ''; updatePinDots(); }, 800);
+                return;
+            }
+            // ✅ PIN correct
+            currentDriver = selectedDriver;
+            $('driverScreen').classList.remove('open');
+            // Update topbar
+            $('tbChip').style.display = 'flex';
+            $('tbAvatar').textContent = currentDriver.name[0].toUpperCase();
+            $('tbName').textContent = currentDriver.name;
+            $('btnComm').style.display = '';
+            $('btnShift').style.display = '';
+            $('kpiStrip').style.display = 'grid';
+            $('tabsBar').style.display = 'flex';
+            $('waitingState').style.display = 'none';
+            $('refreshFab').style.display = 'flex';
+            // Commissions panel label
+            $('cpDriverName').textContent = currentDriver.name + ' · Entregador';
+            await registerShiftStart();
+            await loadOrders();
+            setupRealtime();
+            toast('✅ Olá, ' + currentDriver.name + '!', 'success');
+        }
+
+        // ──────────────────────────────────────────────────
+        //  SHIFT
+        // ──────────────────────────────────────────────────
+        async function registerShiftStart() {
+            if (!sb || !currentDriver) return;
+            const today = new Date().toISOString().slice(0, 10);
+            try {
+                const { data: existing } = await sb.from('staff_shifts')
+                    .select('id').eq('staff_id', currentDriver.id).eq('shift_date', today).limit(1);
+                if (existing && existing.length) { shiftId = existing[0].id; toast('↩️ Expediente retomado', 'success'); return; }
+                const { data: ins } = await sb.from('staff_shifts').insert({
+                    staff_id: currentDriver.id, shift_date: today, started_at: new Date().toISOString()
+                }).select().single();
+                if (ins) shiftId = ins.id;
+            } catch (e) { }
+        }
+
+        async function endShift() {
+            if (!currentDriver) return;
+            if (!confirm('Encerrar expediente de ' + currentDriver.name + '?')) return;
+            if (shiftId && sb) {
+                try {
+                    const today = new Date(); today.setHours(0, 0, 0, 0);
+                    const { data: orders } = await sb.from('orders')
+                        .select('delivery_fee').eq('deliverer_id', currentDriver.id)
+                        .eq('status', 'delivered').gte('created_at', today.toISOString());
+                    const totalDeliveries = (orders || []).length;
+                    const totalFees = (orders || []).reduce((s, o) => s + Number(o.delivery_fee || 0), 0);
+                    await sb.from('staff_shifts').update({
+                        ended_at: new Date().toISOString(),
+                        orders_count: totalDeliveries,
+                        total_revenue: totalFees
+                    }).eq('id', shiftId);
+                } catch (e) { }
+            }
+            // Reset UI
+            currentDriver = null; shiftId = null;
+            $('tbChip').style.display = 'none';
+            $('btnComm').style.display = 'none';
+            $('btnShift').style.display = 'none';
+            $('kpiStrip').style.display = 'none';
+            $('tabsBar').style.display = 'none';
+            $('refreshFab').style.display = 'none';
+            $('waitingState').style.display = 'block';
+            $('panelPending').innerHTML = '';
+            $('panelHistory').innerHTML = '';
+            allOrders = []; allHistory = [];
+            toast('👋 Expediente encerrado', 'success');
+            setTimeout(openDriverScreen, 600);
+        }
+
+        // ──────────────────────────────────────────────────
+        //  REALTIME
+        // ──────────────────────────────────────────────────
+        function setupRealtime() {
+            if (!sb || !currentDriver) return;
+            sb.channel('driver-orders-' + currentDriver.id)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
+                    const o = payload.new;
+                    if (!o) return;
+                    // Only care about orders assigned to this driver
+                    if (o.deliverer_id != currentDriver.id && payload.eventType !== 'UPDATE') return;
+                    if (o.order_type !== 'delivery') return;
+                    await loadOrders();
+                })
+                .subscribe();
+        }
+
+        // ──────────────────────────────────────────────────
+        //  LOAD ORDERS
+        // ──────────────────────────────────────────────────
+        async function loadOrders() {
+            if (!sb || !currentDriver) return;
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+            try {
+                // Active: ready (waiting pick-up) OR delivering (in transit) — assigned to me
+                const { data: active } = await sb.from('orders')
+                    .select('*')
+                    .eq('deliverer_id', currentDriver.id)
+                    .eq('order_type', 'delivery')
+                    .in('status', ['ready', 'delivering'])
+                    .order('created_at', { ascending: true });
+                allOrders = active || [];
+
+                // History: delivered today by me
+                const { data: hist } = await sb.from('orders')
+                    .select('*')
+                    .eq('deliverer_id', currentDriver.id)
+                    .eq('order_type', 'delivery')
+                    .eq('status', 'delivered')
+                    .gte('created_at', today.toISOString())
+                    .order('delivered_at', { ascending: false });
+                allHistory = hist || [];
+            } catch (e) {
+                toast('Erro ao carregar pedidos', 'error');
+            }
+            renderAll();
+        }
+
+        async function refreshOrders() {
+            const fab = $('refreshFab');
+            fab.classList.add('spin');
+            await loadOrders();
+            setTimeout(() => fab.classList.remove('spin'), 600);
+        }
+
+        // ──────────────────────────────────────────────────
+        //  RENDER
+        // ──────────────────────────────────────────────────
+        let currentTab = 'pending';
+
+        function switchTab(tab, btn) {
+            currentTab = tab;
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            $('panelPending').style.display = tab === 'pending' ? 'block' : 'none';
+            $('panelHistory').style.display = tab === 'history' ? 'block' : 'none';
+        }
+
+        function renderAll() {
+            renderKpis();
+            renderPending();
+            renderHistory();
+        }
+
+        function renderKpis() {
+            const todayEarned = allHistory.reduce((s, o) => s + Number(o.delivery_fee || 0), 0) * motoFeePct / 100;
+            $('kpiPending').textContent = allOrders.length;
+            $('kpiDone').textContent = allHistory.length;
+            $('kpiEarned').textContent = 'R$' + todayEarned.toFixed(0);
+        }
+
+        function renderPending() {
+            const el = $('panelPending');
+            if (!allOrders.length) {
+                el.innerHTML = `<div class="empty">
+            <div class="empty-ico">✅</div>
+            <div class="empty-title">Nenhuma entrega pendente</div>
+            <div class="empty-sub">Novos pedidos aparecerão aqui<br>quando o admin atribuir.</div>
+        </div>`;
+                return;
+            }
+            // Sort: delivering first, then ready
+            const sorted = [...allOrders].sort((a, b) => {
+                const order = { delivering: 0, ready: 1 };
+                return (order[a.status] ?? 9) - (order[b.status] ?? 9);
+            });
+            el.innerHTML = sorted.map(o => buildOrderCard(o)).join('');
+        }
+
+        function buildOrderCard(o) {
+            const isDelivering = o.status === 'delivering';
+            const statusLabel = isDelivering ? '🛵 Em rota' : '✔️ Pronto p/ retirar';
+            const statusClass = isDelivering ? 'delivering' : 'ready';
+            const fee = Number(o.delivery_fee || 0);
+            const earned = (fee * motoFeePct / 100).toFixed(2).replace('.', ',');
+
+            let items = [];
+            try { items = typeof o.items === 'string' ? JSON.parse(o.items) : (o.items || []); } catch (e) { }
+            const itemsText = items.map(i => `${i.qty}x ${esc(i.name)}`).join(' · ') || '—';
+
+            const addr = o.address || '—';
+
+            const actions = isDelivering
+                ? `<button class="btn btn-success" onclick="openConfirmModal(${o.id})">🏠 Confirmar entrega</button>`
+                : `<button class="btn btn-primary" onclick="startDelivery(${o.id})">🛵 Iniciar entrega</button>`;
+
+            return `<div class="order-card ${isDelivering ? 'priority' : ''}">
+        <div class="oc-head">
+            <div>
+                <div class="oc-num">${esc(o.order_number || '#' + o.id)}</div>
+                <div class="oc-items">${itemsText}</div>
+            </div>
+            <span class="oc-status ${statusClass}">${statusLabel}</span>
+        </div>
+        <div class="oc-body">
+            <div class="oc-row">👤 <strong>${esc(o.customer_name)}</strong>
+                ${o.customer_phone ? `<a href="tel:${o.customer_phone}" style="margin-left:6px;font-size:12px;color:var(--brand);text-decoration:none;">📞 Ligar</a>` : ''}
+            </div>
+            <div class="oc-row">📍 ${esc(addr)}</div>
+            <div class="oc-row">💵 <strong>R$ ${Number(o.total || 0).toFixed(2).replace('.', ',')} </strong>
+                <span style="font-size:11px;color:var(--ink3)">· ${payLabel(o.payment_method)}</span>
+            </div>
+            <div class="oc-row" style="color:var(--yellow)">🛵 Taxa: <strong style="color:var(--yellow)">R$ ${earned}</strong>
+                <span style="font-size:11px;color:var(--ink3)">(${motoFeePct}% de R$ ${fee.toFixed(2).replace('.', ',')})</span>
+            </div>
+            ${o.notes ? `<div class="oc-row" style="color:var(--ink3)">📝 ${esc(o.notes)}</div>` : ''}
+        </div>
+        <div class="oc-footer">${actions}</div>
+    </div>`;
+        }
+
+        function renderHistory() {
+            const el = $('panelHistory');
+            if (!allHistory.length) {
+                el.innerHTML = `<div class="empty">
+            <div class="empty-ico">📋</div>
+            <div class="empty-title">Nenhuma entrega hoje</div>
+            <div class="empty-sub">Suas entregas concluídas hoje<br>aparecerão aqui.</div>
+        </div>`;
+                return;
+            }
+            const totalFee = allHistory.reduce((s, o) => s + Number(o.delivery_fee || 0), 0) * motoFeePct / 100;
+            const summary = `<div style="background:var(--yellow-bg);border:1.5px solid #f5d7a0;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-size:11px;color:var(--yellow);font-weight:700;text-transform:uppercase;letter-spacing:.4px">Total ganho hoje</div><div style="font-family:var(--syne);font-size:20px;font-weight:800;color:var(--yellow)">R$ ${totalFee.toFixed(2).replace('.', ',')}</div></div>
+        <div style="font-size:24px">🏆</div>
+    </div>`;
+            el.innerHTML = summary + allHistory.map(o => {
+                const fee = (Number(o.delivery_fee || 0) * motoFeePct / 100).toFixed(2).replace('.', ',');
+                const dt = o.delivered_at ? new Date(o.delivered_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
+                return `<div class="hist-item">
+            <div class="hist-head">
+                <span class="hist-num">${esc(o.order_number || '#' + o.id)}</span>
+                <span class="hist-total">+R$ ${fee}</span>
+            </div>
+            <div class="hist-meta">👤 ${esc(o.customer_name)} · ⏱ ${dt}</div>
+            <div class="hist-meta">📍 ${esc(o.address || '—')}</div>
+        </div>`;
+            }).join('');
+        }
+
+        // ──────────────────────────────────────────────────
+        //  ACTIONS
+        // ──────────────────────────────────────────────────
+        async function startDelivery(orderId) {
+            const btn = document.querySelector(`[onclick="startDelivery(${orderId})"]`);
+            if (btn) { btn.disabled = true; btn.textContent = '⏳ Atualizando...'; }
+            try {
+                const now = new Date().toISOString();
+                const { error } = await sb.from('orders').update({
+                    status: 'delivering',
+                    updated_at: now
+                }).eq('id', orderId);
+                if (error) throw error;
+                // Status history
+                try { await sb.from('order_status_history').insert({ order_id: orderId, status: 'delivering', note: 'Entregador saiu para entrega', created_at: now }); } catch (e) { }
+                toast('🛵 Saindo para entrega!', 'success');
+                await loadOrders();
+            } catch (e) {
+                toast('❌ Erro: ' + (e.message || e), 'error');
+                if (btn) { btn.disabled = false; btn.textContent = '🛵 Iniciar entrega'; }
+            }
+        }
+
+        function openConfirmModal(orderId) {
+            const o = allOrders.find(x => x.id == orderId);
+            if (!o) return;
+            pendingConfirmId = orderId;
+            $('cmNum').textContent = o.order_number || '#' + o.id;
+            $('cmCustomer').textContent = o.customer_name + (o.address ? ' · ' + o.address : '');
+            $('cmConfirmBtn').disabled = false;
+            $('cmConfirmBtn').textContent = '✅ Confirmar';
+            $('confirmModal').classList.add('open');
+        }
+
+        function closeConfirmModal() {
+            $('confirmModal').classList.remove('open');
+            pendingConfirmId = null;
+        }
+
+        async function doConfirmDelivery() {
+            if (!pendingConfirmId) return;
+            const orderId = pendingConfirmId;
+            const btn = $('cmConfirmBtn');
+            btn.disabled = true; btn.textContent = '⏳ Salvando...';
+
+            try {
+                const now = new Date().toISOString();
+                const o = allOrders.find(x => x.id == orderId);
+                const fee = Number(o?.delivery_fee || 0);
+                const earned = fee * motoFeePct / 100;
+
+                // Update order to delivered
+                const { error } = await sb.from('orders').update({
+                    status: 'delivered',
+                    delivered_at: now,
+                    updated_at: now,
+                    delivery_fee_paid: true,
+                }).eq('id', orderId);
+                if (error) throw error;
+
+                // Credit commission to deliverer
+                if (earned > 0 && currentDriver) {
+                    try {
+                        await sb.from('staff_commissions').insert({
+                            staff_id: currentDriver.id,
+                            order_id: orderId,
+                            type: 'taxa_entrega',
+                            amount: parseFloat(earned.toFixed(2)),
+                            order_type: 'delivery',
+                            paid: true,
+                            created_at: now
+                        });
+                    } catch (e) { /* tabela pode não existir */ }
+                }
+
+                // Status history
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: orderId, status: 'delivered',
+                        note: `Entrega confirmada pelo entregador ${currentDriver?.name || ''}. Taxa: R$ ${earned.toFixed(2)}.`,
+                        created_at: now
+                    });
+                } catch (e) { }
+
+                closeConfirmModal();
+                toast(`🏠 Entregue! +R$ ${earned.toFixed(2).replace('.', ',')} creditado.`, 'success');
+                await loadOrders();
+
+                // Auto-switch to history tab after delivery
+                if (!allOrders.length) {
+                    switchTab('history', $('tabHistory'));
+                }
+            } catch (e) {
+                toast('❌ Erro: ' + (e.message || e), 'error');
+                btn.disabled = false; btn.textContent = '✅ Confirmar';
+            }
+        }
+
+        // ──────────────────────────────────────────────────
+        //  COMMISSIONS PANEL
+        // ──────────────────────────────────────────────────
+        function openCommissions() {
+            if (!currentDriver) return;
+            $('commissionsPanel').classList.add('open');
+            loadCommissions();
+        }
+        function closeCommissions() { $('commissionsPanel').classList.remove('open'); }
+
+        function setCpPeriod(period, btn) {
+            cpPeriod = period;
+            document.querySelectorAll('.cp-period-btn').forEach(b => b.classList.remove('on'));
+            btn.classList.add('on');
+            loadCommissions();
+        }
+
+        async function loadCommissions() {
+            if (!currentDriver || !sb) return;
+            $('cpHistory').innerHTML = '<div class="cp-empty">Carregando...</div>';
+
+            const now = new Date();
+            const today = new Date(now); today.setHours(0, 0, 0, 0);
+            let since;
+            if (cpPeriod === 'today') { since = today; }
+            else if (cpPeriod === 'week') { since = new Date(today); since.setDate(since.getDate() - since.getDay()); }
+            else { since = new Date(today.getFullYear(), today.getMonth(), 1); }
+
+            try {
+                // Try from staff_commissions table
+                const { data: comms, error: e1 } = await sb
+                    .from('staff_commissions')
+                    .select('id, amount, paid, created_at, order_id, orders(order_number, customer_name)')
+                    .eq('staff_id', currentDriver.id)
+                    .eq('type', 'taxa_entrega')
+                    .gte('created_at', since.toISOString())
+                    .order('created_at', { ascending: false });
+
+                if (e1) throw e1;
+
+                const rows = comms || [];
+                const paid = rows.filter(r => r.paid).reduce((s, r) => s + Number(r.amount), 0);
+                const pending = rows.filter(r => !r.paid).reduce((s, r) => s + Number(r.amount), 0);
+
+                $('cpTotal').textContent = 'R$ ' + fmtR(paid + pending);
+                $('cpHeroSub').textContent = rows.length + ' entrega(s)';
+                $('cpPaid').textContent = 'R$ ' + fmtR(paid);
+                $('cpPending').textContent = 'R$ ' + fmtR(pending);
+
+                if (!rows.length) { $('cpHistory').innerHTML = '<div class="cp-empty">Nenhuma comissão no período.</div>'; return; }
+
+                $('cpHistory').innerHTML = rows.map(r => {
+                    const o = r.orders || {};
+                    const dt = new Date(r.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                    const cls = r.paid ? 'var(--green)' : 'var(--yellow)';
+                    return `<div class="cp-hist-row">
+                <div style="flex:1">
+                    <div class="cp-hist-order">${esc(o.order_number || '#' + r.order_id)} · ${esc(o.customer_name || '—')}</div>
+                    <div class="cp-hist-meta">${dt} · ${r.paid ? '✅ Creditado' : '⏳ Pendente'}</div>
+                </div>
+                <div class="cp-hist-amt" style="color:${cls}">R$ ${fmtR(r.amount)}</div>
+            </div>`;
+                }).join('');
+
+            } catch (e) {
+                // Fallback: calculate from orders directly
+                try {
+                    const { data: orders } = await sb.from('orders')
+                        .select('id,order_number,customer_name,delivery_fee,status,delivered_at,created_at')
+                        .eq('deliverer_id', currentDriver.id)
+                        .eq('order_type', 'delivery')
+                        .neq('status', 'cancelled')
+                        .gte('created_at', since.toISOString())
+                        .order('created_at', { ascending: false });
+
+                    const ords = orders || [];
+                    let paid = 0, pending = 0;
+                    ords.forEach(o => {
+                        const taxa = Number(o.delivery_fee || 0) * motoFeePct / 100;
+                        if (o.status === 'delivered') paid += taxa;
+                        else pending += taxa;
+                    });
+
+                    $('cpTotal').textContent = 'R$ ' + fmtR(paid + pending);
+                    $('cpHeroSub').textContent = ords.length + ' entrega(s) · dados calculados';
+                    $('cpPaid').textContent = 'R$ ' + fmtR(paid);
+                    $('cpPending').textContent = 'R$ ' + fmtR(pending);
+
+                    if (!ords.length) { $('cpHistory').innerHTML = '<div class="cp-empty">Nenhuma entrega no período.</div>'; return; }
+
+                    $('cpHistory').innerHTML = ords.map(o => {
+                        const taxa = Number(o.delivery_fee || 0) * motoFeePct / 100;
+                        const isPaid = o.status === 'delivered';
+                        const dt = new Date(o.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                        return `<div class="cp-hist-row">
+                    <div style="flex:1">
+                        <div class="cp-hist-order">${esc(o.order_number || '#' + o.id)} · ${esc(o.customer_name || '—')}</div>
+                        <div class="cp-hist-meta">${dt} · ${isPaid ? '✅ Creditado' : '⏳ Pendente'}</div>
+                    </div>
+                    <div class="cp-hist-amt" style="color:${isPaid ? 'var(--green)' : 'var(--yellow)'}">R$ ${fmtR(taxa)}</div>
+                </div>`;
+                    }).join('');
+                } catch (e2) {
+                    $('cpHistory').innerHTML = '<div class="cp-empty">Erro ao carregar comissões.</div>';
+                }
+            }
+        }
+
+        // ──────────────────────────────────────────────────
+        //  HELPERS
+        // ──────────────────────────────────────────────────
+        function payLabel(m) {
+            return { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' }[m] || (m || '—').toUpperCase();
+        }
+        function fmtR(n) { return (+(n || 0)).toFixed(2).replace('.', ','); }
+        function esc(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+        function toast(msg, type = '') {
+            const t = $('toast'); t.textContent = msg; t.className = 'show' + (type ? ' ' + type : '');
+            clearTimeout(t._to); t._to = setTimeout(() => { t.className = ''; }, 3200);
+        }
+        function $(id) { return document.getElementById(id); }
+        function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+        function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+    </script>
+
+</body>
+
+</html>
