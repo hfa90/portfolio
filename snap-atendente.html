@@ -4407,6 +4407,8 @@
             const now = new Date().toISOString();
 
             try {
+                // Insere APENAS em order_edit_requests — NÃO toca no pedido original
+                // Isso evita que o admin receba o pedido como se fosse novo/editado
                 await sb.from('order_edit_requests').insert({
                     order_id: order.id,
                     requested_by: currentAttendant.id,
@@ -4425,12 +4427,6 @@
                     status: 'pending',
                     created_at: now,
                 });
-
-                // Sinaliza pedido com edição pendente
-                await sb.from('orders').update({
-                    has_pending_edit: true,
-                    updated_at: now,
-                }).eq('id', order.id);
 
                 _pendingTakeovers.add(order.id);
                 renderTableCards();

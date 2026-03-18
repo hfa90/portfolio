@@ -2102,6 +2102,131 @@
             line-height: 1.5;
         }
 
+        /* ===== TAKEOVER MODAL (Assumir Mesa) ===== */
+        #takeoverModal {
+            position: fixed;
+            inset: 0;
+            z-index: 9100;
+            background: rgba(28,27,25,.65);
+            backdrop-filter: blur(5px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        #takeoverModal.open {
+            display: flex;
+        }
+        .tv-box {
+            background: var(--white);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 20px 60px rgba(0,0,0,.18);
+            overflow: hidden;
+        }
+        .tv-hdr {
+            background: linear-gradient(135deg, #6C4BFF 0%, #8B6AFF 100%);
+            padding: 22px 24px 18px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .tv-hdr-ico {
+            font-size: 28px;
+            line-height: 1;
+        }
+        .tv-hdr-text {}
+        .tv-hdr-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 16px;
+            color: #fff;
+        }
+        .tv-hdr-sub {
+            font-size: 12px;
+            color: rgba(255,255,255,.75);
+            margin-top: 2px;
+        }
+        .tv-body {
+            padding: 22px 24px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .tv-info-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: var(--ink2);
+        }
+        .tv-info-row strong {
+            color: var(--ink1);
+        }
+        .tv-arrow-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 16px;
+            background: var(--surface2);
+            border-radius: 12px;
+            font-size: 14px;
+        }
+        .tv-att-from {
+            flex: 1;
+            text-align: center;
+        }
+        .tv-att-from span, .tv-att-to span {
+            display: block;
+            font-size: 10px;
+            color: var(--ink3);
+            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: .05em;
+        }
+        .tv-att-from strong { color: var(--ink2); }
+        .tv-arrow-icon {
+            font-size: 20px;
+            color: #6C4BFF;
+        }
+        .tv-att-to {
+            flex: 1;
+            text-align: center;
+        }
+        .tv-att-to strong { color: #6C4BFF; }
+        .tv-actions {
+            display: flex;
+            gap: 10px;
+            padding-top: 4px;
+        }
+        .tv-btn-reject {
+            flex: 1;
+            padding: 13px;
+            border-radius: 12px;
+            border: 1.5px solid var(--surface3);
+            background: var(--white);
+            color: var(--ink2);
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .tv-btn-reject:hover { background: var(--surface2); }
+        .tv-btn-approve {
+            flex: 2;
+            padding: 13px;
+            border-radius: 12px;
+            border: none;
+            background: #6C4BFF;
+            color: #fff;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all .2s;
+        }
+        .tv-btn-approve:hover { background: #5B38EE; }
+
         .bell-btn {
             position: relative;
             width: 36px;
@@ -7829,8 +7954,22 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 }, (payload) => {
                     const req = payload.new;
                     if (req.status !== 'pending') return;
-                    _pendingEditRequests.push(req);
-                    showEditRequestAlert(req);
+
+                    // Detectar tipo antes de rotear para o fluxo correto
+                    let isTakeover = false;
+                    try {
+                        const before = typeof req.items_before === 'string'
+                            ? JSON.parse(req.items_before) : req.items_before;
+                        if (before && before._type === 'takeover') isTakeover = true;
+                    } catch (e) { }
+
+                    if (isTakeover) {
+                        // Takeover vai para popup próprio — não interfere com edição de itens
+                        showTakeoverAlert(req);
+                    } else {
+                        _pendingEditRequests.push(req);
+                        showEditRequestAlert(req);
+                    }
                 })
                 .subscribe();
         }
@@ -7903,92 +8042,55 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             try { playNotificationSound(); } catch (e) { }
         }
 
-        /** Admin APROVA — lida com takeover de mesa OU edição de itens */
+        /** Admin APROVA — edição de itens do pedido */
         async function approveEditRequest() {
             if (!_currentEditRequest) return;
             const req = _currentEditRequest;
+            const after = typeof req.items_after === 'string'
+                ? JSON.parse(req.items_after) : req.items_after || [];
+            const sub = after.reduce((s, i) => s + (+(i.price || 0)) * (+(i.qty || 1)), 0);
             const now = new Date().toISOString();
-
-            const parseJSON = (raw) => {
-                try { return typeof raw === 'string' ? JSON.parse(raw) : (raw || []); } catch (e) { return []; }
-            };
-            const before = parseJSON(req.items_before);
-            const after = parseJSON(req.items_after);
-            const isTakeover = before && before._type === 'takeover';
-
             try {
-                if (isTakeover) {
-                    // Transfere atendimento: atualiza attendant_id do pedido
-                    await sb.from('orders').update({
-                        attendant_id: after.new_attendant_id,
-                        has_pending_edit: false,
-                        updated_at: now,
-                    }).eq('id', req.order_id);
+                await sb.from('orders').update({
+                    items: JSON.stringify(after),
+                    subtotal: sub,
+                    total: sub,
+                    has_pending_edit: false,
+                    last_edited_at: now,
+                    updated_at: now,
+                }).eq('id', req.order_id);
 
-                    await sb.from('order_edit_requests').update({
-                        status: 'approved', reviewed_by: 'admin', reviewed_at: now,
-                    }).eq('id', req.id);
+                await sb.from('order_edit_requests').update({
+                    status: 'approved', reviewed_by: 'admin', reviewed_at: now,
+                }).eq('id', req.id);
 
-                    try {
-                        await sb.from('order_status_history').insert({
-                            order_id: req.order_id, status: 'confirmed',
-                            note: `✅ Mesa transferida para ${after.new_attendant_name || '—'} com aprovação do admin.`,
-                        });
-                    } catch (e) { }
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: req.order_id, status: 'confirmed',
+                        note: '✅ Edição aprovada pelo admin. Itens atualizados — cozinha notificada.'
+                    });
+                } catch (e) { }
 
-                    showToast(`✅ Mesa transferida para ${after.new_attendant_name || '—'} com sucesso!`, 'success');
-                } else {
-                    // Edição de itens normal
-                    const sub = after.reduce((s, i) => s + (+(i.price || 0)) * (+(i.qty || 1)), 0);
-                    await sb.from('orders').update({
-                        items: JSON.stringify(after),
-                        subtotal: sub,
-                        total: sub,
-                        has_pending_edit: false,
-                        last_edited_at: now,
-                        updated_at: now,
-                    }).eq('id', req.order_id);
-
-                    await sb.from('order_edit_requests').update({
-                        status: 'approved', reviewed_by: 'admin', reviewed_at: now,
-                    }).eq('id', req.id);
-
-                    try {
-                        await sb.from('order_status_history').insert({
-                            order_id: req.order_id, status: 'confirmed',
-                            note: '✅ Edição aprovada pelo admin. Itens atualizados — cozinha notificada.'
-                        });
-                    } catch (e) { }
-
-                    showToast('✅ Edição aprovada! Cozinha notificada automaticamente.', 'success');
-                    loadOrders();
-                }
-
+                showToast('✅ Edição aprovada! Cozinha notificada automaticamente.', 'success');
                 _currentEditRequest = null;
                 _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
                 document.getElementById('editRequestModal').classList.remove('open');
+                loadOrders();
             } catch (e) { showToast('❌ Erro ao aprovar: ' + (e.message || e), 'error'); }
         }
 
-        /** Admin REJEITA — lida com takeover de mesa OU edição de itens */
+        /** Admin REJEITA — edição de itens do pedido */
         async function rejectEditRequest() {
             if (!_currentEditRequest) return;
             const req = _currentEditRequest;
+            const before = typeof req.items_before === 'string'
+                ? JSON.parse(req.items_before) : req.items_before || [];
             const now = new Date().toISOString();
-
-            const parseJSON = (raw) => {
-                try { return typeof raw === 'string' ? JSON.parse(raw) : (raw || []); } catch (e) { return []; }
-            };
-            const before = parseJSON(req.items_before);
-            const isTakeover = before && before._type === 'takeover';
-
             try {
-                // Limpar flag has_pending_edit do pedido
                 await sb.from('orders').update({
+                    items: JSON.stringify(before),
                     has_pending_edit: false,
                     updated_at: now,
-                    // Se não é takeover, restaura itens originais
-                    ...(isTakeover ? {} : { items: JSON.stringify(Array.isArray(before) ? before : []) }),
                 }).eq('id', req.order_id);
 
                 await sb.from('order_edit_requests').update({
@@ -7998,23 +8100,129 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: req.order_id, status: 'confirmed',
-                        note: isTakeover
-                            ? '✗ Solicitação de assumir mesa recusada pelo admin.'
-                            : '✗ Edição recusada pelo admin. Itens originais mantidos.',
+                        note: '✗ Edição recusada pelo admin. Itens originais mantidos.'
                     });
                 } catch (e) { }
 
-                showToast(isTakeover
-                    ? '✗ Transferência de mesa recusada.'
-                    : '✗ Edição recusada. Pedido mantido com itens originais.', 'warning');
+                showToast('✗ Edição recusada. Pedido mantido com itens originais.', 'warning');
                 _currentEditRequest = null;
                 _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
                 document.getElementById('editRequestModal').classList.remove('open');
             } catch (e) { showToast('❌ Erro ao recusar: ' + (e.message || e), 'error'); }
         }
 
+        /* ══════════════════════════════════════════
+           TAKEOVER DE MESA — Fluxo próprio, separado de edição de itens
+        ══════════════════════════════════════════ */
+        let _currentTakeoverReq = null;
+
+        async function showTakeoverAlert(req) {
+            _currentTakeoverReq = req;
+
+            let before = {}, after = {};
+            try {
+                before = typeof req.items_before === 'string' ? JSON.parse(req.items_before) : req.items_before || {};
+                after  = typeof req.items_after  === 'string' ? JSON.parse(req.items_after)  : req.items_after  || {};
+            } catch (e) { }
+
+            // Preenche o popup de takeover
+            document.getElementById('tvMesa').textContent      = 'Mesa ' + (before.mesa || '—');
+            document.getElementById('tvCustomer').textContent  = before.customer || '—';
+            document.getElementById('tvFromAtt').textContent   = before.current_attendant_name || '—';
+            document.getElementById('tvToAtt').textContent     = after.new_attendant_name || '—';
+
+            document.getElementById('takeoverModal').classList.add('open');
+            try { playNotificationSound(); } catch (e) { }
+        }
+
+        function closeTakeoverModal() {
+            document.getElementById('takeoverModal').classList.remove('open');
+            _currentTakeoverReq = null;
+        }
+
+        async function approveTakeover() {
+            if (!_currentTakeoverReq) return;
+            const req = _currentTakeoverReq;
+            const now = new Date().toISOString();
+            let after = {};
+            try { after = typeof req.items_after === 'string' ? JSON.parse(req.items_after) : req.items_after || {}; } catch (e) { }
+
+            try {
+                // Atualiza attendant_id no pedido — sem tocar em itens, totais ou status
+                await sb.from('orders').update({
+                    attendant_id: after.new_attendant_id,
+                    updated_at: now,
+                }).eq('id', req.order_id);
+
+                await sb.from('order_edit_requests').update({
+                    status: 'approved', reviewed_by: 'admin', reviewed_at: now,
+                }).eq('id', req.id);
+
+                try {
+                    await sb.from('order_status_history').insert({
+                        order_id: req.order_id, status: req.current_status || 'confirmed',
+                        note: `✅ Mesa transferida para ${after.new_attendant_name || '—'} com aprovação do admin. Taxa de serviço será creditada ao novo atendente.`,
+                    });
+                } catch (e) { }
+
+                showToast(`✅ Mesa transferida para ${after.new_attendant_name || '—'}!`, 'success');
+                closeTakeoverModal();
+            } catch (e) {
+                showToast('❌ Erro ao aprovar transferência: ' + (e.message || e), 'error');
+            }
+        }
+
+        async function rejectTakeover() {
+            if (!_currentTakeoverReq) return;
+            const req = _currentTakeoverReq;
+            const now = new Date().toISOString();
+
+            try {
+                await sb.from('order_edit_requests').update({
+                    status: 'rejected', reviewed_by: 'admin', reviewed_at: now,
+                }).eq('id', req.id);
+
+                showToast('✗ Solicitação de assumir mesa recusada.', 'warning');
+                closeTakeoverModal();
+            } catch (e) {
+                showToast('❌ Erro ao recusar: ' + (e.message || e), 'error');
+            }
+        }
+
 
     </script>
+
+    <!-- ══ TAKEOVER REQUEST MODAL (Assumir Mesa) ══ -->
+    <div id="takeoverModal">
+        <div class="tv-box">
+            <div class="tv-hdr">
+                <div class="tv-hdr-ico">🔄</div>
+                <div class="tv-hdr-text">
+                    <div class="tv-hdr-title">Solicitação de Assumir Mesa</div>
+                    <div class="tv-hdr-sub">Atendente quer assumir o atendimento de outra mesa</div>
+                </div>
+            </div>
+            <div class="tv-body">
+                <div class="tv-info-row">🍽️ Mesa: <strong id="tvMesa">—</strong></div>
+                <div class="tv-info-row">👤 Cliente: <strong id="tvCustomer">—</strong></div>
+                <div class="tv-arrow-row">
+                    <div class="tv-att-from">
+                        <span>Atendente atual</span>
+                        <strong id="tvFromAtt">—</strong>
+                    </div>
+                    <div class="tv-arrow-icon">→</div>
+                    <div class="tv-att-to">
+                        <span>Solicitante</span>
+                        <strong id="tvToAtt">—</strong>
+                    </div>
+                </div>
+                <div class="tv-actions">
+                    <button class="tv-btn-reject" onclick="rejectTakeover()">✗ Recusar</button>
+                    <button class="tv-btn-approve" onclick="approveTakeover()">✓ Aprovar transferência</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ══ EDIT REQUEST APPROVAL MODAL ══ -->
     <div id="editRequestModal"
