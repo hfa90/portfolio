@@ -2102,6 +2102,50 @@
             line-height: 1.5;
         }
 
+        /* ===== RECEIPT ALERT (Comprovante PIX do cliente) ===== */
+        .receipt-alert {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            z-index: 998;
+            background: var(--white);
+            border: 2px solid #6C4BFF;
+            border-radius: 16px;
+            padding: 18px 20px;
+            width: 320px;
+            box-shadow: 0 8px 40px rgba(108, 75, 255, 0.22);
+            transform: translateX(360px);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .receipt-alert.show {
+            transform: translateX(0);
+        }
+        .receipt-alert-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 15px;
+            color: #6C4BFF;
+        }
+        .receipt-alert-body {
+            font-size: 13px;
+            color: var(--ink2);
+            line-height: 1.5;
+        }
+        .receipt-alert-view {
+            background: #6C4BFF;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        .receipt-alert-view:hover { background: #5B38EE; }
+
         /* ===== TAKEOVER MODAL (Assumir Mesa) ===== */
         #takeoverModal {
             position: fixed;
@@ -3590,6 +3634,24 @@
                                 <input class="form-input" id="settingsTime" type="number" value="35">
                             </div>
                         </div>
+                        <!-- ── Chave PIX ── -->
+                        <div
+                            style="background:var(--surface2);border:1.5px solid #6C4BFF33;border-radius:var(--radius-sm);padding:16px;margin-bottom:8px">
+                            <h4 style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:#6C4BFF;margin-bottom:12px">
+                                📱 Pagamento via PIX</h4>
+                            <div class="form-group" style="margin-bottom:0">
+                                <label class="form-label">Chave PIX <span
+                                        style="font-size:11px;color:var(--ink3)">(CPF, CNPJ, e-mail, telefone
+                                        ou chave aleatória)</span></label>
+                                <input class="form-input" id="settingsPixKey" type="text"
+                                    placeholder="Ex: 11999999999 ou email@exemplo.com"
+                                    style="font-family:monospace">
+                                <small style="font-size:11px;color:var(--ink3);margin-top:5px;display:block">
+                                    Essa chave aparece no app do cliente quando ele seleciona PIX como forma
+                                    de pagamento.</small>
+                            </div>
+                        </div>
+
                         <div class="form-group">
                             <label class="form-label">Nova senha do admin <span
                                     style="font-size:11px;color:var(--ink3)">(deixe em branco para não
@@ -4252,6 +4314,22 @@
         </div>
     </div>
 
+    <!-- RECEIPT ALERT (Cliente enviou comprovante PIX) -->
+    <div class="receipt-alert" id="receiptAlert">
+        <div class="alert-top">
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:18px">📎</span>
+                <div class="receipt-alert-title">Comprovante PIX recebido</div>
+            </div>
+            <button class="alert-dismiss" onclick="dismissReceiptAlert()">✕</button>
+        </div>
+        <div class="receipt-alert-body" id="receiptAlertBody">—</div>
+        <div class="alert-actions">
+            <button class="alert-dismiss" onclick="dismissReceiptAlert()">Dispensar</button>
+            <button class="receipt-alert-view" onclick="viewReceiptFile()">📥 Baixar comprovante</button>
+        </div>
+    </div>
+
     <!-- WHATSAPP MODAL -->
     <div class="wa-modal-overlay" id="waModalOverlay" onclick="if(event.target===this)closeWaModal()">
         <div class="wa-modal">
@@ -4474,7 +4552,8 @@
                 document.getElementById('liveBadge').style.display = 'inline-flex';
                 loadDashboard();
                 setupRealtime();
-                setupEditRequestsRT(); // escuta solicitações de edição do atendente
+                setupEditRequestsRT();       // escuta solicitações de edição do atendente
+                setupPaymentReceiptsRT();   // escuta comprovantes PIX enviados pelo cliente
                 if (showLogin) showToast('✅ Conectado ao Supabase!', 'success');
                 // Diagnóstico de RLS: testa se UPDATE na tabela orders está funcionando
                 checkOrdersRLS();
@@ -6104,12 +6183,14 @@
             const address = document.getElementById('settingsAddress').value.trim();
             const time = document.getElementById('settingsTime').value;
             const fee = document.getElementById('settingsDelivery').value;
+            const pixKey = (document.getElementById('settingsPixKey')?.value || '').trim();
 
             // Persistir localStorage
             if (name) { localStorage.setItem('business_name', name); }
             if (address) { localStorage.setItem('business_address', address); }
             if (time) { localStorage.setItem('delivery_time', time); }
             if (fee) { localStorage.setItem('delivery_fee', fee); }
+            localStorage.setItem('pix_key', pixKey);
 
             // Nova senha → gerar hash e salvar no banco
             if (pass) {
@@ -6124,6 +6205,7 @@
                     { key: 'business_address', value: address || '' },
                     { key: 'delivery_time', value: time || '35' },
                     { key: 'delivery_fee', value: fee || '4.99' },
+                    { key: 'pix_key', value: pixKey },
                 ];
                 for (const row of rows) {
                     await sb.from('app_settings').upsert(row, { onConflict: 'key' });
@@ -6941,14 +7023,16 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             const localAddr = localStorage.getItem('business_address') || '';
             const localTime = localStorage.getItem('delivery_time') || '';
             const localFee = localStorage.getItem('delivery_fee') || '';
+            const localPixKey = localStorage.getItem('pix_key') || '';
 
-            const setVal = (id, val) => { const el = document.getElementById(id); if (el && val) el.value = val; };
+            const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined) el.value = val; };
             setVal('settingsUrl', localUrl);
             setVal('settingsKey', localKey);
             setVal('settingsName', localName);
             setVal('settingsAddress', localAddr);
             setVal('settingsTime', localTime);
             setVal('settingsDelivery', localFee);
+            setVal('settingsPixKey', localPixKey);
 
             // 2. Lock automático se URL e key estiverem gravadas
             const locked = localStorage.getItem('conn_locked') === '1';
@@ -6969,10 +7053,11 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                         if (dbMap['business_address']) setVal('settingsAddress', dbMap['business_address']);
                         if (dbMap['delivery_time']) setVal('settingsTime', dbMap['delivery_time']);
                         if (dbMap['delivery_fee']) setVal('settingsDelivery', dbMap['delivery_fee']);
+                        setVal('settingsPixKey', dbMap['pix_key'] || '');
 
                         // Atualizar localStorage com valores do banco
                         Object.entries(dbMap).forEach(([k, v]) => {
-                            if (v && ['sb_url', 'sb_key', 'business_name', 'business_address', 'delivery_time', 'delivery_fee'].includes(k)) {
+                            if (v && ['sb_url', 'sb_key', 'business_name', 'business_address', 'delivery_time', 'delivery_fee', 'pix_key'].includes(k)) {
                                 localStorage.setItem(k, v);
                             }
                         });
@@ -7972,6 +8057,43 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     }
                 })
                 .subscribe();
+        }
+
+        // ===== PAYMENT RECEIPTS (Comprovantes PIX) =====
+        let _receiptAlertTimer = null;
+        let _currentReceiptUrl = null;
+
+        function setupPaymentReceiptsRT() {
+            if (!sb) return;
+            sb.channel('payment-receipts-admin')
+                .on('postgres_changes', {
+                    event: 'INSERT', schema: 'public', table: 'payment_receipts'
+                }, (payload) => {
+                    showReceiptAlert(payload.new);
+                })
+                .subscribe();
+        }
+
+        function showReceiptAlert(receipt) {
+            _currentReceiptUrl = receipt.file_url;
+            const orderRef = receipt.order_number || ('#' + receipt.order_id);
+            document.getElementById('receiptAlertBody').innerHTML =
+                `<strong>${receipt.customer_name || '—'}</strong> enviou comprovante para o pedido <strong>${orderRef}</strong>.<br>
+                <span style="font-size:11px;color:var(--ink3)">Clique em "Baixar comprovante" para verificar e validar.</span>`;
+            const el = document.getElementById('receiptAlert');
+            el.classList.add('show');
+            try { playNotificationSound(); } catch (e) { }
+            if (_receiptAlertTimer) clearTimeout(_receiptAlertTimer);
+            _receiptAlertTimer = setTimeout(dismissReceiptAlert, 20000);
+        }
+
+        function dismissReceiptAlert() {
+            document.getElementById('receiptAlert').classList.remove('show');
+            _currentReceiptUrl = null;
+        }
+
+        function viewReceiptFile() {
+            if (_currentReceiptUrl) window.open(_currentReceiptUrl, '_blank');
         }
 
         /** Mostra o popup de aprovação — detecta se é takeover ou edição de itens */
