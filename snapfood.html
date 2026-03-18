@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
             --brand: #E8420A;
@@ -3750,7 +3750,7 @@
                 <!-- QR Code -->
                 <div class="pix-qr-wrap" id="pixQrWrap">
                     <div class="pix-qr-total" id="pixQrTotal">Valor: calculando...</div>
-                    <canvas id="pixQrCanvas"></canvas>
+                    <div id="pixQrDiv"></div>
                     <div style="font-size:11px;color:var(--ink3);text-align:center">
                         Aponte a câmera do seu banco para o QR Code
                     </div>
@@ -4952,16 +4952,26 @@
             const payload = generatePixPayload(key, total, businessName, 'Brasil');
 
             const wrap = document.getElementById('pixQrWrap');
-            const canvas = document.getElementById('pixQrCanvas');
+            const qrDiv = document.getElementById('pixQrDiv');
             const totalEl = document.getElementById('pixQrTotal');
 
             if (totalEl) totalEl.textContent = 'Valor: R$ ' + total.toFixed(2).replace('.', ',');
             wrap.classList.add('visible');
 
+            // Limpa QR anterior e gera novo
+            qrDiv.innerHTML = '';
             try {
-                await QRCode.toCanvas(canvas, payload, { width: 220, margin: 2, color: { dark: '#1C1B19', light: '#FFFFFF' } });
+                new QRCode(qrDiv, {
+                    text: payload,
+                    width: 220,
+                    height: 220,
+                    colorDark: '#1C1B19',
+                    colorLight: '#FFFFFF',
+                    correctLevel: QRCode.CorrectLevel.M
+                });
             } catch (e) {
-                wrap.innerHTML = '<p style="color:red;font-size:12px">❌ Erro ao gerar QR Code</p>';
+                console.error('[QR Code]', e);
+                qrDiv.innerHTML = '<p style="color:red;font-size:12px">❌ ' + (e.message || 'Erro ao gerar QR Code') + '</p>';
             }
         }
 
