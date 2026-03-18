@@ -696,11 +696,15 @@
       user-select: none;
       -webkit-user-select: none;
       overflow: hidden;
+      /* Prevent page scroll while interacting with the grid */
+      overscroll-behavior: none;
     }
 
     .grid-scroll-wrap {
       overflow: auto;
       scrollbar-width: none;
+      /* Also block scroll bubbling from inner wrapper */
+      overscroll-behavior: contain;
     }
 
     .grid-scroll-wrap::-webkit-scrollbar {
@@ -2358,8 +2362,15 @@
     function renderGrid(size) {
       const el = document.getElementById('grid-el');
       const svg = document.getElementById('svg-lines');
+      const gridCard = document.querySelector('.grid-card');
       el.style.gridTemplateColumns = `repeat(${size},var(--cell))`;
       el.innerHTML = ''; svg.innerHTML = '';
+
+      // Remove old listeners before re-adding
+      gridCard.removeEventListener('touchstart', onGridTouchStart);
+      gridCard.removeEventListener('touchmove', onGridTouchMove);
+      gridCard.removeEventListener('touchend', onGridTouchEnd);
+      gridCard.removeEventListener('touchcancel', onGridTouchEnd);
 
       // Responsive cell size
       const wrap = document.querySelector('.grid-card');
@@ -2375,14 +2386,23 @@
         for (let c = 0; c < size; c++) {
           const cell = document.createElement('div'); cell.className = 'cell';
           cell.textContent = G.grid[r][c]; cell.dataset.r = r; cell.dataset.c = c;
-          cell.addEventListener('pointerdown', onPD, { passive: true });
-          cell.addEventListener('pointerenter', onPE, { passive: true });
           el.appendChild(cell);
           if (!ces[r]) ces[r] = []; ces[r][c] = cell;
         }
       }
       G.cellEls = ces; G.gridSize = size;
-      document.addEventListener('pointerup', onPU, { once: false });
+
+      // ── Attach touch events on the CARD (not each cell) ──
+      // passive:false allows us to call preventDefault() → blocks page scroll
+      gridCard.addEventListener('touchstart', onGridTouchStart, { passive: false });
+      gridCard.addEventListener('touchmove', onGridTouchMove, { passive: false });
+      gridCard.addEventListener('touchend', onGridTouchEnd, { passive: false });
+      gridCard.addEventListener('touchcancel', onGridTouchEnd, { passive: false });
+
+      // Mouse fallback (desktop)
+      gridCard.addEventListener('mousedown', onGridMouseDown);
+      document.addEventListener('mousemove', onGridMouseMove);
+      document.addEventListener('mouseup', onGridMouseUp);
     }
 
     function cxy(r, c) {
@@ -2390,23 +2410,75 @@
       const gap = 3; return { x: c * (cs + gap) + cs / 2, y: r * (cs + gap) + cs / 2 };
     }
 
-    // ════════════════════════════════════════════
-    //  POINTER EVENTS
-    // ════════════════════════════════════════════
-    function onPD(e) {
+    // Returns the cell element at a given page coordinate, or null
+    function cellFromPoint(x, y) {
+      // Use elementFromPoint — works even when cells don't fire pointerenter under touch
+      const el = document.elementFromPoint(x, y);
+      if (el && el.classList.contains('cell')) return el;
+      // walk up one level in case of child node
+      if (el && el.parentElement && el.parentElement.classList.contains('cell')) return el.parentElement;
+      return null;
+    }
+
+    // ── TOUCH HANDLERS (primary — blocks scroll) ──
+    function onGridTouchStart(e) {
       if (G.over) return;
-      const r = +e.currentTarget.dataset.r, c = +e.currentTarget.dataset.c;
+      e.preventDefault(); // ← KEY: stops page scroll
+      const t = e.touches[0];
+      const cell = cellFromPoint(t.clientX, t.clientY);
+      if (!cell) return;
+      const r = +cell.dataset.r, c = +cell.dataset.c;
       G.sel = true; G.selStart = [r, c]; G.selCells = [[r, c]];
       hlCells([[r, c]]); drawSel([r, c], [r, c]);
     }
-    function onPE(e) {
+
+    function onGridTouchMove(e) {
       if (!G.sel || G.over) return;
-      const r = +e.currentTarget.dataset.r, c = +e.currentTarget.dataset.c;
-      const cells = lineOf(G.selStart, [r, c]); G.selCells = cells;
+      e.preventDefault(); // ← KEY: stops page scroll during drag
+      const t = e.touches[0];
+      const cell = cellFromPoint(t.clientX, t.clientY);
+      if (!cell) return;
+      const r = +cell.dataset.r, c = +cell.dataset.c;
+      const endCell = [r, c];
+      // Only update if end cell changed
+      const prev = G.selCells[G.selCells.length - 1];
+      if (prev && prev[0] === r && prev[1] === c) return;
+      const cells = lineOf(G.selStart, endCell);
+      G.selCells = cells;
+      clrHl(); hlCells(cells); drawSel(G.selStart, endCell);
+    }
+
+    function onGridTouchEnd(e) {
+      if (!G.sel) return;
+      e.preventDefault();
+      G.sel = false; clrSel();
+      if (G.selCells.length > 1) checkSel(G.selCells);
+      clrHl(); G.selCells = [];
+    }
+
+    // ── MOUSE HANDLERS (desktop fallback) ──
+    function onGridMouseDown(e) {
+      if (G.over) return;
+      const cell = cellFromPoint(e.clientX, e.clientY);
+      if (!cell) return;
+      const r = +cell.dataset.r, c = +cell.dataset.c;
+      G.sel = true; G.selStart = [r, c]; G.selCells = [[r, c]];
+      hlCells([[r, c]]); drawSel([r, c], [r, c]);
+    }
+
+    function onGridMouseMove(e) {
+      if (!G.sel || G.over) return;
+      const cell = cellFromPoint(e.clientX, e.clientY);
+      if (!cell) return;
+      const r = +cell.dataset.r, c = +cell.dataset.c;
+      const cells = lineOf(G.selStart, [r, c]);
+      G.selCells = cells;
       clrHl(); hlCells(cells); drawSel(G.selStart, [r, c]);
     }
-    function onPU() {
-      if (!G.sel) return; G.sel = false; clrSel();
+
+    function onGridMouseUp(e) {
+      if (!G.sel) return;
+      G.sel = false; clrSel();
       if (G.selCells.length > 1) checkSel(G.selCells);
       clrHl(); G.selCells = [];
     }
@@ -2665,9 +2737,14 @@
     function fmt(s) { return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
     function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; }
 
-    // Prevent zoom on double tap
+    // Prevent double-tap zoom ONLY outside the grid (grid handles its own touch)
     let lt = 0;
-    document.addEventListener('touchend', e => { const n = Date.now(); if (n - lt < 300) e.preventDefault(); lt = n; }, { passive: false });
+    document.addEventListener('touchend', e => {
+      if (e.target.closest('.grid-card')) return;
+      const n = Date.now();
+      if (n - lt < 300) e.preventDefault();
+      lt = n;
+    }, { passive: false });
 
     // Close sheets by tapping overlay background
     ['ov-win', 'ov-lose', 'ov-p2win'].forEach(id => {
