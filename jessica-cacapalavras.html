@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#f8e8f5">
+<title>✨ Jessword – Caça Palavras da Jess</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fdf4ff;
+    --surface: #fff;
+    --pink: #f472b6;
+    --pink-light: #fce7f3;
+    --pink-mid: #fbcfe8;
+    --rose: #fb7185;
+    --purple: #c084fc;
+    --purple-light: #f3e8ff;
+    --lavender: #e9d5ff;
+    --mint: #6ee7b7;
+    --gold: #fbbf24;
+    --text: #3b0764;
+    --text-soft: #7c3aed;
+    --text-muted: #a78bfa;
+    --cell: 38px;
+    --radius: 16px;
+    --shadow: 0 4px 24px rgba(192,132,252,0.18);
+    --glow-found: 0 0 18px 6px #f472b6aa, 0 0 6px 2px #fbbf24aa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    min-height: 100vh;
+    font-family: 'Nunito', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overscroll-behavior: none;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse at 10% 10%, #f3e8ff88 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 80%, #fce7f388 0%, transparent 50%),
+      radial-gradient(ellipse at 60% 40%, #e0f2fe44 0%, transparent 60%),
+      #fdf4ff;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 20px 10px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(253,244,255,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1.5px solid var(--lavender);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 42px; height: 42px;
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 3px 12px #f472b666;
+  }
+
+  .logo-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-sub {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    display: block;
+    margin-top: -4px;
+  }
+
+  /* ─── LEVEL / STATS BAR ─── */
+  .stats-bar {
+    display: flex;
+    gap: 10px;
+    padding: 12px 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .stats-bar::-webkit-scrollbar { display: none; }
+
+  .stat-chip {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface);
+    border-radius: 30px;
+    padding: 7px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text);
+    box-shadow: 0 2px 10px rgba(192,132,252,0.12);
+    border: 1.5px solid var(--lavender);
+    transition: all 0.3s;
+  }
+
+  .stat-chip .icon { font-size: 1rem; }
+  .stat-chip .val { color: var(--pink); }
+
+  /* Level progress */
+  .level-progress-wrap {
+    padding: 0 20px 14px;
+  }
+  .level-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.78rem; font-weight: 700;
+    color: var(--text-muted);
+    margin-bottom: 5px;
+  }
+  .level-bar-bg {
+    height: 8px; border-radius: 99px;
+    background: var(--lavender);
+    overflow: hidden;
+  }
+  .level-bar-fill {
+    height: 100%; border-radius: 99px;
+    background: linear-gradient(90deg, var(--pink), var(--purple));
+    transition: width 0.6s cubic-bezier(.4,0,.2,1);
+    box-shadow: 0 0 10px var(--pink);
+  }
+
+  /* ─── MAIN CONTENT ─── */
+  main {
+    padding: 0 12px 30px;
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  /* ─── WORD LIST ─── */
+  .word-list-section {
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    padding-left: 4px;
+  }
+
+  .word-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .word-chip {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    background: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--lavender);
+    transition: all 0.35s cubic-bezier(.4,0,.2,1);
+    letter-spacing: 0.5px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .word-chip.found {
+    background: linear-gradient(135deg, var(--pink-light), var(--lavender));
+    border-color: var(--pink);
+    color: var(--text-soft);
+    text-decoration: line-through;
+    text-decoration-color: var(--pink);
+    animation: chipFound 0.5s ease;
+  }
+
+  @keyframes chipFound {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.18); }
+    100% { transform: scale(1); }
+  }
+
+  /* ─── GRID WRAPPER ─── */
+  .grid-outer {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 14px;
+    border: 1.5px solid var(--lavender);
+    overflow: hidden;
+    margin-bottom: 16px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .grid-scroll {
+    overflow-x: auto;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .grid-scroll::-webkit-scrollbar { display: none; }
+
+  .grid {
+    display: inline-grid;
+    gap: 3px;
+    margin: 0 auto;
+  }
+
+  .cell {
+    width: var(--cell); height: var(--cell);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem;
+    font-weight: 800;
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.1s, box-shadow 0.3s;
+    position: relative;
+    letter-spacing: 0;
+    border: 1.5px solid transparent;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .cell:active { transform: scale(0.9); }
+
+  .cell.highlighted {
+    background: var(--pink-mid);
+    border-color: var(--pink);
+    color: var(--text-soft);
+    transform: scale(1.04);
+    z-index: 2;
+  }
+
+  .cell.found-cell {
+    animation: cellGlow 1.2s ease forwards;
+    color: #7c3aed;
+    font-weight: 900;
+    border-color: var(--pink);
+    z-index: 3;
+  }
+
+  @keyframes cellGlow {
+    0%   { background: var(--pink-mid); box-shadow: none; }
+    20%  { background: #fdf4c7; box-shadow: var(--glow-found); transform: scale(1.15); }
+    60%  { box-shadow: var(--glow-found); }
+    100% { background: linear-gradient(135deg, #fce7f3, #ede9fe); box-shadow: 0 0 8px 2px #f472b644; transform: scale(1); }
+  }
+
+  .cell.wrong-flash {
+    animation: wrongFlash 0.45s ease;
+  }
+  @keyframes wrongFlash {
+    0%,100% { background: var(--bg); }
+    30%,70% { background: #fee2e2; border-color: #fb7185; }
+  }
+
+  /* ─── ACTION BUTTONS ─── */
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .btn {
+    flex: 1;
+    padding: 13px;
+    border-radius: 14px;
+    border: none;
+    font-family: 'Nunito', sans-serif;
+    font-size: 0.9rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    letter-spacing: 0.3px;
+  }
+  .btn:active { transform: scale(0.96); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    color: white;
+    box-shadow: 0 4px 18px #f472b655;
+  }
+  .btn-primary:hover { box-shadow: 0 6px 24px #f472b688; transform: translateY(-1px); }
+
+  .btn-outline {
+    background: var(--surface);
+    color: var(--text-soft);
+    border: 2px solid var(--lavender);
+    box-shadow: 0 2px 8px rgba(192,132,252,0.08);
+  }
+  .btn-outline:hover { border-color: var(--pink); background: var(--pink-light); }
+
+  /* ─── TIMER ─── */
+  .timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .timer-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 2.2rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--rose), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .timer-display.urgent {
+    animation: pulse 0.6s ease infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+
+  /* ─── OVERLAY / MODAL ─── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(59,7,100,0.45);
+    backdrop-filter: blur(8px);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .overlay.active {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .modal {
+    background: var(--surface);
+    border-radius: 28px;
+    padding: 32px 28px;
+    max-width: 380px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 24px 80px rgba(192,132,252,0.35);
+    border: 2px solid var(--lavender);
+    transform: scale(0.85) translateY(30px);
+    transition: transform 0.35s cubic-bezier(.34,1.56,.64,1);
+  }
+  .overlay.active .modal {
+    transform: scale(1) translateY(0);
+  }
+
+  .modal-emoji { font-size: 3.5rem; margin-bottom: 10px; display: block; }
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.7rem;
+    font-weight: 900;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .modal-sub {
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin-bottom: 22px;
+  }
+  .modal-stats {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 22px;
+  }
+  .modal-stat {
+    background: var(--purple-light);
+    border-radius: 14px;
+    padding: 10px 16px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--text-soft);
+  }
+  .modal-stat strong {
+    display: block;
+    font-size: 1.4rem;
+    color: var(--pink);
+    font-family: 'Playfair Display', serif;
+  }
+  .modal-btn {
+    width: 100%;
+    padding: 14px;
+    border-radius: 16px;
+    border: none;
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 18px #f472b655;
+    margin-bottom: 10px;
+  }
+  .modal-btn:active { transform: scale(0.97); }
+  .modal-btn.secondary {
+    background: var(--surface);
+    color: var(--text-soft);
+    border: 2px solid var(--lavender);
+    box-shadow: none;
+  }
+
+  /* ─── LEVEL UP BADGE ─── */
+  .levelup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, var(--gold), #f97316);
+    color: white;
+    border-radius: 30px;
+    padding: 6px 18px;
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 16px #fbbf2466;
+    animation: badgePop 0.5s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes badgePop {
+    0% { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+
+  /* ─── FLOATING PARTICLES ─── */
+  .particle {
+    position: fixed;
+    pointer-events: none;
+    font-size: 1.4rem;
+    z-index: 200;
+    animation: floatUp 1.4s ease forwards;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 1; transform: translateY(0) scale(1) rotate(0deg); }
+    100% { opacity: 0; transform: translateY(-140px) scale(0.4) rotate(30deg); }
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 400px) {
+    :root { --cell: 32px; }
+    .logo-text { font-size: 1.2rem; }
+    .grid-outer { padding: 10px; }
+    .modal { padding: 24px 18px; }
+  }
+
+  @media (min-width: 500px) {
+    :root { --cell: 42px; }
+  }
+
+  /* ─── SELECTION LINE (SVG overlay) ─── */
+  .grid-canvas-wrap {
+    position: relative;
+  }
+  #selection-svg {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ─── FOUND LINES SVG ─── */
+  .found-line {
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+    animation: lineAppear 0.4s ease forwards;
+  }
+  @keyframes lineAppear {
+    0% { opacity: 0; stroke-dashoffset: 500; }
+    100% { opacity: 0.45; stroke-dashoffset: 0; }
+  }
+
+  /* ─── HINT FLASH ─── */
+  .cell.hint-flash {
+    animation: hintBlink 1s ease 3;
+  }
+  @keyframes hintBlink {
+    0%,100% { background: var(--bg); }
+    50% { background: #fef3c7; border-color: var(--gold); }
+  }
+
+  /* ─── INTRO SCREEN ─── */
+  #intro-screen {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+    text-align: center;
+    transition: opacity 0.5s, transform 0.5s;
+  }
+  #intro-screen.hidden {
+    opacity: 0;
+    transform: scale(1.05);
+    pointer-events: none;
+  }
+
+  .intro-logo {
+    font-family: 'Playfair Display', serif;
+    font-size: 3.2rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 8px;
+  }
+  .intro-tagline {
+    font-size: 1rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 32px;
+  }
+  .intro-flowers {
+    font-size: 3rem;
+    margin-bottom: 20px;
+    animation: floatFlowers 3s ease-in-out infinite;
+  }
+  @keyframes floatFlowers {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+  .intro-feature {
+    background: var(--surface);
+    border-radius: 16px;
+    padding: 14px 20px;
+    margin-bottom: 12px;
+    border: 1.5px solid var(--lavender);
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 320px;
+    text-align: left;
+  }
+  .intro-feature .fi { font-size: 1.3rem; }
+  .intro-start {
+    margin-top: 24px;
+    width: 100%;
+    max-width: 320px;
+    padding: 16px;
+    border-radius: 18px;
+    border: none;
+    background: linear-gradient(135deg, var(--pink), var(--purple));
+    color: white;
+    font-family: 'Nunito', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 6px 24px #f472b666;
+    letter-spacing: 0.3px;
+    transition: all 0.2s;
+  }
+  .intro-start:active { transform: scale(0.97); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--lavender); border-radius: 99px; }
+</style>
+</head>
+<body>
+
+<!-- ─── INTRO SCREEN ─── -->
+<div id="intro-screen">
+  <div class="intro-flowers">🌸💜🌸</div>
+  <div class="intro-logo">Jessword</div>
+  <div class="intro-tagline">O Caça Palavras da Jess ✨</div>
+  <div class="intro-feature"><span class="fi">🎮</span> Níveis progressivos com desafios maiores</div>
+  <div class="intro-feature"><span class="fi">⭐</span> Sobe de nível a cada 3 vitórias</div>
+  <div class="intro-feature"><span class="fi">✨</span> Células brilham ao encontrar palavras</div>
+  <div class="intro-feature"><span class="fi">💡</span> Dica disponível quando precisar</div>
+  <button class="intro-start" onclick="startGame()">Começar a Jogar 🌸</button>
+</div>
+
+<!-- ─── HEADER ─── -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">💜</div>
+    <div>
+      <span class="logo-text">Jessword</span>
+      <span class="logo-sub">Caça Palavras</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div class="stat-chip">
+      <span class="icon">🏆</span>
+      <span>Fase <span class="val" id="hdr-level">1</span></span>
+    </div>
+  </div>
+</header>
+
+<!-- ─── STATS BAR ─── -->
+<div class="stats-bar">
+  <div class="stat-chip"><span class="icon">⭐</span> Vitórias <span class="val" id="stat-wins">0</span></div>
+  <div class="stat-chip"><span class="icon">🎯</span> Placar <span class="val" id="stat-score">0</span></div>
+  <div class="stat-chip"><span class="icon">⏱️</span> Tempo <span class="val" id="stat-time">0s</span></div>
+  <div class="stat-chip"><span class="icon">🔥</span> Série <span class="val" id="stat-streak">0</span></div>
+</div>
+
+<!-- ─── LEVEL PROGRESS ─── -->
+<div class="level-progress-wrap">
+  <div class="level-label">
+    <span>Progresso para nível <span id="prog-next">2</span></span>
+    <span id="prog-label">0 / 3 vitórias</span>
+  </div>
+  <div class="level-bar-bg">
+    <div class="level-bar-fill" id="level-bar" style="width:0%"></div>
+  </div>
+</div>
+
+<!-- ─── MAIN ─── -->
+<main>
+
+  <!-- Timer -->
+  <div class="timer-row">
+    <div class="timer-display" id="timer-display">00:00</div>
+  </div>
+
+  <!-- Word List -->
+  <div class="word-list-section">
+    <div class="section-title">🔍 Encontre as palavras</div>
+    <div class="word-chips" id="word-chips"></div>
+  </div>
+
+  <!-- Grid -->
+  <div class="grid-outer">
+    <div class="grid-scroll">
+      <div class="grid-canvas-wrap" id="grid-wrap">
+        <div class="grid" id="grid"></div>
+        <svg id="selection-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="actions">
+    <button class="btn btn-outline" onclick="requestHint()">💡 Dica</button>
+    <button class="btn btn-outline" onclick="newRound()">🔄 Novo Jogo</button>
+    <button class="btn btn-primary" onclick="newRound()">▶ Jogar</button>
+  </div>
+
+</main>
+
+<!-- ─── WIN MODAL ─── -->
+<div class="overlay" id="win-overlay">
+  <div class="modal">
+    <span class="modal-emoji" id="win-emoji">🎉</span>
+    <div id="levelup-badge-wrap"></div>
+    <div class="modal-title" id="win-title">Parabéns, Jess!</div>
+    <div class="modal-sub" id="win-sub">Você encontrou todas as palavras!</div>
+    <div class="modal-stats">
+      <div class="modal-stat"><strong id="win-time">–</strong>Tempo</div>
+      <div class="modal-stat"><strong id="win-pts">–</strong>Pontos</div>
+      <div class="modal-stat"><strong id="win-streak">–</strong>Série</div>
+    </div>
+    <button class="modal-btn" onclick="closeWin(true)">🌸 Próximo Jogo</button>
+    <button class="modal-btn secondary" onclick="closeWin(false)">Ver Resultado</button>
+  </div>
+</div>
+
+<!-- ─── LOSE MODAL ─── -->
+<div class="overlay" id="lose-overlay">
+  <div class="modal">
+    <span class="modal-emoji">⏰</span>
+    <div class="modal-title">Tempo Esgotado!</div>
+    <div class="modal-sub" id="lose-sub">Não desanime, tente novamente!</div>
+    <div class="modal-stats">
+      <div class="modal-stat"><strong id="lose-found">–</strong>Achadas</div>
+      <div class="modal-stat"><strong id="lose-total">–</strong>Total</div>
+    </div>
+    <button class="modal-btn" onclick="closeLose()">💪 Tentar Novamente</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════
+//   WORD BANKS by category
+// ═══════════════════════════════════════
+const WORD_BANKS = [
+  // Flowers & Nature (Jess-themed)
+  ["JESSICA","FLORES","BORBOLETA","PRIMAVERA","JARDIM","ROSAS","VIOLETA","MARGARIDA","GIRASSOL","TULIPA","ORQUIDEA","LIRIO","JASMIM","LAVANDA","HIBISCO","AZALEIA","PETALA","AROMA","NATUREZA","BEIJA"],
+  // Love & Feelings
+  ["JESSICA","AMOR","CARINHO","ALEGRIA","SORRISO","FELIZ","ABRACE","SONHO","PAIXAO","DOCE","GENTIL","LINDA","BRILHO","GRACA","CANDURA","TERNURA","DELICADA","ESPECIAL","BONITA","QUERIDA"],
+  // Stars & Universe
+  ["JESSICA","ESTRELA","GALAXIA","COMETA","PLANETA","COSMOS","AURORA","NEBULA","BRILHO","CELESTE","SIDERAL","ASTRO","LUNAR","SOLAR","ORBITAL","METEORO","VENUUS","SATURNO","POLARIS","ZODIACO"],
+  // Music & Art
+  ["JESSICA","MUSICA","MELODIA","RITMO","DANCA","PIANO","VIOLAO","CANTO","POESIA","PINTURA","ARTE","CORAL","SONATA","BALADA","SINFONIA","COMPASSO","ACORDE","FLUXO","HARPA","LIRA"],
+  // Magic & Fantasy
+  ["JESSICA","MAGICA","FEITICO","ENCANTO","FADA","DUENDE","CRISTAL","POTION","RUNE","MISTERIO","PORTAL","DRAGAO","UNICORN","SORTILEGIO","AURA","MISTICA","FLECHA","ELFOS","GNOMO","ANJO"],
+];
+
+// ═══════════════════════════════════════
+//   CONFIG PER LEVEL
+// ═══════════════════════════════════════
+const LEVELS = [
+  { level: 1, gridSize: 12, wordCount: 7,  timeLimit: 210, label: "Iniciante" },
+  { level: 2, gridSize: 13, wordCount: 9,  timeLimit: 240, label: "Fácil" },
+  { level: 3, gridSize: 14, wordCount: 11, timeLimit: 270, label: "Médio" },
+  { level: 4, gridSize: 15, wordCount: 13, timeLimit: 300, label: "Difícil" },
+  { level: 5, gridSize: 16, wordCount: 15, timeLimit: 330, label: "Expert" },
+  { level: 6, gridSize: 17, wordCount: 17, timeLimit: 360, label: "Mestre" },
+  { level: 7, gridSize: 18, wordCount: 19, timeLimit: 390, label: "Lendário" },
+];
+
+// ═══════════════════════════════════════
+//   STATE
+// ═══════════════════════════════════════
+let state = {
+  currentLevel: 0,    // index into LEVELS
+  winsThisLevel: 0,
+  totalWins: 0,
+  totalScore: 0,
+  streak: 0,
+  grid: [],
+  words: [],
+  placed: [],         // {word, cells:[[r,c],...], dir}
+  found: new Set(),
+  selecting: false,
+  selStart: null,
+  selCurrent: null,
+  selCells: [],
+  timerInterval: null,
+  elapsed: 0,
+  gameOver: false,
+  gameStarted: false,
+  cellEls: [],
+};
+
+const DIRECTIONS = [
+  [0,1],[1,0],[0,-1],[-1,0],   // H,V,H-rev,V-rev
+  [1,1],[1,-1],[-1,1],[-1,-1]  // diagonals
+];
+
+// ═══════════════════════════════════════
+//   INIT
+// ═══════════════════════════════════════
+function startGame() {
+  document.getElementById('intro-screen').classList.add('hidden');
+  newRound();
+}
+
+function newRound() {
+  const cfg = LEVELS[Math.min(state.currentLevel, LEVELS.length - 1)];
+  clearInterval(state.timerInterval);
+
+  // pick random word bank
+  const bank = WORD_BANKS[Math.floor(Math.random() * WORD_BANKS.length)];
+  // always include "JESSICA" + shuffle rest
+  let pool = bank.filter(w => w !== "JESSICA");
+  shuffle(pool);
+  const words = ["JESSICA", ...pool].slice(0, cfg.wordCount);
+
+  state.words = words;
+  state.found = new Set();
+  state.placed = [];
+  state.selecting = false;
+  state.selStart = null;
+  state.selCells = [];
+  state.elapsed = 0;
+  state.gameOver = false;
+  state.gameStarted = true;
+
+  buildGrid(cfg.gridSize, words);
+  renderGrid(cfg.gridSize);
+  renderWordChips();
+  updateStats();
+  updateProgress();
+  startTimer(cfg.timeLimit);
+}
+
+// ═══════════════════════════════════════
+//   GRID BUILDER
+// ═══════════════════════════════════════
+function buildGrid(size, words) {
+  const grid = Array.from({length: size}, () => Array(size).fill(''));
+  const placed = [];
+
+  for (const word of words) {
+    let placed_ok = false;
+    for (let attempt = 0; attempt < 200 && !placed_ok; attempt++) {
+      const dir = DIRECTIONS[Math.floor(Math.random() * DIRECTIONS.length)];
+      const [dr, dc] = dir;
+      const maxR = size - Math.max(0, dr * (word.length - 1)) - Math.max(0, -dr * (word.length - 1));
+      const maxC = size - Math.max(0, dc * (word.length - 1)) - Math.max(0, -dc * (word.length - 1));
+      const startR = Math.floor(Math.random() * Math.max(1, dr >= 0 ? size - dr * (word.length-1) : size));
+      const startC = Math.floor(Math.random() * Math.max(1, dc >= 0 ? size - dc * (word.length-1) : size));
+
+      // Check bounds & conflicts
+      const cells = [];
+      let valid = true;
+      for (let i = 0; i < word.length; i++) {
+        const r = startR + dr * i;
+        const c = startC + dc * i;
+        if (r < 0 || r >= size || c < 0 || c >= size) { valid = false; break; }
+        if (grid[r][c] !== '' && grid[r][c] !== word[i]) { valid = false; break; }
+        cells.push([r, c]);
+      }
+      if (valid) {
+        for (let i = 0; i < word.length; i++) {
+          grid[cells[i][0]][cells[i][1]] = word[i];
+        }
+        placed.push({ word, cells, dir });
+        placed_ok = true;
+      }
+    }
+  }
+
+  // fill empty
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
+      if (!grid[r][c]) grid[r][c] = letters[Math.floor(Math.random() * letters.length)];
+
+  state.grid = grid;
+  state.placed = placed;
+}
+
+// ═══════════════════════════════════════
+//   RENDER GRID
+// ═══════════════════════════════════════
+function renderGrid(size) {
+  const gridEl = document.getElementById('grid');
+  const svgEl = document.getElementById('selection-svg');
+  gridEl.style.gridTemplateColumns = `repeat(${size}, var(--cell))`;
+  gridEl.innerHTML = '';
+  svgEl.innerHTML = '';
+
+  const cellSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 38;
+  const gap = 3;
+  const total = size * cellSize + (size - 1) * gap;
+  svgEl.setAttribute('width', total);
+  svgEl.setAttribute('height', total);
+  svgEl.setAttribute('viewBox', `0 0 ${total} ${total}`);
+
+  const cellEls = [];
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.textContent = state.grid[r][c];
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      cell.addEventListener('pointerdown', onCellPointerDown, {passive:true});
+      cell.addEventListener('pointerenter', onCellPointerEnter, {passive:true});
+      gridEl.appendChild(cell);
+      if (!cellEls[r]) cellEls[r] = [];
+      cellEls[r][c] = cell;
+    }
+  }
+  state.cellEls = cellEls;
+  state.gridSize = size;
+
+  document.addEventListener('pointerup', onPointerUp);
+}
+
+// ═══════════════════════════════════════
+//   INTERACTION
+// ═══════════════════════════════════════
+function getCellCenter(r, c) {
+  const cellSize = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cell')) || 38;
+  const gap = 3;
+  const x = c * (cellSize + gap) + cellSize / 2;
+  const y = r * (cellSize + gap) + cellSize / 2;
+  return {x, y};
+}
+
+function onCellPointerDown(e) {
+  if (state.gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  state.selecting = true;
+  state.selStart = [r, c];
+  state.selCurrent = [r, c];
+  state.selCells = [[r, c]];
+  highlightCells([[r, c]]);
+  drawSelectionLine([r,c],[r,c]);
+}
+
+function onCellPointerEnter(e) {
+  if (!state.selecting || state.gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (state.selStart) {
+    const cells = getCellsInLine(state.selStart, [r, c]);
+    state.selCells = cells;
+    state.selCurrent = [r, c];
+    clearHighlight();
+    highlightCells(cells);
+    drawSelectionLine(state.selStart, [r,c]);
+  }
+}
+
+function onPointerUp() {
+  if (!state.selecting) return;
+  state.selecting = false;
+  clearSelectionLine();
+  if (state.selCells.length > 1) checkSelection(state.selCells);
+  clearHighlight();
+  state.selCells = [];
+}
+
+function getCellsInLine(start, end) {
+  const [r1,c1] = start;
+  const [r2,c2] = end;
+  const dr = Math.sign(r2-r1), dc = Math.sign(c2-c1);
+  if (dr === 0 && dc === 0) return [start];
+  // only allow straight lines
+  if (dr !== 0 && dc !== 0 && Math.abs(r2-r1) !== Math.abs(c2-c1)) {
+    // snap to predominant axis
+    const diffR = Math.abs(r2-r1), diffC = Math.abs(c2-c1);
+    if (diffR > diffC) {
+      return getCellsInLine(start, [r2, c1]);
+    } else {
+      return getCellsInLine(start, [r1, c2]);
+    }
+  }
+  const cells = [];
+  let r = r1, c = c1;
+  const steps = Math.max(Math.abs(r2-r1), Math.abs(c2-c1));
+  for (let i = 0; i <= steps; i++) {
+    cells.push([r, c]);
+    r += dr; c += dc;
+  }
+  return cells;
+}
+
+function highlightCells(cells) {
+  for (const [r,c] of cells) {
+    if (state.cellEls[r] && state.cellEls[r][c]) {
+      state.cellEls[r][c].classList.add('highlighted');
+    }
+  }
+}
+
+function clearHighlight() {
+  const size = state.gridSize;
+  for (let r = 0; r < size; r++)
+    for (let c = 0; c < size; c++)
+      if (state.cellEls[r] && state.cellEls[r][c])
+        state.cellEls[r][c].classList.remove('highlighted');
+}
+
+// ═══════════════════════════════════════
+//   SELECTION LINE SVG
+// ═══════════════════════════════════════
+function drawSelectionLine(start, end) {
+  const svgEl = document.getElementById('selection-svg');
+  const old = svgEl.querySelector('#sel-line');
+  if (old) old.remove();
+
+  const s = getCellCenter(start[0], start[1]);
+  const e = getCellCenter(end[0], end[1]);
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('id', 'sel-line');
+  line.setAttribute('x1', s.x); line.setAttribute('y1', s.y);
+  line.setAttribute('x2', e.x); line.setAttribute('y2', e.y);
+  line.setAttribute('stroke', '#f472b6');
+  line.setAttribute('stroke-width', '18');
+  line.setAttribute('stroke-linecap', 'round');
+  line.setAttribute('opacity', '0.35');
+  svgEl.appendChild(line);
+}
+
+function clearSelectionLine() {
+  const svgEl = document.getElementById('selection-svg');
+  const old = svgEl.querySelector('#sel-line');
+  if (old) old.remove();
+}
+
+function drawFoundLine(cells, colorIdx) {
+  const COLORS = ['#f472b6','#c084fc','#6ee7b7','#fb923c','#60a5fa','#f59e0b','#34d399','#a78bfa'];
+  const svgEl = document.getElementById('selection-svg');
+  const s = getCellCenter(cells[0][0], cells[0][1]);
+  const e = getCellCenter(cells[cells.length-1][0], cells[cells.length-1][1]);
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('class', 'found-line');
+  line.setAttribute('x1', s.x); line.setAttribute('y1', s.y);
+  line.setAttribute('x2', e.x); line.setAttribute('y2', e.y);
+  line.setAttribute('stroke', COLORS[colorIdx % COLORS.length]);
+  line.setAttribute('stroke-width', '18');
+  line.setAttribute('stroke-linecap', 'round');
+  const len = Math.hypot(e.x - s.x, e.y - s.y) + 50;
+  line.setAttribute('stroke-dasharray', len);
+  line.setAttribute('stroke-dashoffset', len);
+  line.style.transition = `stroke-dashoffset 0.4s ease`;
+  svgEl.appendChild(line);
+  // animate
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { line.style.strokeDashoffset = '0'; });
+  });
+}
+
+// ═══════════════════════════════════════
+//   CHECK SELECTION
+// ═══════════════════════════════════════
+function checkSelection(cells) {
+  const word = cells.map(([r,c]) => state.grid[r][c]).join('');
+  const wordRev = word.split('').reverse().join('');
+
+  for (const p of state.placed) {
+    if (state.found.has(p.word)) continue;
+    if (p.word === word || p.word === wordRev) {
+      // FOUND!
+      state.found.add(p.word);
+      animateFound(p.cells, state.found.size - 1);
+      markChip(p.word);
+      spawnParticles(cells[Math.floor(cells.length/2)]);
+
+      // score
+      const timeBonus = Math.max(0, 200 - state.elapsed);
+      const pts = 100 + p.word.length * 10 + Math.floor(timeBonus * 0.5);
+      state.totalScore += pts;
+
+      updateStats();
+
+      if (state.found.size === state.placed.length) {
+        setTimeout(winRound, 600);
+      }
+      return;
+    }
+  }
+
+  // wrong
+  for (const [r,c] of cells) {
+    if (state.cellEls[r] && state.cellEls[r][c]) {
+      state.cellEls[r][c].classList.add('wrong-flash');
+      setTimeout(() => state.cellEls[r][c].classList.remove('wrong-flash'), 500);
+    }
+  }
+}
+
+function animateFound(cells, idx) {
+  for (const [r,c] of cells) {
+    if (state.cellEls[r] && state.cellEls[r][c]) {
+      const el = state.cellEls[r][c];
+      el.classList.remove('found-cell');
+      void el.offsetWidth; // reflow
+      el.classList.add('found-cell');
+    }
+  }
+  drawFoundLine(cells, idx);
+}
+
+function markChip(word) {
+  const chips = document.querySelectorAll('.word-chip');
+  for (const chip of chips) {
+    if (chip.dataset.word === word) {
+      chip.classList.add('found');
+      break;
+    }
+  }
+}
+
+// ═══════════════════════════════════════
+//   PARTICLES
+// ═══════════════════════════════════════
+function spawnParticles(cellPos) {
+  if (!cellPos) return;
+  const emojis = ['✨','🌸','💜','⭐','🌟','💖','🦋','🌺','🎉'];
+  const el = state.cellEls[cellPos[0]]?.[cellPos[1]];
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  for (let i = 0; i < 5; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    p.style.left = (rect.left + rect.width/2 + (Math.random()-0.5)*40) + 'px';
+    p.style.top = (rect.top + (Math.random()-0.5)*20) + 'px';
+    p.style.animationDelay = (i * 80) + 'ms';
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 1600);
+  }
+}
+
+// ═══════════════════════════════════════
+//   HINT
+// ═══════════════════════════════════════
+function requestHint() {
+  const unfound = state.placed.filter(p => !state.found.has(p.word));
+  if (!unfound.length) return;
+  const target = unfound[Math.floor(Math.random() * unfound.length)];
+  const [r, c] = target.cells[0];
+  if (state.cellEls[r] && state.cellEls[r][c]) {
+    state.cellEls[r][c].classList.add('hint-flash');
+    setTimeout(() => state.cellEls[r][c].classList.remove('hint-flash'), 3200);
+  }
+  state.totalScore = Math.max(0, state.totalScore - 20);
+  updateStats();
+}
+
+// ═══════════════════════════════════════
+//   TIMER
+// ═══════════════════════════════════════
+function startTimer(limit) {
+  clearInterval(state.timerInterval);
+  state.elapsed = 0;
+  const display = document.getElementById('timer-display');
+
+  state.timerInterval = setInterval(() => {
+    if (state.gameOver) { clearInterval(state.timerInterval); return; }
+    state.elapsed++;
+    const remaining = limit - state.elapsed;
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    display.textContent = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    display.classList.toggle('urgent', remaining <= 30);
+
+    if (remaining <= 0) {
+      clearInterval(state.timerInterval);
+      loseRound();
+    }
+
+    // update stat
+    document.getElementById('stat-time').textContent = state.elapsed + 's';
+  }, 1000);
+}
+
+// ═══════════════════════════════════════
+//   WIN / LOSE
+// ═══════════════════════════════════════
+function winRound() {
+  if (state.gameOver) return;
+  state.gameOver = true;
+  clearInterval(state.timerInterval);
+
+  state.totalWins++;
+  state.winsThisLevel++;
+  state.streak++;
+
+  let leveledUp = false;
+  if (state.winsThisLevel >= 3 && state.currentLevel < LEVELS.length - 1) {
+    state.currentLevel++;
+    state.winsThisLevel = 0;
+    leveledUp = true;
+  }
+
+  const cfg = LEVELS[Math.min(state.currentLevel, LEVELS.length-1)];
+  const prevCfg = LEVELS[Math.min(Math.max(state.currentLevel-1,0), LEVELS.length-1)];
+
+  document.getElementById('win-time').textContent = fmtTime(state.elapsed);
+  document.getElementById('win-pts').textContent = state.totalScore;
+  document.getElementById('win-streak').textContent = state.streak + '🔥';
+
+  const badgeWrap = document.getElementById('levelup-badge-wrap');
+  badgeWrap.innerHTML = '';
+  if (leveledUp) {
+    badgeWrap.innerHTML = `<div class="levelup-badge">🚀 Subiu para Nível ${cfg.level} – ${cfg.label}!</div>`;
+    document.getElementById('win-emoji').textContent = '🎊';
+    document.getElementById('win-title').textContent = 'Nível Alcançado!';
+    document.getElementById('win-sub').textContent = `Incrível, Jess! Você é uma campeã! Agora o desafio fica maior 💪`;
+  } else {
+    document.getElementById('win-emoji').textContent = ['🎉','🌸','💜','⭐','✨'][Math.floor(Math.random()*5)];
+    document.getElementById('win-title').textContent = ['Parabéns, Jess!','Arrasou, Jess!','Brilhou, Jess!'][Math.floor(Math.random()*3)];
+    document.getElementById('win-sub').textContent = `${3 - state.winsThisLevel} vitória${3-state.winsThisLevel!==1?'s':''} para o próximo nível!`;
+  }
+
+  updateStats();
+  updateProgress();
+  document.getElementById('win-overlay').classList.add('active');
+}
+
+function loseRound() {
+  if (state.gameOver) return;
+  state.gameOver = true;
+  state.streak = 0;
+  document.getElementById('lose-found').textContent = state.found.size;
+  document.getElementById('lose-total').textContent = state.placed.length;
+  document.getElementById('lose-sub').textContent = `Você encontrou ${state.found.size} de ${state.placed.length} palavras. Continue tentando! 💪`;
+  updateStats();
+  document.getElementById('lose-overlay').classList.add('active');
+}
+
+function closeWin(next) {
+  document.getElementById('win-overlay').classList.remove('active');
+  if (next) setTimeout(newRound, 300);
+}
+function closeLose() {
+  document.getElementById('lose-overlay').classList.remove('active');
+  setTimeout(newRound, 300);
+}
+
+// ═══════════════════════════════════════
+//   UI UPDATES
+// ═══════════════════════════════════════
+function renderWordChips() {
+  const container = document.getElementById('word-chips');
+  container.innerHTML = '';
+  for (const w of state.words) {
+    const chip = document.createElement('div');
+    chip.className = 'word-chip';
+    chip.textContent = w;
+    chip.dataset.word = w;
+    container.appendChild(chip);
+  }
+}
+
+function updateStats() {
+  document.getElementById('stat-wins').textContent = state.totalWins;
+  document.getElementById('stat-score').textContent = state.totalScore;
+  document.getElementById('stat-streak').textContent = state.streak;
+  document.getElementById('hdr-level').textContent = LEVELS[Math.min(state.currentLevel, LEVELS.length-1)].level;
+}
+
+function updateProgress() {
+  const wins = state.winsThisLevel;
+  const pct = (wins / 3) * 100;
+  document.getElementById('level-bar').style.width = pct + '%';
+  document.getElementById('prog-label').textContent = `${wins} / 3 vitórias`;
+  const nextLevel = Math.min(state.currentLevel + 1, LEVELS.length - 1);
+  document.getElementById('prog-next').textContent = LEVELS[nextLevel].level;
+}
+
+function fmtTime(secs) {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+// ═══════════════════════════════════════
+//   UTILS
+// ═══════════════════════════════════════
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Prevent zoom on double tap
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 300) e.preventDefault();
+  lastTap = now;
+}, { passive: false });
+</script>
+</body>
+</html>
