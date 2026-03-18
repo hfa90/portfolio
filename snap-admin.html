@@ -7835,7 +7835,7 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 .subscribe();
         }
 
-        /** Mostra o popup de aprovação com diff visual dos itens */
+        /** Mostra o popup de aprovação — detecta se é takeover ou edição de itens */
         async function showEditRequestAlert(req) {
             _currentEditRequest = req;
 
@@ -7859,75 +7859,136 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             document.getElementById('erOrderNum').textContent = orderNum;
             document.getElementById('erOrderMeta').textContent = orderMeta;
             document.getElementById('erAttChip').textContent = '👤 ' + attName;
-            document.getElementById('erHdrSub').textContent = attName + ' quer alterar ' + orderNum;
 
-            const parseItems = (raw) => {
+            const parseJSON = (raw) => {
                 if (!raw) return [];
-                return (typeof raw === 'string' ? JSON.parse(raw) : raw);
+                try { return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch (e) { return []; }
             };
-            const before = parseItems(req.items_before);
-            const after = parseItems(req.items_after);
+            const before = parseJSON(req.items_before);
+            const after = parseJSON(req.items_after);
 
-            const fmtList = (items) => items.length
-                ? items.map(i => `<div class="er-diff-item">${i.qty}× ${i.name || '?'} <span style="color:var(--ink3);font-size:10px">R$ ${((+(i.price || 0)) * (+(i.qty || 1))).toFixed(2).replace('.', ',')}</span></div>`).join('')
-                : '<div style="font-size:12px;color:var(--ink3)">—</div>';
+            // Detectar se é solicitação de assumir mesa (takeover)
+            const isTakeover = before && before._type === 'takeover';
 
-            document.getElementById('erBefore').innerHTML = fmtList(before);
-            document.getElementById('erAfter').innerHTML = fmtList(after);
+            if (isTakeover) {
+                // UI específica para takeover
+                document.getElementById('erHdrSub').textContent = attName + ' quer assumir a Mesa ' + (before.mesa || '—');
+                document.getElementById('erDiffTitle').textContent = 'Transferência de atendimento';
+                document.getElementById('erBeforeLabel').textContent = 'Atendente atual';
+                document.getElementById('erAfterLabel').textContent = 'Novo atendente';
+                document.getElementById('erBefore').innerHTML =
+                    `<div class="er-diff-item" style="font-size:13px">👤 ${before.current_attendant_name || '—'}<br>
+                    <span style="font-size:11px;color:var(--ink3)">Cliente: ${before.customer || '—'}</span></div>`;
+                document.getElementById('erAfter').innerHTML =
+                    `<div class="er-diff-item" style="font-size:13px;color:var(--success)">👤 ${after.new_attendant_name || attName}<br>
+                    <span style="font-size:11px;color:var(--ink3)">Receberá 10% de taxa de serviço</span></div>`;
+                document.querySelector('#editRequestModal .er-btn-approve').textContent = '✓ Aprovar transferência';
+                document.querySelector('#editRequestModal .er-hdr-ico').textContent = '🔄';
+            } else {
+                // UI padrão para edição de itens
+                document.getElementById('erHdrSub').textContent = attName + ' quer alterar ' + orderNum;
+                document.getElementById('erDiffTitle').textContent = 'Diferença solicitada';
+                document.getElementById('erBeforeLabel').textContent = 'Antes';
+                document.getElementById('erAfterLabel').textContent = 'Depois';
+                const fmtList = (items) => Array.isArray(items) && items.length
+                    ? items.map(i => `<div class="er-diff-item">${i.qty}× ${i.name || '?'} <span style="color:var(--ink3);font-size:10px">R$ ${((+(i.price || 0)) * (+(i.qty || 1))).toFixed(2).replace('.', ',')}</span></div>`).join('')
+                    : '<div style="font-size:12px;color:var(--ink3)">—</div>';
+                document.getElementById('erBefore').innerHTML = fmtList(before);
+                document.getElementById('erAfter').innerHTML = fmtList(after);
+                document.querySelector('#editRequestModal .er-btn-approve').textContent = '✓ Aprovar e notificar cozinha';
+                document.querySelector('#editRequestModal .er-hdr-ico').textContent = '✏️';
+            }
 
             document.getElementById('editRequestModal').classList.add('open');
             try { playNotificationSound(); } catch (e) { }
         }
 
-        /** Admin APROVA — grava novos itens + notifica cozinha via last_edited_at */
+        /** Admin APROVA — lida com takeover de mesa OU edição de itens */
         async function approveEditRequest() {
             if (!_currentEditRequest) return;
             const req = _currentEditRequest;
-            const after = typeof req.items_after === 'string'
-                ? JSON.parse(req.items_after) : req.items_after || [];
-            const sub = after.reduce((s, i) => s + (+(i.price || 0)) * (+(i.qty || 1)), 0);
             const now = new Date().toISOString();
+
+            const parseJSON = (raw) => {
+                try { return typeof raw === 'string' ? JSON.parse(raw) : (raw || []); } catch (e) { return []; }
+            };
+            const before = parseJSON(req.items_before);
+            const after = parseJSON(req.items_after);
+            const isTakeover = before && before._type === 'takeover';
+
             try {
-                await sb.from('orders').update({
-                    items: JSON.stringify(after),
-                    subtotal: sub,
-                    total: sub,
-                    has_pending_edit: false,
-                    last_edited_at: now,
-                    updated_at: now,
-                }).eq('id', req.order_id);
+                if (isTakeover) {
+                    // Transfere atendimento: atualiza attendant_id do pedido
+                    await sb.from('orders').update({
+                        attendant_id: after.new_attendant_id,
+                        has_pending_edit: false,
+                        updated_at: now,
+                    }).eq('id', req.order_id);
 
-                await sb.from('order_edit_requests').update({
-                    status: 'approved', reviewed_by: 'admin', reviewed_at: now,
-                }).eq('id', req.id);
+                    await sb.from('order_edit_requests').update({
+                        status: 'approved', reviewed_by: 'admin', reviewed_at: now,
+                    }).eq('id', req.id);
 
-                try {
-                    await sb.from('order_status_history').insert({
-                        order_id: req.order_id, status: 'confirmed',
-                        note: '✅ Edição aprovada pelo admin. Itens atualizados — cozinha notificada.'
-                    });
-                } catch (e) { }
+                    try {
+                        await sb.from('order_status_history').insert({
+                            order_id: req.order_id, status: 'confirmed',
+                            note: `✅ Mesa transferida para ${after.new_attendant_name || '—'} com aprovação do admin.`,
+                        });
+                    } catch (e) { }
 
-                showToast('✅ Edição aprovada! Cozinha notificada automaticamente.', 'success');
+                    showToast(`✅ Mesa transferida para ${after.new_attendant_name || '—'} com sucesso!`, 'success');
+                } else {
+                    // Edição de itens normal
+                    const sub = after.reduce((s, i) => s + (+(i.price || 0)) * (+(i.qty || 1)), 0);
+                    await sb.from('orders').update({
+                        items: JSON.stringify(after),
+                        subtotal: sub,
+                        total: sub,
+                        has_pending_edit: false,
+                        last_edited_at: now,
+                        updated_at: now,
+                    }).eq('id', req.order_id);
+
+                    await sb.from('order_edit_requests').update({
+                        status: 'approved', reviewed_by: 'admin', reviewed_at: now,
+                    }).eq('id', req.id);
+
+                    try {
+                        await sb.from('order_status_history').insert({
+                            order_id: req.order_id, status: 'confirmed',
+                            note: '✅ Edição aprovada pelo admin. Itens atualizados — cozinha notificada.'
+                        });
+                    } catch (e) { }
+
+                    showToast('✅ Edição aprovada! Cozinha notificada automaticamente.', 'success');
+                    loadOrders();
+                }
+
                 _currentEditRequest = null;
                 _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
                 document.getElementById('editRequestModal').classList.remove('open');
-                loadOrders();
             } catch (e) { showToast('❌ Erro ao aprovar: ' + (e.message || e), 'error'); }
         }
 
-        /** Admin REJEITA — restaura itens originais e cancela a solicitação */
+        /** Admin REJEITA — lida com takeover de mesa OU edição de itens */
         async function rejectEditRequest() {
             if (!_currentEditRequest) return;
             const req = _currentEditRequest;
-            const before = typeof req.items_before === 'string'
-                ? JSON.parse(req.items_before) : req.items_before || [];
             const now = new Date().toISOString();
+
+            const parseJSON = (raw) => {
+                try { return typeof raw === 'string' ? JSON.parse(raw) : (raw || []); } catch (e) { return []; }
+            };
+            const before = parseJSON(req.items_before);
+            const isTakeover = before && before._type === 'takeover';
+
             try {
+                // Limpar flag has_pending_edit do pedido
                 await sb.from('orders').update({
-                    items: JSON.stringify(before),
                     has_pending_edit: false,
                     updated_at: now,
+                    // Se não é takeover, restaura itens originais
+                    ...(isTakeover ? {} : { items: JSON.stringify(Array.isArray(before) ? before : []) }),
                 }).eq('id', req.order_id);
 
                 await sb.from('order_edit_requests').update({
@@ -7937,11 +7998,15 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: req.order_id, status: 'confirmed',
-                        note: '✗ Edição recusada pelo admin. Itens originais mantidos.'
+                        note: isTakeover
+                            ? '✗ Solicitação de assumir mesa recusada pelo admin.'
+                            : '✗ Edição recusada pelo admin. Itens originais mantidos.',
                     });
                 } catch (e) { }
 
-                showToast('✗ Edição recusada. Pedido mantido com itens originais.', 'warning');
+                showToast(isTakeover
+                    ? '✗ Transferência de mesa recusada.'
+                    : '✗ Edição recusada. Pedido mantido com itens originais.', 'warning');
                 _currentEditRequest = null;
                 _pendingEditRequests = _pendingEditRequests.filter(r => r.id !== req.id);
                 document.getElementById('editRequestModal').classList.remove('open');
@@ -7970,14 +8035,14 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     </div>
                     <span class="er-att-chip" id="erAttChip">Atendente</span>
                 </div>
-                <div class="er-diff-title">Diferença solicitada</div>
+                <div class="er-diff-title" id="erDiffTitle">Diferença solicitada</div>
                 <div class="er-diff">
                     <div class="er-diff-col before">
-                        <div class="er-diff-col-label">Antes</div>
+                        <div class="er-diff-col-label" id="erBeforeLabel">Antes</div>
                         <div id="erBefore"></div>
                     </div>
                     <div class="er-diff-col after">
-                        <div class="er-diff-col-label">Depois</div>
+                        <div class="er-diff-col-label" id="erAfterLabel">Depois</div>
                         <div id="erAfter"></div>
                     </div>
                 </div>
