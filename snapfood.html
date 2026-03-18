@@ -3552,7 +3552,11 @@
                     🔄 Atualizando em tempo real...
                 </p>
 
-                <button class="confirm-btn" style="max-width:300px; margin:16px auto 0;" onclick="resetOrder()">
+                <button id="cancelOrderBtn" style="display:none;max-width:300px;margin:12px auto 0;width:100%;background:none;border:1.5px solid #C0392B;border-radius:10px;padding:12px;font-size:14px;font-weight:600;color:#C0392B;cursor:pointer;" onclick="cancelCurrentOrder()">
+                    ✕ Cancelar pedido
+                </button>
+
+                <button class="confirm-btn" style="max-width:300px; margin:12px auto 0;" onclick="resetOrder()">
                     Fazer novo pedido
                 </button>
             </div>
@@ -4791,6 +4795,30 @@
             } else {
                 note.textContent = '🔄 Atualizando em tempo real...';
                 note.style.color = '';
+            }
+
+            // Botão de cancelar: visível apenas se pedido ainda pode ser cancelado
+            const cancelBtn = document.getElementById('cancelOrderBtn');
+            if (cancelBtn) {
+                cancelBtn.style.display = ['pending', 'confirmed'].includes(status) ? 'block' : 'none';
+            }
+        }
+
+        async function cancelCurrentOrder() {
+            if (!currentOrderDbId) return;
+            if (!confirm('Tem certeza que deseja cancelar o pedido?')) return;
+            try {
+                if (sb) {
+                    await sb.from('orders').update({
+                        status: 'cancelled',
+                        updated_at: new Date().toISOString()
+                    }).eq('id', currentOrderDbId);
+                }
+                applyStatusToTracker('cancelled');
+                document.getElementById('cancelOrderBtn').style.display = 'none';
+                showToast('Pedido cancelado.', 'info');
+            } catch (e) {
+                showToast('Erro ao cancelar pedido. Tente novamente.', 'error');
             }
         }
 

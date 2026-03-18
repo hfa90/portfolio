@@ -2069,6 +2069,39 @@
             flex: 1;
         }
 
+        /* ===== CHECKOUT ALERT (Atendente fechou conta) ===== */
+        .checkout-alert {
+            position: fixed;
+            top: 280px;
+            right: 24px;
+            z-index: 997;
+            background: var(--white);
+            border: 2px solid #1A9E6A;
+            border-radius: 16px;
+            padding: 18px 20px;
+            width: 320px;
+            box-shadow: 0 8px 40px rgba(26, 158, 106, 0.22);
+            transform: translateX(360px);
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .checkout-alert.show {
+            transform: translateX(0);
+        }
+        .checkout-alert-title {
+            font-family: 'Syne', sans-serif;
+            font-weight: 800;
+            font-size: 15px;
+            color: #1A9E6A;
+        }
+        .checkout-alert-body {
+            font-size: 13px;
+            color: var(--ink2);
+            line-height: 1.5;
+        }
+
         .bell-btn {
             position: relative;
             width: 36px;
@@ -4082,6 +4115,18 @@
         </div>
     </div>
 
+    <!-- CHECKOUT ALERT (Atendente fechou conta) -->
+    <div class="checkout-alert" id="checkoutAlert">
+        <div class="alert-top">
+            <div class="checkout-alert-title">🧾 Conta fechada</div>
+            <button class="alert-dismiss" onclick="dismissCheckoutAlert()">✕</button>
+        </div>
+        <div class="checkout-alert-body" id="checkoutAlertBody">—</div>
+        <div class="alert-actions">
+            <button class="alert-dismiss" onclick="dismissCheckoutAlert()">OK</button>
+        </div>
+    </div>
+
     <!-- WHATSAPP MODAL -->
     <div class="wa-modal-overlay" id="waModalOverlay" onclick="if(event.target===this)closeWaModal()">
         <div class="wa-modal">
@@ -4439,6 +4484,14 @@
                         if (new Date(existing.updated_at) > new Date(updated.updated_at)) return;
                     }
 
+                    // Notificar admin quando atendente fecha conta de mesa (sem ação do admin)
+                    if (updated.status === 'delivered' &&
+                        updated.order_type === 'presencial' &&
+                        existingIdx >= 0 &&
+                        !_adminConfirmedIds.has(updated.id)) {
+                        triggerCheckoutAlert(updated);
+                    }
+
                     // Se status final, garantir que sai da lista ativa
                     if (updated.status === 'delivered' || updated.status === 'cancelled') {
                         if (existingIdx >= 0) {
@@ -4533,6 +4586,9 @@
         // Desbloquear AudioContext no primeiro clique
         document.addEventListener('click', () => { try { getAudioCtx(); } catch (e) { } }, { once: true });
 
+        // IDs de pedidos fechados localmente pelo admin (para não duplicar o alerta de checkout)
+        const _adminConfirmedIds = new Set();
+
         // ===== NEW ORDER ALERT =====
         let alertOrderId = null;
         let _blinkInterval = null;
@@ -4577,6 +4633,26 @@
             dismissAlert();
             goPage('orders', document.querySelectorAll('.nav-item')[1]);
             setTimeout(() => { if (alertOrderId) openOrderDrawer(alertOrderId); }, 300);
+        }
+
+        // ===== CHECKOUT ALERT (Atendente fechou conta) =====
+        let _checkoutAlertTimer = null;
+        function triggerCheckoutAlert(order) {
+            const attObj = allStaff.find(s => s.id == order.attendant_id);
+            const attName = attObj ? attObj.name : (order.attendant_id ? 'Atendente #' + order.attendant_id : 'Atendente');
+            const mesa = order.table_number || '—';
+            const total = 'R$ ' + Number(order.total || 0).toFixed(2).replace('.', ',');
+            const pgto = { pix: 'PIX', card: 'Cartão', cash: 'Dinheiro' }[order.payment_method] || order.payment_method || '—';
+            document.getElementById('checkoutAlertBody').innerHTML =
+                `<strong>${attName}</strong> fechou a conta da <strong>Mesa ${mesa}</strong>.<br>
+                Total: <strong>${total}</strong> · Pgto: ${pgto}${order.service_fee_paid ? ' · taxa de serviço incluída' : ''}.`;
+            const el = document.getElementById('checkoutAlert');
+            el.classList.add('show');
+            if (_checkoutAlertTimer) clearTimeout(_checkoutAlertTimer);
+            _checkoutAlertTimer = setTimeout(dismissCheckoutAlert, 12000);
+        }
+        function dismissCheckoutAlert() {
+            document.getElementById('checkoutAlert').classList.remove('show');
         }
 
         // ===== NAVIGATION =====
@@ -5141,6 +5217,7 @@
                 delivery_fee_paid: isDelivery,
             };
 
+            _adminConfirmedIds.add(currentOrderId); // marcar que o admin fechou este pedido
             if (!isDemoMode && sb) {
                 const { error } = await sb.from('orders').update(updateData).eq('id', currentOrderId);
                 if (error) { showToast('Erro ao confirmar: ' + error.message, 'error'); return; }
