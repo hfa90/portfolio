@@ -1188,9 +1188,10 @@
         }
 
         #mapContainer {
-            flex: 1;
+            position: absolute;
+            inset: 0;
             width: 100%;
-            min-height: 0;
+            height: 100%;
         }
 
         .map-footer {
@@ -1263,6 +1264,18 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Leaflet — forçar renderização correta */
+        .leaflet-container {
+            width: 100% !important;
+            height: 100% !important;
+            background: #1a1a18;
+        }
+
+        .leaflet-tile-container img {
+            width: 256px !important;
+            height: 256px !important;
         }
 
         /* Leaflet dark tweaks */
@@ -1454,7 +1467,7 @@
             <button class="map-nav-btn secondary" onclick="openExternalNav()"
                 title="Abrir no Waze/Google Maps">🗺</button>
         </div>
-        <div style="position:relative;flex:1;min-height:0">
+        <div style="position:relative;flex:1;min-height:0;overflow:hidden">
             <div id="mapContainer"></div>
             <button class="map-recenter-btn" onclick="recenterMap()" title="Minha localização">📍</button>
         </div>
@@ -2233,36 +2246,48 @@
             $('mapAddr').textContent = o.address || 'Sem endereço';
             $('mapStatus').textContent = '⏳ Localizando endereço...';
             $('mapStatus').className = 'map-status';
+
+            // Abrir modal PRIMEIRO para o container ter dimensões reais
             $('mapModal').classList.add('open');
 
-            // Inicializar mapa na primeira abertura
-            if (!_map) {
-                _map = L.map('mapContainer', { zoomControl: true, attributionControl: true });
+            // Aguardar o browser renderizar o modal com tamanho real
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+            // Inicializar ou reinicializar o mapa
+            if (_map) {
+                _map.invalidateSize(true);
+            } else {
+                _map = L.map('mapContainer', {
+                    zoomControl: true,
+                    attributionControl: true,
+                    renderer: L.canvas()
+                });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap contributors',
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
                     maxZoom: 19,
+                    crossOrigin: true,
                 }).addTo(_map);
-                // Posição padrão: Brasil
-                _map.setView([-15.7801, -47.9292], 4);
+                _map.setView([-3.119, -60.0212], 12); // Manaus como padrão
             }
-            setTimeout(() => _map.invalidateSize(), 150);
+
+            // Forçar recalculo de tamanho após render
+            setTimeout(() => { if (_map) _map.invalidateSize(true); }, 300);
 
             // Geocodificar endereço do cliente
             _destCoords = null;
             const addr = o.address;
             if (addr && addr !== '—' && addr.length > 5) {
-                $('mapStatus').textContent = '🔍 Buscando "' + addr.slice(0, 30) + '..."';
+                $('mapStatus').textContent = '🔍 Buscando endereço...';
                 _destCoords = await geocodeAddress(addr);
             }
 
             if (_destCoords) {
                 placeDestMarker(_destCoords);
-                $('mapStatus').textContent = '✅ Destino localizado — ' + addr.slice(0, 40);
+                $('mapStatus').textContent = '✅ ' + (addr || '').slice(0, 45);
                 $('mapStatus').className = 'map-status ok';
             } else {
-                $('mapStatus').textContent = '⚠️ Endereço não localizado automaticamente — use 🧭 Navegar';
+                $('mapStatus').textContent = '⚠️ Endereço não localizado — use 🧭 Navegar';
                 $('mapStatus').className = 'map-status err';
-                // Tentar mostrar posição atual mesmo sem destino
             }
 
             // Iniciar GPS do entregador
@@ -2272,6 +2297,12 @@
         function closeMap() {
             $('mapModal').classList.remove('open');
             stopGPSWatch();
+            // Remover marcadores mas manter o mapa instanciado
+            if (_driverMarker) { _map.removeLayer(_driverMarker); _driverMarker = null; }
+            if (_destMarker) { _map.removeLayer(_destMarker); _destMarker = null; }
+            if (_routeLine) { _map.removeLayer(_routeLine); _routeLine = null; }
+            _destCoords = null;
+            _driverCoords = null;
         }
 
         async function geocodeAddress(address) {
