@@ -3017,10 +3017,57 @@
         .or-pending-edit {
             animation: pendingPulse 1.8s ease-in-out infinite;
         }
+
+        /* ── Tela de módulo desativado ── */
+        #moduleBlocked {
+            position: fixed;
+            inset: 0;
+            background: #111110;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        #moduleBlocked.show {
+            display: flex;
+        }
+
+        .blocked-icon {
+            font-size: 48px;
+        }
+
+        .blocked-title {
+            font-family: var(--syne, sans-serif);
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .blocked-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.6;
+            max-width: 300px;
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- Tela de módulo desativado -->
+    <div id="moduleBlocked">
+        <div class="blocked-icon">🔒</div>
+        <div class="blocked-title">Painel de Atendimento desativado</div>
+        <div class="blocked-sub">Este módulo foi desativado pelo administrador.<br>Entre em contato para reativar o
+            acesso.</div>
+        <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.2)">🔥 Painel de Atendimento</div>
+    </div>
+
 
     <!-- ══════════════════════ AUTH ══════════════════════ -->
     <div id="loginScreen">
@@ -3612,6 +3659,16 @@
             } catch (e) {
                 if (typeof SnapCommissions !== 'undefined') SnapCommissions.init(sb, {});
             }
+
+            // Verificar se módulo está ativo
+            try {
+                const { data: modRow } = await sb.from('app_settings')
+                    .select('value').eq('key', 'modulo_atendente').single();
+                if (modRow && modRow.value === 'false') {
+                    document.getElementById('moduleBlocked').classList.add('show');
+                    return;
+                }
+            } catch (e) { /* se não existe a key, considera ativo */ }
 
             $('loginScreen').style.display = 'none';
             $('app').style.display = 'flex';

@@ -4119,6 +4119,7 @@
         let modalProduct = null;
         let modalQty = 1;
         let isDemoMode = false;
+        let _restaurantId = null; // ID do restaurante — carregado do banco
         let favorites = new Set();
         let _pixKey = ''; // Chave PIX do estabelecimento (carregada do banco)
 
@@ -4214,6 +4215,10 @@
         async function loadAppSettings() {
             if (isDemoMode || !sb) return;
             try {
+                // Carregar restaurant_id (primeiro restaurante ativo)
+                const { data: rest } = await sb.from('restaurants').select('id').eq('active', true).limit(1).single();
+                if (rest) _restaurantId = rest.id;
+
                 const { data, error } = await sb.from('app_settings').select('key, value');
                 if (error || !data) return;
                 const map = {};
@@ -5149,6 +5154,7 @@
                 total: total,
                 status: 'pending',
                 estimated_time: _estTime,
+                restaurant_id: _restaurantId,
                 address: selectedOrderType === 'delivery' ? [
                     document.getElementById('addressStreet').value,
                     document.getElementById('addressNeighborhood').value,
