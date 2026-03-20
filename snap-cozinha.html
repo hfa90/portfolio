@@ -1353,20 +1353,21 @@
     </div>
 
 
-    <!-- LOGIN -->
-    <div id="loginScreen">
-        <div class="lc">
-            <div class="lc-ey">🔥 SnapFood</div>
-            <div class="lc-title">Tela da Cozinha</div>
-            <div class="lc-sub">Configure uma vez — as credenciais ficam salvas neste dispositivo.</div>
-            <div id="lErr" class="lc-err"></div>
-            <label class="fl">URL do Supabase</label>
-            <input class="fi" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off">
-            <label class="fl">Chave Anon</label>
-            <input class="fi" id="sbKey" type="text" placeholder="eyJ..." autocomplete="off">
-            <p class="fi-hint">Mesmas credenciais do painel admin.</p>
-            <button class="lc-btn" onclick="doConnect()">Entrar na Cozinha →</button>
+    <!-- LOADING -->
+    <div id="loginScreen"
+        style="position:fixed;inset:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:1000">
+        <div style="font-size:24px;font-weight:800;color:#E8420A;font-family:sans-serif">🔥 Cozinha</div>
+        <div
+            style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.1);border-top-color:#E8420A;border-radius:50%;animation:spin 0.7s linear infinite">
         </div>
+        <div id="lErr" style="font-size:13px;color:rgba(255,255,255,0.4)">Conectando...</div>
+        <style>
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg)
+                }
+            }
+        </style>
     </div>
 
     <!-- HEADER -->
@@ -1496,24 +1497,23 @@
         }
 
         /* ── CONNECT ── */
-        window.addEventListener('load', () => {
-            const url = localStorage.getItem('kitch_url'), key = localStorage.getItem('kitch_key');
-            if (url && key) { document.getElementById('sbUrl').value = url; document.getElementById('sbKey').value = key; initApp(url, key); }
-            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => { });
-        });
+        // ===== CONFIGURAÇÃO CENTRAL DO SUPABASE =====
+        const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuYnJva3d0b253aW55eW15bGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjIxNDcsImV4cCI6MjA4OTAzODE0N30.8xdg51XgHgAiWCpO23KdzyTPFroIxRXIEJFmZEW3svs';
 
-        async function doConnect() {
-            const url = document.getElementById('sbUrl').value.trim(), key = document.getElementById('sbKey').value.trim();
-            const err = document.getElementById('lErr'); err.style.display = 'none';
-            if (!url || !key) { err.style.display = 'block'; err.textContent = '❌ Preencha os dois campos.'; return; }
-            try { await initApp(url, key); } catch (e) { err.style.display = 'block'; err.textContent = '❌ ' + (e.message || e); }
-        }
+
+        window.addEventListener('load', () => {
+            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => { });
+            initApp(SUPABASE_URL, SUPABASE_ANON_KEY);
+        });
 
         async function initApp(url, key) {
             sb = createClient(url, key);
             const { error } = await sb.from('orders').select('id').limit(1);
-            if (error) throw error;
-            localStorage.setItem('kitch_url', url); localStorage.setItem('kitch_key', key);
+            if (error) {
+                document.getElementById('lErr').textContent = '❌ Erro ao conectar: ' + error.message;
+                throw error;
+            }
             $('loginScreen').style.display = 'none';
             $('hdr').style.display = 'flex'; $('main').style.display = 'flex';
             showEl('statsMob'); showEl('mobTabs'); showEl('mobCtrl');

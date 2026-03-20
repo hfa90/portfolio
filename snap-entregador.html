@@ -1102,21 +1102,21 @@
 
 <body>
 
-    <!-- ══════════════════════════════ LOGIN ══════════════════════════════ -->
-    <div id="loginScreen">
-        <div class="lx">
-            <div class="lx-brand">🛵 SnapFood</div>
-            <div class="lx-sub">App do Entregador — configure uma vez.</div>
-            <div id="lErr" class="lx-err"></div>
-            <label class="fld-l">URL do Supabase</label>
-            <input class="fld-i" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off"
-                autocorrect="off" spellcheck="false">
-            <label class="fld-l">Chave Anon</label>
-            <input class="fld-i" id="sbKey" type="text" placeholder="eyJ..." autocomplete="off" autocorrect="off"
-                spellcheck="false">
-            <p class="fld-hint">Mesmas credenciais do painel admin.</p>
-            <button class="lx-btn" onclick="doLogin()">Entrar →</button>
+    <!-- ══════════════════════════════ LOADING ══════════════════════════════ -->
+    <div id="loginScreen"
+        style="position:fixed;inset:0;background:#111110;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:1000">
+        <div style="font-size:24px;font-weight:800;color:#E8420A;font-family:sans-serif">🛵 SnapFood</div>
+        <div
+            style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.1);border-top-color:#E8420A;border-radius:50%;animation:spin 0.7s linear infinite">
         </div>
+        <div id="lErr" style="font-size:13px;color:rgba(255,255,255,0.4)">Conectando...</div>
+        <style>
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg)
+                }
+            }
+        </style>
     </div>
 
     <!-- ══════════════════════════════ APP ══════════════════════════════ -->
@@ -1289,24 +1289,23 @@
         // ──────────────────────────────────────────────────
         //  BOOT
         // ──────────────────────────────────────────────────
-        window.addEventListener('DOMContentLoaded', () => {
-            const url = ls('sb_url'), key = ls('sb_key');
-            if (url && key) { $('sbUrl').value = url; $('sbKey').value = key; initApp(url, key); }
-        });
+        // ===== CONFIGURAÇÃO CENTRAL DO SUPABASE =====
+        const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuYnJva3d0b253aW55eW15bGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjIxNDcsImV4cCI6MjA4OTAzODE0N30.8xdg51XgHgAiWCpO23KdzyTPFroIxRXIEJFmZEW3svs';
 
-        async function doLogin() {
-            const url = $('sbUrl').value.trim(), key = $('sbKey').value.trim();
-            if (!url || !key) { $('lErr').textContent = 'Preencha URL e chave.'; return; }
-            try { await initApp(url, key); }
-            catch (e) { $('lErr').textContent = '❌ ' + (e.message || e); }
-        }
+        // ===== INIT =====
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initApp(SUPABASE_URL, SUPABASE_ANON_KEY);
+        });
 
         async function initApp(url, key) {
             sb = createClient(url, key);
-            // Quick connectivity test
             const { error } = await sb.from('orders').select('id').limit(1);
-            if (error && error.code !== 'PGRST116') throw new Error(error.message);
-            lsSet('sb_url', url); lsSet('sb_key', key);
+            if (error && error.code !== 'PGRST116') {
+                $('lErr').textContent = '❌ Erro ao conectar: ' + error.message;
+                throw new Error(error.message);
+            }
             $('loginScreen').style.display = 'none';
             $('app').style.display = 'flex';
             $('connDot').classList.add('on');
