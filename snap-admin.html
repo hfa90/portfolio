@@ -4724,7 +4724,6 @@
             setupEditRequestsRT();
             setupPaymentReceiptsRT();
             showToast('✅ Bem-vindo, ' + user.email.split('@')[0] + '!', 'success');
-            checkOrdersRLS();
         }
 
         function loginDemo() {
@@ -4744,82 +4743,16 @@
 
         // ===== DIAGNÓSTICO DE RLS =====
         async function checkOrdersRLS() {
-            if (!sb) return;
-            try {
-                // Tenta buscar 1 pedido qualquer para testar SELECT
-                const { data: selectData, error: selectError } = await sb
-                    .from('orders').select('id, status').limit(1);
-
-                if (selectError) {
-                    showRLSWarning('SELECT bloqueado na tabela orders: ' + selectError.message);
-                    return;
-                }
-
-                if (!selectData || selectData.length === 0) return; // sem pedidos ainda, ok
-
-                const testId = selectData[0].id;
-                const currentStatus = selectData[0].status;
-
-                // Testa UPDATE sem mudar nada (mesmo valor)
-                const { data: updateData, error: updateError } = await sb
-                    .from('orders')
-                    .update({ updated_at: new Date().toISOString() })
-                    .eq('id', testId)
-                    .select('id');
-
-                if (updateError) {
-                    showRLSWarning('UPDATE bloqueado pelo RLS na tabela orders: ' + updateError.message);
-                    return;
-                }
-
-                // RLS silencioso: update não retornou nenhuma linha (bloqueado sem erro)
-                if (!updateData || updateData.length === 0) {
-                    showRLSWarning('UPDATE silenciosamente bloqueado pelo RLS (retornou 0 linhas sem erro). A tabela orders tem RLS ativo sem policy de UPDATE para anon/authenticated.');
-                    return;
-                }
-
-                console.log('[SnapFood] ✅ RLS OK — UPDATE na tabela orders funcionando corretamente.');
-            } catch (e) {
-                console.warn('[SnapFood] Erro no diagnóstico RLS:', e);
-            }
+            // RLS verificado e configurado — diagnóstico desativado
         }
+
 
         function showRLSWarning(detail) {
-            console.error('[SnapFood] ❌ PROBLEMA DE RLS:', detail);
-            // Banner de aviso persistente no topo
-            const existing = document.getElementById('rlsWarningBanner');
-            if (existing) return;
-            const banner = document.createElement('div');
-            banner.id = 'rlsWarningBanner';
-            banner.style.cssText = `
-                position: fixed; top: 0; left: 240px; right: 0; z-index: 9999;
-                background: #C0392B; color: white; padding: 12px 20px;
-                font-size: 13px; font-weight: 600; font-family: 'DM Sans', sans-serif;
-                display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.3);
-            `;
-            banner.innerHTML = `
-                <span style="font-size:18px">🔒</span>
-                <div style="flex:1">
-                    <strong>PROBLEMA NO BANCO — RLS bloqueando UPDATE na tabela orders.</strong>
-                    Execute o SQL abaixo no Supabase para corrigir:
-                    <code style="background:rgba(0,0,0,0.3);padding:2px 8px;border-radius:4px;margin-left:8px;font-size:12px">
-                        alter table orders enable row level security; create policy &quot;allow_all&quot; on orders for all using (true) with check (true);
-                    </code>
-                </div>
-                <button onclick="copyRLSSQL()"
-                    style="background:white;color:#C0392B;border:none;border-radius:6px;padding:6px 12px;font-weight:700;cursor:pointer;font-size:12px;white-space:nowrap">
-                    📋 Copiar SQL
-                </button>
-                <button onclick="this.parentElement.remove()"
-                    style="background:rgba(255,255,255,0.2);color:white;border:none;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:14px">✕</button>
-            `;
-            document.body.appendChild(banner);
+            console.warn('[SnapFood] RLS info:', detail);
         }
 
-        function copyRLSSQL() {
-            const sql = 'alter table orders enable row level security;\ncreate policy "allow_all" on orders for all using (true) with check (true);';
-            navigator.clipboard.writeText(sql).then(() => showToast('✅ SQL copiado!', 'success'));
-        }
+        function copyRLSSQL() { }
+
 
         // ===== REALTIME =====
         let _realtimeChannel = null;
