@@ -1638,8 +1638,8 @@
             gap: 10px;
         }
 
-        /* ===== LOADING SCREEN ===== */
-        .login-screen {
+        /* ===== AUTH SCREEN ===== */
+        .auth-screen {
             position: fixed;
             inset: 0;
             background: var(--sidebar-bg);
@@ -1647,35 +1647,133 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-direction: column;
-            gap: 16px;
+            padding: 24px;
         }
 
-        .snap-loading-logo {
+        .auth-box {
+            background: #1c1c1a;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 40px 36px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .auth-logo {
             font-family: 'Syne', sans-serif;
-            font-size: 28px;
+            font-size: 26px;
             font-weight: 800;
             color: var(--brand);
+            margin-bottom: 4px;
         }
 
-        .snap-loading-sub {
+        .auth-sub {
             font-size: 13px;
-            color: rgba(255, 255, 255, 0.4);
+            color: rgba(255, 255, 255, 0.35);
+            margin-bottom: 32px;
         }
 
-        .snap-loading-spinner {
-            width: 36px;
-            height: 36px;
+        .auth-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 7px;
+        }
+
+        .auth-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 14px;
+            color: #fff;
+            outline: none;
+            margin-bottom: 16px;
+            transition: border-color 0.2s;
+            box-sizing: border-box;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .auth-input:focus {
+            border-color: var(--brand);
+        }
+
+        .auth-input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        .auth-btn {
+            width: 100%;
+            background: var(--brand);
+            border: none;
+            border-radius: 10px;
+            padding: 13px;
+            color: #fff;
+            font-family: 'Syne', sans-serif;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            margin-top: 4px;
+        }
+
+        .auth-btn:hover {
+            background: var(--brand-dark);
+        }
+
+        .auth-btn:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .auth-error {
+            background: rgba(192, 57, 43, 0.15);
+            border: 1px solid rgba(192, 57, 43, 0.3);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            color: #f09595;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .auth-spinner {
+            width: 32px;
+            height: 32px;
             border: 3px solid rgba(255, 255, 255, 0.1);
             border-top-color: var(--brand);
             border-radius: 50%;
             animation: spin 0.7s linear infinite;
+            margin: 0 auto 12px;
+        }
+
+        .auth-loading-msg {
+            text-align: center;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.35);
         }
 
         @keyframes spin {
             to {
                 transform: rotate(360deg);
             }
+        }
+
+        .auth-reset-msg {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.3);
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .auth-reset-msg:hover {
+            color: rgba(255, 255, 255, 0.6);
         }
 
         /* ===== CATEGORIES PAGE ===== */
@@ -3248,11 +3346,50 @@
 
 <body>
 
-    <!-- LOADING SCREEN -->
-    <div class="login-screen" id="loginScreen">
-        <div class="snap-loading-logo">SnapFood</div>
-        <div class="snap-loading-spinner"></div>
-        <div class="snap-loading-sub" id="loginMsg">Conectando ao painel...</div>
+    <!-- AUTH SCREEN -->
+    <div class="auth-screen" id="loginScreen">
+
+        <!-- Estado: loading inicial -->
+        <div id="authLoading" class="auth-box" style="text-align:center;padding:48px 36px">
+            <div class="auth-logo" style="margin-bottom:20px">SnapFood</div>
+            <div class="auth-spinner"></div>
+            <div class="auth-loading-msg" id="authLoadingMsg">Iniciando...</div>
+        </div>
+
+        <!-- Estado: formulário de login -->
+        <div id="authForm" class="auth-box" style="display:none">
+            <div class="auth-logo">SnapFood</div>
+            <div class="auth-sub">Painel Administrativo</div>
+
+            <div class="auth-error" id="authError"></div>
+
+            <label class="auth-label">E-mail</label>
+            <input class="auth-input" id="authEmail" type="email" placeholder="admin@seurestaurante.com"
+                autocomplete="email" autocorrect="off" spellcheck="false">
+
+            <label class="auth-label">Senha</label>
+            <input class="auth-input" id="authPassword" type="password" placeholder="••••••••"
+                autocomplete="current-password" onkeydown="if(event.key==='Enter') doAuthLogin()">
+
+            <button class="auth-btn" id="authBtn" onclick="doAuthLogin()">Entrar no painel</button>
+
+            <div class="auth-reset-msg" onclick="doPasswordReset()">Esqueci minha senha</div>
+        </div>
+
+        <!-- Estado: reset de senha enviado -->
+        <div id="authResetDone" class="auth-box" style="display:none;text-align:center">
+            <div class="auth-logo" style="margin-bottom:16px">SnapFood</div>
+            <div style="font-size:32px;margin-bottom:12px">📧</div>
+            <div style="font-size:15px;font-weight:600;color:#fff;margin-bottom:8px">E-mail enviado!</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:24px;line-height:1.6">
+                Verifique sua caixa de entrada e clique no link para redefinir sua senha.
+            </div>
+            <button class="auth-btn"
+                onclick="document.getElementById('authResetDone').style.display='none';document.getElementById('authForm').style.display='block'">
+                Voltar ao login
+            </button>
+        </div>
+
     </div>
 
     <!-- SIDEBAR -->
@@ -4470,15 +4607,102 @@
         let editingCategoryId = null;
         let currentOrderId = null;
         let charts = {};
-        let adminPass = 'admin123';
+        let adminPass = 'admin123'; // legado — mantido para compatibilidade com funções antigas
 
         // ===== CONFIGURAÇÃO CENTRAL DO SUPABASE =====
-        // ➜ Substitua pelos valores do seu projeto Supabase
         const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuYnJva3d0b253aW55eW15bGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjIxNDcsImV4cCI6MjA4OTAzODE0N30.8xdg51XgHgAiWCpO23KdzyTPFroIxRXIEJFmZEW3svs';
 
         // ===== AUTH =====
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
+            sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            // Verificar se já existe sessão ativa
+            showAuthLoading('Verificando sessão...');
+            const { data: { session } } = await sb.auth.getSession();
+
+            if (session) {
+                // Já está logado — entrar direto
+                await enterApp(session.user);
+            } else {
+                // Mostrar formulário de login
+                showAuthForm();
+            }
+
+            // Escutar mudanças de sessão (login/logout em outras abas)
+            sb.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) {
+                    await enterApp(session.user);
+                }
+                if (event === 'SIGNED_OUT') {
+                    showAuthForm();
+                }
+            });
+        });
+
+        function showAuthLoading(msg) {
+            document.getElementById('authLoading').style.display = 'block';
+            document.getElementById('authForm').style.display = 'none';
+            document.getElementById('authResetDone').style.display = 'none';
+            document.getElementById('authLoadingMsg').textContent = msg || 'Carregando...';
+        }
+
+        function showAuthForm() {
+            document.getElementById('authLoading').style.display = 'none';
+            document.getElementById('authForm').style.display = 'block';
+            document.getElementById('authResetDone').style.display = 'none';
+            setTimeout(() => document.getElementById('authEmail').focus(), 100);
+        }
+
+        async function doAuthLogin() {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const errEl = document.getElementById('authError');
+            const btn = document.getElementById('authBtn');
+
+            errEl.style.display = 'none';
+            if (!email || !password) {
+                errEl.style.display = 'block';
+                errEl.textContent = 'Preencha e-mail e senha.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+
+            const { data, error } = await sb.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                errEl.style.display = 'block';
+                errEl.textContent = error.message.includes('Invalid login')
+                    ? '❌ E-mail ou senha incorretos.'
+                    : '❌ ' + error.message;
+                btn.disabled = false;
+                btn.textContent = 'Entrar no painel';
+                return;
+            }
+
+            showAuthLoading('Carregando painel...');
+        }
+
+        async function doPasswordReset() {
+            const email = document.getElementById('authEmail').value.trim();
+            if (!email) {
+                const errEl = document.getElementById('authError');
+                errEl.style.display = 'block';
+                errEl.textContent = 'Digite seu e-mail antes de redefinir a senha.';
+                return;
+            }
+            await sb.auth.resetPasswordForEmail(email, {
+                redirectTo: window.location.href
+            });
+            document.getElementById('authForm').style.display = 'none';
+            document.getElementById('authResetDone').style.display = 'block';
+        }
+
+        async function enterApp(user) {
+            showAuthLoading('Carregando painel...');
+
             const savedPass = localStorage.getItem('admin_pass');
             if (savedPass) adminPass = savedPass;
 
@@ -4489,8 +4713,19 @@
             if (savedAddress && document.getElementById('settingsAddress')) document.getElementById('settingsAddress').value = savedAddress;
             if (savedTime && document.getElementById('settingsTime')) document.getElementById('settingsTime').value = savedTime;
 
-            initSupabase(SUPABASE_URL, SUPABASE_ANON_KEY);
-        });
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('sbStatusLabel').textContent = 'Conectado';
+            document.getElementById('sbStatusSub').textContent = user.email.split('@')[0];
+            document.getElementById('sbDot').classList.add('connected');
+            document.getElementById('liveBadge').style.display = 'inline-flex';
+
+            loadDashboard();
+            setupRealtime();
+            setupEditRequestsRT();
+            setupPaymentReceiptsRT();
+            showToast('✅ Bem-vindo, ' + user.email.split('@')[0] + '!', 'success');
+            checkOrdersRLS();
+        }
 
         function loginDemo() {
             isDemoMode = true;
@@ -4504,23 +4739,7 @@
         }
 
         function initSupabase(url, key) {
-            try {
-                sb = createClient(url, key);
-                document.getElementById('loginScreen').style.display = 'none';
-                document.getElementById('sbStatusLabel').textContent = 'Conectado';
-                document.getElementById('sbStatusSub').textContent = url.replace('https://', '').split('.')[0];
-                document.getElementById('sbDot').classList.add('connected');
-                document.getElementById('liveBadge').style.display = 'inline-flex';
-                loadDashboard();
-                setupRealtime();
-                setupEditRequestsRT();
-                setupPaymentReceiptsRT();
-                showToast('✅ Conectado!', 'success');
-                checkOrdersRLS();
-            } catch (e) {
-                document.getElementById('loginMsg').textContent = '❌ Erro ao conectar: ' + e.message;
-                console.error(e);
-            }
+            // Mantido por compatibilidade — auth agora é feita via Supabase Auth
         }
 
         // ===== DIAGNÓSTICO DE RLS =====
@@ -6168,9 +6387,9 @@
         function saveSettings() { saveSettingsToDb(); }
         function saveBusinessSettings() { saveBusinessSettingsToDb(); }
 
-        function confirmLogout() {
+        async function confirmLogout() {
             if (confirm('Sair do painel admin?')) {
-                sessionStorage.removeItem('admin_session');
+                await sb.auth.signOut();
                 location.reload();
             }
         }
