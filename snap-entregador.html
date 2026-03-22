@@ -1587,6 +1587,7 @@
         let sb = null;
         let currentDriver = null;   // { id, name, pin, role }
         let shiftId = null;
+        let _restaurantId = null;   // uuid do restaurante — carregado no boot
         let allOrders = [];         // ready + delivering for this driver
         let allHistory = [];        // delivered today
         let cpPeriod = 'today';
@@ -1661,10 +1662,32 @@
 
         async function enterApp() {
             showAuthLoading('Conectando...');
+
+            // ── Buscar restaurant_id (obrigatório em todos os inserts) ────────
             try {
-                const { data } = await sb.from('staff_settings').select('moto_fee_pct').limit(1);
+                const { data: { user } } = await sb.auth.getUser();
+                if (user) {
+                    const { data: ru } = await sb.from('restaurant_users')
+                        .select('restaurant_id').eq('user_id', user.id).limit(1).maybeSingle();
+                    if (ru?.restaurant_id) _restaurantId = ru.restaurant_id;
+                }
+            } catch (e) { }
+            if (!_restaurantId) {
+                try {
+                    const { data: rest } = await sb.from('restaurants')
+                        .select('id').eq('active', true).limit(1).maybeSingle();
+                    if (rest?.id) _restaurantId = rest.id;
+                } catch (e) { }
+            }
+
+            try {
+                const { data } = await sb.from('staff_settings')
+                    .select('moto_fee_pct')
+                    .eq('restaurant_id', _restaurantId)
+                    .limit(1);
                 if (data && data.length) motoFeePct = data[0].moto_fee_pct ?? 100;
             } catch (e) { }
+
             // Verificar se módulo está ativo
             try {
                 const { data: modRow } = await sb.from('app_settings')
@@ -1795,7 +1818,8 @@
                     .select('id').eq('staff_id', currentDriver.id).eq('shift_date', today).limit(1);
                 if (existing && existing.length) { shiftId = existing[0].id; toast('↩️ Expediente retomado', 'success'); return; }
                 const { data: ins } = await sb.from('staff_shifts').insert({
-                    staff_id: currentDriver.id, shift_date: today, started_at: new Date().toISOString()
+                    staff_id: currentDriver.id, shift_date: today, started_at: new Date().toISOString(),
+                    restaurant_id: _restaurantId,
                 }).select('id').single();
                 if (ins) shiftId = ins.id;
             } catch (e) { }
@@ -2127,25 +2151,48 @@
         //  ACTIONS
         // ──────────────────────────────────────────────────
         async function startDelivery(orderId) {
+            // Guarda ref ao botão ANTES de qualquer await (DOM pode mudar depois)
             const btn = document.querySelector(`[onclick="startDelivery(${orderId})"]`);
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Atualizando...'; }
+
+            let success = false;
             try {
                 const now = new Date().toISOString();
-                // Atribuir este entregador ao pedido e mudar status
                 const { error } = await sb.from('orders').update({
                     status: 'delivering',
                     deliverer_id: currentDriver.id,
-                    updated_at: now
+                    updated_at: now,
                 }).eq('id', orderId);
                 if (error) throw error;
-                try { await sb.from('order_status_history').insert({ order_id: orderId, status: 'delivering', note: 'Entregador ' + currentDriver.name + ' saiu para entrega', created_at: now }); } catch (e) { }
+
+                // Histórico — silencioso, não bloqueia o fluxo
+                sb.from('order_status_history').insert({
+                    order_id: orderId,
+                    status: 'delivering',
+                    note: 'Entregador ' + currentDriver.name + ' saiu para entrega',
+                    created_at: now,
+                    restaurant_id: _restaurantId,
+                }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
+
+                success = true;
                 toast('🛵 Saindo para entrega!', 'success');
+                haptic('success');
+
+                // loadOrders vai recriar o DOM — abrir mapa depois
                 await loadOrders();
-                // Abrir mapa automaticamente
                 setTimeout(() => openMap(orderId), 600);
+
             } catch (e) {
-                toast('❌ Erro: ' + (e.message || e), 'error');
-                if (btn) { btn.disabled = false; btn.textContent = '🛵 Iniciar entrega'; }
+                console.error('[startDelivery]', e);
+                toast('❌ Erro ao iniciar entrega: ' + (e.message || e), 'error');
+            } finally {
+                // Só restaura o botão se o update FALHOU
+                // (se teve sucesso, loadOrders() recria o DOM com botão novo)
+                if (!success) {
+                    const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`);
+                    if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
+                    else if (btn) { btn.disabled = false; btn.textContent = '🛵 Iniciar entrega'; }
+                }
             }
         }
 
@@ -2171,13 +2218,14 @@
             const btn = $('cmConfirmBtn');
             btn.disabled = true; btn.textContent = '⏳ Salvando...';
 
+            let success = false;
             try {
                 const now = new Date().toISOString();
                 const o = allOrders.find(x => x.id == orderId);
                 const fee = Number(o?.delivery_fee || 0);
                 const earned = fee * motoFeePct / 100;
 
-                // Update order to delivered
+                // ── Update principal — se falhar, vai pro catch ──────────────
                 const { error } = await sb.from('orders').update({
                     status: 'delivered',
                     delivered_at: now,
@@ -2186,41 +2234,49 @@
                 }).eq('id', orderId);
                 if (error) throw error;
 
-                // Credit commission to deliverer
-                if (earned > 0 && currentDriver) {
-                    try {
-                        await sb.from('staff_commissions').insert({
-                            staff_id: currentDriver.id,
-                            order_id: orderId,
-                            type: 'taxa_entrega',
-                            amount: parseFloat(earned.toFixed(2)),
-                            order_type: 'delivery',
-                            paid: true,
-                            created_at: now
-                        });
-                    } catch (e) { /* tabela pode não existir */ }
+                success = true; // update principal OK
+
+                // ── Inserts secundários: fire-and-forget (não travam o botão) ─
+                if (earned > 0 && currentDriver && _restaurantId) {
+                    sb.from('staff_commissions').insert({
+                        staff_id: currentDriver.id,
+                        order_id: orderId,
+                        type: 'taxa_entrega',
+                        amount: parseFloat(earned.toFixed(2)),
+                        order_type: 'delivery',
+                        paid: true,
+                        created_at: now,
+                        restaurant_id: _restaurantId,
+                    }).then(({ error: e }) => { if (e) console.warn('[commission]', e.message); });
                 }
 
-                // Status history
-                try {
-                    await sb.from('order_status_history').insert({
-                        order_id: orderId, status: 'delivered',
+                if (_restaurantId) {
+                    sb.from('order_status_history').insert({
+                        order_id: orderId,
+                        status: 'delivered',
                         note: `Entrega confirmada pelo entregador ${currentDriver?.name || ''}. Taxa: R$ ${earned.toFixed(2)}.`,
-                        created_at: now
-                    });
-                } catch (e) { }
+                        created_at: now,
+                        restaurant_id: _restaurantId,
+                    }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
+                }
 
                 closeConfirmModal();
                 toast(`🏠 Entregue! +R$ ${earned.toFixed(2).replace('.', ',')} creditado.`, 'success');
+                haptic('success');
                 await loadOrders();
 
-                // Auto-switch to history tab after delivery
                 if (!allOrders.length) {
                     switchTab('history', $('tabHistory'));
                 }
             } catch (e) {
-                toast('❌ Erro: ' + (e.message || e), 'error');
-                btn.disabled = false; btn.textContent = '✅ Confirmar';
+                console.error('[doConfirmDelivery]', e);
+                toast('❌ Erro ao confirmar entrega: ' + (e.message || e), 'error');
+            } finally {
+                // Restaura o botão sempre que o update principal falhar
+                if (!success) {
+                    btn.disabled = false;
+                    btn.textContent = '✅ Confirmar';
+                }
             }
         }
 
