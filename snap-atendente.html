@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport"
         content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>SnapFood — Atendimento</title>
@@ -3663,7 +3664,7 @@
             // Verificar se módulo está ativo
             try {
                 const { data: modRow } = await sb.from('app_settings')
-                    .select('value').eq('key', 'modulo_atendente').single();
+                    .select('value').eq('key', 'modulo_atendente').maybeSingle();
                 if (modRow && modRow.value === 'false') {
                     document.getElementById('moduleBlocked').classList.add('show');
                     return;
@@ -3720,11 +3721,38 @@
            REALTIME
         ══════════════════════════════════════════ */
         function setupRT() {
-            sb.channel('att-rt')
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                    if ($('ordersPanel').classList.contains('open')) loadTodayOrders();
+            const channel = sb.channel('att-rt')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, (payload) => {
+                    // Atualiza o array em memória imediatamente, sem precisar do painel aberto
+                    const o = payload.new || payload.old;
+                    if (!o) return;
+                    const today = new Date(); today.setHours(0, 0, 0, 0);
+                    const oDate = new Date(o.created_at);
+                    if (oDate < today) return; // ignora pedidos de dias anteriores
+
+                    if (payload.eventType === 'INSERT') {
+                        allOrders.unshift(o);
+                    } else if (payload.eventType === 'UPDATE') {
+                        const idx = allOrders.findIndex(x => x.id === o.id);
+                        if (idx !== -1) allOrders[idx] = { ...allOrders[idx], ...o };
+                        else allOrders.unshift(o);
+                    } else if (payload.eventType === 'DELETE') {
+                        allOrders = allOrders.filter(x => x.id !== o.id);
+                    }
+                    if ($('ordersPanel').classList.contains('open')) renderOrders();
+
+                    // Atualiza mesas se modal estiver aberto
+                    if ($('tablesModal').classList.contains('open')) openTablesModal();
                 })
-                .subscribe();
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        $('connDot').classList.add('on');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        $('connDot').classList.remove('on');
+                        console.warn('[RT] Canal com problema, reconectando em 5s...');
+                        setTimeout(setupRT, 5000);
+                    }
+                });
         }
 
         /* ══════════════════════════════════════════
@@ -4143,10 +4171,11 @@
 
         async function loadTodayOrders() {
             const today = new Date(); today.setHours(0, 0, 0, 0);
-            const { data } = await sb.from('orders')
-                .select('*')
+            const { data, error } = await sb.from('orders')
+                .select('id,order_number,customer_name,customer_phone,order_type,payment_method,status,notes,address,table_number,items,subtotal,delivery_fee,discount,total,estimated_time,attendant_id,has_pending_edit,created_at,updated_at')
                 .gte('created_at', today.toISOString())
                 .order('created_at', { ascending: false });
+            if (error) { console.error('[loadTodayOrders]', error); toast('Erro ao carregar pedidos: ' + error.message, 'error'); return; }
             allOrders = data || [];
             renderOrders();
         }
@@ -4421,11 +4450,12 @@
             const today = new Date().toISOString().slice(0, 10);
             try {
                 // Check if shift already exists for today
-                const { data: existing } = await sb.from('staff_shifts')
-                    .select('id,started_at')
+                const { data: existing, error: e1 } = await sb.from('staff_shifts')
+                    .select('id, started_at')
                     .eq('staff_id', currentAttendant.id)
                     .eq('shift_date', today)
                     .limit(1);
+                if (e1) throw e1;
                 if (existing && existing.length) {
                     shiftId = existing[0].id;
                     // Already has a shift, just resume (do NOT create new)
@@ -4433,13 +4463,14 @@
                     return;
                 }
                 // Create new shift
-                const { data: inserted } = await sb.from('staff_shifts').insert({
+                const { data: inserted, error: e2 } = await sb.from('staff_shifts').insert({
                     staff_id: currentAttendant.id,
                     shift_date: today,
                     started_at: new Date().toISOString(),
-                }).select().single();
+                }).select('id').single();
+                if (e2) throw e2;
                 if (inserted) shiftId = inserted.id;
-            } catch (e) { /* silently fail - shift tracking is secondary */ }
+            } catch (e) { console.warn('[shift]', e.message); /* silently fail - shift tracking is secondary */ }
         }
 
         async function endShift() {
@@ -4537,7 +4568,7 @@
                 // Busca pedidos presenciais ativos + funcionários + takeovers pendentes em paralelo
                 const [ordersRes, staffRes, takeoversRes] = await Promise.all([
                     sb.from('orders')
-                        .select('*')
+                        .select('id,order_number,customer_name,order_type,payment_method,status,notes,table_number,items,subtotal,delivery_fee,discount,total,attendant_id,has_pending_edit,created_at,updated_at')
                         .eq('order_type', 'presencial')
                         .in('status', ['pending', 'confirmed', 'preparing', 'ready'])
                         .gte('created_at', today.toISOString())
@@ -4858,7 +4889,7 @@
         async function loadEditOrder(orderId) {
             if (!orderId) { $('eoContent').style.display = 'none'; return; }
             try {
-                const { data: ord } = await sb.from('orders').select('*').eq('id', orderId).single();
+                const { data: ord } = await sb.from('orders').select('id,order_number,customer_name,customer_phone,order_type,payment_method,status,notes,address,table_number,items,subtotal,delivery_fee,discount,total,attendant_id,created_at,updated_at').eq('id', orderId).single();
                 if (!ord) return;
                 editOrderId = Number(orderId);
                 const raw = typeof ord.items === 'string' ? JSON.parse(ord.items) : (ord.items || []);
