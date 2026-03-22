@@ -9,6 +9,8 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
     <style>
         :root {
             --brand: #E8420A;
@@ -60,7 +62,7 @@
             flex-direction: column;
         }
 
-        /* ═══════════ LOGIN ═══════════ */
+        /* ═══════════ AUTH ═══════════ */
         #loginScreen {
             position: fixed;
             inset: 0;
@@ -72,33 +74,30 @@
             padding: 24px;
         }
 
-        .lx {
+        .auth-box {
             width: 100%;
             max-width: 360px;
+            background: #1c1c1a;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-sm);
+            padding: 36px 28px;
         }
 
-        .lx-brand {
+        .auth-logo {
             font-family: var(--syne);
-            font-size: 26px;
+            font-size: 24px;
             font-weight: 800;
             color: #fff;
             margin-bottom: 4px;
         }
 
-        .lx-sub {
+        .auth-sub {
             font-size: 13px;
             color: rgba(255, 255, 255, .5);
             margin-bottom: 28px;
         }
 
-        .lx-err {
-            font-size: 13px;
-            color: #FF6B6B;
-            margin-bottom: 12px;
-            min-height: 18px;
-        }
-
-        .fld-l {
+        .auth-label {
             display: block;
             font-size: 12px;
             font-weight: 600;
@@ -108,7 +107,7 @@
             text-transform: uppercase;
         }
 
-        .fld-i {
+        .auth-input {
             width: 100%;
             background: rgba(255, 255, 255, .07);
             border: 1.5px solid rgba(255, 255, 255, .12);
@@ -120,19 +119,18 @@
             margin-bottom: 14px;
             outline: none;
             transition: border-color .2s;
+            box-sizing: border-box;
         }
 
-        .fld-i:focus {
+        .auth-input:focus {
             border-color: var(--brand2);
         }
 
-        .fld-hint {
-            font-size: 11px;
-            color: rgba(255, 255, 255, .3);
-            margin-bottom: 20px;
+        .auth-input::placeholder {
+            color: rgba(255, 255, 255, 0.2);
         }
 
-        .lx-btn {
+        .auth-btn {
             width: 100%;
             padding: 14px;
             background: var(--brand);
@@ -147,8 +145,36 @@
             letter-spacing: .3px;
         }
 
-        .lx-btn:hover {
+        .auth-btn:hover {
             background: var(--brand3);
+        }
+
+        .auth-btn:disabled {
+            opacity: 0.5;
+            cursor: default;
+        }
+
+        .auth-error {
+            font-size: 13px;
+            color: #FF6B6B;
+            margin-bottom: 12px;
+            display: none;
+        }
+
+        .auth-spinner {
+            width: 28px;
+            height: 28px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--brand);
+            border-radius: 50%;
+            animation: authSpin 0.7s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes authSpin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         /* ═══════════ TOPBAR ═══════════ */
@@ -1097,26 +1123,284 @@
                 font-size: 17px;
             }
         }
+
+        /* ══════════ MAPA DE ENTREGA ══════════ */
+        #mapModal {
+            position: fixed;
+            inset: 0;
+            z-index: 500;
+            background: #0f0f0e;
+            display: none;
+            flex-direction: column;
+        }
+
+        #mapModal.open {
+            display: flex;
+        }
+
+        .map-header {
+            background: #1a1a18;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+            padding-top: calc(12px + env(safe-area-inset-top));
+        }
+
+        .map-header-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .map-header-name {
+            font-family: var(--syne);
+            font-size: 15px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .map-header-addr {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.45);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .map-close-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: none;
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 18px;
+            width: 36px;
+            height: 36px;
+            cursor: pointer;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #mapContainer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        .map-footer {
+            background: #1a1a18;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 12px 16px;
+            display: flex;
+            gap: 8px;
+            flex-shrink: 0;
+            padding-bottom: calc(12px + env(safe-area-inset-bottom));
+        }
+
+        .map-status {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            text-align: center;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .map-status.ok {
+            color: #1D9E75;
+        }
+
+        .map-status.err {
+            color: #FF6B6B;
+        }
+
+        .map-nav-btn {
+            background: var(--brand);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-family: var(--syne);
+            font-size: 13px;
+            font-weight: 700;
+            padding: 0 16px;
+            cursor: pointer;
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .map-nav-btn.secondary {
+            background: rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .map-recenter-btn {
+            position: absolute;
+            bottom: 90px;
+            right: 16px;
+            z-index: 1000;
+            background: #1a1a18;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 20px;
+            width: 44px;
+            height: 44px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Leaflet — forçar renderização correta */
+        .leaflet-container {
+            width: 100% !important;
+            height: 100% !important;
+            background: #1a1a18;
+        }
+
+        .leaflet-tile-container img {
+            width: 256px !important;
+            height: 256px !important;
+        }
+
+        /* Leaflet dark tweaks */
+        .leaflet-tile-pane {
+            filter: brightness(0.85) saturate(0.9);
+        }
+
+        .leaflet-control-zoom a {
+            background: #1a1a18 !important;
+            color: #fff !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+        }
+
+        .leaflet-control-attribution {
+            background: rgba(0, 0, 0, 0.5) !important;
+            color: rgba(255, 255, 255, 0.3) !important;
+            font-size: 9px !important;
+        }
+
+        .leaflet-control-attribution a {
+            color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        .driver-pulse {
+            width: 16px;
+            height: 16px;
+            background: #E8420A;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 0 0 4px rgba(232, 66, 10, 0.3);
+            animation: driverPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes driverPulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 4px rgba(232, 66, 10, 0.3);
+            }
+
+            50% {
+                box-shadow: 0 0 0 8px rgba(232, 66, 10, 0.1);
+            }
+        }
+
+        /* ── Tela de módulo desativado ── */
+        #moduleBlocked {
+            position: fixed;
+            inset: 0;
+            background: #111110;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        #moduleBlocked.show {
+            display: flex;
+        }
+
+        .blocked-icon {
+            font-size: 48px;
+        }
+
+        .blocked-title {
+            font-family: var(--syne, sans-serif);
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .blocked-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.6;
+            max-width: 300px;
+        }
     </style>
 </head>
 
 <body>
 
-    <!-- ══════════════════════════════ LOGIN ══════════════════════════════ -->
+    <!-- Tela de módulo desativado -->
+    <div id="moduleBlocked">
+        <div class="blocked-icon">🔒</div>
+        <div class="blocked-title">App do Entregador desativado</div>
+        <div class="blocked-sub">Este módulo foi desativado pelo administrador.<br>Entre em contato para reativar o
+            acesso.</div>
+        <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.2)">🛵 App do Entregador</div>
+    </div>
+
+
+    <!-- ══════════════════════════════ AUTH ══════════════════════════════ -->
     <div id="loginScreen">
-        <div class="lx">
-            <div class="lx-brand">🛵 SnapFood</div>
-            <div class="lx-sub">App do Entregador — configure uma vez.</div>
-            <div id="lErr" class="lx-err"></div>
-            <label class="fld-l">URL do Supabase</label>
-            <input class="fld-i" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off"
-                autocorrect="off" spellcheck="false">
-            <label class="fld-l">Chave Anon</label>
-            <input class="fld-i" id="sbKey" type="text" placeholder="eyJ..." autocomplete="off" autocorrect="off"
-                spellcheck="false">
-            <p class="fld-hint">Mesmas credenciais do painel admin.</p>
-            <button class="lx-btn" onclick="doLogin()">Entrar →</button>
+
+        <!-- Loading inicial -->
+        <div id="authLoading" style="width:100%;max-width:360px;text-align:center">
+            <div style="font-family:var(--syne);font-size:24px;font-weight:800;color:#fff;margin-bottom:18px">🛵
+                SnapFood</div>
+            <div class="auth-spinner"></div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.4)" id="authLoadingMsg">Iniciando...</div>
         </div>
+
+        <!-- Formulário de login -->
+        <div id="authForm" class="auth-box" style="display:none">
+            <div class="auth-logo">🛵 SnapFood</div>
+            <div class="auth-sub">App do Entregador</div>
+
+            <div class="auth-error" id="authError"></div>
+
+            <label class="auth-label">E-mail</label>
+            <input class="auth-input" id="authEmail" type="email" placeholder="entregador@restaurante.com"
+                autocomplete="email" autocorrect="off" spellcheck="false">
+
+            <label class="auth-label">Senha</label>
+            <input class="auth-input" id="authPassword" type="password" placeholder="••••••••"
+                autocomplete="current-password" onkeydown="if(event.key==='Enter') doAuthLogin()">
+
+            <button class="auth-btn" id="authBtn" onclick="doAuthLogin()">Entrar →</button>
+        </div>
+
     </div>
 
     <!-- ══════════════════════════════ APP ══════════════════════════════ -->
@@ -1133,7 +1417,9 @@
             <div style="flex:1"></div>
             <button class="tb-btn-ghost" id="btnComm" onclick="openCommissions()" style="display:none">💰
                 Ganhos</button>
-            <button class="tb-btn-ghost" id="btnShift" onclick="endShift()" style="display:none">⏹ Sair</button>
+            <button class="tb-btn-ghost" id="btnShift" onclick="endShift()" style="display:none">⏹ Encerrar</button>
+            <button class="tb-btn-ghost" onclick="doSignOut()" style="opacity:0.4;font-size:12px"
+                title="Sair do sistema">Sair</button>
             <div class="conn-dot" id="connDot"></div>
         </div>
 
@@ -1217,6 +1503,27 @@
         </div>
     </div>
 
+    <!-- ══════════════════════════════ MAPA DE ENTREGA ══════════════════════════════ -->
+    <div id="mapModal">
+        <div class="map-header">
+            <button class="map-close-btn" onclick="closeMap()">✕</button>
+            <div class="map-header-info">
+                <div class="map-header-name" id="mapCustomerName">—</div>
+                <div class="map-header-addr" id="mapAddr">Localizando endereço...</div>
+            </div>
+            <button class="map-nav-btn secondary" onclick="openExternalNav()"
+                title="Abrir no Waze/Google Maps">🗺</button>
+        </div>
+        <div style="position:relative;flex:1;min-height:0;overflow:hidden">
+            <div id="mapContainer"></div>
+            <button class="map-recenter-btn" onclick="recenterMap()" title="Minha localização">📍</button>
+        </div>
+        <div class="map-footer">
+            <div class="map-status" id="mapStatus">⏳ Localizando...</div>
+            <button class="map-nav-btn" onclick="openExternalNav()">🧭 Navegar</button>
+        </div>
+    </div>
+
     <!-- ══════════════════════════════ CONFIRM DELIVERY MODAL ══════════════════════════════ -->
     <div id="confirmModal">
         <div class="cm-box">
@@ -1287,35 +1594,101 @@
         let motoFeePct = 100;
 
         // ──────────────────────────────────────────────────
-        //  BOOT
+        //  AUTH + BOOT
         // ──────────────────────────────────────────────────
-        window.addEventListener('DOMContentLoaded', () => {
-            const url = ls('sb_url'), key = ls('sb_key');
-            if (url && key) { $('sbUrl').value = url; $('sbKey').value = key; initApp(url, key); }
+        const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuYnJva3d0b253aW55eW15bGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjIxNDcsImV4cCI6MjA4OTAzODE0N30.8xdg51XgHgAiWCpO23KdzyTPFroIxRXIEJFmZEW3svs';
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+            showAuthLoading('Verificando sessão...');
+            const { data: { session } } = await sb.auth.getSession();
+
+            if (session) {
+                await enterApp();
+            } else {
+                showAuthForm();
+            }
+
+            sb.auth.onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' && session) await enterApp();
+                if (event === 'SIGNED_OUT') showAuthForm();
+            });
         });
 
-        async function doLogin() {
-            const url = $('sbUrl').value.trim(), key = $('sbKey').value.trim();
-            if (!url || !key) { $('lErr').textContent = 'Preencha URL e chave.'; return; }
-            try { await initApp(url, key); }
-            catch (e) { $('lErr').textContent = '❌ ' + (e.message || e); }
+        function showAuthLoading(msg) {
+            $('authLoading').style.display = 'block';
+            $('authForm').style.display = 'none';
+            $('authLoadingMsg').textContent = msg || 'Carregando...';
         }
 
-        async function initApp(url, key) {
-            sb = createClient(url, key);
-            // Quick connectivity test
-            const { error } = await sb.from('orders').select('id').limit(1);
-            if (error && error.code !== 'PGRST116') throw new Error(error.message);
-            lsSet('sb_url', url); lsSet('sb_key', key);
-            $('loginScreen').style.display = 'none';
-            $('app').style.display = 'flex';
-            $('connDot').classList.add('on');
-            // Load motoFeePct from staff_settings
+        function showAuthForm() {
+            $('authLoading').style.display = 'none';
+            $('authForm').style.display = 'block';
+            setTimeout(() => $('authEmail').focus(), 100);
+        }
+
+        async function doAuthLogin() {
+            const email = $('authEmail').value.trim();
+            const password = $('authPassword').value;
+            const errEl = $('authError');
+            const btn = $('authBtn');
+
+            errEl.style.display = 'none';
+            if (!email || !password) {
+                errEl.style.display = 'block';
+                errEl.textContent = 'Preencha e-mail e senha.';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Entrando...';
+
+            const { error } = await sb.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                errEl.style.display = 'block';
+                errEl.textContent = error.message.includes('Invalid login')
+                    ? '❌ E-mail ou senha incorretos.'
+                    : '❌ ' + error.message;
+                btn.disabled = false;
+                btn.textContent = 'Entrar →';
+                return;
+            }
+            showAuthLoading('Carregando...');
+        }
+
+        async function enterApp() {
+            showAuthLoading('Conectando...');
             try {
                 const { data } = await sb.from('staff_settings').select('moto_fee_pct').limit(1);
                 if (data && data.length) motoFeePct = data[0].moto_fee_pct ?? 100;
             } catch (e) { }
+            // Verificar se módulo está ativo
+            try {
+                const { data: modRow } = await sb.from('app_settings')
+                    .select('value').eq('key', 'modulo_entregador').maybeSingle();
+                if (modRow && modRow.value === 'false') {
+                    document.getElementById('moduleBlocked').classList.add('show');
+                    return;
+                }
+            } catch (e) { /* se não existe a key, considera ativo */ }
+
+            $('loginScreen').style.display = 'none';
+            $('app').style.display = 'flex';
+            $('connDot').classList.add('on');
             openDriverScreen();
+        }
+
+        async function doSignOut() {
+            if (!confirm('Sair do sistema completamente?')) return;
+            await sb.auth.signOut();
+            location.reload();
+        }
+
+        async function initApp(url, key) {
+            // Mantido por compatibilidade
         }
 
         // ──────────────────────────────────────────────────
@@ -1423,7 +1796,7 @@
                 if (existing && existing.length) { shiftId = existing[0].id; toast('↩️ Expediente retomado', 'success'); return; }
                 const { data: ins } = await sb.from('staff_shifts').insert({
                     staff_id: currentDriver.id, shift_date: today, started_at: new Date().toISOString()
-                }).select().single();
+                }).select('id').single();
                 if (ins) shiftId = ins.id;
             } catch (e) { }
         }
@@ -1465,47 +1838,150 @@
         // ──────────────────────────────────────────────────
         //  REALTIME
         // ──────────────────────────────────────────────────
+        let _rtChannel = null;
+
+        // ── Processa evento RT diretamente em memória (sem roundtrip ao banco) ──
+        function onRTEvent(payload) {
+            const o = payload.new || payload.old;
+            if (!o) return;
+
+            // Filtro 1: só pedidos delivery
+            if (o.order_type && o.order_type !== 'delivery') return;
+
+            const myId = currentDriver?.id;
+            const isMyOrder = o.deliverer_id == myId;
+            const isUnassigned = !o.deliverer_id;
+            const wasAssigned = payload.eventType === 'UPDATE'
+                && payload.old?.deliverer_id != myId
+                && payload.new?.deliverer_id == myId;
+
+            // Filtro 2: só eventos que interessam ao entregador
+            const relevantStatus = ['ready', 'delivering', 'delivered'].includes(o.status);
+            if (!relevantStatus && !wasAssigned) return;
+            if (!isMyOrder && !isUnassigned && !wasAssigned) return;
+
+            // ── Atualiza allOrders em memória instantaneamente ─────────────
+            const prevDeliveringIds = allOrders.filter(x => x.status === 'delivering' && x.deliverer_id == myId).map(x => x.id);
+
+            if (payload.eventType === 'DELETE') {
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                allHistory = allHistory.filter(x => x.id !== o.id);
+
+            } else if (o.status === 'delivered') {
+                // Pedido entregue: sai de allOrders, entra em allHistory
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                const alreadyHist = allHistory.find(x => x.id === o.id);
+                if (!alreadyHist) {
+                    allHistory.unshift(o);
+                } else {
+                    allHistory = allHistory.map(x => x.id === o.id ? { ...x, ...o } : x);
+                }
+
+            } else if (o.status === 'ready' || o.status === 'delivering') {
+                // Pedido pronto ou em rota: entra/atualiza em allOrders
+                allHistory = allHistory.filter(x => x.id !== o.id);
+                const idx = allOrders.findIndex(x => x.id === o.id);
+                if (idx !== -1) {
+                    allOrders[idx] = { ...allOrders[idx], ...o };
+                } else {
+                    allOrders.push(o);
+                }
+
+            } else {
+                // Qualquer outro status (cancelled etc): remove de ambas as listas
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                allHistory = allHistory.filter(x => x.id !== o.id);
+            }
+
+            // ── Notificações instantâneas ──────────────────────────────────
+            if (o.status === 'ready' && isMyOrder) {
+                const isNew = !prevDeliveringIds.includes(o.id) && !allOrders.find(x => x.id === o.id && x.status === 'ready');
+                toast('📦 Pedido ' + (o.order_number || '#' + o.id) + ' pronto para retirar!', 'success');
+                haptic('success');
+            }
+
+            if (o.status === 'delivering' && isMyOrder) {
+                const isNewDelivering = !prevDeliveringIds.includes(o.id);
+                if (isNewDelivering) {
+                    toast('🛵 ' + (o.order_number || '#' + o.id) + ' — saindo para entrega!', 'success');
+                    haptic('success');
+                    // Abrir mapa automaticamente
+                    if (!$('mapModal')?.classList.contains('open')) {
+                        setTimeout(() => openMap(o.id), 600);
+                    }
+                }
+            }
+
+            if (wasAssigned) {
+                toast('🆕 Novo pedido atribuído a você: ' + (o.order_number || '#' + o.id), 'success');
+                haptic('success');
+            }
+
+            // ── Render imediato sem ir ao banco ────────────────────────────
+            renderAll();
+        }
+
         function setupRealtime() {
             if (!sb || !currentDriver) return;
-            sb.channel('driver-orders-' + currentDriver.id)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async (payload) => {
-                    const o = payload.new;
-                    if (!o) return;
-                    // Only care about orders assigned to this driver
-                    if (o.deliverer_id != currentDriver.id && payload.eventType !== 'UPDATE') return;
-                    if (o.order_type !== 'delivery') return;
-                    await loadOrders();
-                })
-                .subscribe();
+            // Limpa canal anterior
+            if (_rtChannel) { try { sb.removeChannel(_rtChannel); } catch (e) { } _rtChannel = null; }
+            if (window._driverPoll) { clearInterval(window._driverPoll); window._driverPoll = null; }
+
+            // Sem filter no canal — plano free não suporta row filters.
+            // Toda a filtragem é feita em onRTEvent() sem roundtrip ao banco.
+            _rtChannel = sb.channel('driver-rt-' + currentDriver.id + '-' + Date.now())
+                .on('postgres_changes', {
+                    event: '*',
+                    schema: 'public',
+                    table: 'orders'
+                }, onRTEvent)
+                .subscribe((status) => {
+                    const dot = $('connDot');
+                    if (status === 'SUBSCRIBED') {
+                        if (dot) { dot.classList.add('on'); }
+                        console.log('[RT] Realtime ativo para', currentDriver.name);
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        if (dot) { dot.classList.remove('on'); }
+                        console.warn('[RT] Canal perdido, reconectando em 5s...');
+                        setTimeout(setupRealtime, 5000);
+                    }
+                });
         }
 
         // ──────────────────────────────────────────────────
         //  LOAD ORDERS
         // ──────────────────────────────────────────────────
+        // Colunas usadas pelos cards — evita select('*') que pode falhar com RLS
+        const ORDER_COLS = 'id,order_number,customer_name,customer_phone,order_type,payment_method,status,notes,address,items,subtotal,delivery_fee,total,deliverer_id,attendant_id,created_at,updated_at,delivered_at';
+
         async function loadOrders() {
             if (!sb || !currentDriver) return;
             const today = new Date(); today.setHours(0, 0, 0, 0);
             try {
-                // Active: ready (waiting pick-up) OR delivering (in transit) — assigned to me
-                const { data: active } = await sb.from('orders')
-                    .select('*')
-                    .eq('deliverer_id', currentDriver.id)
+                // Pedidos ativos: prontos ou em rota — deste entregador OU sem atribuição
+                const { data: active, error: e1 } = await sb.from('orders')
+                    .select(ORDER_COLS)
                     .eq('order_type', 'delivery')
                     .in('status', ['ready', 'delivering'])
+                    .or(`deliverer_id.eq.${currentDriver.id},deliverer_id.is.null`)
                     .order('created_at', { ascending: true });
+                if (e1) throw e1;
                 allOrders = active || [];
 
-                // History: delivered today by me
-                const { data: hist } = await sb.from('orders')
-                    .select('*')
+                // Histórico: entregues hoje por mim
+                const { data: hist, error: e2 } = await sb.from('orders')
+                    .select(ORDER_COLS)
                     .eq('deliverer_id', currentDriver.id)
                     .eq('order_type', 'delivery')
                     .eq('status', 'delivered')
                     .gte('created_at', today.toISOString())
                     .order('delivered_at', { ascending: false });
+                if (e2) throw e2;
                 allHistory = hist || [];
+
             } catch (e) {
-                toast('Erro ao carregar pedidos', 'error');
+                console.error('[loadOrders]', e);
+                toast('Erro ao carregar pedidos: ' + (e.message || e), 'error');
             }
             renderAll();
         }
@@ -1547,14 +2023,20 @@
             const el = $('panelPending');
             if (!allOrders.length) {
                 el.innerHTML = `<div class="empty">
-            <div class="empty-ico">✅</div>
-            <div class="empty-title">Nenhuma entrega pendente</div>
-            <div class="empty-sub">Novos pedidos aparecerão aqui<br>quando o admin atribuir.</div>
-        </div>`;
+                    <div class="empty-ico">🛵</div>
+                    <div class="empty-title">Aguardando pedidos</div>
+                    <div class="empty-sub">Pedidos prontos para entrega<br>aparecerão aqui automaticamente.</div>
+                    <div style="margin-top:16px;padding:10px 14px;background:rgba(255,255,255,0.04);border-radius:10px;font-size:12px;color:rgba(255,255,255,0.3);text-align:center">
+                        👤 Logado como <strong style="color:rgba(255,255,255,0.6)">${currentDriver ? currentDriver.name : '—'}</strong>
+                    </div>
+                </div>`;
                 return;
             }
-            // Sort: delivering first, then ready
+            // Sort: delivering first (meu), depois ready (meu), depois sem entregador
             const sorted = [...allOrders].sort((a, b) => {
+                const myA = a.deliverer_id == currentDriver?.id;
+                const myB = b.deliverer_id == currentDriver?.id;
+                if (myA !== myB) return myA ? -1 : 1;
                 const order = { delivering: 0, ready: 1 };
                 return (order[a.status] ?? 9) - (order[b.status] ?? 9);
             });
@@ -1563,7 +2045,8 @@
 
         function buildOrderCard(o) {
             const isDelivering = o.status === 'delivering';
-            const statusLabel = isDelivering ? '🛵 Em rota' : '✔️ Pronto p/ retirar';
+            const isMyOrder = o.deliverer_id == currentDriver?.id;
+            const statusLabel = isDelivering ? '🛵 Em rota' : (isMyOrder ? '✔️ Pronto p/ retirar' : '📦 Disponível');
             const statusClass = isDelivering ? 'delivering' : 'ready';
             const fee = Number(o.delivery_fee || 0);
             const earned = (fee * motoFeePct / 100).toFixed(2).replace('.', ',');
@@ -1575,8 +2058,15 @@
             const addr = o.address || '—';
 
             const actions = isDelivering
-                ? `<button class="btn btn-success" onclick="openConfirmModal(${o.id})">🏠 Confirmar entrega</button>`
+                ? `<div style="display:flex;gap:8px">
+                     <button class="btn btn-secondary" style="flex:0 0 auto;padding:0 14px" onclick="openMap(${o.id})">🗺 Mapa</button>
+                     <button class="btn btn-success" style="flex:1" onclick="openConfirmModal(${o.id})">🏠 Entreguei</button>
+                   </div>`
                 : `<button class="btn btn-primary" onclick="startDelivery(${o.id})">🛵 Iniciar entrega</button>`;
+
+            const assignedBadge = !isMyOrder
+                ? `<div style="font-size:11px;color:rgba(255,255,255,0.35);margin-bottom:8px;padding:4px 8px;background:rgba(255,255,255,0.05);border-radius:6px;display:inline-block">Não atribuído</div>`
+                : '';
 
             return `<div class="order-card ${isDelivering ? 'priority' : ''}">
         <div class="oc-head">
@@ -1586,6 +2076,7 @@
             </div>
             <span class="oc-status ${statusClass}">${statusLabel}</span>
         </div>
+        ${assignedBadge}
         <div class="oc-body">
             <div class="oc-row">👤 <strong>${esc(o.customer_name)}</strong>
                 ${o.customer_phone ? `<a href="tel:${o.customer_phone}" style="margin-left:6px;font-size:12px;color:var(--brand);text-decoration:none;">📞 Ligar</a>` : ''}
@@ -1640,15 +2131,18 @@
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Atualizando...'; }
             try {
                 const now = new Date().toISOString();
+                // Atribuir este entregador ao pedido e mudar status
                 const { error } = await sb.from('orders').update({
                     status: 'delivering',
+                    deliverer_id: currentDriver.id,
                     updated_at: now
                 }).eq('id', orderId);
                 if (error) throw error;
-                // Status history
-                try { await sb.from('order_status_history').insert({ order_id: orderId, status: 'delivering', note: 'Entregador saiu para entrega', created_at: now }); } catch (e) { }
+                try { await sb.from('order_status_history').insert({ order_id: orderId, status: 'delivering', note: 'Entregador ' + currentDriver.name + ' saiu para entrega', created_at: now }); } catch (e) { }
                 toast('🛵 Saindo para entrega!', 'success');
                 await loadOrders();
+                // Abrir mapa automaticamente
+                setTimeout(() => openMap(orderId), 600);
             } catch (e) {
                 toast('❌ Erro: ' + (e.message || e), 'error');
                 if (btn) { btn.disabled = false; btn.textContent = '🛵 Iniciar entrega'; }
@@ -1845,6 +2339,15 @@
             return { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' }[m] || (m || '—').toUpperCase();
         }
         function fmtR(n) { return (+(n || 0)).toFixed(2).replace('.', ','); }
+        function haptic(style = 'medium') {
+            try {
+                if (window.navigator?.vibrate) {
+                    const map = { light: 10, medium: 18, heavy: 30, success: [20, 50, 20] };
+                    navigator.vibrate(map[style] || 18);
+                }
+            } catch (e) { }
+        }
+
         function esc(s) {
             if (!s) return '';
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -1856,6 +2359,234 @@
         function $(id) { return document.getElementById(id); }
         function ls(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
         function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+
+        // ══════════════════════════════════════════
+        //  MAPA DE ENTREGA (Leaflet + OpenStreetMap)
+        // ══════════════════════════════════════════
+        let _map = null;
+        let _driverMarker = null;
+        let _destMarker = null;
+        let _routeLine = null;
+        let _gpsWatch = null;
+        let _currentMapOrder = null;
+        let _destCoords = null; // { lat, lng }
+        let _driverCoords = null;
+
+        async function openMap(orderId) {
+            // Aceita ID ou objeto
+            const o = typeof orderId === 'object' ? orderId : allOrders.find(x => x.id == orderId);
+            if (!o) { toast('Pedido não encontrado', 'error'); return; }
+            _currentMapOrder = o;
+
+            $('mapCustomerName').textContent = o.customer_name || 'Cliente';
+            $('mapAddr').textContent = o.address || 'Sem endereço';
+            $('mapStatus').textContent = '⏳ Localizando endereço...';
+            $('mapStatus').className = 'map-status';
+
+            // Abrir modal PRIMEIRO para o container ter dimensões reais
+            $('mapModal').classList.add('open');
+
+            // Aguardar o browser renderizar o modal com tamanho real
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+            // Inicializar ou reinicializar o mapa
+            if (_map) {
+                _map.invalidateSize(true);
+            } else {
+                _map = L.map('mapContainer', {
+                    zoomControl: true,
+                    attributionControl: true,
+                    renderer: L.canvas()
+                });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+                    maxZoom: 19,
+                    crossOrigin: true,
+                }).addTo(_map);
+                _map.setView([-3.119, -60.0212], 12); // Manaus como padrão
+            }
+
+            // Forçar recalculo de tamanho após render
+            setTimeout(() => { if (_map) _map.invalidateSize(true); }, 300);
+
+            // Geocodificar endereço do cliente
+            _destCoords = null;
+            const addr = o.address;
+            if (addr && addr !== '—' && addr.length > 5) {
+                $('mapStatus').textContent = '🔍 Buscando endereço...';
+                _destCoords = await geocodeAddress(addr);
+            }
+
+            if (_destCoords) {
+                placeDestMarker(_destCoords);
+                $('mapStatus').textContent = '✅ ' + (addr || '').slice(0, 45);
+                $('mapStatus').className = 'map-status ok';
+            } else {
+                $('mapStatus').textContent = '⚠️ Endereço não localizado — use 🧭 Navegar';
+                $('mapStatus').className = 'map-status err';
+            }
+
+            // Iniciar GPS do entregador
+            startGPSWatch();
+        }
+
+        function closeMap() {
+            $('mapModal').classList.remove('open');
+            stopGPSWatch();
+            // Remover marcadores mas manter o mapa instanciado
+            if (_driverMarker) { _map.removeLayer(_driverMarker); _driverMarker = null; }
+            if (_destMarker) { _map.removeLayer(_destMarker); _destMarker = null; }
+            if (_routeLine) { _map.removeLayer(_routeLine); _routeLine = null; }
+            _destCoords = null;
+            _driverCoords = null;
+        }
+
+        async function geocodeAddress(address) {
+            try {
+                const q = encodeURIComponent(address + ', Brasil');
+                const res = await fetch(
+                    `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1`,
+                    { headers: { 'Accept-Language': 'pt-BR' } }
+                );
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+                }
+            } catch (e) {
+                console.warn('[Mapa] Erro geocodificação:', e);
+            }
+            return null;
+        }
+
+        function placeDestMarker(coords) {
+            if (_destMarker) _map.removeLayer(_destMarker);
+            const destIcon = L.divIcon({
+                html: `<div style="
+                    background:#E8420A;color:#fff;border-radius:50% 50% 50% 0;
+                    width:32px;height:32px;display:flex;align-items:center;
+                    justify-content:center;font-size:16px;
+                    transform:rotate(-45deg);border:2px solid #fff;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.4)">
+                    <span style="transform:rotate(45deg)">🏠</span></div>`,
+                iconSize: [32, 32],
+                iconAnchor: [16, 32],
+                className: '',
+            });
+            _destMarker = L.marker([coords.lat, coords.lng], { icon: destIcon })
+                .addTo(_map)
+                .bindPopup(`<b>Destino</b><br>${$('mapAddr').textContent}`);
+            _map.setView([coords.lat, coords.lng], 15);
+        }
+
+        function placeDriverMarker(lat, lng) {
+            const driverIcon = L.divIcon({
+                html: `<div class="driver-pulse"></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8],
+                className: '',
+            });
+            if (_driverMarker) {
+                _driverMarker.setLatLng([lat, lng]);
+            } else {
+                _driverMarker = L.marker([lat, lng], { icon: driverIcon })
+                    .addTo(_map)
+                    .bindPopup('📍 Sua localização');
+            }
+
+            // Traçar linha de rota simples entre entregador e destino
+            if (_destCoords) {
+                if (_routeLine) _map.removeLayer(_routeLine);
+                _routeLine = L.polyline(
+                    [[lat, lng], [_destCoords.lat, _destCoords.lng]],
+                    { color: '#E8420A', weight: 3, opacity: 0.7, dashArray: '8 6' }
+                ).addTo(_map);
+
+                // Calcular distância aproximada
+                const dist = calcDistance(lat, lng, _destCoords.lat, _destCoords.lng);
+                $('mapStatus').textContent = `✅ ~${dist < 1 ? (dist * 1000).toFixed(0) + 'm' : dist.toFixed(1) + 'km'} até o cliente`;
+                $('mapStatus').className = 'map-status ok';
+
+                // Ajustar zoom para mostrar os dois pontos
+                _map.fitBounds(
+                    [[lat, lng], [_destCoords.lat, _destCoords.lng]],
+                    { padding: [60, 60] }
+                );
+            } else {
+                _map.setView([lat, lng], 15);
+            }
+        }
+
+        function startGPSWatch() {
+            if (!navigator.geolocation) {
+                $('mapStatus').textContent = '❌ GPS não disponível neste dispositivo';
+                $('mapStatus').className = 'map-status err';
+                return;
+            }
+            stopGPSWatch();
+            _gpsWatch = navigator.geolocation.watchPosition(
+                (pos) => {
+                    _driverCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                    placeDriverMarker(_driverCoords.lat, _driverCoords.lng);
+                },
+                (err) => {
+                    console.warn('[GPS]', err.message);
+                    $('mapStatus').textContent = '⚠️ Sem acesso ao GPS — verifique as permissões';
+                    $('mapStatus').className = 'map-status err';
+                },
+                { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+            );
+        }
+
+        function stopGPSWatch() {
+            if (_gpsWatch !== null) {
+                navigator.geolocation.clearWatch(_gpsWatch);
+                _gpsWatch = null;
+            }
+        }
+
+        function recenterMap() {
+            if (_driverCoords && _destCoords) {
+                _map.fitBounds(
+                    [[_driverCoords.lat, _driverCoords.lng], [_destCoords.lat, _destCoords.lng]],
+                    { padding: [60, 60] }
+                );
+            } else if (_driverCoords) {
+                _map.setView([_driverCoords.lat, _driverCoords.lng], 15);
+            } else if (_destCoords) {
+                _map.setView([_destCoords.lat, _destCoords.lng], 15);
+            }
+        }
+
+        function openExternalNav() {
+            if (!_currentMapOrder) return;
+            const addr = _currentMapOrder.address || '';
+            if (!addr || addr === '—') {
+                toast('❌ Endereço não disponível', 'error');
+                return;
+            }
+            const encoded = encodeURIComponent(addr);
+            // Tentar Waze primeiro, fallback Google Maps
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            const isIOS = /iPhone|iPad/i.test(navigator.userAgent);
+
+            if (isAndroid || isIOS) {
+                // Waze deep link
+                window.open(`https://waze.com/ul?q=${encoded}&navigate=yes`, '_blank');
+            } else {
+                window.open(`https://www.google.com/maps/dir/?api=1&destination=${encoded}`, '_blank');
+            }
+        }
+
+        function calcDistance(lat1, lng1, lat2, lng2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLng = (lng2 - lng1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
     </script>
 
 </body>

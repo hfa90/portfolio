@@ -1337,10 +1337,95 @@
         .ac.edited {
             border: 2.5px solid #F5C518 !important;
         }
+
+        /* ── Tela de módulo desativado ── */
+        #moduleBlocked {
+            position: fixed;
+            inset: 0;
+            background: #111110;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        #moduleBlocked.show {
+            display: flex;
+        }
+
+        .blocked-icon {
+            font-size: 48px;
+        }
+
+        .blocked-title {
+            font-family: var(--syne, sans-serif);
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .blocked-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.6;
+            max-width: 300px;
+        }
+
+
+        /* ── Tela de módulo desativado ── */
+        #moduleBlocked {
+            position: fixed;
+            inset: 0;
+            background: #111110;
+            z-index: 2000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            padding: 32px;
+            text-align: center;
+        }
+
+        #moduleBlocked.show {
+            display: flex;
+        }
+
+        .blocked-icon {
+            font-size: 48px;
+        }
+
+        .blocked-title {
+            font-family: var(--sans, sans-serif);
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .blocked-sub {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.45);
+            line-height: 1.6;
+            max-width: 300px;
+        }
     </style>
 </head>
 
 <body>
+
+    <!-- Tela de módulo desativado -->
+    <div id="moduleBlocked">
+        <div class="blocked-icon">🔒</div>
+        <div class="blocked-title">Tela da Cozinha desativada</div>
+        <div class="blocked-sub">Este módulo foi desativado pelo administrador.<br>Entre em contato para reativar o
+            acesso.</div>
+        <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.2)">🔥 Tela da Cozinha</div>
+    </div>
+
 
     <!-- ══ EDIT ALERT BANNER ══ -->
     <div id="editAlertBanner" style="display:none" class="edit-alert-banner">
@@ -1353,20 +1438,21 @@
     </div>
 
 
-    <!-- LOGIN -->
-    <div id="loginScreen">
-        <div class="lc">
-            <div class="lc-ey">🔥 SnapFood</div>
-            <div class="lc-title">Tela da Cozinha</div>
-            <div class="lc-sub">Configure uma vez — as credenciais ficam salvas neste dispositivo.</div>
-            <div id="lErr" class="lc-err"></div>
-            <label class="fl">URL do Supabase</label>
-            <input class="fi" id="sbUrl" type="url" placeholder="https://xxxx.supabase.co" autocomplete="off">
-            <label class="fl">Chave Anon</label>
-            <input class="fi" id="sbKey" type="text" placeholder="eyJ..." autocomplete="off">
-            <p class="fi-hint">Mesmas credenciais do painel admin.</p>
-            <button class="lc-btn" onclick="doConnect()">Entrar na Cozinha →</button>
+    <!-- LOADING -->
+    <div id="loginScreen"
+        style="position:fixed;inset:0;background:#111;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:1000">
+        <div style="font-size:24px;font-weight:800;color:#E8420A;font-family:sans-serif">🔥 Cozinha</div>
+        <div
+            style="width:32px;height:32px;border:3px solid rgba(255,255,255,0.1);border-top-color:#E8420A;border-radius:50%;animation:spin 0.7s linear infinite">
         </div>
+        <div id="lErr" style="font-size:13px;color:rgba(255,255,255,0.4)">Conectando...</div>
+        <style>
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg)
+                }
+            }
+        </style>
     </div>
 
     <!-- HEADER -->
@@ -1496,24 +1582,34 @@
         }
 
         /* ── CONNECT ── */
-        window.addEventListener('load', () => {
-            const url = localStorage.getItem('kitch_url'), key = localStorage.getItem('kitch_key');
-            if (url && key) { document.getElementById('sbUrl').value = url; document.getElementById('sbKey').value = key; initApp(url, key); }
-            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => { });
-        });
+        // ===== CONFIGURAÇÃO CENTRAL DO SUPABASE =====
+        const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFuYnJva3d0b253aW55eW15bGZzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM0NjIxNDcsImV4cCI6MjA4OTAzODE0N30.8xdg51XgHgAiWCpO23KdzyTPFroIxRXIEJFmZEW3svs';
 
-        async function doConnect() {
-            const url = document.getElementById('sbUrl').value.trim(), key = document.getElementById('sbKey').value.trim();
-            const err = document.getElementById('lErr'); err.style.display = 'none';
-            if (!url || !key) { err.style.display = 'block'; err.textContent = '❌ Preencha os dois campos.'; return; }
-            try { await initApp(url, key); } catch (e) { err.style.display = 'block'; err.textContent = '❌ ' + (e.message || e); }
-        }
+        // ===== INIT =====
+
+        window.addEventListener('load', () => {
+            if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(() => { });
+            initApp(SUPABASE_URL, SUPABASE_ANON_KEY);
+        });
 
         async function initApp(url, key) {
             sb = createClient(url, key);
             const { error } = await sb.from('orders').select('id').limit(1);
-            if (error) throw error;
-            localStorage.setItem('kitch_url', url); localStorage.setItem('kitch_key', key);
+            if (error) {
+                document.getElementById('lErr').textContent = '❌ Erro ao conectar: ' + error.message;
+                throw error;
+            }
+            // Verificar se módulo está ativo
+            try {
+                const { data: modRow } = await sb.from('app_settings')
+                    .select('value').eq('key', 'modulo_cozinha').maybeSingle();
+                if (modRow && modRow.value === 'false') {
+                    document.getElementById('moduleBlocked').classList.add('show');
+                    return;
+                }
+            } catch (e) { /* se não existe a key, considera ativo */ }
+
             $('loginScreen').style.display = 'none';
             $('hdr').style.display = 'flex'; $('main').style.display = 'flex';
             showEl('statsMob'); showEl('mobTabs'); showEl('mobCtrl');
@@ -1539,24 +1635,38 @@
         }
 
         /* ── REALTIME ── */
+        let _rtChannel = null;
         function setupRT() {
-            sb.channel('krt').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, onChange).subscribe();
+            if (_rtChannel) { try { sb.removeChannel(_rtChannel); } catch (e) { } }
+            _rtChannel = sb.channel('krt-' + Date.now())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, onChange)
+                .subscribe((status) => {
+                    const dot = $('connDot');
+                    if (status === 'SUBSCRIBED') {
+                        if (dot) { dot.className = 'conn on'; }
+                        console.log('[RT] Cozinha conectada em tempo real');
+                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        if (dot) { dot.className = 'conn'; }
+                        console.warn('[RT] Canal perdido, reconectando em 4s...');
+                        setTimeout(setupRT, 4000);
+                    }
+                });
         }
 
         function onChange(p) {
-            const o = p.new || p.old, s = o.status;
-            if (p.eventType === 'DELETE') { purge(o.id); renderAll(); return; }
+            const o = p.new || p.old;
+            if (!o) return;
+            const s = o.status;
+            if (p.eventType === 'DELETE') { purge(o.id); renderAll(); updStats(); return; }
 
-            // ── Detectar edição aprovada pelo admin ──────────────────────────
+            // ── Detectar edição aprovada pelo admin ─────────────────────────
             if (p.eventType === 'UPDATE' && o.last_edited_at) {
                 const wasInActive = active.find(x => x.id === o.id);
                 const wasInQueue = queue.find(x => x.id === o.id);
                 if (wasInActive || wasInQueue) {
-                    // Atualizar o objeto na lista
                     if (wasInActive) {
                         active = active.map(x => x.id === o.id ? o : x);
-                        // Substituir card DOM com itens atualizados
-                        const oldCard = document.querySelector(`[data-oid="${o.id}"]`);
+                        const oldCard = document.querySelector('[data-oid="' + o.id + '"]');
                         if (oldCard) {
                             stopTmr(o.id);
                             const newCard = buildCard(o);
@@ -1566,7 +1676,6 @@
                         }
                     }
                     if (wasInQueue) queue = queue.map(x => x.id === o.id ? o : x);
-                    // Banner de alerta visual + som
                     showEditBanner(o);
                     beep('urgent');
                     flashTitle('✏️ PEDIDO ALTERADO!');
@@ -1575,18 +1684,39 @@
                 }
             }
 
+            // ── Roteamento por status ─────────────────────────────────────
             if (s === 'preparing') {
-                const already = active.find(x => x.id === o.id);
                 queue = queue.filter(x => x.id !== o.id);
-                if (!already) { active.push(o); beep('new'); flashTitle('🔥 NOVO PEDIDO!'); toast('🔥 Novo pedido: ' + o.order_number); }
-                else active = active.map(x => x.id === o.id ? o : x);
-            } else if (s === 'confirmed') {
+                const already = active.find(x => x.id === o.id);
+                if (!already) {
+                    active.push(o);
+                    beep('new');
+                    flashTitle('🔥 NOVO PEDIDO EM PREPARO!');
+                    toast('🔥 Pedido iniciado: ' + (o.order_number || '#' + o.id));
+                } else {
+                    active = active.map(x => x.id === o.id ? o : x);
+                }
+            } else if (s === 'confirmed' || s === 'pending') {
+                // Novo pedido na fila — instantâneo
                 active = active.filter(x => x.id !== o.id);
                 const already = queue.find(x => x.id === o.id);
-                if (!already) queue.push(o); else queue = queue.map(x => x.id === o.id ? o : x);
+                if (!already) {
+                    queue.push(o);
+                    if (p.eventType === 'INSERT') {
+                        beep('new');
+                        flashTitle('📋 NOVO PEDIDO NA FILA!');
+                        toast('📋 Novo pedido: ' + (o.order_number || '#' + o.id));
+                    }
+                } else {
+                    queue = queue.map(x => x.id === o.id ? o : x);
+                }
             } else {
+                // ready / delivering / delivered / cancelled
                 const wa = active.find(x => x.id === o.id);
-                if (wa && s === 'ready') { const t = (Date.now() - new Date(wa.created_at)) / 1000; if (t > 0 && t < 7200) { ptLog.push(t); doneToday++; } }
+                if (wa && s === 'ready') {
+                    const t = (Date.now() - new Date(wa.created_at)) / 1000;
+                    if (t > 0 && t < 7200) { ptLog.push(t); doneToday++; }
+                }
                 purge(o.id);
             }
             renderAll(); updStats();
