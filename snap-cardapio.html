@@ -5247,7 +5247,13 @@
 
       // Mostrar botão de comprovante PIX se o pagamento for PIX
       const sendReceiptBtn = document.getElementById('sendReceiptBtn');
-      if (sendReceiptBtn) sendReceiptBtn.style.display = selectedPayment === 'pix' ? 'block' : 'none';
+      if (sendReceiptBtn) {
+        sendReceiptBtn.style.display = selectedPayment === 'pix' ? 'block' : 'none';
+        // Garante que o botão está sempre ativo para novos pedidos
+        sendReceiptBtn.disabled = false;
+        sendReceiptBtn.textContent = '📎 Enviar comprovante PIX';
+        sendReceiptBtn.style.background = '#1A9E6A';
+      }
 
       cart = [];
       updateCartUI();
@@ -5405,13 +5411,41 @@
     }
 
     function resetOrder() {
-      // Limpar canal de tracking
+      // ── Limpar canal de tracking ──────────────────────────────────────
       if (_trackingChannel && sb) {
         try { sb.removeChannel(_trackingChannel); } catch (e) { }
         _trackingChannel = null;
       }
       if (_trackPolling) { clearInterval(_trackPolling); _trackPolling = null; }
       currentOrderDbId = null;
+
+      // ── Resetar estado do botão "Enviar comprovante PIX" ─────────────
+      const sendBtn = document.getElementById('sendReceiptBtn');
+      if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = '📎 Enviar comprovante PIX';
+        sendBtn.style.background = '#1A9E6A';
+        sendBtn.style.display = 'none'; // esconde até próximo pedido PIX
+      }
+
+      // ── Restaurar seção de upload do modal PIX ao estado inicial ─────
+      const uploadSection = document.getElementById('pixUploadSection');
+      if (uploadSection) {
+        uploadSection.classList.remove('visible');
+        uploadSection.innerHTML = `
+          <div>
+            <div class="pix-upload-title">📎 Enviar comprovante de pagamento</div>
+            <div class="pix-upload-sub">Após pagar, envie o print ou PDF para confirmar</div>
+          </div>
+          <label class="pix-file-label">
+            <span>📁</span> Selecionar arquivo
+            <input type="file" id="receiptFileInput" accept="image/*,.pdf" onchange="onReceiptFileSelected(this)">
+          </label>
+          <div class="pix-file-name" id="receiptFileName" style="display:none"></div>
+          <button class="pix-btn primary" id="uploadComprovanteBtn" onclick="uploadComprovante()" style="display:none">
+            📤 Enviar comprovante
+          </button>`;
+      }
 
       document.getElementById('checkoutOverlay').classList.remove('open');
       document.getElementById('checkoutContent').style.display = 'block';
