@@ -1839,41 +1839,109 @@
         //  REALTIME
         // ──────────────────────────────────────────────────
         let _rtChannel = null;
+
+        // ── Processa evento RT diretamente em memória (sem roundtrip ao banco) ──
+        function onRTEvent(payload) {
+            const o = payload.new || payload.old;
+            if (!o) return;
+
+            // Filtro 1: só pedidos delivery
+            if (o.order_type && o.order_type !== 'delivery') return;
+
+            const myId = currentDriver?.id;
+            const isMyOrder = o.deliverer_id == myId;
+            const isUnassigned = !o.deliverer_id;
+            const wasAssigned = payload.eventType === 'UPDATE'
+                && payload.old?.deliverer_id != myId
+                && payload.new?.deliverer_id == myId;
+
+            // Filtro 2: só eventos que interessam ao entregador
+            const relevantStatus = ['ready', 'delivering', 'delivered'].includes(o.status);
+            if (!relevantStatus && !wasAssigned) return;
+            if (!isMyOrder && !isUnassigned && !wasAssigned) return;
+
+            // ── Atualiza allOrders em memória instantaneamente ─────────────
+            const prevDeliveringIds = allOrders.filter(x => x.status === 'delivering' && x.deliverer_id == myId).map(x => x.id);
+
+            if (payload.eventType === 'DELETE') {
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                allHistory = allHistory.filter(x => x.id !== o.id);
+
+            } else if (o.status === 'delivered') {
+                // Pedido entregue: sai de allOrders, entra em allHistory
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                const alreadyHist = allHistory.find(x => x.id === o.id);
+                if (!alreadyHist) {
+                    allHistory.unshift(o);
+                } else {
+                    allHistory = allHistory.map(x => x.id === o.id ? { ...x, ...o } : x);
+                }
+
+            } else if (o.status === 'ready' || o.status === 'delivering') {
+                // Pedido pronto ou em rota: entra/atualiza em allOrders
+                allHistory = allHistory.filter(x => x.id !== o.id);
+                const idx = allOrders.findIndex(x => x.id === o.id);
+                if (idx !== -1) {
+                    allOrders[idx] = { ...allOrders[idx], ...o };
+                } else {
+                    allOrders.push(o);
+                }
+
+            } else {
+                // Qualquer outro status (cancelled etc): remove de ambas as listas
+                allOrders = allOrders.filter(x => x.id !== o.id);
+                allHistory = allHistory.filter(x => x.id !== o.id);
+            }
+
+            // ── Notificações instantâneas ──────────────────────────────────
+            if (o.status === 'ready' && isMyOrder) {
+                const isNew = !prevDeliveringIds.includes(o.id) && !allOrders.find(x => x.id === o.id && x.status === 'ready');
+                toast('📦 Pedido ' + (o.order_number || '#' + o.id) + ' pronto para retirar!', 'success');
+                haptic('success');
+            }
+
+            if (o.status === 'delivering' && isMyOrder) {
+                const isNewDelivering = !prevDeliveringIds.includes(o.id);
+                if (isNewDelivering) {
+                    toast('🛵 ' + (o.order_number || '#' + o.id) + ' — saindo para entrega!', 'success');
+                    haptic('success');
+                    // Abrir mapa automaticamente
+                    if (!$('mapModal')?.classList.contains('open')) {
+                        setTimeout(() => openMap(o.id), 600);
+                    }
+                }
+            }
+
+            if (wasAssigned) {
+                toast('🆕 Novo pedido atribuído a você: ' + (o.order_number || '#' + o.id), 'success');
+                haptic('success');
+            }
+
+            // ── Render imediato sem ir ao banco ────────────────────────────
+            renderAll();
+        }
+
         function setupRealtime() {
             if (!sb || !currentDriver) return;
             // Limpa canal anterior
             if (_rtChannel) { try { sb.removeChannel(_rtChannel); } catch (e) { } _rtChannel = null; }
-            // Limpa polling anterior se existir
             if (window._driverPoll) { clearInterval(window._driverPoll); window._driverPoll = null; }
 
-            // IMPORTANTE: Não usar filter no canal — plano free não suporta row filters no Realtime.
-            // A filtragem é feita no JS após receber o evento.
+            // Sem filter no canal — plano free não suporta row filters.
+            // Toda a filtragem é feita em onRTEvent() sem roundtrip ao banco.
             _rtChannel = sb.channel('driver-rt-' + currentDriver.id + '-' + Date.now())
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
                     table: 'orders'
-                }, async (payload) => {
-                    const o = payload.new || payload.old;
-                    if (!o) return;
-                    // Filtrar no JS: só pedidos delivery
-                    if (o.order_type && o.order_type !== 'delivery') return;
-                    // Só recarrega se for pedido deste entregador, sem entregador (disponível), ou recém-atribuído
-                    const isMyOrder = o.deliverer_id == currentDriver.id;
-                    const isUnassigned = !o.deliverer_id && ['ready', 'delivering'].includes(o.status);
-                    const wasAssigned = payload.eventType === 'UPDATE' &&
-                        payload.old && payload.old.deliverer_id != currentDriver.id &&
-                        payload.new && payload.new.deliverer_id == currentDriver.id;
-                    if (!isMyOrder && !isUnassigned && !wasAssigned) return;
-                    await loadOrders();
-                })
+                }, onRTEvent)
                 .subscribe((status) => {
                     const dot = $('connDot');
                     if (status === 'SUBSCRIBED') {
-                        if (dot) dot.className = 'conn-dot on';
+                        if (dot) { dot.classList.add('on'); }
                         console.log('[RT] Realtime ativo para', currentDriver.name);
                     } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                        if (dot) dot.className = 'conn-dot';
+                        if (dot) { dot.classList.remove('on'); }
                         console.warn('[RT] Canal perdido, reconectando em 5s...');
                         setTimeout(setupRealtime, 5000);
                     }
@@ -1883,43 +1951,37 @@
         // ──────────────────────────────────────────────────
         //  LOAD ORDERS
         // ──────────────────────────────────────────────────
+        // Colunas usadas pelos cards — evita select('*') que pode falhar com RLS
+        const ORDER_COLS = 'id,order_number,customer_name,customer_phone,order_type,payment_method,status,notes,address,items,subtotal,delivery_fee,total,deliverer_id,attendant_id,created_at,updated_at,delivered_at';
+
         async function loadOrders() {
             if (!sb || !currentDriver) return;
             const today = new Date(); today.setHours(0, 0, 0, 0);
-            const prevDelivering = allOrders.filter(o => o.status === 'delivering').map(o => o.id);
             try {
-                // Busca pedidos atribuídos a este entregador OU sem entregador (disponíveis)
-                const { data: active } = await sb.from('orders')
-                    .select('*')
+                // Pedidos ativos: prontos ou em rota — deste entregador OU sem atribuição
+                const { data: active, error: e1 } = await sb.from('orders')
+                    .select(ORDER_COLS)
                     .eq('order_type', 'delivery')
                     .in('status', ['ready', 'delivering'])
                     .or(`deliverer_id.eq.${currentDriver.id},deliverer_id.is.null`)
                     .order('created_at', { ascending: true });
+                if (e1) throw e1;
                 allOrders = active || [];
 
                 // Histórico: entregues hoje por mim
-                const { data: hist } = await sb.from('orders')
-                    .select('*')
+                const { data: hist, error: e2 } = await sb.from('orders')
+                    .select(ORDER_COLS)
                     .eq('deliverer_id', currentDriver.id)
                     .eq('order_type', 'delivery')
                     .eq('status', 'delivered')
                     .gte('created_at', today.toISOString())
                     .order('delivered_at', { ascending: false });
+                if (e2) throw e2;
                 allHistory = hist || [];
 
-                // Abrir mapa automaticamente se chegou novo pedido "delivering" atribuído a mim
-                const newDelivering = allOrders.filter(o =>
-                    o.status === 'delivering' &&
-                    o.deliverer_id == currentDriver.id &&
-                    !prevDelivering.includes(o.id)
-                );
-                if (newDelivering.length > 0 && !$('mapModal').classList.contains('open')) {
-                    toast('🛵 Nova entrega! Abrindo mapa...', 'success');
-                    setTimeout(() => openMap(newDelivering[0].id), 800);
-                }
             } catch (e) {
                 console.error('[loadOrders]', e);
-                toast('Erro ao carregar pedidos', 'error');
+                toast('Erro ao carregar pedidos: ' + (e.message || e), 'error');
             }
             renderAll();
         }
@@ -2277,6 +2339,15 @@
             return { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' }[m] || (m || '—').toUpperCase();
         }
         function fmtR(n) { return (+(n || 0)).toFixed(2).replace('.', ','); }
+        function haptic(style = 'medium') {
+            try {
+                if (window.navigator?.vibrate) {
+                    const map = { light: 10, medium: 18, heavy: 30, success: [20, 50, 20] };
+                    navigator.vibrate(map[style] || 18);
+                }
+            } catch (e) { }
+        }
+
         function esc(s) {
             if (!s) return '';
             return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
