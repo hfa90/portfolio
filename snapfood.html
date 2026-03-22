@@ -4215,11 +4215,40 @@
         async function loadAppSettings() {
             if (isDemoMode || !sb) return;
             try {
-                // Carregar restaurant_id (primeiro restaurante ativo)
-                const { data: rest } = await sb.from('restaurants').select('id').eq('active', true).limit(1).single();
-                if (rest) _restaurantId = rest.id;
+                // ── Buscar restaurante pelo usuário autenticado ──────────────
+                try {
+                    const { data: { user } } = await sb.auth.getUser();
+                    if (user) {
+                        const { data: ru } = await sb
+                            .from('restaurant_users')
+                            .select('restaurant_id')
+                            .eq('user_id', user.id)
+                            .limit(1)
+                            .maybeSingle();
+                        if (ru?.restaurant_id) _restaurantId = ru.restaurant_id;
+                    }
+                } catch (e) { }
 
-                const { data, error } = await sb.from('app_settings').select('key, value');
+                // Fallback: primeiro restaurante ativo
+                if (!_restaurantId) {
+                    const { data: rest } = await sb
+                        .from('restaurants')
+                        .select('id')
+                        .eq('active', true)
+                        .limit(1)
+                        .maybeSingle();
+                    if (rest?.id) _restaurantId = rest.id;
+                }
+
+                if (!_restaurantId) {
+                    console.error('[snapfood] Nenhum restaurante encontrado.');
+                    return;
+                }
+
+                const { data, error } = await sb
+                    .from('app_settings')
+                    .select('key, value')
+                    .eq('restaurant_id', _restaurantId);
                 if (error || !data) return;
                 const map = {};
                 data.forEach(r => { map[r.key] = r.value; });
@@ -4736,7 +4765,8 @@
                             points_earned: -ptsNeeded,
                             balance_after: newPoints,
                             description: `Resgate VIP: ${product.name}`,
-                            created_at: new Date().toISOString()
+                            created_at: new Date().toISOString(),
+                            restaurant_id: _restaurantId,
                         });
                     } catch (e) { }
                 } catch (e) { console.warn('VIP redeem error:', e); }
@@ -5106,6 +5136,7 @@
                     file_type: file.type.startsWith('image/') ? 'image' : 'pdf',
                     status: 'pending',
                     uploaded_at: new Date().toISOString(),
+                    restaurant_id: _restaurantId,
                 });
 
                 showToast('✅ Comprovante enviado! Aguardando verificação.', 'success');
@@ -5140,7 +5171,18 @@
             const _cpfRaw = (document.getElementById('customerCpf')?.value || '').replace(/\D/g, '');
             const _estTime = parseInt(localStorage.getItem('delivery_time') || '35') || 35;
 
-            // Monta payload sem campos opcionais que podem não existir na tabela
+            // ── Garantir restaurant_id antes de inserir ────────────────────
+            if (!_restaurantId) {
+                try {
+                    const { data: rest } = await sb.from('restaurants').select('id').eq('active', true).limit(1).maybeSingle();
+                    if (rest?.id) _restaurantId = rest.id;
+                } catch (e) { }
+            }
+            if (!_restaurantId) {
+                showToast('❌ Restaurante não identificado. Recarregue a página.', 'error');
+                return;
+            }
+
             const orderData = {
                 customer_name: name,
                 customer_phone: phone,
@@ -5161,9 +5203,8 @@
                     document.getElementById('addressComplement').value
                 ].filter(Boolean).join(', ') : null,
                 table_number: null,
+                restaurant_id: _restaurantId,
             };
-            // Adiciona restaurant_id apenas se existir (campo opcional)
-            if (_restaurantId) orderData.restaurant_id = _restaurantId;
 
             if (!isDemoMode && sb) {
                 try {
@@ -5187,7 +5228,8 @@
                             order_id: inserted.id,
                             status: 'pending',
                             note: 'Pedido criado pelo cliente',
-                            created_at: new Date().toISOString()
+                            created_at: new Date().toISOString(),
+                            restaurant_id: _restaurantId,
                         });
                     } catch (e) { /* tabela opcional */ }
 
@@ -5552,7 +5594,8 @@
                             total_orders: 0,
                             total_spent: 0,
                             total_redeemed: 0,
-                            created_at: new Date().toISOString()
+                            created_at: new Date().toISOString(),
+                            restaurant_id: _restaurantId,
                         });
                     } else {
                         // já cadastrado — apenas registrar o perfil local

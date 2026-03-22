@@ -3578,6 +3578,7 @@
         let ordersTab = 'active';
         let allOrders = [];
         let submitting = false;
+        let _restaurantId = null;  // uuid do restaurante — carregado no boot, obrigatório em todos os inserts
 
         /* ══════ AUTH ══════ */
         const SUPABASE_URL = 'https://anbrokwtonwinyymylfs.supabase.co/';
@@ -3691,24 +3692,53 @@
         }
 
         async function loadSettings() {
+            // ── 1. Busca restaurante vinculado ao usuário autenticado ──────────
             try {
-                // Busca restaurant_id (coluna NOT NULL na tabela orders)
-                const { data: rest } = await sb
-                    .from('restaurants')
-                    .select('id')
-                    .eq('active', true)
-                    .limit(1)
-                    .maybeSingle();
-                if (rest) _restaurantId = rest.id;
-            } catch (e) { /* tabela restaurants pode não existir */ }
+                const { data: { user } } = await sb.auth.getUser();
+                if (user) {
+                    // Tenta via restaurant_users (multi-tenant)
+                    const { data: ru } = await sb
+                        .from('restaurant_users')
+                        .select('restaurant_id')
+                        .eq('user_id', user.id)
+                        .limit(1)
+                        .maybeSingle();
+                    if (ru?.restaurant_id) {
+                        _restaurantId = ru.restaurant_id;
+                    }
+                }
+            } catch (e) { /* silently continue */ }
 
+            // Fallback: primeiro restaurante ativo (caso não use multi-tenant)
+            if (!_restaurantId) {
+                try {
+                    const { data: rest } = await sb
+                        .from('restaurants')
+                        .select('id')
+                        .eq('active', true)
+                        .limit(1)
+                        .maybeSingle();
+                    if (rest?.id) _restaurantId = rest.id;
+                } catch (e) { /* silently continue */ }
+            }
+
+            if (!_restaurantId) {
+                console.error('[loadSettings] Nenhum restaurante encontrado para este usuário.');
+                toast('⚠️ Restaurante não encontrado. Verifique o cadastro.', 'error');
+                return;
+            }
+
+            // ── 2. Carrega configurações filtrando pelo restaurante ────────────
             try {
-                const { data } = await sb.from('app_settings').select('key,value');
+                const { data } = await sb
+                    .from('app_settings')
+                    .select('key,value')
+                    .eq('restaurant_id', _restaurantId);
                 if (!data) return;
                 const m = {};
                 data.forEach(r => m[r.key] = r.value);
                 if (m.delivery_fee) delivFee = parseFloat(m.delivery_fee) || 5.00;
-            } catch (e) { }
+            } catch (e) { console.warn('[loadSettings] app_settings:', e); }
         }
 
         async function loadCats() {
@@ -4076,6 +4106,21 @@
                 ? [$('f-street').value, $('f-neigh').value, $('f-comp').value].filter(Boolean).join(', ')
                 : null;
 
+            // ── Garante restaurant_id antes de qualquer insert ─────────────
+            if (!_restaurantId) {
+                // Última tentativa de buscar
+                try {
+                    const { data: rest } = await sb.from('restaurants').select('id').eq('active', true).limit(1).maybeSingle();
+                    if (rest?.id) _restaurantId = rest.id;
+                } catch (e) { }
+            }
+            if (!_restaurantId) {
+                toast('❌ Restaurante não identificado. Faça logout e entre novamente.', 'error');
+                submitting = false;
+                btn.disabled = false; btn.textContent = '✅ Confirmar Pedido';
+                return;
+            }
+
             const payload = {
                 customer_name: name,
                 customer_phone: phone.replace(/\D/g, ''),
@@ -4093,8 +4138,7 @@
                 total,
                 estimated_time: 30,
                 attendant_id: currentAttendant ? currentAttendant.id : null,
-                // restaurant_id é NOT NULL — usa o id buscado no login
-                ..._restaurantId ? { restaurant_id: _restaurantId } : {},
+                restaurant_id: _restaurantId,
             };
 
             try {
@@ -4107,7 +4151,8 @@
                 // Status history
                 try {
                     await sb.from('order_status_history').insert({
-                        order_id: inserted.id, status: 'confirmed', note: 'Pedido criado pelo atendente'
+                        order_id: inserted.id, status: 'confirmed', note: 'Pedido criado pelo atendente',
+                        restaurant_id: _restaurantId
                     });
                 } catch (e) { }
 
@@ -4137,7 +4182,8 @@
                                 points_earned: earned,
                                 balance_after: newPoints,
                                 description: `Pedido ${inserted.order_number || '#' + inserted.id}`,
-                                created_at: new Date().toISOString()
+                                created_at: new Date().toISOString(),
+                                restaurant_id: _restaurantId,
                             });
                         }
                     }
@@ -4244,7 +4290,7 @@
             if (!confirm('Cancelar este pedido?')) return;
             try {
                 await sb.from('orders').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', id);
-                await sb.from('order_status_history').insert({ order_id: id, status: 'cancelled', note: 'Cancelado pelo atendente' });
+                await sb.from('order_status_history').insert({ order_id: id, status: 'cancelled', note: 'Cancelado pelo atendente', restaurant_id: _restaurantId });
                 toast('Pedido cancelado', 'success');
                 loadTodayOrders();
             } catch (e) { toast('Erro ao cancelar', 'error'); }
@@ -4480,6 +4526,7 @@
                     staff_id: currentAttendant.id,
                     shift_date: today,
                     started_at: new Date().toISOString(),
+                    restaurant_id: _restaurantId,
                 }).select('id').single();
                 if (e2) throw e2;
                 if (inserted) shiftId = inserted.id;
@@ -4695,6 +4742,7 @@
                         new_attendant_id: currentAttendant.id,
                         new_attendant_name: currentAttendant.name,
                     }),
+                    restaurant_id: _restaurantId,
                     status: 'pending',
                     created_at: now,
                 });
@@ -4817,6 +4865,7 @@
                         status: 'delivered',
                         note: `[ATENDENTE_CHECKOUT] Conta da Mesa ${mesa} fechada por ${attName}. Pgto: ${ckPayMethod}. Taxa: ${ckTaxaChoice === true ? 'aceita' : 'recusada'}.`,
                         created_at: now,
+                        restaurant_id: _restaurantId,
                     });
                 } catch (e) { }
 
@@ -4831,6 +4880,7 @@
                             order_type: 'presencial',
                             paid: true,
                             created_at: now,
+                            restaurant_id: _restaurantId,
                         });
                     } catch (e) { }
                 }
@@ -4994,6 +5044,7 @@
                     items_after: JSON.stringify(editOrderItems),
                     status: 'pending',
                     created_at: new Date().toISOString(),
+                    restaurant_id: _restaurantId,
                 });
 
                 // Marcar pedido como "tem edição pendente" (sinaliza pro admin)
@@ -5006,7 +5057,8 @@
                 try {
                     await sb.from('order_status_history').insert({
                         order_id: editOrderId, status: 'confirmed',
-                        note: '⏳ Edição solicitada pelo atendente ' + (currentAttendant ? currentAttendant.name : '') + ' — aguardando aprovação do admin.'
+                        note: '⏳ Edição solicitada pelo atendente ' + (currentAttendant ? currentAttendant.name : '') + ' — aguardando aprovação do admin.',
+                        restaurant_id: _restaurantId,
                     });
                 } catch (e) { }
 
