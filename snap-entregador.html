@@ -1588,6 +1588,7 @@
         let currentDriver = null;   // { id, name, pin, role }
         let shiftId = null;
         let _restaurantId = null;   // uuid do restaurante — carregado no boot
+        let _operationInProgress = false; // bloqueia renderAll durante update crítico
         let allOrders = [];         // ready + delivering for this driver
         let allHistory = [];        // delivered today
         let cpPeriod = 'today';
@@ -1981,32 +1982,28 @@
         async function loadOrders() {
             if (!sb || !currentDriver) return;
             const today = new Date(); today.setHours(0, 0, 0, 0);
-            try {
-                // Pedidos ativos: prontos ou em rota — deste entregador OU sem atribuição
-                const { data: active, error: e1 } = await sb.from('orders')
-                    .select(ORDER_COLS)
-                    .eq('order_type', 'delivery')
-                    .in('status', ['ready', 'delivering'])
-                    .or(`deliverer_id.eq.${currentDriver.id},deliverer_id.is.null`)
-                    .order('created_at', { ascending: true });
-                if (e1) throw e1;
-                allOrders = active || [];
 
-                // Histórico: entregues hoje por mim
-                const { data: hist, error: e2 } = await sb.from('orders')
-                    .select(ORDER_COLS)
-                    .eq('deliverer_id', currentDriver.id)
-                    .eq('order_type', 'delivery')
-                    .eq('status', 'delivered')
-                    .gte('created_at', today.toISOString())
-                    .order('delivered_at', { ascending: false });
-                if (e2) throw e2;
-                allHistory = hist || [];
+            // Pedidos ativos: prontos ou em rota — deste entregador OU sem atribuição
+            const { data: active, error: e1 } = await sb.from('orders')
+                .select(ORDER_COLS)
+                .eq('order_type', 'delivery')
+                .in('status', ['ready', 'delivering'])
+                .or(`deliverer_id.eq.${currentDriver.id},deliverer_id.is.null`)
+                .order('created_at', { ascending: true });
+            if (e1) { console.error('[loadOrders:active]', e1.message); }
+            else { allOrders = active || []; }
 
-            } catch (e) {
-                console.error('[loadOrders]', e);
-                toast('Erro ao carregar pedidos: ' + (e.message || e), 'error');
-            }
+            // Histórico: entregues hoje por mim
+            const { data: hist, error: e2 } = await sb.from('orders')
+                .select(ORDER_COLS)
+                .eq('deliverer_id', currentDriver.id)
+                .eq('order_type', 'delivery')
+                .eq('status', 'delivered')
+                .gte('created_at', today.toISOString())
+                .order('delivered_at', { ascending: false });
+            if (e2) { console.error('[loadOrders:history]', e2.message); }
+            else { allHistory = hist || []; }
+
             renderAll();
         }
 
@@ -2031,6 +2028,9 @@
         }
 
         function renderAll() {
+            // Não recriar DOM durante operação crítica (startDelivery/doConfirmDelivery)
+            // evita destruir botão em estado "Atualizando..." antes do update terminar
+            if (_operationInProgress) return;
             renderKpis();
             renderPending();
             renderHistory();
@@ -2151,11 +2151,10 @@
         //  ACTIONS
         // ──────────────────────────────────────────────────
         async function startDelivery(orderId) {
-            // Guarda ref ao botão ANTES de qualquer await (DOM pode mudar depois)
             const btn = document.querySelector(`[onclick="startDelivery(${orderId})"]`);
             if (btn) { btn.disabled = true; btn.textContent = '⏳ Atualizando...'; }
+            _operationInProgress = true;
 
-            let success = false;
             try {
                 const now = new Date().toISOString();
                 const { error } = await sb.from('orders').update({
@@ -2163,36 +2162,42 @@
                     deliverer_id: currentDriver.id,
                     updated_at: now,
                 }).eq('id', orderId);
-                if (error) throw error;
 
-                // Histórico — silencioso, não bloqueia o fluxo
-                sb.from('order_status_history').insert({
-                    order_id: orderId,
-                    status: 'delivering',
-                    note: 'Entregador ' + currentDriver.name + ' saiu para entrega',
-                    created_at: now,
-                    restaurant_id: _restaurantId,
-                }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
+                if (error) {
+                    _operationInProgress = false;
+                    const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`) || btn;
+                    if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
+                    toast('❌ Erro ao iniciar entrega: ' + (error.message || JSON.stringify(error)), 'error');
+                    console.error('[startDelivery]', error);
+                    return;
+                }
 
-                success = true;
+                // ── Sucesso: inserts secundários fire-and-forget ──────────────
+                if (_restaurantId) {
+                    sb.from('order_status_history').insert({
+                        order_id: orderId,
+                        status: 'delivering',
+                        note: 'Entregador ' + currentDriver.name + ' saiu para entrega',
+                        created_at: now,
+                        restaurant_id: _restaurantId,
+                    }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
+                }
+
                 toast('🛵 Saindo para entrega!', 'success');
                 haptic('success');
 
-                // loadOrders vai recriar o DOM — abrir mapa depois
+                // Libera o renderAll antes de recarregar (loadOrders chama renderAll)
+                _operationInProgress = false;
                 await loadOrders();
                 setTimeout(() => openMap(orderId), 600);
 
             } catch (e) {
-                console.error('[startDelivery]', e);
+                console.error('[startDelivery exception]', e);
                 toast('❌ Erro ao iniciar entrega: ' + (e.message || e), 'error');
-            } finally {
-                // Só restaura o botão se o update FALHOU
-                // (se teve sucesso, loadOrders() recria o DOM com botão novo)
-                if (!success) {
-                    const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`);
-                    if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
-                    else if (btn) { btn.disabled = false; btn.textContent = '🛵 Iniciar entrega'; }
-                }
+                _operationInProgress = false;
+                // Tenta restaurar o botão em qualquer posição no DOM
+                const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`) || btn;
+                if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
             }
         }
 
@@ -2217,26 +2222,31 @@
             const orderId = pendingConfirmId;
             const btn = $('cmConfirmBtn');
             btn.disabled = true; btn.textContent = '⏳ Salvando...';
+            _operationInProgress = true;
 
-            let success = false;
             try {
                 const now = new Date().toISOString();
                 const o = allOrders.find(x => x.id == orderId);
                 const fee = Number(o?.delivery_fee || 0);
                 const earned = fee * motoFeePct / 100;
 
-                // ── Update principal — se falhar, vai pro catch ──────────────
+                // ── Update principal ──────────────────────────────────────────
                 const { error } = await sb.from('orders').update({
                     status: 'delivered',
                     delivered_at: now,
                     updated_at: now,
                     delivery_fee_paid: true,
                 }).eq('id', orderId);
-                if (error) throw error;
 
-                success = true; // update principal OK
+                if (error) {
+                    _operationInProgress = false;
+                    btn.disabled = false; btn.textContent = '✅ Confirmar';
+                    toast('❌ Erro ao confirmar: ' + (error.message || JSON.stringify(error)), 'error');
+                    console.error('[doConfirmDelivery]', error);
+                    return;
+                }
 
-                // ── Inserts secundários: fire-and-forget (não travam o botão) ─
+                // ── Inserts secundários fire-and-forget ───────────────────────
                 if (earned > 0 && currentDriver && _restaurantId) {
                     sb.from('staff_commissions').insert({
                         staff_id: currentDriver.id,
@@ -2260,6 +2270,8 @@
                     }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
                 }
 
+                // ── Sucesso: fecha modal e atualiza lista ─────────────────────
+                _operationInProgress = false;
                 closeConfirmModal();
                 toast(`🏠 Entregue! +R$ ${earned.toFixed(2).replace('.', ',')} creditado.`, 'success');
                 haptic('success');
@@ -2268,15 +2280,12 @@
                 if (!allOrders.length) {
                     switchTab('history', $('tabHistory'));
                 }
+
             } catch (e) {
-                console.error('[doConfirmDelivery]', e);
+                _operationInProgress = false;
+                console.error('[doConfirmDelivery exception]', e);
                 toast('❌ Erro ao confirmar entrega: ' + (e.message || e), 'error');
-            } finally {
-                // Restaura o botão sempre que o update principal falhar
-                if (!success) {
-                    btn.disabled = false;
-                    btn.textContent = '✅ Confirmar';
-                }
+                btn.disabled = false; btn.textContent = '✅ Confirmar';
             }
         }
 
