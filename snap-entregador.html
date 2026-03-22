@@ -1856,6 +1856,8 @@
             $('panelPending').innerHTML = '';
             $('panelHistory').innerHTML = '';
             allOrders = []; allHistory = [];
+            _lastOrderIds = '';
+            stopPolling();
             toast('👋 Expediente encerrado', 'success');
             setTimeout(openDriverScreen, 600);
         }
@@ -1863,114 +1865,61 @@
         // ──────────────────────────────────────────────────
         //  REALTIME
         // ──────────────────────────────────────────────────
-        let _rtChannel = null;
-
-        // ── Processa evento RT diretamente em memória (sem roundtrip ao banco) ──
-        function onRTEvent(payload) {
-            const o = payload.new || payload.old;
-            if (!o) return;
-
-            // Filtro 1: só pedidos delivery
-            if (o.order_type && o.order_type !== 'delivery') return;
-
-            const myId = currentDriver?.id;
-            const isMyOrder = o.deliverer_id == myId;
-            const isUnassigned = !o.deliverer_id;
-            const wasAssigned = payload.eventType === 'UPDATE'
-                && payload.old?.deliverer_id != myId
-                && payload.new?.deliverer_id == myId;
-
-            // Filtro 2: só eventos que interessam ao entregador
-            const relevantStatus = ['ready', 'delivering', 'delivered'].includes(o.status);
-            if (!relevantStatus && !wasAssigned) return;
-            if (!isMyOrder && !isUnassigned && !wasAssigned) return;
-
-            // ── Atualiza allOrders em memória instantaneamente ─────────────
-            const prevDeliveringIds = allOrders.filter(x => x.status === 'delivering' && x.deliverer_id == myId).map(x => x.id);
-
-            if (payload.eventType === 'DELETE') {
-                allOrders = allOrders.filter(x => x.id !== o.id);
-                allHistory = allHistory.filter(x => x.id !== o.id);
-
-            } else if (o.status === 'delivered') {
-                // Pedido entregue: sai de allOrders, entra em allHistory
-                allOrders = allOrders.filter(x => x.id !== o.id);
-                const alreadyHist = allHistory.find(x => x.id === o.id);
-                if (!alreadyHist) {
-                    allHistory.unshift(o);
-                } else {
-                    allHistory = allHistory.map(x => x.id === o.id ? { ...x, ...o } : x);
-                }
-
-            } else if (o.status === 'ready' || o.status === 'delivering') {
-                // Pedido pronto ou em rota: entra/atualiza em allOrders
-                allHistory = allHistory.filter(x => x.id !== o.id);
-                const idx = allOrders.findIndex(x => x.id === o.id);
-                if (idx !== -1) {
-                    allOrders[idx] = { ...allOrders[idx], ...o };
-                } else {
-                    allOrders.push(o);
-                }
-
-            } else {
-                // Qualquer outro status (cancelled etc): remove de ambas as listas
-                allOrders = allOrders.filter(x => x.id !== o.id);
-                allHistory = allHistory.filter(x => x.id !== o.id);
-            }
-
-            // ── Notificações instantâneas ──────────────────────────────────
-            if (o.status === 'ready' && isMyOrder) {
-                const isNew = !prevDeliveringIds.includes(o.id) && !allOrders.find(x => x.id === o.id && x.status === 'ready');
-                toast('📦 Pedido ' + (o.order_number || '#' + o.id) + ' pronto para retirar!', 'success');
-                haptic('success');
-            }
-
-            if (o.status === 'delivering' && isMyOrder) {
-                const isNewDelivering = !prevDeliveringIds.includes(o.id);
-                if (isNewDelivering) {
-                    toast('🛵 ' + (o.order_number || '#' + o.id) + ' — saindo para entrega!', 'success');
-                    haptic('success');
-                    // Abrir mapa automaticamente
-                    if (!$('mapModal')?.classList.contains('open')) {
-                        setTimeout(() => openMap(o.id), 600);
-                    }
-                }
-            }
-
-            if (wasAssigned) {
-                toast('🆕 Novo pedido atribuído a você: ' + (o.order_number || '#' + o.id), 'success');
-                haptic('success');
-            }
-
-            // ── Render imediato sem ir ao banco ────────────────────────────
-            renderAll();
-        }
+        // ── POLLING: atualiza a cada 1s quando há pedidos ativos ────────
+        let _pollTimer = null;
+        let _lastOrderIds = '';   // string dos ids para detectar mudança
 
         function setupRealtime() {
-            if (!sb || !currentDriver) return;
-            // Limpa canal anterior
-            if (_rtChannel) { try { sb.removeChannel(_rtChannel); } catch (e) { } _rtChannel = null; }
-            if (window._driverPoll) { clearInterval(window._driverPoll); window._driverPoll = null; }
+            stopPolling();
+            startPolling();
+        }
 
-            // Sem filter no canal — plano free não suporta row filters.
-            // Toda a filtragem é feita em onRTEvent() sem roundtrip ao banco.
-            _rtChannel = sb.channel('driver-rt-' + currentDriver.id + '-' + Date.now())
-                .on('postgres_changes', {
-                    event: '*',
-                    schema: 'public',
-                    table: 'orders'
-                }, onRTEvent)
-                .subscribe((status) => {
-                    const dot = $('connDot');
-                    if (status === 'SUBSCRIBED') {
-                        if (dot) { dot.classList.add('on'); }
-                        console.log('[RT] Realtime ativo para', currentDriver.name);
-                    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                        if (dot) { dot.classList.remove('on'); }
-                        console.warn('[RT] Canal perdido, reconectando em 5s...');
-                        setTimeout(setupRealtime, 5000);
-                    }
-                });
+        function startPolling() {
+            if (!sb || !currentDriver) return;
+            const dot = $('connDot');
+            if (dot) dot.classList.add('on');
+            _pollTimer = setInterval(silentPoll, 1000);
+        }
+
+        function stopPolling() {
+            if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        }
+
+        async function silentPoll() {
+            // Não pollar durante operação crítica (startDelivery / doConfirmDelivery)
+            if (_operationInProgress) return;
+            if (!sb || !currentDriver) return;
+
+            const today = new Date(); today.setHours(0, 0, 0, 0);
+
+            const { data: active } = await sb.from('orders')
+                .select(ORDER_COLS)
+                .eq('order_type', 'delivery')
+                .in('status', ['ready', 'delivering'])
+                .or(`deliverer_id.eq.${currentDriver.id},deliverer_id.is.null`)
+                .order('created_at', { ascending: true });
+
+            const { data: hist } = await sb.from('orders')
+                .select(ORDER_COLS)
+                .eq('deliverer_id', currentDriver.id)
+                .eq('order_type', 'delivery')
+                .eq('status', 'delivered')
+                .gte('created_at', today.toISOString())
+                .order('delivered_at', { ascending: false });
+
+            const newOrders = active || [];
+            const newHistory = hist || [];
+
+            // Só renderiza se houver mudança real (evita piscar sem motivo)
+            const newIds = newOrders.map(o => o.id + ':' + o.status).sort().join(',');
+            const changed = newIds !== _lastOrderIds;
+            _lastOrderIds = newIds;
+
+            if (changed) {
+                allOrders = newOrders;
+                allHistory = newHistory;
+                renderAll();
+            }
         }
 
         // ──────────────────────────────────────────────────
@@ -2164,15 +2113,12 @@
                 }).eq('id', orderId);
 
                 if (error) {
-                    _operationInProgress = false;
-                    const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`) || btn;
-                    if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
-                    toast('❌ Erro ao iniciar entrega: ' + (error.message || JSON.stringify(error)), 'error');
+                    toast('❌ Erro: ' + (error.message || JSON.stringify(error)), 'error');
                     console.error('[startDelivery]', error);
                     return;
                 }
 
-                // ── Sucesso: inserts secundários fire-and-forget ──────────────
+                // Insert histórico fire-and-forget
                 if (_restaurantId) {
                     sb.from('order_status_history').insert({
                         order_id: orderId,
@@ -2185,19 +2131,17 @@
 
                 toast('🛵 Saindo para entrega!', 'success');
                 haptic('success');
-
-                // Libera o renderAll antes de recarregar (loadOrders chama renderAll)
-                _operationInProgress = false;
-                await loadOrders();
-                setTimeout(() => openMap(orderId), 600);
+                // O poll vai buscar o pedido atualizado em até 1s
+                // Abre mapa direto sem esperar
+                setTimeout(() => openMap(orderId), 400);
 
             } catch (e) {
-                console.error('[startDelivery exception]', e);
-                toast('❌ Erro ao iniciar entrega: ' + (e.message || e), 'error');
+                toast('❌ Erro: ' + (e.message || e), 'error');
+                console.error('[startDelivery]', e);
+            } finally {
                 _operationInProgress = false;
-                // Tenta restaurar o botão em qualquer posição no DOM
-                const btnNow = document.querySelector(`[onclick="startDelivery(${orderId})"]`) || btn;
-                if (btnNow) { btnNow.disabled = false; btnNow.textContent = '🛵 Iniciar entrega'; }
+                // Força um poll imediato para redesenhar o card
+                _lastOrderIds = '';
             }
         }
 
@@ -2230,7 +2174,6 @@
                 const fee = Number(o?.delivery_fee || 0);
                 const earned = fee * motoFeePct / 100;
 
-                // ── Update principal ──────────────────────────────────────────
                 const { error } = await sb.from('orders').update({
                     status: 'delivered',
                     delivered_at: now,
@@ -2239,14 +2182,12 @@
                 }).eq('id', orderId);
 
                 if (error) {
-                    _operationInProgress = false;
-                    btn.disabled = false; btn.textContent = '✅ Confirmar';
-                    toast('❌ Erro ao confirmar: ' + (error.message || JSON.stringify(error)), 'error');
+                    toast('❌ Erro: ' + (error.message || JSON.stringify(error)), 'error');
                     console.error('[doConfirmDelivery]', error);
                     return;
                 }
 
-                // ── Inserts secundários fire-and-forget ───────────────────────
+                // Inserts secundários fire-and-forget
                 if (earned > 0 && currentDriver && _restaurantId) {
                     sb.from('staff_commissions').insert({
                         staff_id: currentDriver.id,
@@ -2270,22 +2211,18 @@
                     }).then(({ error: e }) => { if (e) console.warn('[history]', e.message); });
                 }
 
-                // ── Sucesso: fecha modal e atualiza lista ─────────────────────
-                _operationInProgress = false;
                 closeConfirmModal();
                 toast(`🏠 Entregue! +R$ ${earned.toFixed(2).replace('.', ',')} creditado.`, 'success');
                 haptic('success');
-                await loadOrders();
-
-                if (!allOrders.length) {
-                    switchTab('history', $('tabHistory'));
-                }
 
             } catch (e) {
+                toast('❌ Erro: ' + (e.message || e), 'error');
+                console.error('[doConfirmDelivery]', e);
+            } finally {
                 _operationInProgress = false;
-                console.error('[doConfirmDelivery exception]', e);
-                toast('❌ Erro ao confirmar entrega: ' + (e.message || e), 'error');
                 btn.disabled = false; btn.textContent = '✅ Confirmar';
+                // Força poll imediato para redesenhar tudo
+                _lastOrderIds = '';
             }
         }
 
