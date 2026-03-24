@@ -1136,6 +1136,7 @@
                 transform: translateY(100%);
             }
 
+
             to {
                 transform: translateY(0);
             }
@@ -1656,8 +1657,11 @@
         // 1. Inicialização única (Remova as duplicatas)
         const SUPABASE_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co";
         const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZnlzbXpyb2h5dnZyeGV5amd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDExMDUsImV4cCI6MjA4NjQ3NzEwNX0.1D9mB2PzbdsqXFSKIC_iZEpUffao9hXWbtc_Hxwbm3Q";
-        const GEMINI_API_KEY = "AIzaSyAKeixhfUIy-YaQxPTuq-yatf6AES3yX4k";
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+        // ── Anthropic Claude API via Supabase Edge Function (chave segura no servidor) ──
+        const ANTHROPIC_API_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co/functions/v1/claude-proxy";
+
+        console.log("Usando API Claude via Supabase Edge Function");
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: {
                 lock: async (name, acquireTimeout, fn) => fn(),
@@ -1855,10 +1859,8 @@ Você nunca fecha uma conversa. Cada resposta é uma continuação, um convite, 
 ${regrasCores}`;
             }
 
-            chatHistory = [{
-                role: "user",
-                parts: [{
-                    text: `${personaPrompt}
+            chatHistory = [];
+            chatHistory._systemPrompt = `${personaPrompt}
 
 CONTEXTO DE HOJE (use com naturalidade, nunca cite diretamente):
 - Como está: ${humorAtual}
@@ -1868,9 +1870,7 @@ CONTEXTO DE HOJE (use com naturalidade, nunca cite diretamente):
 MEMÓRIA DE SESSÕES ANTERIORES (só mencione se a pessoa perguntar ou se for muito relevante):
 ${memoriaUsuario || 'Primeira vez conversando.'}
 
-Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, não respondendo.`
-                }]
-            }];
+Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, não respondendo.`;
         }
 
         async function salvarMensagemNoBanco(role, content) {
@@ -1890,14 +1890,14 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
         }
 
         // ── Gerenciamento de limite de contexto ──
-        // Gemini 2.5 Flash: ~1M tokens, mas conversas longas dão erro 400 na prática.
-        // Usamos estimativa simples: 1 token ≈ 4 chars. Limite seguro: ~60.000 tokens (240k chars)
+        // Claude: ~200k tokens. Limite seguro: ~60.000 tokens (240k chars)
         const LIMITE_CHARS = 240000;
         const AVISO_CHARS = 160000; // 67% — começa a mostrar aviso
 
         function estimarTamanhoHistorico() {
-            return chatHistory.reduce((total, msg) => {
-                return total + (msg.parts?.[0]?.text?.length || 0);
+            const systemLen = (chatHistory._systemPrompt || '').length;
+            return systemLen + chatHistory.reduce((total, msg) => {
+                return total + (msg.parts?.[0]?.text?.length || msg.content?.length || 0);
             }, 0);
         }
 
@@ -1933,31 +1933,44 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             }
         }
 
-        // Remove mensagens antigas mantendo o prompt do sistema (índice 0) e as últimas N mensagens
+        // Remove mensagens antigas mantendo as últimas N mensagens (system prompt é separado)
         function trimHistoricoSeNecessario() {
             const usado = estimarTamanhoHistorico();
             if (usado < LIMITE_CHARS * 0.85) return; // ainda ok
 
-            // Mantém: [0] = system prompt + últimas 8 trocas (16 msgs)
+            // Mantém: últimas 8 trocas (16 msgs)
             const MANTER = 16;
-            if (chatHistory.length <= MANTER + 1) return;
+            if (chatHistory.length <= MANTER) return;
 
-            const systemMsg = chatHistory[0];
-            const recentes = chatHistory.slice(-(MANTER));
-            chatHistory = [systemMsg, ...recentes];
+            const systemPromptSalvo = chatHistory._systemPrompt;
+            const recentes = chatHistory.slice(-MANTER);
+            chatHistory = recentes;
+            chatHistory._systemPrompt = systemPromptSalvo;
 
             // Avisa o usuário discretamente no chat
             appendMessage('💬 (Mensagens mais antigas foram arquivadas para manter a conversa fluindo.)', 'bot');
         }
 
-        // Chama a API Gemini com retry automático em caso de erro 503/429
+        // Chama a API Claude (Anthropic) com retry automático em caso de erro 529/429
         async function chamarGeminiComRetry(body, tentativas = 3) {
             for (let i = 0; i < tentativas; i++) {
                 try {
-                    const response = await fetch(API_URL, {
+                    // Monta payload para a Edge Function do Supabase
+                    const claudePayload = {
+                        system: chatHistory._systemPrompt || "",
+                        messages: chatHistory.map(m => ({
+                            role: m.role === 'model' ? 'assistant' : m.role,
+                            content: m.parts?.[0]?.text ?? m.content ?? ""
+                        }))
+                    };
+
+                    const response = await fetch(ANTHROPIC_API_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(body)
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                        },
+                        body: JSON.stringify(claudePayload)
                     });
 
                     // Trata erros HTTP antes de tentar parsear
@@ -1966,42 +1979,39 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                         const status = response.status;
                         const msg = errData?.error?.message || response.statusText;
 
-                        // 429 = cota excedida, 503 = serviço indisponível → tenta de novo
-                        if ((status === 429 || status === 503) && i < tentativas - 1) {
-                            const espera = (i + 1) * 2000; // 2s, 4s...
+                        // 429 / 529 = sobrecarga → tenta de novo
+                        if ((status === 429 || status === 529) && i < tentativas - 1) {
+                            const espera = (i + 1) * 2000;
                             await new Promise(r => setTimeout(r, espera));
                             continue;
                         }
 
-                        // Erro 400 geralmente = conversa muito longa → trim e tenta de novo
+                        // Conversa muito longa → trim e tenta de novo
                         if (status === 400) {
                             if (i < tentativas - 1 && chatHistory.length > 4) {
-                                // Remove metade das mensagens do meio e tenta novamente
-                                const systemMsg = chatHistory[0];
+                                const savedSystemPrompt = chatHistory._systemPrompt;
                                 const recentes = chatHistory.slice(-8);
-                                chatHistory = [systemMsg, ...recentes];
-                                body.contents = chatHistory;
+                                chatHistory = recentes;
+                                chatHistory._systemPrompt = savedSystemPrompt;
                                 appendMessage('💬 (Renovei o espaço da conversa para continuar.)', 'bot');
                                 continue;
                             }
                             throw new Error('Conversa muito longa. Clique em 🗑️ para limpar o chat e continuar.');
                         }
-                        if (status === 429) throw new Error('Muitas mensagens seguidas. Aguarde um momento e tente novamente.');
-                        if (status === 503) throw new Error('O serviço está temporariamente sobrecarregado. Tente em alguns segundos.');
                         if (status === 401 || status === 403) throw new Error('Chave de API inválida ou sem permissão.');
                         throw new Error(`Erro ${status}: ${msg}`);
                     }
 
                     const data = await response.json();
 
-                    // Gemini pode retornar sem candidates em casos de bloqueio de conteúdo
-                    if (!data.candidates || data.candidates.length === 0) {
-                        const motivo = data.promptFeedback?.blockReason;
-                        if (motivo) throw new Error('Mensagem bloqueada pela API: ' + motivo);
-                        throw new Error('Resposta vazia da IA. Tente reformular sua mensagem.');
-                    }
+                    // Adapta resposta Claude → formato esperado pelo código Gemini
+                    const textoResposta = data.content?.[0]?.text;
+                    if (!textoResposta) throw new Error('Resposta vazia da IA. Tente reformular sua mensagem.');
 
-                    return data;
+                    // Retorna no formato que o código já espera (data.candidates[0].content.parts[0].text)
+                    return {
+                        candidates: [{ content: { parts: [{ text: textoResposta }] } }]
+                    };
 
                 } catch (err) {
                     // Erro de rede (offline, DNS, CORS)
@@ -2012,7 +2022,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                         }
                         throw new Error('Sem conexão com a internet. Verifique sua rede e tente novamente.');
                     }
-                    throw err; // outros erros: propaga direto
+                    throw err;
                 }
             }
         }
@@ -2040,14 +2050,13 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             atualizarBarraLimite();
 
             try {
-                console.log('[Gemini] Enviando mensagem. chatHistory length:', chatHistory.length);
-                console.log('[Gemini] Primeira msg (prompt):', chatHistory[0]?.parts[0]?.text?.substring(0, 100));
+                console.log('[Claude] Enviando mensagem. chatHistory length:', chatHistory.length);
                 const data = await chamarGeminiComRetry({ contents: chatHistory });
-                console.log('[Gemini] Resposta recebida:', JSON.stringify(data).substring(0, 200));
+                console.log('[Claude] Resposta recebida:', JSON.stringify(data).substring(0, 200));
                 let fullBotReply = data.candidates[0].content.parts[0].text;
 
-                await salvarMensagemNoBanco('model', fullBotReply);
-                chatHistory.push({ role: "model", parts: [{ text: fullBotReply }] });
+                await salvarMensagemNoBanco('assistant', fullBotReply);
+                chatHistory.push({ role: "assistant", parts: [{ text: fullBotReply }] });
                 atualizarBarraLimite();
 
                 const [reactionEmoji, botText] = fullBotReply.split('#');
@@ -2090,7 +2099,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 // Mostra a mensagem de erro real, não genérica
                 const msgErro = error.message || 'Erro desconhecido. Tente novamente.';
                 appendMessage(`⚠️ ${msgErro}`, 'bot');
-                console.error('[Gemini Error]', error);
+                console.error('[Claude Error]', error);
             } finally {
                 sendBtn.disabled = false;
             }
@@ -2159,7 +2168,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 if (!error && mensagens) {
                     mensagens.forEach(msg => {
                         // Se for do bot, precisamos tratar o formato emoji#texto
-                        if (msg.role === 'model') {
+                        if (msg.role === 'assistant' || msg.role === 'model') {
                             const [_, botText] = msg.content.split('#');
                             const chunks = (botText || msg.content).split(/[|\n]+/).filter(c => c.trim().length > 0);
                             chunks.forEach(chunk => appendMessage(chunk.trim(), 'bot'));
@@ -2168,7 +2177,8 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                         }
 
                         // Alimenta o chatHistory para a IA ter contexto
-                        chatHistory.push({ role: msg.role, parts: [{ text: msg.content }] });
+                        const role = (msg.role === 'model') ? 'assistant' : msg.role;
+                        chatHistory.push({ role: role, parts: [{ text: msg.content }] });
                     });
                 }
             }
@@ -2757,8 +2767,8 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             };
 
             // Temporariamente sobrescreve o sistema da IA
-            if (chatHistory.length > 0) {
-                chatHistory[0].parts[0].text = promptSOSMap[tipo] + '\n\n' + chatHistory[0].parts[0].text;
+            if (chatHistory._systemPrompt) {
+                chatHistory._systemPrompt = promptSOSMap[tipo] + '\n\n' + chatHistory._systemPrompt;
             }
 
             const msg = mensagensSOS[tipo];
@@ -3182,15 +3192,21 @@ O que escreveu: "${texto}"
 
 Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como um amigo que leu e quer responder de verdade — não de forma genérica. Use o nome da pessoa se quiser. Termine com uma pergunta simples, curiosa, humana.`;
 
-                const response = await fetch(API_URL, {
+                const response = await fetch(ANTHROPIC_API_URL, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }] })
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                    },
+                    body: JSON.stringify({
+                        system: "Você é um amigo próximo e terapeuta gentil.",
+                        messages: [{ role: 'user', content: prompt }]
+                    })
                 });
                 const data = await response.json();
                 clearInterval(thinking);
 
-                const reflexao = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+                const reflexao = data.content?.[0]?.text?.trim()
                     || 'Que belo registro. Obrigado por ter parado para notar isso.';
 
                 // Digita a resposta letra por letra com espaçamento correto
@@ -3352,5 +3368,3 @@ Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como 
 </body>
 
 </html>
-
-
