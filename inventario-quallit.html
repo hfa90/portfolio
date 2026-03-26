@@ -15409,7 +15409,12 @@ Regras de resposta:
                 renderColetoresKPIs();
                 filterColetores();
             } catch (e) {
-                toast('Erro ao carregar coletores: ' + e.message, 'error');
+                const msg = e.message || '';
+                if (msg.includes('column') || msg.includes('schema') || msg.includes('relation') || msg.includes('does not exist') || msg.includes('404')) {
+                    setTimeout(_showSQLHelper, 300);
+                } else {
+                    toast('Erro ao carregar coletores: ' + msg, 'error');
+                }
             } finally { setLoad(false); }
         }
 
@@ -15471,8 +15476,8 @@ Regras de resposta:
                 const st = col.status || 'Ativo';
                 const cls = badgeCls[st] || 'coletor-badge-ativo';
                 const ico = statusIco[st] || '';
-                const garantiaStr = col.garantia_ate ? (() => {
-                    const d = new Date(col.garantia_ate + 'T12:00:00');
+                const garantiaStr = (col.dt_garantia || col.garantia_ate) ? (() => {
+                    const d = new Date((col.dt_garantia || col.garantia_ate) + 'T12:00:00');
                     const diff = Math.ceil((d - new Date()) / 86400000);
                     const fmt = d.toLocaleDateString('pt-BR');
                     if (diff < 0) return `<span style="color:var(--red)">${fmt} (vencida)</span>`;
@@ -15506,7 +15511,7 @@ Regras de resposta:
                     </div>
                     <div class="coletor-card-row">
                         <span class="coletor-card-lbl">Sistema</span>
-                        <span class="coletor-card-val">${col.sistema_operacional || '—'}</span>
+                        <span class="coletor-card-val">${col.so || col.sistema_operacional || '—'}</span>
                     </div>
                     <div class="coletor-card-row">
                         <span class="coletor-card-lbl">Valor</span>
@@ -15540,12 +15545,12 @@ Regras de resposta:
                 ['Número de Série', col.numero_serie || '—'],
                 ['Fabricante', col.fabricante || '—'],
                 ['Modelo', col.modelo || '—'],
-                ['Sistema Operacional', col.sistema_operacional || '—'],
+                ['Sistema Operacional', col.so || col.sistema_operacional || '—'],
                 ['Firmware', col.firmware || '—'],
                 ['Localidade / Setor', col.localidade || '—'],
                 ['Responsável', col.responsavel || '—'],
-                ['Data de Aquisição', col.data_aquisicao ? new Date(col.data_aquisicao + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
-                ['Garantia até', col.garantia_ate ? new Date(col.garantia_ate + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
+                ['Data de Aquisição', (col.dt_aquisicao || col.data_aquisicao) ? new Date((col.dt_aquisicao || col.data_aquisicao) + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
+                ['Garantia até', (col.dt_garantia || col.garantia_ate) ? new Date((col.dt_garantia || col.garantia_ate) + 'T12:00:00').toLocaleDateString('pt-BR') : '—'],
                 ['Valor', col.valor ? 'R$ ' + parseFloat(col.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—'],
                 ['Observações', col.observacoes || '—'],
             ];
@@ -15592,10 +15597,10 @@ Regras de resposta:
             f('col-modelo', col?.modelo || '');
             f('col-status', col?.status || 'Ativo');
             f('col-local', col?.localidade || '');
-            f('col-so', col?.sistema_operacional || '');
+            f('col-so', col?.so || col?.sistema_operacional || '');
             f('col-firmware', col?.firmware || '');
-            f('col-aquisicao', col?.data_aquisicao || '');
-            f('col-garantia', col?.garantia_ate || '');
+            f('col-aquisicao', col?.dt_aquisicao || col?.data_aquisicao || '');
+            f('col-garantia', col?.dt_garantia || col?.garantia_ate || '');
             f('col-valor', col?.valor || '');
             f('col-responsavel', col?.responsavel || '');
             f('col-obs', col?.observacoes || '');
@@ -15606,43 +15611,104 @@ Regras de resposta:
             openModal('m-coletor-form');
         }
 
+        // SQL para criar a tabela coletores no Supabase
+        const COLETORES_SQL = `-- Execute este SQL no Supabase → SQL Editor
+CREATE TABLE IF NOT EXISTS coletores (
+  id                  uuid        DEFAULT gen_random_uuid() PRIMARY KEY,
+  patrimonio          text,
+  numero_serie        text,
+  fabricante          text,
+  modelo              text,
+  status              text        DEFAULT 'Ativo',
+  localidade          text,
+  so                  text,
+  firmware            text,
+  dt_aquisicao        date,
+  dt_garantia         date,
+  valor               numeric,
+  responsavel         text,
+  observacoes         text,
+  ultimo_inventario   timestamptz,
+  inv_responsavel     text,
+  inv_obs             text,
+  created_at          timestamptz DEFAULT now(),
+  updated_at          timestamptz DEFAULT now()
+);`;
+
+        function _showSQLHelper() {
+            const existing = document.getElementById('m-sql-helper');
+            if (existing) { openModal('m-sql-helper'); return; }
+            const div = document.createElement('div');
+            div.className = 'modal-overlay';
+            div.id = 'm-sql-helper';
+            div.innerHTML = `
+        <div class="modal modal-lg" style="max-width:640px">
+            <div class="modal-header">
+                <div class="modal-title">🛠️ Criar Tabela no Supabase</div>
+                <button class="modal-close" onclick="closeModal('m-sql-helper')">×</button>
+            </div>
+            <div class="modal-body">
+                <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">
+                    A tabela <code style="background:var(--bg3);padding:2px 6px;border-radius:4px;font-family:var(--mono)">coletores</code>
+                    não existe ou está incompleta no Supabase. Execute o SQL abaixo no
+                    <strong>Supabase → SQL Editor</strong> e tente novamente.
+                </div>
+                <div style="position:relative">
+                    <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;font-family:var(--mono);color:var(--text2);overflow-x:auto;white-space:pre;line-height:1.7">${COLETORES_SQL}</pre>
+                    <button onclick="navigator.clipboard.writeText(COLETORES_SQL).then(()=>toast('SQL copiado!','success'))"
+                        style="position:absolute;top:10px;right:10px;background:var(--accent);border:none;border-radius:6px;padding:5px 12px;font-size:11px;font-weight:700;color:#fff;cursor:pointer">
+                        📋 Copiar
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="closeModal('m-sql-helper')">Fechar</button>
+                <button class="btn btn-accent" onclick="closeModal('m-sql-helper');loadColetoresPage()">🔄 Tentar Novamente</button>
+            </div>
+        </div>`;
+            document.body.appendChild(div);
+            openModal('m-sql-helper');
+        }
+
         async function saveColetor() {
-            const g = id => document.getElementById(id)?.value?.trim() || '';
-            const patrimonio = g('col-patrimonio');
-            const fabricante = g('col-fabricante');
-            const modelo = g('col-modelo');
+            const gv = id => document.getElementById(id)?.value?.trim() || '';
+            const patrimonio = gv('col-patrimonio');
+            const fabricante = gv('col-fabricante');
+            const modelo = gv('col-modelo');
             if (!patrimonio) return toast('Informe o Patrimônio / ID', 'error');
             if (!fabricante) return toast('Selecione o Fabricante', 'error');
             if (!modelo) return toast('Informe o Modelo', 'error');
 
+            // Colunas mapeadas para os nomes exatos da tabela (sem acentos)
             const payload = {
                 patrimonio,
-                numero_serie: g('col-ns'),
+                numero_serie: gv('col-ns') || null,
                 fabricante,
                 modelo,
-                status: g('col-status') || 'Ativo',
-                localidade: g('col-local'),
-                sistema_operacional: g('col-so'),
-                firmware: g('col-firmware'),
-                data_aquisicao: g('col-aquisicao') || null,
-                garantia_ate: g('col-garantia') || null,
-                valor: g('col-valor') || null,
-                responsavel: g('col-responsavel'),
-                observacoes: g('col-obs'),
+                status: gv('col-status') || 'Ativo',
+                localidade: gv('col-local') || null,
+                so: gv('col-so') || null,
+                firmware: gv('col-firmware') || null,
+                dt_aquisicao: gv('col-aquisicao') || null,
+                dt_garantia: gv('col-garantia') || null,
+                valor: gv('col-valor') ? parseFloat(gv('col-valor')) : null,
+                responsavel: gv('col-responsavel') || null,
+                observacoes: gv('col-obs') || null,
                 updated_at: new Date().toISOString(),
             };
 
             setBtn('btn-save-coletor', true, 'Salvando...');
             try {
                 if (_editingColetorId) {
-                    const updated = await DB.patch('coletores', `?id=eq.${_editingColetorId}`, payload);
+                    await DB.patch('coletores', `?id=eq.${_editingColetorId}`, payload);
                     const idx = coletoresCache.findIndex(c => c.id === _editingColetorId);
                     if (idx > -1) coletoresCache[idx] = { ...coletoresCache[idx], ...payload };
                     toast('Coletor atualizado!', 'success');
                     await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'edit', detail: `Coletor editado: ${patrimonio}` }).catch(() => { });
                 } else {
                     payload.created_at = new Date().toISOString();
-                    const [newRow] = await DB.post('coletores', payload);
+                    const result = await DB.post('coletores', payload);
+                    const newRow = Array.isArray(result) ? result[0] : result;
                     if (newRow) coletoresCache.unshift(newRow);
                     toast('Coletor cadastrado!', 'success');
                     await writeLog({ actor_type: ROLE, actor_name: ME?.name, actor_cd: ME?.cd || 'ADMIN', action: 'add', detail: `Coletor adicionado: ${patrimonio}` }).catch(() => { });
@@ -15652,9 +15718,14 @@ Regras de resposta:
                 renderColetoresKPIs();
                 filterColetores();
             } catch (e) {
-                toast('Erro ao salvar: ' + e.message, 'error');
+                const msg = e.message || '';
+                if (msg.includes('column') || msg.includes('schema') || msg.includes('relation') || msg.includes('does not exist')) {
+                    _showSQLHelper();
+                } else {
+                    toast('Erro ao salvar: ' + msg, 'error');
+                }
             } finally {
-                setBtn('btn-save-coletor', false, 'Salvar');
+                setBtn('btn-save-coletor', false, '💾 Salvar');
             }
         }
 
@@ -15829,9 +15900,18 @@ Regras de resposta:
             const health = total ? Math.round(ativos / total * 100) : 0;
             const hColor = health >= 80 ? '#22c55e' : health >= 55 ? '#f59e0b' : '#ef4444';
 
-            // Garantias
-            const vencidas = coletoresCache.filter(c => c.garantia_ate && new Date(c.garantia_ate + 'T12:00:00') < now).length;
-            const venc30 = coletoresCache.filter(c => { if (!c.garantia_ate) return false; const d = new Date(c.garantia_ate + 'T12:00:00'); const diff = (d - now) / 86400000; return diff >= 0 && diff <= 30; }).length;
+            // Garantias (suporta nomes novos e legados)
+            const vencidas = coletoresCache.filter(c => {
+                const d = c.dt_garantia || c.garantia_ate;
+                return d && new Date(d + 'T12:00:00') < now;
+            }).length;
+            const venc30 = coletoresCache.filter(c => {
+                const d = c.dt_garantia || c.garantia_ate;
+                if (!d) return false;
+                const dt = new Date(d + 'T12:00:00');
+                const diff = (dt - now) / 86400000;
+                return diff >= 0 && diff <= 30;
+            }).length;
 
             // Valor total
             const valorTotal = coletoresCache.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
@@ -15856,6 +15936,7 @@ Regras de resposta:
             const listaRows = coletoresCache.map((c, i) => {
                 const sc = statusColor[c.status] || '#888';
                 const lastInv = c.ultimo_inventario ? new Date(c.ultimo_inventario).toLocaleDateString('pt-BR') : '—';
+                const soStr = c.so || c.sistema_operacional || '—';
                 return `<tr style="${i % 2 === 0 ? 'background:#f8fafc' : ''}">
                 <td>${c.patrimonio || '—'}</td>
                 <td>${c.fabricante || '—'}</td>
