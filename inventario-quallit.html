@@ -5420,6 +5420,113 @@
             border: 1px solid rgba(239, 68, 68, .3);
         }
 
+        /* ── Fundo colorido por status ── */
+        .coletor-card[data-status="Ativo"] {
+            border-color: rgba(34, 197, 94, .3);
+            background: linear-gradient(160deg, rgba(34, 197, 94, .07) 0%, var(--surface) 55%);
+        }
+
+        .coletor-card[data-status="Backup"] {
+            border-color: rgba(100, 116, 139, .3);
+            background: linear-gradient(160deg, rgba(100, 116, 139, .07) 0%, var(--surface) 55%);
+        }
+
+        .coletor-card[data-status="Manutenção"] {
+            border-color: rgba(245, 158, 11, .3);
+            background: linear-gradient(160deg, rgba(245, 158, 11, .07) 0%, var(--surface) 55%);
+        }
+
+        .coletor-card[data-status="Inativo"] {
+            border-color: rgba(239, 68, 68, .3);
+            background: linear-gradient(160deg, rgba(239, 68, 68, .07) 0%, var(--surface) 55%);
+        }
+
+        .coletor-card[data-status="Ativo"]::before {
+            background: #22c55e;
+        }
+
+        .coletor-card[data-status="Backup"]::before {
+            background: #64748b;
+        }
+
+        .coletor-card[data-status="Manutenção"]::before {
+            background: #f59e0b;
+        }
+
+        .coletor-card[data-status="Inativo"]::before {
+            background: #ef4444;
+        }
+
+        /* ── Select de status inline no card ── */
+        .col-status-sel {
+            appearance: none;
+            -webkit-appearance: none;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .6px;
+            text-transform: uppercase;
+            padding: 3px 22px 3px 9px;
+            border-radius: 20px;
+            font-family: var(--font);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23ffffff77'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 7px center;
+            background-size: 8px;
+        }
+
+        .col-status-sel.st-ativo {
+            background-color: rgba(34, 197, 94, .18);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, .4);
+        }
+
+        .col-status-sel.st-backup {
+            background-color: rgba(100, 116, 139, .2);
+            color: #94a3b8;
+            border: 1px solid rgba(100, 116, 139, .4);
+        }
+
+        .col-status-sel.st-manut {
+            background-color: rgba(245, 158, 11, .18);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, .4);
+        }
+
+        .col-status-sel.st-inativo {
+            background-color: rgba(239, 68, 68, .18);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, .4);
+        }
+
+        /* ── Botões de turno ── */
+        .turno-btn {
+            flex: 1;
+            padding: 5px 0;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 7px;
+            cursor: pointer;
+            transition: all .15s;
+            font-family: var(--font);
+            border: 1px solid var(--border2);
+            background: var(--bg3);
+            color: var(--text3);
+        }
+
+        .turno-btn.active {
+            background: rgba(14, 165, 233, .15);
+            border-color: var(--accent);
+            color: var(--accent2);
+        }
+
+        .turno-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent2);
+        }
+
         .coletor-card-modelo {
             font-size: 15px;
             font-weight: 600;
@@ -15456,6 +15563,9 @@ Regras de resposta:
 
         // ── Helpers ────────────────────────────────────────────────────────
         function _statusColetor(col, vincs) {
+            // Status explícito salvo na tabela tem prioridade
+            if (col.status) return col.status;
+            // Fallback: deriva pelo tipo/defeito/vínculo
             if (col.tipo === 'inativo') return 'Inativo';
             if (col.defeituoso) return 'Manutenção';
             const pool = vincs || vinculosCache;
@@ -15463,6 +15573,49 @@ Regras de resposta:
             if (!v) return 'Backup';
             const hoje = new Date().toISOString().slice(0, 10);
             return v.date === hoje ? 'Ativo' : 'Backup';
+        }
+
+        // Mapeamento status → classe CSS do select
+        function _stSelClass(st) {
+            return { 'Ativo': 'st-ativo', 'Backup': 'st-backup', 'Manutenção': 'st-manut', 'Inativo': 'st-inativo' }[st] || 'st-backup';
+        }
+
+        // Atualiza status + turno no banco e no cache sem recarregar tudo
+        async function setColetorStatus(id, newStatus, event) {
+            if (event) event.stopPropagation();
+            try {
+                await DB.patch('coletores', `?id=eq.${id}`, { status: newStatus });
+                const col = coletoresCache.find(c => c.id === id);
+                if (col) col.status = newStatus;
+                // Atualiza o card no DOM diretamente
+                const card = document.querySelector(`.coletor-card[data-id="${id}"]`);
+                if (card) {
+                    card.dataset.status = newStatus;
+                    const sel = card.querySelector('.col-status-sel');
+                    if (sel) {
+                        sel.value = newStatus;
+                        sel.className = 'col-status-sel ' + _stSelClass(newStatus);
+                    }
+                }
+                renderColetoresKPIs();
+                filterColetores();
+            } catch (e) { toast('Erro ao atualizar status: ' + e.message, 'error'); }
+        }
+
+        async function setColetorTurno(id, turno, event) {
+            if (event) event.stopPropagation();
+            try {
+                await DB.patch('coletores', `?id=eq.${id}`, { turno });
+                const col = coletoresCache.find(c => c.id === id);
+                if (col) col.turno = turno;
+                // Atualiza botões no DOM
+                const card = document.querySelector(`.coletor-card[data-id="${id}"]`);
+                if (card) {
+                    card.querySelectorAll('.turno-btn').forEach(btn => {
+                        btn.classList.toggle('active', btn.dataset.turno === String(turno));
+                    });
+                }
+            } catch (e) { toast('Erro ao atualizar turno: ' + e.message, 'error'); }
         }
 
         function _latestVinculo(coletorId, vincs) {
@@ -15553,37 +15706,51 @@ Regras de resposta:
 
             grid.innerHTML = list.map(col => {
                 const st = _statusColetor(col);
-                const vinc = _latestVinculo(col.id);
                 const tipoLabel = col.tipo === 'proprio' ? '🏢 Próprio' : col.tipo === 'locado' ? '🤝 Locado' : col.tipo === 'inativo' ? '⛔ Inativo' : col.tipo || '—';
-                return `<div class="coletor-card" data-status="${st}" onclick="verColetor('${col.id}')">
-                <div class="coletor-card-header">
+                const turno = col.turno || 0;
+                const selCls = _stSelClass(st);
+                return `<div class="coletor-card" data-status="${st}" data-id="${col.id}">
+                <!-- Header: número + select de status (clicável sem abrir detalhes) -->
+                <div class="coletor-card-header" onclick="verColetor('${col.id}')" style="cursor:pointer">
                     <span class="coletor-card-id">#${col.number}</span>
-                    <div style="display:flex;gap:5px;align-items:center">
-                        ${col.defeituoso ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)">⚠️ Defeito</span>` : ''}
-                        <span class="coletor-card-badge ${_stBadge[st]}">${_stIco[st]} ${st}</span>
+                    <select class="col-status-sel ${selCls}"
+                        onclick="event.stopPropagation()"
+                        onchange="setColetorStatus('${col.id}',this.value,event)">
+                        <option value="Ativo"      ${st === 'Ativo' ? 'selected' : ''}>✅ Ativo</option>
+                        <option value="Backup"     ${st === 'Backup' ? 'selected' : ''}>💾 Backup</option>
+                        <option value="Manutenção" ${st === 'Manutenção' ? 'selected' : ''}>🔧 Manutenção</option>
+                        <option value="Inativo"    ${st === 'Inativo' ? 'selected' : ''}>⛔ Inativo</option>
+                    </select>
+                </div>
+                <!-- Corpo clicável -->
+                <div onclick="verColetor('${col.id}')" style="cursor:pointer">
+                    <div class="coletor-card-modelo">${col.modelo || 'Sem modelo'}</div>
+                    <div class="coletor-card-fabricante">${tipoLabel}${col.patrimonio ? ' · ' + col.patrimonio : ''}</div>
+                    ${col.defeituoso && col.defeito_desc ? `<div style="font-size:11px;color:var(--red);background:rgba(239,68,68,.07);border-radius:6px;padding:5px 8px;margin:6px 0">⚠️ ${col.defeito_desc}</div>` : ''}
+                    <div class="coletor-card-info" style="margin-top:10px">
+                        <div class="coletor-card-row">
+                            <span class="coletor-card-lbl">Patrimônio</span>
+                            <span class="coletor-card-val" style="font-family:var(--mono)">${col.patrimonio || '—'}</span>
+                        </div>
+                        <div class="coletor-card-row">
+                            <span class="coletor-card-lbl">Tipo</span>
+                            <span class="coletor-card-val">${col.tipo || '—'}</span>
+                        </div>
                     </div>
                 </div>
-                <div class="coletor-card-modelo">${col.modelo || 'Sem modelo'}</div>
-                <div class="coletor-card-fabricante">${tipoLabel}${col.patrimonio ? ' · ' + col.patrimonio : ''}</div>
-                <div class="coletor-card-info">
-                    <div class="coletor-card-row">
-                        <span class="coletor-card-lbl">Patrimônio</span>
-                        <span class="coletor-card-val" style="font-family:var(--mono)">${col.patrimonio || '—'}</span>
-                    </div>
-                    <div class="coletor-card-row">
-                        <span class="coletor-card-lbl">Tipo</span>
-                        <span class="coletor-card-val">${col.tipo || '—'}</span>
-                    </div>
-                    <div class="coletor-card-row">
-                        <span class="coletor-card-lbl">Último uso</span>
-                        <span class="coletor-card-val">${vinc ? new Date(vinc.date + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</span>
-                    </div>
-                    <div class="coletor-card-row">
-                        <span class="coletor-card-lbl">T1 / T2</span>
-                        <span class="coletor-card-val">${vinc ? (vinc.t1 || '—') + ' / ' + (vinc.t2 || '—') : '—'}</span>
-                    </div>
+                <!-- Turno: botões T1 / T2 (não abrem detalhes) -->
+                <div style="margin:10px 0 8px;display:flex;gap:6px;align-items:center">
+                    <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;font-family:var(--mono);flex-shrink:0">Turno</span>
+                    <button class="turno-btn ${turno === 1 ? 'active' : ''}" data-turno="1"
+                        onclick="event.stopPropagation();setColetorTurno('${col.id}',${turno === 1 ? 0 : 1},event)">
+                        1º Turno
+                    </button>
+                    <button class="turno-btn ${turno === 2 ? 'active' : ''}" data-turno="2"
+                        onclick="event.stopPropagation();setColetorTurno('${col.id}',${turno === 2 ? 0 : 2},event)">
+                        2º Turno
+                    </button>
                 </div>
-                ${col.defeituoso && col.defeito_desc ? `<div style="font-size:11px;color:var(--red);background:rgba(239,68,68,.07);border-radius:6px;padding:6px 8px;margin-bottom:8px">⚠️ ${col.defeito_desc}</div>` : ''}
+                <!-- Footer -->
                 <div class="coletor-card-footer">
                     <button onclick="event.stopPropagation();editarColetor('${col.id}')">✏️ Editar</button>
                     <button onclick="event.stopPropagation();verColetor('${col.id}')">👁️ Detalhes</button>
@@ -15617,11 +15784,14 @@ Regras de resposta:
                 }
             } catch (_) { }
 
+            const turnoLabel = col.turno === 1 ? '1º Turno' : col.turno === 2 ? '2º Turno' : '—';
             const rows = [
                 ['Número', '#' + col.number],
                 ['Patrimônio', col.patrimonio || '—'],
                 ['Modelo', col.modelo || '—'],
                 ['Tipo', col.tipo || '—'],
+                ['Status', `<span class="coletor-card-badge ${_stBadge[st]}">${_stIco[st]} ${st}</span>`],
+                ['Turno', turnoLabel],
                 ['Defeituoso', col.defeituoso ? `⚠️ Sim${col.defeito_desc ? ' — ' + col.defeito_desc : ''}` : '✅ Não'],
             ];
 
@@ -15690,7 +15860,9 @@ Regras de resposta:
                     modelo: gv('col-modelo') || null,
                     tipo: gv('col-tipo') || 'proprio',
                     defeituoso,
-                    defeito_desc: defeituoso ? gv('col-defeito-desc') : ''
+                    defeito_desc: defeituoso ? gv('col-defeito-desc') : '',
+                    status: 'Backup',
+                    turno: 0
                 };
 
                 if (_editingColetorId) {
