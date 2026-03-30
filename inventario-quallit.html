@@ -432,45 +432,32 @@
             overflow: hidden;
         }
 
+        /* ═══════════════════════════════════════
+           SIDEBAR — sempre drawer overlay fixo
+           ═══════════════════════════════════════ */
         .sidebar {
-            width: 240px;
-            background: var(--bg2);
-            border-right: 1px solid var(--border);
-            padding: 20px 12px;
-            flex-shrink: 0;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
-            overscroll-behavior: contain;
-            height: 0;
-            min-height: 0;
-            flex: 0 0 240px;
-            transition: transform .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1);
-        }
-
-        /* Desktop collapsed: sidebar recolhe para largura zero */
-        .sidebar.sidebar-collapsed {
-            width: 0 !important;
-            min-width: 0 !important;
-            flex-basis: 0 !important;
-            padding-left: 0;
-            padding-right: 0;
-            overflow: hidden;
-        }
-
-        .sidebar.sidebar-collapsed.mob-open {
-            /* no desktop colapsado, mob-open reabre como overlay */
-            width: 280px !important;
             position: fixed;
-            top: 0;
+            top: 60px;
             left: 0;
             bottom: 0;
             z-index: 200;
-            padding-top: 70px;
-            padding-left: 12px;
-            padding-right: 12px;
+            width: 260px;
+            background: var(--bg2);
+            border-right: 1px solid var(--border);
+            padding: 20px 12px;
             overflow-y: auto;
-            box-shadow: 6px 0 40px rgba(0, 0, 0, .6);
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            transform: translateX(-100%);
+            transition: transform .28s cubic-bezier(.4, 0, .2, 1);
+            box-shadow: 4px 0 32px rgba(0, 0, 0, .45);
         }
+
+        .sidebar.sidebar-open {
+            transform: translateX(0);
+        }
+
+        /* Sem sidebar-collapsed, sem desktop-hidden, sem mob-open */
 
         /* Sidebar logout button */
         .sidebar-logout-btn {
@@ -3302,6 +3289,10 @@
             z-index: 199;
         }
 
+        .sidebar-backdrop.sidebar-open {
+            display: block;
+        }
+
         /* NAV COUNT BADGE */
         .nav-cnt {
             margin-left: auto;
@@ -3599,10 +3590,6 @@
 
         /* ── Tablet (≤ 1024px) ── */
         @media(max-width: 1024px) {
-            .sidebar {
-                width: 200px;
-            }
-
             .main-content {
                 padding: 20px;
             }
@@ -3613,28 +3600,12 @@
            ══════════════════════════════════════════════ */
         @media(max-width: 768px) {
 
-            /* ── Sidebar: off-canvas drawer ── */
+            /* ── Sidebar mobile: top menor por causa da topbar de 56px ── */
             .sidebar {
-                display: none;
-                position: fixed;
-                top: 0;
-                left: 0;
-                bottom: 0;
-                z-index: 200;
-                width: 300px;
-                transform: translateX(-100%);
-                transition: transform .32s cubic-bezier(.4, 0, .2, 1);
-                box-shadow: 6px 0 40px rgba(0, 0, 0, .5);
-                overflow-y: auto;
-                padding-top: calc(60px + env(safe-area-inset-top, 0px));
+                top: 56px;
             }
 
-            .sidebar.mob-open {
-                display: block !important;
-                transform: translateX(0);
-            }
-
-            .sidebar-backdrop.mob-open {
+            .sidebar-backdrop.sidebar-open {
                 display: block;
             }
 
@@ -9569,48 +9540,18 @@ SEÇÕES: ${sections.join(', ')}. Tom executivo, máximo 500 palavras. Inclua: S
         let _catSortKey = null, _catSortDir = 1;
 
         // ============================================================
-        // SIDEBAR MOBILE
+        // SIDEBAR TOGGLE
         // ============================================================
         function toggleSidebar() {
             const s = document.getElementById('main-sidebar');
             const b = document.getElementById('sidebar-backdrop');
-            const isMobile = window.innerWidth <= 768;
-
-            if (isMobile) {
-                // Mobile: drawer slide-in
-                const open = s.classList.toggle('mob-open');
-                b.classList.toggle('mob-open', open);
-                return;
-            }
-
-            // Desktop: 3 estados
-            // Estado A: visível normalmente (sem classes extras)
-            // Estado B: colapsado (sidebar-collapsed, sem mob-open)
-            // Estado C: drawer aberto sobre o conteúdo (sidebar-collapsed + mob-open)
-
-            const isCollapsed = s.classList.contains('sidebar-collapsed');
-            const isDrawerOpen = isCollapsed && s.classList.contains('mob-open');
-
-            if (!isCollapsed) {
-                // A → B: recolhe o sidebar
-                s.classList.add('sidebar-collapsed');
-                s.classList.remove('mob-open');
-                b.classList.remove('mob-open');
-            } else if (!isDrawerOpen) {
-                // B → C: abre como drawer sobre o conteúdo
-                s.classList.add('mob-open');
-                b.classList.add('mob-open');
-            } else {
-                // C → B: fecha o drawer (mantém colapsado)
-                s.classList.remove('mob-open');
-                b.classList.remove('mob-open');
-            }
+            const open = s.classList.toggle('sidebar-open');
+            b.classList.toggle('sidebar-open', open);
         }
 
         function closeSidebar() {
-            const s = document.getElementById('main-sidebar');
-            s.classList.remove('mob-open');
-            document.getElementById('sidebar-backdrop').classList.remove('mob-open');
+            document.getElementById('main-sidebar').classList.remove('sidebar-open');
+            document.getElementById('sidebar-backdrop').classList.remove('sidebar-open');
         }
 
         // ============================================================
@@ -9731,8 +9672,9 @@ SEÇÕES: ${sections.join(', ')}. Tom executivo, máximo 500 palavras. Inclua: S
                 document.getElementById('viewer-nav').style.display = isViewer ? 'block' : 'none';
                 document.getElementById('viewer-full-nav').style.display = isViewerFull ? 'block' : 'none';
                 // Viewer simples: esconde sidebar (só tem 1 item), conteúdo ocupa tela cheia
-                const _sb = document.getElementById('main-sidebar');
-                if (_sb) _sb.style.display = isViewer ? 'none' : '';
+                // Viewer simples: esconde botão de menu (não tem navegação lateral)
+                const _hb = document.querySelector('.hamburger');
+                if (_hb) _hb.style.display = isViewer ? 'none' : '';
 
                 // ── Aplica template salvo do usuário ──
                 const tmplCfg = _getSavedThemeConfig();
