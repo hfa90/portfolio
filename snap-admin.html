@@ -5371,12 +5371,15 @@
             let orders = isDemoMode ? allOrders : [];
 
             if (!isDemoMode && sb) {
-                const { data } = await sb.from('orders').select('*').order('created_at', { ascending: false }).limit(200);
-                if (data) {
-                    // Dashboard usa todos; allOrders só guarda ativos
-                    orders = data;
-                    allOrders = data.filter(o => !['delivered', 'cancelled'].includes(o.status));
-                }
+                try {
+                    let q = sb.from('orders').select('*').order('created_at', { ascending: false }).limit(200);
+                    if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+                    const { data } = await q;
+                    if (data) {
+                        orders = data;
+                        allOrders = data.filter(o => !['delivered', 'cancelled'].includes(o.status));
+                    }
+                } catch (e) { console.warn('[loadDashboard]', e); }
             }
 
             const today = new Date().toDateString();
@@ -5500,13 +5503,14 @@
         // ===== ORDERS =====
         async function loadOrders() {
             if (!isDemoMode && sb) {
-                const { data, error } = await sb.from('orders')
+                let q = sb.from('orders')
                     .select('*')
                     .not('status', 'in', '("delivered","cancelled")')
                     .order('created_at', { ascending: false });
+                if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+                const { data, error } = await q;
                 if (!error && data) {
                     allOrders = data;
-                    // Sincronizar _knownOrderIds
                     data.forEach(o => _knownOrderIds.add(o.id));
                 }
             } else {
@@ -6014,8 +6018,10 @@
         // ===== PRODUCTS =====
         async function loadProducts() {
             if (!isDemoMode && sb) {
-                const { data } = await sb.from('products').select('*, category:categories(name, icon)').order('created_at', { ascending: false });
-                if (data) allProducts = data;
+                let qp = sb.from('products').select('*, category:categories(name, icon)').order('sort_order').order('created_at', { ascending: false });
+                if (_restaurantId) qp = qp.eq('restaurant_id', _restaurantId);
+                const { data: dataProd } = await qp;
+                if (dataProd) allProducts = dataProd;
                 await loadCategoriesForSelect();
             }
             renderProducts(allProducts);
@@ -6105,7 +6111,9 @@
                     if (editingProductId) {
                         result = await sb.from('products').update(data).eq('id', editingProductId).select();
                     } else {
-                        result = await sb.from('products').insert({ ...data, created_at: new Date().toISOString() }).select();
+                        const prodInsert = { ...data, created_at: new Date().toISOString() };
+                        if (_restaurantId) prodInsert.restaurant_id = _restaurantId;
+                        result = await sb.from('products').insert(prodInsert).select();
                     }
                     if (result.error) {
                         showToast('❌ Erro: ' + result.error.message, 'error');
@@ -6113,9 +6121,9 @@
                         return;
                     }
                     // Recarregar lista fresca do banco
-                    const { data: fresh } = await sb.from('products')
-                        .select('*, category:categories(name, icon)')
-                        .order('created_at', { ascending: false });
+                    let qfresh = sb.from('products').select('*, category:categories(name, icon)').order('sort_order').order('created_at', { ascending: false });
+                    if (_restaurantId) qfresh = qfresh.eq('restaurant_id', _restaurantId);
+                    const { data: fresh } = await qfresh;
                     if (fresh) allProducts = fresh;
                 } else {
                     // Demo mode
@@ -6197,7 +6205,9 @@
 
         async function loadCategoriesForSelect() {
             if (!isDemoMode && sb && !allCategories.length) {
-                const { data } = await sb.from('categories').select('*').order('sort_order');
+                let qcs = sb.from('categories').select('*').order('sort_order');
+                if (_restaurantId) qcs = qcs.eq('restaurant_id', _restaurantId);
+                const { data } = await qcs;
                 if (data) allCategories = data;
             }
 
@@ -6222,10 +6232,14 @@
         // ===== CATEGORIES =====
         async function loadCategories() {
             if (!isDemoMode && sb) {
-                const { data } = await sb.from('categories').select('*').order('sort_order');
+                let qc = sb.from('categories').select('*').order('sort_order');
+                if (_restaurantId) qc = qc.eq('restaurant_id', _restaurantId);
+                const { data } = await qc;
                 if (data) allCategories = data;
                 if (!allProducts.length) {
-                    const { data: prods } = await sb.from('products').select('category_id');
+                    let qpr = sb.from('products').select('category_id');
+                    if (_restaurantId) qpr = qpr.eq('restaurant_id', _restaurantId);
+                    const { data: prods } = await qpr;
                     if (prods) allProducts = prods;
                 }
             }
@@ -6292,10 +6306,14 @@
                 if (editingCategoryId) {
                     ({ error } = await sb.from('categories').update(data).eq('id', editingCategoryId));
                 } else {
-                    ({ error } = await sb.from('categories').insert(data));
+                    const catInsert = { ...data };
+                    if (_restaurantId) catInsert.restaurant_id = _restaurantId;
+                    ({ error } = await sb.from('categories').insert(catInsert));
                 }
                 if (error) { showToast('Erro: ' + error.message, 'error'); return; }
-                const { data: fresh } = await sb.from('categories').select('*').order('sort_order');
+                let qcfresh = sb.from('categories').select('*').order('sort_order');
+                if (_restaurantId) qcfresh = qcfresh.eq('restaurant_id', _restaurantId);
+                const { data: fresh } = await qcfresh;
                 if (fresh) allCategories = fresh;
             } else {
                 if (editingCategoryId) {
@@ -6327,7 +6345,9 @@
             let orders = isDemoMode ? [...allOrders, ...allHistory] : [];
             if (!isDemoMode && sb) {
                 // Relatórios usam TODOS os pedidos (incluindo entregues/cancelados)
-                const { data } = await sb.from('orders').select('*').order('created_at', { ascending: false });
+                let qrep = sb.from('orders').select('*').order('created_at', { ascending: false });
+                if (_restaurantId) qrep = qrep.eq('restaurant_id', _restaurantId);
+                const { data } = await qrep;
                 if (data) orders = data;
             }
 
@@ -6855,7 +6875,9 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             loadLoyaltySettings();
             let customers = [];
             if (!isDemoMode && sb) {
-                const { data, error } = await sb.from('loyalty_customers').select('*').order('points', { ascending: false });
+                let qlc = sb.from('loyalty_customers').select('*').order('points', { ascending: false });
+                if (_restaurantId) qlc = qlc.eq('restaurant_id', _restaurantId);
+                const { data, error } = await qlc;
                 if (!error && data) { allCustomers = data; customers = data; }
                 else if (error && error.code === '42P01') {
                     showToast('⚠️ Tabela loyalty_customers não existe. Execute o SQL de atualização.', 'warning');
@@ -7180,7 +7202,10 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             const points = parseInt(document.getElementById('custPoints').value) || 0;
             if (!name || !phone) { showToast('Preencha nome e telefone', 'error'); return; }
 
-            const data = { name, phone, points, total_orders: 0, total_spent: 0, total_redeemed: 0, updated_at: new Date().toISOString() };
+            const data = {
+                name, phone, points, total_orders: 0, total_spent: 0, total_redeemed: 0, updated_at: new Date().toISOString(),
+                ...(_restaurantId ? { restaurant_id: _restaurantId } : {})
+            };
 
             if (!isDemoMode && sb) {
                 let error;
@@ -7257,6 +7282,7 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     } else {
                         // Novo cliente — cadastrar automaticamente
                         const { data: novo } = await sb.from('loyalty_customers').insert({
+                            ...(_restaurantId ? { restaurant_id: _restaurantId } : {}),
                             name: order.customer_name,
                             phone: phoneClean,
                             points: basePoints,
@@ -7462,11 +7488,13 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
 
         async function loadHistory() {
             if (!isDemoMode && sb) {
-                const { data } = await sb.from('orders')
+                let qh = sb.from('orders')
                     .select('*')
                     .in('status', ['delivered', 'cancelled'])
                     .order('created_at', { ascending: false });
-                if (data) allHistory = data;
+                if (_restaurantId) qh = qh.eq('restaurant_id', _restaurantId);
+                const { data: dataHist } = await qh;
+                if (dataHist) allHistory = dataHist;
             } else {
                 // Demo: usar os pedidos já em memória que estejam concluídos
                 allHistory = allOrders.filter(o => ['delivered', 'cancelled'].includes(o.status));
@@ -7845,10 +7873,9 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             if (!allHistory || allHistory.length === 0) {
                 if (!isDemoMode && sb) {
                     try {
-                        const { data } = await sb.from('orders')
-                            .select('*')
-                            .in('status', ['delivered', 'cancelled'])
-                            .order('created_at', { ascending: false });
+                        let qsh = sb.from('orders').select('*').in('status', ['delivered', 'cancelled']).order('created_at', { ascending: false });
+                        if (_restaurantId) qsh = qsh.eq('restaurant_id', _restaurantId);
+                        const { data } = await qsh;
                         if (data) allHistory = data;
                     } catch (e) { /* silencioso */ }
                 } else {
@@ -7858,41 +7885,61 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
             await loadStaff();
         }
 
+        // Stub de SnapCommissions para evitar erros caso o arquivo externo não exista
+        const SnapCommissions = window.SnapCommissions || {
+            init: () => { },
+            updateConfig: () => { }
+        };
+
         async function loadTaxaSettings() {
             if (!isDemoMode && sb) {
                 try {
-                    const { data } = await sb.from('staff_settings').select('*').limit(1);
+                    let q = sb.from('staff_settings').select('*').limit(1);
+                    if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+                    const { data } = await q;
                     if (data && data.length) {
                         taxaServicoEnabled = data[0].taxa_servico_enabled;
                         motoFeePct = data[0].moto_fee_pct;
                     }
-                } catch (e) { }
+                } catch (e) { console.warn('[loadTaxaSettings]', e); }
             }
-            document.getElementById('toggleTaxaServico').checked = taxaServicoEnabled;
-            document.getElementById('taxaServicoRow').classList.toggle('active-taxa', taxaServicoEnabled);
+            const toggleEl = document.getElementById('toggleTaxaServico');
+            if (toggleEl) toggleEl.checked = taxaServicoEnabled;
+            const taxaRow = document.getElementById('taxaServicoRow');
+            if (taxaRow) taxaRow.classList.toggle('active-taxa', taxaServicoEnabled);
             setMotoFeeOpt(String(motoFeePct));
 
-
-            SnapCommissions.init(sb, {
-                taxaServicoEnabled: taxaServicoEnabled,  // boolean
-                motoFeePct: motoFeePct                   // 0, 50 ou 100
-            });
+            try {
+                SnapCommissions.init(sb, {
+                    taxaServicoEnabled: taxaServicoEnabled,
+                    motoFeePct: motoFeePct
+                });
+            } catch (e) { }
         }
 
         async function saveTaxaSettings() {
             taxaServicoEnabled = document.getElementById('toggleTaxaServico').checked;
             if (!isDemoMode && sb) {
                 try {
-                    const { data: existing } = await sb.from('staff_settings').select('id').limit(1);
+                    // Buscar registro existente por restaurant_id
+                    let q = sb.from('staff_settings').select('id').limit(1);
+                    if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+                    const { data: existing } = await q;
+                    const payload = {
+                        taxa_servico_enabled: taxaServicoEnabled,
+                        moto_fee_pct: motoFeePct,
+                        updated_at: new Date().toISOString()
+                    };
                     if (existing && existing.length) {
-                        await sb.from('staff_settings').update({ taxa_servico_enabled: taxaServicoEnabled, moto_fee_pct: motoFeePct, updated_at: new Date().toISOString() }).eq('id', existing[0].id);
+                        await sb.from('staff_settings').update(payload).eq('id', existing[0].id);
                     } else {
-                        await sb.from('staff_settings').insert({ taxa_servico_enabled: taxaServicoEnabled, moto_fee_pct: motoFeePct });
+                        if (_restaurantId) payload.restaurant_id = _restaurantId;
+                        await sb.from('staff_settings').insert(payload);
                     }
                 } catch (e) { showToast('❌ Erro ao salvar: ' + e.message, 'error'); return; }
             }
-            showToast('✅ Configurações de taxas salvas com sucesso!', 'success');
-            SnapCommissions.updateConfig({ taxaServicoEnabled, motoFeePct });
+            showToast('✅ Configurações de taxas salvas!', 'success');
+            try { SnapCommissions.updateConfig({ taxaServicoEnabled, motoFeePct }); } catch (e) { }
             renderStaffKpis();
             renderAttendantHighlight();
             renderStaffTable();
@@ -7900,8 +7947,13 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
 
         async function loadStaff() {
             if (!isDemoMode && sb) {
-                const { data, error } = await sb.from('staff').select('*').order('created_at', { ascending: false });
-                if (!error && data) allStaff = data;
+                try {
+                    let q = sb.from('staff').select('*').order('name');
+                    if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+                    const { data, error } = await q;
+                    if (!error && data) allStaff = data;
+                    else if (error) console.warn('[loadStaff]', error);
+                } catch (e) { console.warn('[loadStaff]', e); }
             } else if (!allStaff.length) {
                 allStaff = [
                     { id: 1, name: 'Carlos Menezes', role: 'atendente', pin: '3847', phone: '(92) 99201-1234', cpf: '', active: true, created_at: new Date(Date.now() - 86400000 * 2).toISOString() },
@@ -7909,7 +7961,6 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                     { id: 3, name: 'Fernanda Lima', role: 'cozinheiro', pin: '7432', phone: '(92) 99301-5555', cpf: '', active: true, created_at: new Date(Date.now() - 86400000 * 10).toISOString() },
                     { id: 4, name: 'Paulo Rocha', role: 'entregador', pin: '6610', phone: '(92) 99123-7890', cpf: '', active: true, created_at: new Date(Date.now() - 86400000 * 3).toISOString() },
                     { id: 5, name: 'Mariana Castro', role: 'caixa', pin: '9021', phone: '(92) 98707-2222', cpf: '', active: true, created_at: new Date(Date.now() - 86400000 * 7).toISOString() },
-                    { id: 6, name: 'Tiago Neves', role: 'servicos_gerais', pin: '4453', phone: '(92) 99988-3333', cpf: '', active: false, created_at: new Date(Date.now() - 86400000 * 15).toISOString() },
                 ];
             }
             renderStaffKpis();
@@ -8147,11 +8198,22 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
                 showToast(`✅ ${name} atualizado com sucesso!`, 'success');
                 staffEditId = null;
                 const card = document.querySelector('[onclick="saveStaff()"]').closest('.staff-config-card');
-                card.querySelector('.staff-config-title').textContent = '➕ Cadastrar Funcionário';
-                document.querySelector('[onclick="saveStaff()"]').textContent = '✅ Cadastrar funcionário';
+                if (card) card.querySelector('.staff-config-title').textContent = '➕ Cadastrar Funcionário';
+                const btn = document.querySelector('[onclick="saveStaff()"]');
+                if (btn) btn.textContent = '✅ Cadastrar funcionário';
             } else {
                 if (!isDemoMode && sb) {
-                    const { data, error } = await sb.from('staff').insert(entry).select().single();
+                    // Garantir restaurant_id antes de inserir
+                    if (!_restaurantId) {
+                        try {
+                            const { data: { user } } = await sb.auth.getUser();
+                            if (user) await loadRestaurantId(user);
+                        } catch (e) { }
+                    }
+                    if (!_restaurantId) return showToast('❌ Restaurante não identificado. Recarregue a página.', 'error');
+
+                    const insertEntry = { ...entry, restaurant_id: _restaurantId };
+                    const { data, error } = await sb.from('staff').insert(insertEntry).select().single();
                     if (error) return showToast('❌ Erro ao cadastrar: ' + error.message, 'error');
                     allStaff.unshift(data);
                 } else {
