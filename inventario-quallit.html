@@ -16,7 +16,6 @@
         rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         :root {
             --accent: #0ea5e9;
@@ -431,7 +430,6 @@
             flex: 1;
             min-height: 0;
             overflow: hidden;
-            touch-action: pan-y;
         }
 
         .sidebar {
@@ -440,8 +438,12 @@
             border-right: 1px solid var(--border);
             padding: 20px 12px;
             flex-shrink: 0;
-            overflow-y: scroll;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             overscroll-behavior: contain;
+            height: 0;
+            min-height: 0;
+            flex: 0 0 240px;
             transition: transform .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1);
         }
 
@@ -551,12 +553,14 @@
 
         .main-content {
             flex: 1;
-            overflow-y: scroll;
+            overflow-y: auto;
             overflow-x: hidden;
             padding: 28px;
             overscroll-behavior: contain;
             -webkit-overflow-scrolling: touch;
-            touch-action: pan-y;
+            /* Garante que funciona em iOS — o elemento precisa de altura explícita num contexto flex */
+            height: 0;
+            min-height: 0;
         }
 
         .page {
@@ -3674,10 +3678,12 @@
             /* ── Main content ── */
             .main-content {
                 padding: 20px 16px 76px;
-                overflow-y: scroll;
+                overflow-y: auto;
                 overflow-x: hidden;
                 -webkit-overflow-scrolling: touch;
-                touch-action: pan-y;
+                height: 0;
+                min-height: 0;
+                flex: 1;
             }
 
             /* ── iOS-style page header ── */
@@ -18132,19 +18138,20 @@ ${listaSection}
                 card.appendChild(info);
                 grid.appendChild(card);
 
-                // Generate QR Code
-                setTimeout(() => {
-                    try {
-                        new QRCode(document.getElementById(`etiq-qr-${idx}`), {
-                            text: item.qrData,
-                            width: d.qr,
-                            height: d.qr,
-                            colorDark: '#000',
-                            colorLight: '#fff',
-                            correctLevel: QRCode.CorrectLevel.M
-                        });
-                    } catch (e) { console.warn('QRCode error:', e); }
-                }, 50 * idx);
+                // Generate QR Code via qrserver.com (same method used in the rest of the app)
+                const qrSize = d.qr;
+                const qrImg = document.createElement('img');
+                qrImg.width = qrSize;
+                qrImg.height = qrSize;
+                qrImg.style.cssText = `width:${qrSize}px;height:${qrSize}px;display:block;border-radius:4px`;
+                qrImg.alt = 'QR Code';
+                qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=${qrSize}x${qrSize}&data=${encodeURIComponent(item.qrData)}&bgcolor=ffffff&color=000000&qzone=1&format=png`;
+                qrImg.onerror = () => {
+                    qrImg.style.background = '#f0f0f0';
+                    qrImg.alt = 'QR indisponível';
+                };
+                const qrTarget = document.getElementById(`etiq-qr-${idx}`);
+                if (qrTarget) qrTarget.appendChild(qrImg);
             });
 
             toast(`${_etiqItems.length} etiqueta(s) gerada(s)!`, 'success');
