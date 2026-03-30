@@ -3019,6 +3019,43 @@
       .products-grid {
         grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
       }
+
+      /* Header tablet: esconder address-bar para ganhar espaço */
+      .address-bar {
+        display: none;
+      }
+
+      .header-inner {
+        gap: 12px;
+        padding: 0 16px;
+      }
+
+      /* Cart sidebar tablet: 90% width */
+      .cart-sidebar {
+        width: 360px;
+      }
+    }
+
+    /* ===== TABLET MÉDIO (431–600px): produtos 1 coluna ===== */
+    @media (min-width: 431px) and (max-width: 600px) {
+      .products-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+
+      .header-inner {
+        gap: 10px;
+        padding: 0 14px;
+      }
+
+      .address-bar {
+        max-width: 160px;
+        padding: 7px 10px;
+      }
+
+      .address-bar span {
+        display: none;
+      }
     }
 
     /* ═══════════════════════════════════════════
@@ -3737,6 +3774,17 @@
           <strong id="orderNumberDisplay">#0000</strong>
         </div>
 
+        <!-- Resumo de valores — preenchido pelo confirmOrder() -->
+        <div id="successValueSummary" style="
+          background:var(--surface2);
+          border-radius:12px;
+          padding:14px 16px;
+          margin:12px 0;
+          font-size:13px;
+          text-align:left;
+          display:none;
+        "></div>
+
         <!-- Card de status atual -->
         <div class="status-card status-pending" id="statusCard">
           <div class="status-card-icon" id="statusCardIcon">⏳</div>
@@ -4292,18 +4340,22 @@
 
     async function loadCategories() {
       if (isDemoMode) return;
-      const { data, error } = await sb.from('categories').select('*').order('name');
+      const q = sb.from('categories').select('*').eq('active', true).order('sort_order');
+      if (_restaurantId) q.eq('restaurant_id', _restaurantId);
+      const { data, error } = await q;
       if (error) throw error;
       if (data) renderCategories(data);
     }
 
     async function loadProducts() {
       if (isDemoMode) return;
-      const { data, error } = await sb
+      const q = sb
         .from('products')
         .select('*, category:categories(name, icon)')
         .eq('available', true)
-        .order('created_at', { ascending: false });
+        .order('sort_order');
+      if (_restaurantId) q.eq('restaurant_id', _restaurantId);
+      const { data, error } = await q;
 
       if (error) throw error;
       if (data) {
@@ -4574,8 +4626,9 @@
 
       if (!isDemoMode && sb) {
         try {
-          const { data } = await sb.from('loyalty_customers')
-            .select('*').eq('phone', phone).maybeSingle();
+          let q = sb.from('loyalty_customers').select('*').eq('phone', phone);
+          if (_restaurantId) q = q.eq('restaurant_id', _restaurantId);
+          const { data } = await q.maybeSingle();
           customer = data;
           points = data?.points || 0;
         } catch (e) { console.warn('VIP lookup error:', e); }
@@ -4927,25 +4980,59 @@
     function renderCheckoutSummary() {
       const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
       const delivery = selectedOrderType === 'delivery' ? _deliveryFee : 0;
+      const discount = cart.reduce((s, i) => s + (i._vipRedeemed ? (i._originalPrice || 0) * i.qty : 0), 0);
       const total = subtotal + delivery;
 
-      document.getElementById('checkoutSummary').innerHTML = cart.map(i => `
+      let summaryHTML = cart.map(i => `
     <div class="summary-row">
-      <span>${i.qty}x ${i.name}</span>
-      <span>R$ ${formatPriceNum(i.price * i.qty)}</span>
+      <span>${i.qty}x ${i.name}${i._vipRedeemed ? ' <span style="color:var(--success);font-size:11px;font-weight:700">VIP 🎁</span>' : ''}</span>
+      <span>${i._vipRedeemed ? '<span style="color:var(--success)">Grátis</span>' : 'R$ ' + formatPriceNum(i.price * i.qty)}</span>
     </div>
   `).join('');
 
+      // Linha de subtotal (produtos)
+      summaryHTML += `<div class="summary-row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--surface3)">
+        <span style="color:var(--ink2)">Subtotal dos itens</span>
+        <span style="font-weight:600">R$ ${formatPriceNum(subtotal)}</span>
+      </div>`;
+
+      // Linha de taxa de entrega — só para delivery
+      if (selectedOrderType === 'delivery') {
+        summaryHTML += `<div class="summary-row" style="color:var(--ink2)">
+          <span>🛵 Taxa de entrega</span>
+          <span style="font-weight:600">${delivery > 0 ? 'R$ ' + formatPriceNum(delivery) : '<span style="color:var(--success)">Grátis</span>'}</span>
+        </div>`;
+      } else {
+        summaryHTML += `<div class="summary-row" style="color:var(--success)">
+          <span>🏃 Retirada no local</span>
+          <span style="font-weight:600">Sem taxa</span>
+        </div>`;
+      }
+
+      document.getElementById('checkoutSummary').innerHTML = summaryHTML;
       document.getElementById('checkoutTotal').textContent = formatPrice(total);
     }
 
     function selectOrderType(type) {
       selectedOrderType = type;
       document.querySelectorAll('.order-type-btn').forEach(b => b.classList.remove('selected'));
-      document.getElementById('type' + type.charAt(0).toUpperCase() + type.slice(1)).classList.add('selected');
+      const btnId = 'type' + type.charAt(0).toUpperCase() + type.slice(1);
+      const btn = document.getElementById(btnId);
+      if (btn) btn.classList.add('selected');
 
       const deliverySection = document.getElementById('deliverySection');
-      deliverySection.style.display = type === 'delivery' ? 'block' : 'none';
+      if (deliverySection) deliverySection.style.display = type === 'delivery' ? 'block' : 'none';
+
+      // Garantir que o carrinho lateral reflita o modo correto
+      if (type === 'delivery') {
+        cartMode = 'delivery';
+        document.getElementById('tabDelivery')?.classList.add('active');
+        document.getElementById('tabRetirada')?.classList.remove('active');
+      } else {
+        cartMode = 'retirada';
+        document.getElementById('tabRetirada')?.classList.add('active');
+        document.getElementById('tabDelivery')?.classList.remove('active');
+      }
 
       renderCheckoutSummary();
     }
@@ -5157,8 +5244,24 @@
         return;
       }
 
+      if (!selectedPayment) {
+        showToast('⚠️ Selecione uma forma de pagamento', 'error');
+        return;
+      }
+
+      // Validar endereço de entrega
+      if (selectedOrderType === 'delivery') {
+        const street = document.getElementById('addressStreet')?.value.trim();
+        if (!street) {
+          showToast('⚠️ Preencha o endereço de entrega', 'error');
+          document.getElementById('addressStreet')?.focus();
+          return;
+        }
+      }
+
       const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-      const delivery = selectedOrderType === 'delivery' ? _deliveryFee : 0;
+      // Garantir que delivery_fee seja SEMPRE 0 para retirada
+      const delivery = selectedOrderType === 'delivery' ? (_deliveryFee || 0) : 0;
       const total = subtotal + delivery;
       const orderNum = Math.floor(Math.random() * 9000) + 1000;
 
@@ -5244,6 +5347,24 @@
       document.getElementById('checkoutContent').style.display = 'none';
       document.getElementById('successContent').style.display = 'block';
       applyStatusToTracker('pending');
+
+      // ── Resumo de valores na tela de sucesso ──────────────────────
+      const summaryEl = document.getElementById('successValueSummary');
+      if (summaryEl) {
+        const payLabels = { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' };
+        const typeLabels = { delivery: '🛵 Delivery', retirada: '🏃 Retirada', presencial: '🍽️ Presencial' };
+        let html = `<div style="font-weight:700;margin-bottom:8px;font-size:14px">💰 Resumo do pagamento</div>`;
+        html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">Subtotal dos itens</span><span>R$ ${subtotal.toFixed(2).replace('.', ',')}</span></div>`;
+        if (selectedOrderType === 'delivery') {
+          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">🛵 Taxa de entrega</span><span>${delivery > 0 ? 'R$ ' + delivery.toFixed(2).replace('.', ',') : 'Grátis'}</span></div>`;
+        } else {
+          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">${typeLabels[selectedOrderType] || 'Tipo'}</span><span style="color:var(--success)">Sem taxa</span></div>`;
+        }
+        html += `<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--surface3);font-weight:800;font-size:15px"><span>Total</span><span style="color:var(--brand)">R$ ${total.toFixed(2).replace('.', ',')}</span></div>`;
+        html += `<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:#888"><span>Forma de pagamento</span><span>${payLabels[selectedPayment] || selectedPayment}</span></div>`;
+        summaryEl.innerHTML = html;
+        summaryEl.style.display = 'block';
+      }
 
       // Mostrar botão de comprovante PIX se o pagamento for PIX
       const sendReceiptBtn = document.getElementById('sendReceiptBtn');
@@ -5450,6 +5571,9 @@
       document.getElementById('checkoutOverlay').classList.remove('open');
       document.getElementById('checkoutContent').style.display = 'block';
       document.getElementById('successContent').style.display = 'none';
+      // Limpar resumo de valores
+      const valSum = document.getElementById('successValueSummary');
+      if (valSum) { valSum.style.display = 'none'; valSum.innerHTML = ''; }
       applyStatusToTracker('pending');
       showToast('✨ Pronto para um novo pedido!');
     }

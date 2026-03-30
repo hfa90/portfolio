@@ -1979,6 +1979,39 @@
             margin: 0 auto 8px;
         }
 
+        /* ===== HAMBURGER BUTTON ===== */
+        .hamburger-btn {
+            display: none;
+            width: 36px;
+            height: 36px;
+            background: var(--surface2);
+            border: 1px solid var(--surface3);
+            border-radius: var(--radius-sm);
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 18px;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+
+        .hamburger-btn:hover {
+            background: var(--surface3);
+        }
+
+        .sidebar-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.45);
+            z-index: 49;
+            backdrop-filter: blur(2px);
+        }
+
+        .sidebar-overlay.open {
+            display: block;
+        }
+
         /* ===== RESPONSIVE ===== */
         @media (max-width: 1024px) {
             .kpi-grid {
@@ -1992,6 +2025,18 @@
             .reports-grid {
                 grid-template-columns: 1fr;
             }
+
+            .hist-kpi-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .loyalty-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .tier-config-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
         }
 
         @media (max-width: 768px) {
@@ -1999,8 +2044,13 @@
                 --sidebar-w: 0px;
             }
 
+            .hamburger-btn {
+                display: flex;
+            }
+
             .sidebar {
                 transform: translateX(-240px);
+                z-index: 50;
             }
 
             .sidebar.mobile-open {
@@ -2013,11 +2063,144 @@
             }
 
             .page-content {
-                padding: 20px 16px;
+                padding: 16px 12px;
             }
 
             .topbar {
-                padding: 0 16px;
+                padding: 0 12px;
+                height: 56px;
+            }
+
+            .page-title {
+                font-size: 16px;
+            }
+
+            .page-subtitle {
+                display: none;
+            }
+
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+            }
+
+            .kpi-value {
+                font-size: 22px;
+            }
+
+            .hist-kpi-row {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .loyalty-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tier-config-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            /* Tabelas com scroll horizontal */
+            .table-card,
+            .products-table-wrap,
+            .staff-table-wrap,
+            .hist-table-wrap,
+            .loyalty-customer-table {
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .table-card table,
+            .products-table-wrap table,
+            .staff-table-wrap table,
+            .hist-table-wrap .hist-table,
+            .loyalty-customer-table table {
+                min-width: 600px;
+            }
+
+            .table-header {
+                padding: 12px;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 8px;
+            }
+
+            .table-filters {
+                width: 100%;
+                overflow-x: auto;
+                flex-wrap: nowrap;
+                padding-bottom: 2px;
+            }
+
+            .search-input {
+                width: 100%;
+            }
+
+            /* Drawer full-width em mobile */
+            .drawer,
+            .cust-drawer,
+            .hist-detail-panel {
+                width: 100vw;
+                max-width: 100vw;
+            }
+
+            .modal-box {
+                margin: 8px;
+                max-height: 95vh;
+            }
+
+            /* Alerts reposicionados */
+            .new-order-alert,
+            .checkout-alert,
+            .receipt-alert {
+                right: 8px;
+                left: 8px;
+                width: auto;
+            }
+
+            .toast-container {
+                right: 8px;
+                left: 8px;
+                bottom: 16px;
+                align-items: stretch;
+            }
+
+            .toast {
+                max-width: 100%;
+            }
+
+            /* Form rows em coluna no mobile */
+            .form-row,
+            .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+
+            /* Reports grid */
+            .reports-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .kpi-grid {
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .kpi-value {
+                font-size: 20px;
+            }
+
+            .kpi-card {
+                padding: 14px;
+            }
+
+            .topbar-right .btn-primary span {
+                display: none;
+            }
+
+            .hist-kpi-row {
+                grid-template-columns: 1fr 1fr;
             }
         }
 
@@ -3392,6 +3575,9 @@
 
     </div>
 
+    <!-- SIDEBAR OVERLAY (mobile) -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="closeMobileSidebar()"></div>
+
     <!-- SIDEBAR -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
@@ -3458,6 +3644,7 @@
         <!-- TOP BAR -->
         <div class="topbar">
             <div class="topbar-left">
+                <button class="hamburger-btn" id="hamburgerBtn" onclick="toggleMobileSidebar()" title="Menu">☰</button>
                 <div>
                     <div class="page-title" id="pageTitle">Dashboard</div>
                     <div class="page-subtitle" id="pageSubtitle">Visão geral do negócio</div>
@@ -4996,8 +5183,15 @@
             const body = document.getElementById('alertBody');
             let items = [];
             try { items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []); } catch (e) { }
+            const subtotalAlert = Number(order.subtotal || 0);
+            const delivAlert = Number(order.delivery_fee || 0);
+            const totalAlert = Number(order.total || subtotalAlert + delivAlert);
+            let valorStr = `<strong style="color:var(--brand)">R$ ${totalAlert.toFixed(2).replace('.', ',')}</strong>`;
+            if (order.order_type === 'delivery' && delivAlert > 0) {
+                valorStr = `R$ ${subtotalAlert.toFixed(2).replace('.', ',')} + <span style="color:var(--warning)">R$ ${delivAlert.toFixed(2).replace('.', ',')} entrega</span> = <strong style="color:var(--brand)">R$ ${totalAlert.toFixed(2).replace('.', ',')}</strong>`;
+            }
             body.innerHTML = `<strong>${order.customer_name}</strong> fez um pedido via <strong>${typeIcon(order.order_type)} ${order.order_type}</strong>.<br>
-                ${items.length} item(ns) · <strong style="color:var(--brand)">R$ ${Number(order.total).toFixed(2).replace('.', ',')}</strong>`;
+                ${items.length} item(ns) · ${valorStr}`;
             const alertEl = document.getElementById('newOrderAlert');
             alertEl.classList.add('show');
 
@@ -5077,8 +5271,21 @@
             staff: null,
         };
 
+        // ===== MOBILE SIDEBAR =====
+        function toggleMobileSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const isOpen = sidebar.classList.contains('mobile-open');
+            sidebar.classList.toggle('mobile-open', !isOpen);
+            overlay.classList.toggle('open', !isOpen);
+        }
+        function closeMobileSidebar() {
+            document.getElementById('sidebar').classList.remove('mobile-open');
+            document.getElementById('sidebarOverlay').classList.remove('open');
+        }
+
         function goPage(page, btn) {
-            if (page === 'settings') loadModules();
+            closeMobileSidebar();
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
             if (btn) btn.classList.add('active');
 
@@ -5427,11 +5634,30 @@
 
     <div class="detail-section">
       <div class="detail-label">Valores</div>
-      <div class="detail-grid">
-        <div class="detail-item"><div class="detail-item-label">Subtotal</div><div class="detail-item-value">R$ ${Number(order.subtotal).toFixed(2).replace('.', ',')}</div></div>
-        <div class="detail-item"><div class="detail-item-label">Taxa de entrega</div><div class="detail-item-value">R$ ${Number(order.delivery_fee || 0).toFixed(2).replace('.', ',')}</div></div>
-        <div class="detail-item" style="background:var(--brand-bg)"><div class="detail-item-label" style="color:var(--brand)">Total</div><div class="detail-item-value" style="color:var(--brand);font-size:18px">R$ ${Number(order.total).toFixed(2).replace('.', ',')}</div></div>
-        <div class="detail-item"><div class="detail-item-label">Realizado em</div><div class="detail-item-value">${new Date(order.created_at).toLocaleString('pt-BR')}</div></div>
+      <div style="background:var(--surface);border-radius:var(--radius-sm);padding:14px 16px;border:1px solid var(--surface3)">
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:13px;color:var(--ink2)">
+          <span>Subtotal dos itens</span>
+          <span style="font-weight:600">R$ ${Number(order.subtotal).toFixed(2).replace('.', ',')}</span>
+        </div>
+        ${order.order_type === 'delivery' ? `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:13px;color:var(--ink2)">
+          <span>🛵 Taxa de entrega</span>
+          <span style="font-weight:600;color:var(--warning)">${Number(order.delivery_fee || 0) > 0 ? 'R$ ' + Number(order.delivery_fee).toFixed(2).replace('.', ',') : '<span style="color:var(--success)">Grátis</span>'}</span>
+        </div>` : `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:13px;color:var(--ink2)">
+          <span>${order.order_type === 'presencial' ? '🍽️ Presencial' : '🏃 Retirada'}</span>
+          <span style="font-weight:600;color:var(--success)">Sem taxa de entrega</span>
+        </div>`}
+        ${Number(order.discount || 0) > 0 ? `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--surface2);font-size:13px;color:var(--success)">
+          <span>🏷️ Desconto</span>
+          <span style="font-weight:600">−R$ ${Number(order.discount).toFixed(2).replace('.', ',')}</span>
+        </div>` : ''}
+        <div style="display:flex;justify-content:space-between;padding:10px 0 4px;font-size:17px;font-weight:800;color:var(--brand)">
+          <span>Total</span>
+          <span>R$ ${Number(order.total).toFixed(2).replace('.', ',')}</span>
+        </div>
+        <div style="font-size:11px;color:var(--ink3);margin-top:2px">Realizado em ${new Date(order.created_at).toLocaleString('pt-BR')}</div>
       </div>
     </div>
 
@@ -5562,6 +5788,9 @@
             const order = allOrders.find(o => o.id == currentOrderId);
             if (!order) return;
             const payLabel = { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' };
+            const subtotalDlv = Number(order.subtotal || 0);
+            const delivDlv = Number(order.delivery_fee || 0);
+            const totalDlv = Number(order.total || subtotalDlv + delivDlv);
             document.getElementById('dlvInfo').innerHTML = `
                 <div class="dlv-info-row">
                     <span class="dlv-info-label">Pedido</span>
@@ -5576,8 +5805,17 @@
                     <span class="dlv-info-value">${payLabel[order.payment_method] || order.payment_method || '—'}</span>
                 </div>
                 <div class="dlv-info-row">
+                    <span class="dlv-info-label">Subtotal dos itens</span>
+                    <span class="dlv-info-value">R$ ${subtotalDlv.toFixed(2).replace('.', ',')}</span>
+                </div>
+                ${delivDlv > 0 ? `
+                <div class="dlv-info-row">
+                    <span class="dlv-info-label">🛵 Taxa de entrega</span>
+                    <span class="dlv-info-value" style="color:var(--warning)">R$ ${delivDlv.toFixed(2).replace('.', ',')}</span>
+                </div>` : ''}
+                <div class="dlv-info-row">
                     <span class="dlv-info-label">Total a receber</span>
-                    <span class="dlv-info-value dlv-total-value">R$ ${Number(order.total || 0).toFixed(2).replace('.', ',')}</span>
+                    <span class="dlv-info-value dlv-total-value">R$ ${totalDlv.toFixed(2).replace('.', ',')}</span>
                 </div>
             `;
             // Pré-selecionar método de pagamento do pedido

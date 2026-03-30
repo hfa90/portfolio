@@ -73,6 +73,21 @@
             overscroll-behavior: none;
         }
 
+        /* Tablets em landscape: permitir scroll se necessário */
+        @media (min-width: 768px) and (max-height: 600px) {
+            body {
+                overflow-y: auto;
+            }
+
+            #app {
+                overflow: visible;
+            }
+
+            .shell {
+                overflow: visible;
+            }
+        }
+
         /* ── SCROLLBARS ── */
         ::-webkit-scrollbar {
             width: 3px;
@@ -324,6 +339,23 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+        }
+
+        /* Desktop grande: cart mais largo */
+        @media(min-width: 1200px) {
+            .col-cart {
+                width: 420px;
+            }
+
+            .products-grid {
+                grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+            }
+        }
+
+        @media(min-width: 900px) and (max-width: 1199px) {
+            .col-cart {
+                width: 340px;
+            }
         }
 
         /* Mobile: single column, bottom sheet cart */
@@ -3055,6 +3087,110 @@
             line-height: 1.6;
             max-width: 300px;
         }
+
+        /* ═══════════════════════════════════════
+           RESPONSIVE — MOBILE (max-width: 480px)
+        ═══════════════════════════════════════ */
+        @media (max-width: 480px) {
+            .topbar {
+                padding: 10px 12px;
+                gap: 8px;
+            }
+
+            .tb-logo {
+                font-size: 14px;
+            }
+
+            .tb-pill {
+                display: none;
+            }
+
+            .menu-top {
+                padding: 10px 12px 0;
+            }
+
+            .products-scroll {
+                padding: 4px 12px 120px;
+            }
+
+            .products-grid {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+            }
+
+            /* Order modal full screen no mobile */
+            .om-body {
+                max-height: 98dvh;
+                border-radius: 24px 24px 0 0;
+            }
+
+            .fields-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .ot-grid {
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+            }
+
+            .otg-btn {
+                padding: 10px 4px;
+            }
+
+            .otg-icon {
+                font-size: 20px;
+            }
+
+            .otg-lbl {
+                font-size: 10px;
+            }
+
+            /* Ordens panel */
+            .or-row {
+                padding: 10px 12px;
+            }
+        }
+
+        /* ═══════════════════════════════════════
+           RESPONSIVE — TABLET 768–1024px
+        ═══════════════════════════════════════ */
+        @media (min-width: 768px) and (max-width: 1024px) {
+            .col-cart {
+                width: 300px;
+            }
+
+            .products-grid {
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                gap: 8px;
+            }
+
+            .om-body {
+                max-width: 500px;
+            }
+
+            /* Commissions panel */
+            #commissionsPanel {
+                max-width: 100vw;
+            }
+        }
+
+        /* ═══════════════════════════════════════
+           TOAST position
+        ═══════════════════════════════════════ */
+        .toast-wrap {
+            position: fixed;
+            bottom: calc(20px + var(--safe-bot));
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+            pointer-events: none;
+            width: calc(100% - 32px);
+            max-width: 420px;
+        }
     </style>
 </head>
 
@@ -3970,11 +4106,11 @@
 
         function renderFab() {
             const fab = $('cartFab');
-            const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
+            const { sub, deliv, total } = cartTotals();
             const count = cart.reduce((s, i) => s + i.qty, 0);
             if (!count) { fab.classList.add('hidden'); return; }
             fab.classList.remove('hidden');
-            $('fabCount').textContent = count;
+            $('fabCount').textContent = count + (count === 1 ? ' item' : ' itens');
             $('fabTotal').textContent = fmtR(total);
         }
 
@@ -4076,9 +4212,25 @@
             const rows = cart.map(i =>
                 `<div class="oms-row"><span>${i.qty}x ${esc(i.name)}</span><span>R$ ${fmt(i.price * i.qty)}</span></div>`
             ).join('');
-            const delivRow = orderType === 'delivery' ? `<div class="oms-row"><span>Entrega</span><span>R$ ${fmt(deliv)}</span></div>` : '';
-            const discRow = disc > 0 ? `<div class="oms-row"><span>Desconto</span><span style="color:var(--green)">−R$ ${fmt(disc)}</span></div>` : '';
-            $('omSummary').innerHTML = rows + delivRow + discRow +
+
+            // Linha separadora de subtotal
+            const subRow = `<div class="oms-row" style="padding-top:8px;margin-top:4px;border-top:1px solid var(--s2)">
+                <span style="color:var(--ink2)">Subtotal dos itens</span>
+                <span style="font-weight:600">R$ ${fmt(sub)}</span>
+            </div>`;
+
+            // Taxa de entrega — só para delivery, com destaque visual
+            const delivRow = orderType === 'delivery'
+                ? `<div class="oms-row"><span>🛵 Taxa de entrega</span><span style="color:var(--yellow)">${deliv > 0 ? 'R$ ' + fmt(deliv) : '<span style="color:var(--green)">Grátis</span>'}</span></div>`
+                : (orderType === 'retirada'
+                    ? `<div class="oms-row"><span>🏃 Retirada no local</span><span style="color:var(--green)">Sem taxa</span></div>`
+                    : '');
+
+            const discRow = disc > 0
+                ? `<div class="oms-row"><span>🏷️ Desconto</span><span style="color:var(--green)">−R$ ${fmt(disc)}</span></div>`
+                : '';
+
+            $('omSummary').innerHTML = rows + subRow + delivRow + discRow +
                 `<div class="oms-row total-row"><span>Total</span><span>R$ ${fmt(total)}</span></div>`;
         }
 
