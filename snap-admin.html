@@ -9,7 +9,8 @@
         href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
         rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="snap-commissions.js"></script>
+    <!-- snap-commissions.js inlined stub (prevents 404 from blocking page) -->
+    <script>/* snap-commissions stubs — funcionalidade integrada no admin */</script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         :root {
@@ -6559,6 +6560,14 @@
 
         async function saveBusinessSettingsToDb() {
             if (!sb) { showToast('❌ Sem conexão com banco.', 'error'); return; }
+
+            // Tentar carregar _restaurantId agora se ainda for null
+            if (!_restaurantId) {
+                try {
+                    const { data: { user } } = await sb.auth.getUser();
+                    if (user) await loadRestaurantId(user);
+                } catch (e) { }
+            }
             if (!_restaurantId) { showToast('❌ Restaurante não identificado. Recarregue a página.', 'error'); return; }
 
             const pass = document.getElementById('settingsPass')?.value || '';
@@ -8704,9 +8713,12 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
 
         async function loadModules() {
             if (!sb) return;
-            // Aguardar _restaurantId se ainda não carregou
+            // Garantir _restaurantId
             if (!_restaurantId) {
                 await new Promise(r => setTimeout(r, 800));
+                if (!_restaurantId) {
+                    try { const { data: { user } } = await sb.auth.getUser(); if (user) await loadRestaurantId(user); } catch (e) { }
+                }
             }
             try {
                 const keys = [...Object.keys(MODULE_KEYS), 'loyalty_enabled'];
@@ -8732,6 +8744,9 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
         async function toggleModule(key, active) {
             if (!sb) return;
             applyModuleToggle(key, active);
+            if (!_restaurantId) {
+                try { const { data: { user } } = await sb.auth.getUser(); if (user) await loadRestaurantId(user); } catch (e) { }
+            }
             try {
                 if (_restaurantId) {
                     const { data: ex } = await sb.from('app_settings')
@@ -8766,6 +8781,9 @@ Continue pedindo e acumule ainda mais recompensas! 🚀
         async function toggleLoyaltyProgram(active) {
             if (!sb) return;
             applyLoyaltyToggleUI(active);
+            if (!_restaurantId) {
+                try { const { data: { user } } = await sb.auth.getUser(); if (user) await loadRestaurantId(user); } catch (e) { }
+            }
             try {
                 if (_restaurantId) {
                     const { data: ex } = await sb.from('app_settings')
