@@ -447,21 +447,29 @@
             transition: transform .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1);
         }
 
-        /* Desktop collapsed: sidebar hidden as overlay */
-        .sidebar.desktop-hidden {
+        /* Desktop collapsed: sidebar recolhe para largura zero */
+        .sidebar.sidebar-collapsed {
+            width: 0 !important;
+            min-width: 0 !important;
+            flex-basis: 0 !important;
+            padding-left: 0;
+            padding-right: 0;
+            overflow: hidden;
+        }
+
+        .sidebar.sidebar-collapsed.mob-open {
+            /* no desktop colapsado, mob-open reabre como overlay */
+            width: 280px !important;
             position: fixed;
             top: 0;
             left: 0;
             bottom: 0;
             z-index: 200;
-            width: 280px;
-            transform: translateX(-100%);
-            box-shadow: 6px 0 40px rgba(0, 0, 0, .5);
             padding-top: 70px;
-        }
-
-        .sidebar.desktop-hidden.mob-open {
-            transform: translateX(0);
+            padding-left: 12px;
+            padding-right: 12px;
+            overflow-y: auto;
+            box-shadow: 6px 0 40px rgba(0, 0, 0, .6);
         }
 
         /* Sidebar logout button */
@@ -9567,22 +9575,38 @@ SEÇÕES: ${sections.join(', ')}. Tom executivo, máximo 500 palavras. Inclua: S
             const s = document.getElementById('main-sidebar');
             const b = document.getElementById('sidebar-backdrop');
             const isMobile = window.innerWidth <= 768;
+
             if (isMobile) {
-                // Mobile: slide-in drawer (existing behaviour)
+                // Mobile: drawer slide-in
                 const open = s.classList.toggle('mob-open');
                 b.classList.toggle('mob-open', open);
+                return;
+            }
+
+            // Desktop: 3 estados
+            // Estado A: visível normalmente (sem classes extras)
+            // Estado B: colapsado (sidebar-collapsed, sem mob-open)
+            // Estado C: drawer aberto sobre o conteúdo (sidebar-collapsed + mob-open)
+
+            const isCollapsed = s.classList.contains('sidebar-collapsed');
+            const isDrawerOpen = isCollapsed && s.classList.contains('mob-open');
+
+            if (!isCollapsed) {
+                // A → B: recolhe o sidebar
+                s.classList.add('sidebar-collapsed');
+                s.classList.remove('mob-open');
+                b.classList.remove('mob-open');
+            } else if (!isDrawerOpen) {
+                // B → C: abre como drawer sobre o conteúdo
+                s.classList.add('mob-open');
+                b.classList.add('mob-open');
             } else {
-                // Desktop: toggle between visible sidebar and hidden overlay
-                const isNowHidden = s.classList.toggle('desktop-hidden');
-                if (isNowHidden) {
-                    // Just hid sidebar — make sure overlay is closed
-                    s.classList.remove('mob-open');
-                    b.classList.remove('mob-open');
-                } else {
-                    // Sidebar is visible again — nothing extra needed
-                }
+                // C → B: fecha o drawer (mantém colapsado)
+                s.classList.remove('mob-open');
+                b.classList.remove('mob-open');
             }
         }
+
         function closeSidebar() {
             const s = document.getElementById('main-sidebar');
             s.classList.remove('mob-open');
