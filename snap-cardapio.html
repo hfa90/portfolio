@@ -3696,7 +3696,9 @@
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Telefone</label>
-            <input class="form-input" id="customerPhone" type="tel" placeholder="(21) 99999-9999">
+            <input class="form-input" id="customerPhone" type="tel" placeholder="(21) 99999-9999" inputmode="numeric"
+              maxlength="15"
+              oninput="let v=this.value.replace(/\D/g,'').slice(0,11);let o='('+v.slice(0,2);if(v.length>2)o+=') ';if(v.length<=10){o+=v.slice(2,6);if(v.length>6)o+='-'+v.slice(6,10);}else{o+=v.slice(2,7);if(v.length>7)o+='-'+v.slice(7,11);}this.value=o;">
           </div>
           <div class="form-group">
             <label class="form-label">CPF (opcional)</label>
@@ -3726,7 +3728,7 @@
       <div class="form-section">
         <div class="form-section-title">Pagamento</div>
         <div class="payment-methods">
-          <div class="payment-option selected" onclick="selectPayment(this, 'pix')" data-method="pix">
+          <div class="payment-option" onclick="selectPayment(this, 'pix')" data-method="pix">
             <div class="pay-icon">📱</div>
             <span>PIX</span>
           </div>
@@ -4156,7 +4158,7 @@
     let currentMode = 'delivery';
     let cartMode = 'delivery';
     let currentCategory = 'all';
-    let selectedPayment = 'pix';
+    let selectedPayment = null;
     let selectedOrderType = 'delivery';
     let modalProduct = null;
     let modalQty = 1;
@@ -4243,6 +4245,7 @@
 
     // ===== DATA LOADING =====
     let _deliveryFee = 4.99; // padrão, sobrescrito pelo banco
+    let _loyaltyEnabled = true; // padrão ativo, sobrescrito pelo banco
 
     async function loadData() {
       try {
@@ -4335,6 +4338,11 @@
         } else {
           _pixKey = localStorage.getItem('pix_key') || '';
         }
+
+        // Programa de fidelidade — ativo por padrão se não configurado
+        _loyaltyEnabled = map['loyalty_enabled'] !== 'false';
+        applyLoyaltyUI();
+
       } catch (e) { console.warn('[SnapFood] loadAppSettings:', e); }
     }
 
@@ -4543,6 +4551,8 @@
 
       document.getElementById('modalOverlay').classList.add('open');
       document.body.style.overflow = 'hidden';
+      // Mostrar/ocultar botão VIP conforme programa de pontos
+      applyLoyaltyUI();
     }
 
     function closeModal(e, force = false) {
@@ -4969,6 +4979,10 @@
       if (savedName && !nameField.value) nameField.value = savedName;
       if (savedPhone && !phoneField.value) phoneField.value = savedPhone;
 
+      // Resetar seleção de pagamento — usuário deve escolher explicitamente
+      selectedPayment = null;
+      document.querySelectorAll('.payment-option').forEach(o => o.classList.remove('selected'));
+
       renderCheckoutSummary();
       selectOrderType(cartMode);
     }
@@ -5041,7 +5055,8 @@
       selectedPayment = method;
       document.querySelectorAll('.payment-option').forEach(o => o.classList.remove('selected'));
       el.classList.add('selected');
-      if (method === 'pix') openPixModal();
+      // Só abre o modal PIX se o usuário clicar explicitamente (não na inicialização)
+      if (method === 'pix' && _pixKey) openPixModal();
     }
 
     // ===== PIX PAYMENT =====
@@ -5235,17 +5250,27 @@
       }
     }
 
+    let _submittingOrder = false; // evita duplo clique
+
     async function confirmOrder() {
+      if (_submittingOrder) return;
+
       const name = document.getElementById('customerName').value.trim();
       const phone = document.getElementById('customerPhone').value.trim();
 
-      if (!name || !phone) {
-        showToast('⚠️ Preencha nome e telefone', 'error');
+      if (!name || name.length < 2) {
+        showToast('⚠️ Preencha seu nome completo', 'error');
+        document.getElementById('customerName').focus();
         return;
       }
-
+      if (!phone || phone.replace(/\D/g, '').length < 10) {
+        showToast('⚠️ Preencha um telefone válido com DDD', 'error');
+        document.getElementById('customerPhone').focus();
+        return;
+      }
       if (!selectedPayment) {
         showToast('⚠️ Selecione uma forma de pagamento', 'error');
+        document.querySelector('.payment-methods')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
       }
 
@@ -5259,8 +5284,12 @@
         }
       }
 
+      // Bloquear botão durante envio
+      _submittingOrder = true;
+      const confirmBtn = document.querySelector('.confirm-btn');
+      if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = '⏳ Enviando pedido...'; }
+
       const subtotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
-      // Garantir que delivery_fee seja SEMPRE 0 para retirada
       const delivery = selectedOrderType === 'delivery' ? (_deliveryFee || 0) : 0;
       const total = subtotal + delivery;
       const orderNum = Math.floor(Math.random() * 9000) + 1000;
@@ -5268,7 +5297,7 @@
       const _cpfRaw = (document.getElementById('customerCpf')?.value || '').replace(/\D/g, '');
       const _estTime = parseInt(localStorage.getItem('delivery_time') || '35') || 35;
 
-      // ── Garantir restaurant_id antes de inserir ────────────────────
+      // ── Garantir restaurant_id antes de inserir ──
       if (!_restaurantId) {
         try {
           const { data: rest } = await sb.from('restaurants').select('id').eq('active', true).limit(1).maybeSingle();
@@ -5277,16 +5306,18 @@
       }
       if (!_restaurantId) {
         showToast('❌ Restaurante não identificado. Recarregue a página.', 'error');
+        _submittingOrder = false;
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ Confirmar pedido'; }
         return;
       }
 
       const orderData = {
         customer_name: name,
-        customer_phone: phone,
+        customer_phone: phone.replace(/\D/g, ''),
         customer_cpf: _cpfRaw || null,
         order_type: selectedOrderType,
         payment_method: selectedPayment,
-        notes: document.getElementById('orderNotes').value || null,
+        notes: document.getElementById('orderNotes').value.trim() || null,
         items: JSON.stringify(cart.map(i => ({ id: i.id, name: i.name, qty: i.qty, price: i.price }))),
         subtotal: subtotal,
         delivery_fee: delivery,
@@ -5295,9 +5326,9 @@
         status: 'pending',
         estimated_time: _estTime,
         address: selectedOrderType === 'delivery' ? [
-          document.getElementById('addressStreet').value,
-          document.getElementById('addressNeighborhood').value,
-          document.getElementById('addressComplement').value
+          document.getElementById('addressStreet').value.trim(),
+          document.getElementById('addressNeighborhood').value.trim(),
+          document.getElementById('addressComplement').value.trim()
         ].filter(Boolean).join(', ') : null,
         table_number: null,
         restaurant_id: _restaurantId,
@@ -5314,12 +5345,13 @@
             console.error('Erro ao salvar pedido:', error);
             const msg = error.message || error.details || JSON.stringify(error);
             showToast('❌ Erro ao registrar pedido: ' + msg, 'error');
+            _submittingOrder = false;
+            if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ Confirmar pedido'; }
             return;
           }
           currentOrderDbId = inserted.id;
           currentOrderNumber = inserted.order_number || ('#' + orderNum);
 
-          // Gravar status inicial no histórico
           try {
             await sb.from('order_status_history').insert({
               order_id: inserted.id,
@@ -5328,49 +5360,51 @@
               created_at: new Date().toISOString(),
               restaurant_id: _restaurantId,
             });
-          } catch (e) { /* tabela opcional */ }
+          } catch (e) { }
 
           setupOrderTracking(inserted.id);
         } catch (e) {
           console.error(e);
           showToast('❌ Erro de conexão. Tente novamente.', 'error');
+          _submittingOrder = false;
+          if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ Confirmar pedido'; }
           return;
         }
       } else {
-        // Demo mode — simular tracking
         currentOrderDbId = null;
         currentOrderNumber = '#' + orderNum;
         simulateDemoTracking();
       }
+
+      _submittingOrder = false;
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = '✅ Confirmar pedido'; }
 
       document.getElementById('orderNumberDisplay').textContent = currentOrderNumber;
       document.getElementById('checkoutContent').style.display = 'none';
       document.getElementById('successContent').style.display = 'block';
       applyStatusToTracker('pending');
 
-      // ── Resumo de valores na tela de sucesso ──────────────────────
+      // Resumo de valores na tela de sucesso
       const summaryEl = document.getElementById('successValueSummary');
       if (summaryEl) {
         const payLabels = { pix: '📱 PIX', card: '💳 Cartão', cash: '💵 Dinheiro' };
         const typeLabels = { delivery: '🛵 Delivery', retirada: '🏃 Retirada', presencial: '🍽️ Presencial' };
-        let html = `<div style="font-weight:700;margin-bottom:8px;font-size:14px">💰 Resumo do pagamento</div>`;
-        html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">Subtotal dos itens</span><span>R$ ${subtotal.toFixed(2).replace('.', ',')}</span></div>`;
+        let html = `<div style="font-weight:700;margin-bottom:8px;font-size:14px;color:var(--ink)">💰 Resumo do pagamento</div>`;
+        html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="color:var(--ink3)">Subtotal dos itens</span><span>R$ ${subtotal.toFixed(2).replace('.', ',')}</span></div>`;
         if (selectedOrderType === 'delivery') {
-          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">🛵 Taxa de entrega</span><span>${delivery > 0 ? 'R$ ' + delivery.toFixed(2).replace('.', ',') : 'Grátis'}</span></div>`;
+          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="color:var(--ink3)">🛵 Taxa de entrega</span><span style="color:var(--warning)">${delivery > 0 ? 'R$ ' + delivery.toFixed(2).replace('.', ',') : '<span style="color:var(--success)">Grátis</span>'}</span></div>`;
         } else {
-          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#666">${typeLabels[selectedOrderType] || 'Tipo'}</span><span style="color:var(--success)">Sem taxa</span></div>`;
+          html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px"><span style="color:var(--ink3)">${typeLabels[selectedOrderType] || ''}</span><span style="color:var(--success)">Sem taxa</span></div>`;
         }
-        html += `<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;border-top:1px solid var(--surface3);font-weight:800;font-size:15px"><span>Total</span><span style="color:var(--brand)">R$ ${total.toFixed(2).replace('.', ',')}</span></div>`;
-        html += `<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:#888"><span>Forma de pagamento</span><span>${payLabels[selectedPayment] || selectedPayment}</span></div>`;
+        html += `<div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:6px;border-top:1.5px solid var(--surface3);font-weight:800;font-size:16px"><span>Total</span><span style="color:var(--brand)">R$ ${total.toFixed(2).replace('.', ',')}</span></div>`;
+        html += `<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--ink3)"><span>Pagamento</span><span>${payLabels[selectedPayment] || selectedPayment}</span></div>`;
         summaryEl.innerHTML = html;
         summaryEl.style.display = 'block';
       }
 
-      // Mostrar botão de comprovante PIX se o pagamento for PIX
       const sendReceiptBtn = document.getElementById('sendReceiptBtn');
       if (sendReceiptBtn) {
         sendReceiptBtn.style.display = selectedPayment === 'pix' ? 'block' : 'none';
-        // Garante que o botão está sempre ativo para novos pedidos
         sendReceiptBtn.disabled = false;
         sendReceiptBtn.textContent = '📎 Enviar comprovante PIX';
         sendReceiptBtn.style.background = '#1A9E6A';
@@ -5532,6 +5566,7 @@
     }
 
     function resetOrder() {
+      _submittingOrder = false;
       // ── Limpar canal de tracking ──────────────────────────────────────
       if (_trackingChannel && sb) {
         try { sb.removeChannel(_trackingChannel); } catch (e) { }
@@ -5600,12 +5635,22 @@
     }
 
 
+    // ===== LOYALTY UI TOGGLE =====
+    function applyLoyaltyUI() {
+      // Botão "Resgatar com pontos VIP" no modal de produto
+      document.querySelectorAll('.modal-vip-btn').forEach(btn => {
+        btn.style.display = _loyaltyEnabled ? '' : 'none';
+      });
+    }
+
     // ===== WELCOME POPUP =====
     const WP_STORAGE_KEY = 'sf_welcome_done';
     const WP_PROFILE_KEY = 'sf_user_profile';
     let _wpConsent = false;
 
     function wpInit() {
+      // Não mostrar se programa de pontos desativado
+      if (!_loyaltyEnabled) return;
       // Não mostrar se já cadastrou ou recusou permanentemente
       if (localStorage.getItem(WP_STORAGE_KEY)) return;
       // Abrir com pequeno delay para a página carregar primeiro
