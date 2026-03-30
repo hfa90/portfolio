@@ -430,7 +430,8 @@
             display: flex;
             flex: 1;
             min-height: 0;
-            overflow: hidden
+            overflow: hidden;
+            touch-action: pan-y;
         }
 
         .sidebar {
@@ -551,8 +552,11 @@
         .main-content {
             flex: 1;
             overflow-y: scroll;
+            overflow-x: hidden;
             padding: 28px;
             overscroll-behavior: contain;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
         }
 
         .page {
@@ -3553,7 +3557,7 @@
         /* ── iOS touch: remove tap highlight, smooth scroll ── */
         * {
             -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
+            /* NOTE: webkit-touch-callout removed from * — was blocking scroll on iOS */
         }
 
         html {
@@ -3566,6 +3570,19 @@
         .sidebar {
             -webkit-overflow-scrolling: touch;
             overscroll-behavior: contain;
+            touch-action: pan-y;
+            /* ← garante scroll vertical no iOS */
+        }
+
+        /* Evita seleção de texto só em elementos de UI, não em containers scrolláveis */
+        .nav-item,
+        .btn,
+        button,
+        .topbar,
+        .mob-bottom-nav,
+        .mob-nav-item {
+            -webkit-touch-callout: none;
+            user-select: none;
         }
 
         /* ── Tablet (≤ 1024px) ── */
@@ -3657,6 +3674,10 @@
             /* ── Main content ── */
             .main-content {
                 padding: 20px 16px 76px;
+                overflow-y: scroll;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+                touch-action: pan-y;
             }
 
             /* ── iOS-style page header ── */
@@ -12426,7 +12447,71 @@ Regras:
             if (_qrsPaused) return;
             let data = null;
             try { data = JSON.parse(raw); } catch { data = { id: raw }; }
-            // Try to find item by id, then by N/S, then by patrimônio
+
+            // ── Caso 1: QR de COLETOR gerado pela tela de Etiquetas ──
+            if (data.tipo === 'coletor' && data.numero !== undefined) {
+                const numStr = String(data.numero).trim();
+                const col = coletoresCache.find(c => String(c.number) === numStr)
+                    || coletoresCache.find(c => c.patrimonio && c.patrimonio === (data.patrimonio || ''));
+                if (col) {
+                    _qrsPaused = true;
+                    const tipoLabel = col.tipo === 'locado' ? '🤝 Alugado' : '🏢 Próprio';
+                    const st = col.status || (col.defeituoso ? 'Defeito' : 'Ativo');
+                    const html = `
+                        <div style="display:flex;align-items:center;gap:12px;background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);border-radius:10px;padding:14px;margin-bottom:14px">
+                            <span style="font-size:36px">📡</span>
+                            <div>
+                                <div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text3);font-family:var(--mono)">Coletor de Dados</div>
+                                <div style="font-size:28px;font-weight:900;color:var(--accent2);font-family:var(--mono)">#${col.number}</div>
+                            </div>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+                            <div style="background:rgba(34,197,94,.08);border:1.5px solid rgba(34,197,94,.25);border-radius:10px;padding:10px 12px;text-align:center">
+                                <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:var(--mono);margin-bottom:4px">Tipo</div>
+                                <div style="font-size:14px;font-weight:700;color:var(--green)">${tipoLabel}</div>
+                            </div>
+                            <div style="background:rgba(14,165,233,.08);border:1.5px solid rgba(14,165,233,.22);border-radius:10px;padding:10px 12px;text-align:center">
+                                <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);font-family:var(--mono);margin-bottom:4px">Status</div>
+                                <div style="font-size:14px;font-weight:700;color:var(--accent2)">${st}</div>
+                            </div>
+                        </div>
+                        ${col.modelo ? `<div style="padding:8px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:13px;margin-bottom:6px">📦 <strong>Modelo:</strong> ${col.modelo}</div>` : ''}
+                        ${col.patrimonio ? `<div style="padding:8px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:13px;margin-bottom:6px">🏷️ <strong>Patrimônio:</strong> ${col.patrimonio}</div>` : ''}
+                        ${col.empresa ? `<div style="padding:8px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border);font-size:13px;margin-bottom:6px">🏢 <strong>Empresa:</strong> ${col.empresa}</div>` : ''}
+                        <div style="margin-top:10px;padding:10px 12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:8px;font-size:12px;color:var(--text2)">
+                            ✅ Coletor identificado com sucesso via QR Code
+                        </div>
+                    `;
+                    document.getElementById('qrv-body').innerHTML = html;
+                    // Swap confirm button text for coletores (no inventory update needed)
+                    const btn = document.getElementById('btn-qr-validate-confirm');
+                    if (btn) { btn.textContent = '✅ OK — Fechar'; btn.onclick = () => { closeModal('m-qr-validate'); stopQRScan(); }; }
+                    openModal('m-qr-validate');
+                    qrsSetStatus(`Coletor #${col.number} identificado ✅`, true);
+                    return;
+                } else {
+                    qrsSetStatus(`Coletor #${numStr} não encontrado neste CD ⚠️`, false);
+                    return;
+                }
+            }
+
+            // ── Caso 2: QR de EQUIPAMENTO gerado pela tela de Etiquetas ──
+            if (data.tipo === 'equipamento') {
+                const item = itemsCache.find(i => i.patrimonio && i.patrimonio === data.ativo)
+                    || itemsCache.find(i => i.departamento && i.departamento === data.setor && i.equipamento === data.equipamento);
+                if (item) {
+                    if (_qrsConfirmed.has(item.id)) { qrsSetStatus(`Já validado: ${item.equipamento || item.modelo || '—'} ✅`, true); return; }
+                    _qrsPaused = true;
+                    _qrsPendingItem = item;
+                    showQRValidateModal(item);
+                    return;
+                } else {
+                    qrsSetStatus(`Equipamento "${data.ativo || data.equipamento || '—'}" não encontrado ⚠️`, false);
+                    return;
+                }
+            }
+
+            // ── Caso 3: QR legado (id / N/S / patrimônio direto) ──
             const item = itemsCache.find(i => i.id === data.id)
                 || itemsCache.find(i => i.numero_serie && i.numero_serie === (data.ns || raw))
                 || itemsCache.find(i => i.patrimonio && i.patrimonio === (data.patrimonio || raw));
