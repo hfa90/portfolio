@@ -9,7 +9,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
-  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
   <style>
     :root {
       --bg: #0a0c0f;
@@ -1674,60 +1674,108 @@
   </div>
 
   <script>
-    // ==================== SUPABASE CONFIG ====================
-    let supabase = null;
+    // ==================== CONFIG ====================
     let SUPABASE_URL = localStorage.getItem('ti_url') || '';
     let SUPABASE_KEY = localStorage.getItem('ti_key') || '';
 
-    function getSupabaseLib() {
-      // unpkg UMD expõe como window.supabase (objeto com createClient)
-      // fallback para outros formatos possíveis
-      if (window.supabase && typeof window.supabase.createClient === 'function') return window.supabase;
-      if (window.supabaseJs && typeof window.supabaseJs.createClient === 'function') return window.supabaseJs;
-      if (window.Supabase && typeof window.Supabase.createClient === 'function') return window.Supabase;
-      return null;
-    }
+    // ==================== SUPABASE REST CLIENT (sem biblioteca externa) ====================
+    const db = {
+      _url: '', _key: '',
+      init(url, key) { this._url = url.replace(/\/$/, ''); this._key = key; },
+      from(table) {
+        return new DbQuery(this._url, this._key, table);
+      }
+    };
 
-    function initSupabase(url, key) {
-      try {
-        const lib = getSupabaseLib();
-        if (!lib) throw new Error('Biblioteca Supabase não carregada ainda');
-        supabase = lib.createClient(url, key);
-        document.getElementById('conn-status').style.color = 'var(--green)';
-        document.getElementById('conn-status').textContent = '⬤ conectado';
-        return true;
-      } catch (e) {
-        console.error('initSupabase error:', e);
-        document.getElementById('conn-status').style.color = 'var(--red)';
-        document.getElementById('conn-status').textContent = '⬤ erro';
-        return false;
+    class DbQuery {
+      constructor(url, key, table) {
+        this._url = url; this._key = key; this._table = table;
+        this._sel = '*'; this._filters = []; this._ord = null; this._lim = null;
+      }
+      select(s) { this._sel = s; return this; }
+      eq(col, val) { this._filters.push(`${col}=eq.${encodeURIComponent(val)}`); return this; }
+      order(col, { ascending = true } = {}) { this._ord = `${col}=${ascending ? 'asc' : 'desc'}`; return this; }
+      limit(n) { this._lim = n; return this; }
+
+      _buildUrl() {
+        let u = `${this._url}/rest/v1/${this._table}?select=${encodeURIComponent(this._sel)}`;
+        this._filters.forEach(f => u += '&' + f);
+        if (this._ord) u += '&order=' + this._ord;
+        if (this._lim) u += '&limit=' + this._lim;
+        return u;
+      }
+      _headers(extra = {}) {
+        return { 'apikey': this._key, 'Authorization': 'Bearer ' + this._key, 'Content-Type': 'application/json', ...extra };
+      }
+      async _fetch(method, body) {
+        try {
+          const res = await fetch(this._buildUrl(), {
+            method, headers: this._headers({ 'Prefer': 'return=representation' }),
+            body: body ? JSON.stringify(body) : undefined
+          });
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : null;
+          if (!res.ok) return { data: null, error: { message: (data?.message || data?.hint || JSON.stringify(data) || `HTTP ${res.status}`) } };
+          return { data, error: null };
+        } catch (e) { return { data: null, error: { message: e.message } }; }
+      }
+      then(resolve, reject) { return this._fetch('GET').then(resolve, reject); }
+      async insert(rows) {
+        const body = Array.isArray(rows) ? rows : [rows];
+        try {
+          const res = await fetch(`${this._url}/rest/v1/${this._table}?select=*`, {
+            method: 'POST', headers: this._headers({ 'Prefer': 'return=representation' }), body: JSON.stringify(body)
+          });
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : null;
+          if (!res.ok) return { data: null, error: { message: data?.message || data?.hint || `HTTP ${res.status}` } };
+          return { data, error: null };
+        } catch (e) { return { data: null, error: { message: e.message } }; }
+      }
+      async update(payload) {
+        try {
+          const res = await fetch(this._buildUrl(), {
+            method: 'PATCH', headers: this._headers({ 'Prefer': 'return=representation' }), body: JSON.stringify(payload)
+          });
+          const text = await res.text();
+          const data = text ? JSON.parse(text) : null;
+          if (!res.ok) return { data: null, error: { message: data?.message || data?.hint || `HTTP ${res.status}` } };
+          return { data, error: null };
+        } catch (e) { return { data: null, error: { message: e.message } }; }
+      }
+      async delete() {
+        try {
+          const res = await fetch(this._buildUrl(), { method: 'DELETE', headers: this._headers() });
+          if (!res.ok) { const t = await res.text(); const d = t ? JSON.parse(t) : null; return { error: { message: d?.message || `HTTP ${res.status}` } }; }
+          return { error: null };
+        } catch (e) { return { error: { message: e.message } }; }
       }
     }
+
+    let supabase = null;
+    const supabaseProxy = { from: (t) => db.from(t) };
 
     async function salvarConfig() {
       const url = document.getElementById('cfg-url').value.trim();
       const key = document.getElementById('cfg-key').value.trim();
       if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
 
-      const lib = getSupabaseLib();
-      if (!lib) { toast('Biblioteca ainda carregando, aguarde...', 'error'); return; }
-
       const btn = document.querySelector('[onclick="salvarConfig()"]');
-      const originalText = btn.innerHTML;
+      const orig = btn.innerHTML;
       btn.disabled = true;
-      btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Conectando...';
+      btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px"></div> Conectando...';
 
       try {
-        const sbTest = lib.createClient(url, key);
-        const { error } = await sbTest.from('empresas').select('id').limit(1);
+        db.init(url, key);
+        const { error } = await db.from('empresas').select('id').limit(1);
         if (error) {
-          toast('Erro ao conectar: ' + error.message, 'error');
-          btn.disabled = false; btn.innerHTML = originalText; return;
+          toast('Erro: ' + error.message + ' — execute o supabase_setup.sql primeiro', 'error');
+          btn.disabled = false; btn.innerHTML = orig; return;
         }
         localStorage.setItem('ti_url', url);
         localStorage.setItem('ti_key', key);
         SUPABASE_URL = url; SUPABASE_KEY = key;
-        supabase = sbTest;
+        supabase = supabaseProxy;
         document.getElementById('conn-status').style.color = 'var(--green)';
         document.getElementById('conn-status').textContent = '⬤ conectado';
         toast('Conectado com sucesso!', 'success');
@@ -1736,7 +1784,7 @@
       } catch (e) {
         toast('Falha na conexão: ' + e.message, 'error');
       }
-      btn.disabled = false; btn.innerHTML = originalText;
+      btn.disabled = false; btn.innerHTML = orig;
     }
 
     async function testarConexao() {
@@ -1744,18 +1792,15 @@
       const key = document.getElementById('cfg-key').value.trim();
       if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
 
-      const lib = getSupabaseLib();
-      if (!lib) { toast('Biblioteca ainda carregando, tente em 2s', 'error'); return; }
-
       const btn = document.querySelector('[onclick="testarConexao()"]');
       const orig = btn.innerHTML;
-      btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Testando...';
+      btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px"></div> Testando...';
       try {
-        const sb = lib.createClient(url, key);
-        const { error } = await sb.from('empresas').select('id').limit(1);
-        if (error) toast('Erro: ' + error.message + ' — verifique se executou o SQL no Supabase', 'error');
-        else toast('✅ Conexão OK! Banco de dados encontrado.', 'success');
-      } catch (e) { toast('Falha na conexão: ' + e.message, 'error'); }
+        db.init(url, key);
+        const { error } = await db.from('empresas').select('id').limit(1);
+        if (error) toast('Erro: ' + error.message, 'error');
+        else toast('✅ Conexão OK! Banco encontrado.', 'success');
+      } catch (e) { toast('Falha: ' + e.message, 'error'); }
       btn.disabled = false; btn.innerHTML = orig;
     }
 
@@ -1801,7 +1846,7 @@
 
     async function loadEmpresasData() {
       if (!supabase) return;
-      const { data } = await supabase.from('empresas').select('*').eq('ativa', true).order('nome');
+      const { data } = await db.from('empresas').select('*').eq('ativa', 'true').order('nome');
       allEmpresas = data || [];
       const sel = document.getElementById('chamado-empresa');
       if (sel) {
@@ -1811,7 +1856,7 @@
 
     async function loadChamadosData() {
       if (!supabase) return;
-      const { data } = await supabase.from('chamados').select('*, empresas(nome)').order('created_at', { ascending: false });
+      const { data } = await db.from('chamados').select('*,empresas(nome)').order('created_at', { ascending: false });
       allChamados = data || [];
     }
 
@@ -2129,9 +2174,9 @@
 
       let error;
       if (id) {
-        ({ error } = await supabase.from('chamados').update(payload).eq('id', id));
+        ({ error } = await db.from('chamados').eq('id', id).update(payload));
       } else {
-        ({ error } = await supabase.from('chamados').insert([payload]));
+        ({ error } = await db.from('chamados').insert([payload]));
       }
 
       if (error) { toast('Erro: ' + error.message, 'error'); return; }
@@ -2148,7 +2193,7 @@
     async function excluirChamado(id) {
       const c = allChamados.find(x => x.id === id);
       if (!confirm(`Excluir chamado "${c?.titulo}"?\n\nEsta ação não pode ser desfeita.`)) return;
-      const { error } = await supabase.from('chamados').delete().eq('id', id);
+      const { error } = await db.from('chamados').eq('id', id).delete();
       if (error) { toast('Erro ao excluir', 'error'); return; }
       toast('Chamado excluído', 'info');
       await loadChamadosData();
@@ -2195,8 +2240,8 @@
       };
 
       let error;
-      if (id) ({ error } = await supabase.from('empresas').update(payload).eq('id', id));
-      else ({ error } = await supabase.from('empresas').insert([payload]));
+      if (id) ({ error } = await db.from('empresas').eq('id', id).update(payload));
+      else ({ error } = await db.from('empresas').insert([payload]));
 
       if (error) { toast('Erro: ' + error.message, 'error'); return; }
       toast(id ? 'Empresa atualizada!' : 'Empresa cadastrada!', 'success');
@@ -2315,25 +2360,19 @@
     });
 
     // ==================== INIT ====================
-    function tryAutoConnect() {
-      if (!SUPABASE_URL || !SUPABASE_KEY) { navigate('config'); return; }
-      document.getElementById('cfg-url').value = SUPABASE_URL;
-      document.getElementById('cfg-key').value = SUPABASE_KEY;
-      const lib = getSupabaseLib();
-      if (!lib) {
-        // biblioteca ainda carregando, tenta de novo em 500ms
-        setTimeout(tryAutoConnect, 500); return;
-      }
-      try {
-        supabase = lib.createClient(SUPABASE_URL, SUPABASE_KEY);
+    document.addEventListener('DOMContentLoaded', () => {
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        document.getElementById('cfg-url').value = SUPABASE_URL;
+        document.getElementById('cfg-key').value = SUPABASE_KEY;
+        db.init(SUPABASE_URL, SUPABASE_KEY);
+        supabase = supabaseProxy;
         document.getElementById('conn-status').style.color = 'var(--green)';
         document.getElementById('conn-status').textContent = '⬤ conectado';
         loadAllData().then(() => navigate('dashboard'));
-      } catch (e) {
+      } else {
         navigate('config');
       }
-    }
-    document.addEventListener('DOMContentLoaded', tryAutoConnect);
+    });
   </script>
 </body>
 
