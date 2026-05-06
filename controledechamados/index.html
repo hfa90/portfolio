@@ -1452,6 +1452,51 @@
   </main>
 
   <!-- TOAST CONTAINER -->
+  <!-- MODAL ANEXOS -->
+  <div class="modal-overlay hidden" id="modal-anexos">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-header">
+        <div>
+          <h2>Anexos do Chamado</h2>
+          <div id="anexos-rat" style="font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-anexos')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="gap:16px">
+        <!-- Upload area -->
+        <div id="upload-area"
+          style="border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:32px;text-align:center;cursor:pointer;transition:all 0.15s ease"
+          onclick="document.getElementById('file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondragleave="this.style.borderColor='var(--border2)'" ondrop="handleDrop(event)">
+          <div style="font-size:28px;margin-bottom:8px">📎</div>
+          <div style="font-size:13px;font-weight:500;margin-bottom:4px">Clique ou arraste arquivos aqui</div>
+          <div style="font-size:11px;color:var(--text3)">PDF, JPG, PNG, JPEG — até 10MB por arquivo</div>
+          <input type="file" id="file-input" multiple accept=".pdf,.jpg,.jpeg,.png" style="display:none"
+            onchange="uploadAnexos(this.files)">
+        </div>
+        <!-- Upload progress -->
+        <div id="upload-progress" style="display:none">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Enviando...</div>
+          <div style="background:var(--surface3);border-radius:4px;height:4px;overflow:hidden">
+            <div id="progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width 0.3s"></div>
+          </div>
+        </div>
+        <!-- Lista de anexos -->
+        <div id="anexos-lista">
+          <div class="loading">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-container" id="toast-container"></div>
 
   <!-- ==================== MODAL CHAMADO ==================== -->
@@ -1639,6 +1684,14 @@
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn btn-ghost danger-btn" id="btn-excluir-empresa" onclick="excluirEmpresaModal()"
+          style="margin-right:auto;display:none">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+          </svg>
+          Excluir Empresa
+        </button>
         <button class="btn btn-ghost" onclick="closeModal('modal-empresa')">Cancelar</button>
         <button class="btn btn-primary" onclick="salvarEmpresa()">Salvar Empresa</button>
       </div>
@@ -1654,6 +1707,14 @@
           <div id="detalhe-titulo" style="font-size:16px;font-weight:600;margin-top:2px"></div>
         </div>
         <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-ghost btn-sm" id="detalhe-anexos-btn" onclick="">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path
+                d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+            </svg>
+            Anexos <span id="detalhe-anexos-count"
+              style="background:var(--surface3);border-radius:20px;padding:1px 6px;font-size:10px;margin-left:2px">0</span>
+          </button>
           <button class="btn btn-ghost btn-sm" id="detalhe-edit-btn" onclick="">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -2064,14 +2125,19 @@
         const pendentes = chamadosEmp.filter(c => ['aguardando_nf', 'nf_emitida', 'aguardando_pagamento'].includes(c.status_financeiro)).length;
         return `<div class="empresa-card" onclick="verEmpresa('${e.id}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
-        <div>
-          <h3>${e.nome}</h3>
+        <div style="flex:1;min-width:0">
+          <h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.nome}</h3>
           <p>${e.cnpj || 'CNPJ não informado'}</p>
           ${e.contato ? `<p style="margin-top:2px">👤 ${e.contato}</p>` : ''}
         </div>
-        <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();editarEmpresa('${e.id}')">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
+        <div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px">
+          <button class="btn btn-ghost btn-sm btn-icon" title="Editar" onclick="event.stopPropagation();editarEmpresa('${e.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="btn btn-ghost btn-sm btn-icon danger-btn" title="Excluir" onclick="event.stopPropagation();excluirEmpresa('${e.id}','${e.nome.replace(/'/g, "\\'")}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </div>
       </div>
       <div class="empresa-stats">
         <div class="empresa-stat">
@@ -2209,6 +2275,7 @@
       ['nome', 'cnpj', 'telefone', 'contato', 'email', 'endereco'].forEach(f => {
         document.getElementById('empresa-' + f).value = '';
       });
+      document.getElementById('btn-excluir-empresa').style.display = 'none';
       openModal('modal-empresa');
     }
 
@@ -2223,7 +2290,24 @@
       document.getElementById('empresa-contato').value = e.contato || '';
       document.getElementById('empresa-email').value = e.email || '';
       document.getElementById('empresa-endereco').value = e.endereco || '';
+      document.getElementById('btn-excluir-empresa').style.display = '';
       openModal('modal-empresa');
+    }
+
+    function excluirEmpresaModal() {
+      const id = document.getElementById('empresa-id').value;
+      const nome = document.getElementById('empresa-nome').value;
+      excluirEmpresa(id, nome);
+    }
+
+    async function excluirEmpresa(id, nome) {
+      if (!confirm(`Excluir a empresa "${nome}"?\n\nTodos os chamados vinculados perderão o vínculo com ela.\nEsta ação não pode ser desfeita.`)) return;
+      const { error } = await db.from('empresas').eq('id', id).delete();
+      if (error) { toast('Erro ao excluir: ' + error.message, 'error'); return; }
+      toast('Empresa excluída!', 'info');
+      closeModal('modal-empresa');
+      await loadAllData();
+      loadEmpresas();
     }
 
     async function salvarEmpresa() {
@@ -2258,7 +2342,11 @@
       document.getElementById('detalhe-rat').textContent = c.numero_rat || 'SEM RAT';
       document.getElementById('detalhe-titulo').textContent = c.titulo;
       document.getElementById('detalhe-edit-btn').setAttribute('onclick', `editarChamado('${c.id}')`);
-
+      document.getElementById('detalhe-anexos-btn').setAttribute('onclick', `abrirAnexos('${c.id}','${(c.numero_rat || 'SEM RAT').replace(/'/g, "\\'")}' )`);
+      // carrega contagem de anexos
+      contarAnexos(c.id).then(n => {
+        document.getElementById('detalhe-anexos-count').textContent = n;
+      });
       const finSteps = ['sem_cobranca', 'aguardando_nf', 'nf_emitida', 'aguardando_pagamento', 'pago'];
       const finLabels = { sem_cobranca: 'Sem cobrança', aguardando_nf: 'Aguardando emissão de NF', nf_emitida: 'NF emitida', aguardando_pagamento: 'Aguardando pagamento', pago: 'Pago' };
       const curFinIdx = finSteps.indexOf(c.status_financeiro);
@@ -2337,6 +2425,126 @@
 
     function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
     function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    // ==================== ANEXOS (Supabase Storage via REST) ====================
+    const BUCKET = 'chamados-anexos';
+    let currentChamadoId = null;
+
+    function storageUrl(path) {
+      return `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`;
+    }
+    function storageHeaders(extra = {}) {
+      return { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, ...extra };
+    }
+
+    async function contarAnexos(chamadoId) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, {
+          method: 'POST',
+          headers: storageHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ prefix: chamadoId + '/', limit: 100, offset: 0 })
+        });
+        if (!res.ok) return 0;
+        const data = await res.json();
+        return Array.isArray(data) ? data.length : 0;
+      } catch { return 0; }
+    }
+
+    async function abrirAnexos(chamadoId, rat) {
+      currentChamadoId = chamadoId;
+      document.getElementById('anexos-rat').textContent = rat;
+      document.getElementById('upload-progress').style.display = 'none';
+      document.getElementById('progress-bar').style.width = '0%';
+      openModal('modal-anexos');
+      await carregarAnexos();
+    }
+
+    async function carregarAnexos() {
+      const lista = document.getElementById('anexos-lista');
+      lista.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+      try {
+        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, {
+          method: 'POST',
+          headers: storageHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ prefix: currentChamadoId + '/', limit: 100, offset: 0 })
+        });
+        if (!res.ok) { lista.innerHTML = '<div style="text-align:center;padding:24px;color:var(--red);font-size:13px">Erro ao carregar. Verifique se o bucket "chamados-anexos" foi criado no Supabase Storage.</div>'; return; }
+        const files = await res.json();
+        if (!files.length) { lista.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3);font-size:13px">📂 Nenhum anexo ainda</div>'; return; }
+        lista.innerHTML = files.map(f => {
+          const nome = f.name.split('/').pop();
+          const ext = nome.split('.').pop().toLowerCase();
+          const isPdf = ext === 'pdf';
+          const isImg = ['jpg', 'jpeg', 'png', 'webp'].includes(ext);
+          const icon = isPdf ? '📄' : isImg ? '🖼️' : '📎';
+          const kb = f.metadata?.size ? Math.round(f.metadata.size / 1024) + ' KB' : '';
+          const pubUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${currentChamadoId}/${nome}`;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;background:var(--surface2)">
+            <span style="font-size:20px;flex-shrink:0">${icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${nome}</div>
+              <div style="font-size:11px;color:var(--text3)">${kb}</div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <a href="${pubUrl}" target="_blank" class="btn btn-ghost btn-sm" title="Abrir">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Abrir
+              </a>
+              <button class="btn btn-ghost btn-sm btn-icon danger-btn" title="Excluir" onclick="excluirAnexo('${nome}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </div>`;
+        }).join('');
+        // atualiza contagem no botão detalhe
+        document.getElementById('detalhe-anexos-count').textContent = files.length;
+      } catch (e) {
+        lista.innerHTML = `<div style="text-align:center;padding:24px;color:var(--red);font-size:13px">Erro: ${e.message}</div>`;
+      }
+    }
+
+    async function uploadAnexos(files) {
+      if (!files.length) return;
+      const progress = document.getElementById('upload-progress');
+      const bar = document.getElementById('progress-bar');
+      progress.style.display = 'block';
+      let done = 0;
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) { toast(`${file.name} é maior que 10MB`, 'error'); done++; continue; }
+        const path = `${currentChamadoId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+        try {
+          const res = await fetch(storageUrl(path), {
+            method: 'POST',
+            headers: storageHeaders({ 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'true' }),
+            body: file
+          });
+          if (!res.ok) { const d = await res.json(); toast('Erro: ' + (d.message || 'falha no upload'), 'error'); }
+          else toast(`${file.name} enviado!`, 'success');
+        } catch (e) { toast('Erro: ' + e.message, 'error'); }
+        done++;
+        bar.style.width = Math.round(done / files.length * 100) + '%';
+      }
+      setTimeout(() => { progress.style.display = 'none'; bar.style.width = '0%'; }, 800);
+      document.getElementById('file-input').value = '';
+      await carregarAnexos();
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('upload-area').style.borderColor = 'var(--border2)';
+      uploadAnexos(e.dataTransfer.files);
+    }
+
+    async function excluirAnexo(nome) {
+      if (!confirm(`Excluir o arquivo "${nome}"?`)) return;
+      const path = `${currentChamadoId}/${nome}`;
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+        method: 'DELETE', headers: storageHeaders()
+      });
+      if (!res.ok) { toast('Erro ao excluir anexo', 'error'); return; }
+      toast('Anexo excluído', 'info');
+      await carregarAnexos();
+    }
 
     function toast(msg, type = 'info') {
       const tc = document.getElementById('toast-container');
