@@ -1,828 +1,1872 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TI Control — Gestão de Chamados</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<style>
-:root {
-  --bg: #0a0c0f;
-  --surface: #111318;
-  --surface2: #181c23;
-  --surface3: #1e2330;
-  --border: rgba(255,255,255,0.07);
-  --border2: rgba(255,255,255,0.12);
-  --text: #e8eaf0;
-  --text2: #8891a8;
-  --text3: #555e75;
-  --accent: #4f8ef7;
-  --accent2: #3b76e0;
-  --green: #34d399;
-  --green-bg: rgba(52,211,153,0.1);
-  --amber: #fbbf24;
-  --amber-bg: rgba(251,191,36,0.1);
-  --red: #f87171;
-  --red-bg: rgba(248,113,113,0.1);
-  --blue: #60a5fa;
-  --blue-bg: rgba(96,165,250,0.1);
-  --purple: #a78bfa;
-  --purple-bg: rgba(167,139,250,0.1);
-  --cyan: #22d3ee;
-  --cyan-bg: rgba(34,211,238,0.1);
-  --orange: #fb923c;
-  --orange-bg: rgba(251,146,60,0.1);
-  --mono: 'IBM Plex Mono', monospace;
-  --sans: 'Sora', sans-serif;
-  --radius: 8px;
-  --radius-lg: 12px;
-  --sidebar: 240px;
-  --transition: 0.15s ease;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex;font-size:14px}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px}
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TI Control — Gestão de Chamados</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Sora:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+  <script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  <style>
+    :root {
+      --bg: #0a0c0f;
+      --surface: #111318;
+      --surface2: #181c23;
+      --surface3: #1e2330;
+      --border: rgba(255, 255, 255, 0.07);
+      --border2: rgba(255, 255, 255, 0.12);
+      --text: #e8eaf0;
+      --text2: #8891a8;
+      --text3: #555e75;
+      --accent: #4f8ef7;
+      --accent2: #3b76e0;
+      --green: #34d399;
+      --green-bg: rgba(52, 211, 153, 0.1);
+      --amber: #fbbf24;
+      --amber-bg: rgba(251, 191, 36, 0.1);
+      --red: #f87171;
+      --red-bg: rgba(248, 113, 113, 0.1);
+      --blue: #60a5fa;
+      --blue-bg: rgba(96, 165, 250, 0.1);
+      --purple: #a78bfa;
+      --purple-bg: rgba(167, 139, 250, 0.1);
+      --cyan: #22d3ee;
+      --cyan-bg: rgba(34, 211, 238, 0.1);
+      --orange: #fb923c;
+      --orange-bg: rgba(251, 146, 60, 0.1);
+      --mono: 'IBM Plex Mono', monospace;
+      --sans: 'Sora', sans-serif;
+      --radius: 8px;
+      --radius-lg: 12px;
+      --sidebar: 240px;
+      --transition: 0.15s ease;
+    }
 
-/* SIDEBAR */
-.sidebar{width:var(--sidebar);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100;transition:transform var(--transition)}
-.sidebar-logo{padding:20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.logo-icon{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.logo-text{font-weight:700;font-size:14px;letter-spacing:-0.3px}
-.logo-sub{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:0.5px}
-.sidebar-section{padding:8px 8px 4px;margin-top:4px}
-.sidebar-section-label{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:1px;text-transform:uppercase;padding:0 8px;margin-bottom:4px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius);cursor:pointer;transition:all var(--transition);color:var(--text2);font-size:13px;font-weight:400;margin:1px 0}
-.nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active{background:rgba(79,142,247,0.12);color:var(--accent);font-weight:500}
-.nav-icon{width:18px;height:18px;opacity:0.7;flex-shrink:0}
-.nav-item.active .nav-icon{opacity:1}
-.nav-badge{margin-left:auto;background:var(--red-bg);color:var(--red);font-size:10px;font-weight:600;padding:2px 6px;border-radius:20px;font-family:var(--mono)}
-.sidebar-footer{margin-top:auto;padding:12px 8px;border-top:1px solid var(--border)}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
 
-/* MAIN */
-.main{margin-left:var(--sidebar);flex:1;display:flex;flex-direction:column;min-height:100vh}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50}
-.topbar-title{font-weight:600;font-size:16px;flex:1}
-.topbar-subtitle{font-size:12px;color:var(--text3);font-family:var(--mono)}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--radius);border:none;cursor:pointer;font-family:var(--sans);font-size:13px;font-weight:500;transition:all var(--transition)}
-.btn-primary{background:var(--accent);color:#fff}
-.btn-primary:hover{background:var(--accent2)}
-.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)}
-.btn-ghost:hover{background:var(--surface2);color:var(--text)}
-.btn-sm{padding:5px 10px;font-size:12px}
-.btn-icon{width:32px;height:32px;padding:0;justify-content:center}
-.content{padding:24px;flex:1}
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      font-size: 14px
+    }
 
-/* CONFIG BANNER */
-.config-banner{background:rgba(255,180,0,0.08);border:1px solid rgba(255,180,0,0.2);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px}
-.config-banner svg{color:var(--amber);flex-shrink:0}
-.config-banner p{font-size:13px;color:var(--amber);line-height:1.5}
-.config-banner code{background:rgba(255,180,0,0.15);padding:2px 6px;border-radius:4px;font-family:var(--mono);font-size:11px}
-.config-form{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin-top:12px}
-.config-form input{background:var(--surface3);border:1px solid var(--border2);border-radius:var(--radius);padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;width:100%}
-.config-form input::placeholder{color:var(--text3)}
-.config-form input:focus{outline:none;border-color:var(--accent)}
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px
+    }
 
-/* STATS */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;position:relative;overflow:hidden}
-.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent-color,var(--accent))}
-.stat-label{font-size:11px;color:var(--text3);font-weight:600;letter-spacing:0.5px;text-transform:uppercase;margin-bottom:8px}
-.stat-value{font-size:24px;font-weight:700;font-family:var(--mono);color:var(--text);line-height:1}
-.stat-sub{font-size:11px;color:var(--text3);margin-top:6px}
-.stat-icon{position:absolute;right:16px;top:50%;transform:translateY(-50%);opacity:0.12;font-size:36px}
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
 
-/* TABLE */
-.table-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
-.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.table-header h3{font-size:14px;font-weight:600;flex:1}
-.filter-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.search-box{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 12px;display:flex;align-items:center;gap:8px;min-width:220px}
-.search-box input{background:transparent;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:13px;width:100%}
-.search-box input::placeholder{color:var(--text3)}
-select.filter-select{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:7px 10px;color:var(--text);font-family:var(--sans);font-size:13px;cursor:pointer;outline:none}
-select.filter-select:focus{border-color:var(--accent)}
-table{width:100%;border-collapse:collapse}
-thead th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.5px;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap}
-tbody tr{border-bottom:1px solid var(--border);transition:background var(--transition);cursor:pointer}
-tbody tr:last-child{border-bottom:none}
-tbody tr:hover{background:var(--surface2)}
-td{padding:12px 16px;font-size:13px;vertical-align:middle}
-.td-mono{font-family:var(--mono);font-size:12px;color:var(--text2)}
-.td-main{font-weight:500;color:var(--text)}
-.td-sub{font-size:11px;color:var(--text3);margin-top:2px}
+    ::-webkit-scrollbar-thumb {
+      background: var(--surface3);
+      border-radius: 3px
+    }
 
-/* BADGES */
-.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:0.3px;white-space:nowrap}
-.badge-dot{width:5px;height:5px;border-radius:50%}
-.badge-pendente{background:var(--surface3);color:var(--text2)}.badge-dot-pendente{background:var(--text3)}
-.badge-em_andamento{background:var(--blue-bg);color:var(--blue)}.badge-dot-em_andamento{background:var(--blue)}
-.badge-concluido{background:var(--green-bg);color:var(--green)}.badge-dot-concluido{background:var(--green)}
-.badge-cancelado{background:var(--red-bg);color:var(--red)}.badge-dot-cancelado{background:var(--red)}
-.badge-sem_cobranca{background:var(--surface3);color:var(--text3)}
-.badge-aguardando_nf{background:var(--purple-bg);color:var(--purple)}
-.badge-nf_emitida{background:var(--blue-bg);color:var(--blue)}
-.badge-aguardando_pagamento{background:var(--amber-bg);color:var(--amber)}
-.badge-pago{background:var(--green-bg);color:var(--green)}
-.badge-cancelado-fin{background:var(--red-bg);color:var(--red)}
+    /* SIDEBAR */
+    .sidebar {
+      width: var(--sidebar);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      height: 100vh;
+      z-index: 100;
+      transition: transform var(--transition)
+    }
 
-/* MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px;backdrop-filter:blur(4px)}
-.modal-overlay.hidden{display:none}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);width:100%;max-width:760px;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column}
-.modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:var(--surface);z-index:1}
-.modal-header h2{font-size:15px;font-weight:600;flex:1}
-.modal-body{padding:24px;display:flex;flex-direction:column;gap:20px}
-.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;position:sticky;bottom:0;background:var(--surface)}
-.form-grid{display:grid;gap:16px}
-.form-grid-2{grid-template-columns:1fr 1fr}
-.form-grid-3{grid-template-columns:1fr 1fr 1fr}
-.form-group{display:flex;flex-direction:column;gap:6px}
-.form-label{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:0.5px;text-transform:uppercase}
-.form-control{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);padding:9px 12px;color:var(--text);font-family:var(--sans);font-size:13px;width:100%;transition:border-color var(--transition)}
-.form-control:focus{outline:none;border-color:var(--accent)}
-.form-control::placeholder{color:var(--text3)}
-textarea.form-control{resize:vertical;min-height:80px}
-select.form-control{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238891a8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px}
-.form-section{border-top:1px solid var(--border);padding-top:16px}
-.form-section-title{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.form-section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+    .sidebar-logo {
+      padding: 20px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px
+    }
 
-/* DETAIL VIEW */
-.detail-grid{display:grid;grid-template-columns:2fr 1fr;gap:16px}
-.detail-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px}
-.detail-card h4{font-size:11px;font-weight:700;color:var(--text3);letter-spacing:0.8px;text-transform:uppercase;margin-bottom:14px}
-.detail-row{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)}
-.detail-row:last-child{border-bottom:none}
-.detail-key{font-size:12px;color:var(--text3);flex-shrink:0}
-.detail-val{font-size:12px;color:var(--text);text-align:right;font-weight:500}
-.detail-val.mono{font-family:var(--mono)}
-.timeline{display:flex;flex-direction:column;gap:4px}
-.timeline-step{display:flex;align-items:center;gap:10px;padding:8px 0}
-.timeline-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.timeline-dot.done{background:var(--green)}
-.timeline-dot.current{background:var(--amber);box-shadow:0 0 0 3px rgba(251,191,36,0.2)}
-.timeline-dot.pending{background:var(--surface3);border:1px solid var(--border2)}
-.timeline-text{font-size:12px;color:var(--text2)}
-.timeline-step.done .timeline-text{color:var(--green)}
-.timeline-step.current .timeline-text{color:var(--amber);font-weight:500}
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px
+    }
 
-/* EMPTY STATE */
-.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
-.empty-state svg{margin:0 auto 16px;display:block;opacity:0.3}
-.empty-state h3{font-size:15px;color:var(--text2);margin-bottom:6px}
-.empty-state p{font-size:13px;margin-bottom:16px}
+    .logo-text {
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: -0.3px
+    }
 
-/* TOAST */
-.toast-container{position:fixed;bottom:24px;right:24px;display:flex;flex-direction:column;gap:8px;z-index:9999}
-.toast{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:10px;animation:slideIn 0.2s ease;box-shadow:0 8px 32px rgba(0,0,0,0.4);min-width:280px}
-.toast.success{border-left:3px solid var(--green)}
-.toast.error{border-left:3px solid var(--red)}
-.toast.info{border-left:3px solid var(--blue)}
-@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
-.toast.out{animation:slideOut 0.2s ease forwards}
+    .logo-sub {
+      font-size: 10px;
+      color: var(--text3);
+      font-family: var(--mono);
+      letter-spacing: 0.5px
+    }
 
-/* PAGES */
-.page{display:none}
-.page.active{display:block}
+    .sidebar-section {
+      padding: 8px 8px 4px;
+      margin-top: 4px
+    }
 
-/* TAGS */
-.value-tag{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--green)}
-.value-negative{color:var(--red)}
+    .sidebar-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0 8px;
+      margin-bottom: 4px
+    }
 
-/* Tabs */
-.tabs{display:flex;gap:2px;background:var(--surface2);border-radius:var(--radius);padding:3px;margin-bottom:20px}
-.tab-btn{padding:6px 14px;border-radius:6px;border:none;background:transparent;color:var(--text3);font-family:var(--sans);font-size:12px;font-weight:500;cursor:pointer;transition:all var(--transition)}
-.tab-btn.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.3)}
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+      color: var(--text2);
+      font-size: 13px;
+      font-weight: 400;
+      margin: 1px 0
+    }
 
-/* PAGINATION */
-.pagination{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border)}
-.page-info{font-size:12px;color:var(--text3)}
-.page-btns{display:flex;gap:4px}
-.page-btn{padding:5px 10px;border-radius:var(--radius);border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:12px;cursor:pointer;transition:all var(--transition)}
-.page-btn:hover{background:var(--surface2);color:var(--text)}
-.page-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
-.page-btn:disabled{opacity:0.3;cursor:not-allowed}
+    .nav-item:hover {
+      background: var(--surface2);
+      color: var(--text)
+    }
 
-/* LOADING */
-.loading{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--text3);gap:12px;font-size:13px}
-.spinner{width:20px;height:20px;border:2px solid var(--border2);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
+    .nav-item.active {
+      background: rgba(79, 142, 247, 0.12);
+      color: var(--accent);
+      font-weight: 500
+    }
 
-/* RESPONSIVE */
-@media(max-width:1200px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
-@media(max-width:768px){
-  .sidebar{transform:translateX(-100%)}
-  .sidebar.open{transform:translateX(0)}
-  .main{margin-left:0}
-  .form-grid-2,.form-grid-3{grid-template-columns:1fr}
-  .detail-grid{grid-template-columns:1fr}
-  .stats-grid{grid-template-columns:1fr 1fr}
-}
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      opacity: 0.7;
+      flex-shrink: 0
+    }
 
-/* Empresa card */
-.empresa-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;cursor:pointer;transition:all var(--transition)}
-.empresa-card:hover{border-color:var(--border2);background:var(--surface2)}
-.empresa-card h3{font-size:14px;font-weight:600;margin-bottom:4px}
-.empresa-card p{font-size:12px;color:var(--text3)}
-.empresa-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:16px}
-.empresa-stats{display:flex;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
-.empresa-stat{text-align:center}
-.empresa-stat-val{font-size:16px;font-weight:700;font-family:var(--mono)}
-.empresa-stat-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+    .nav-item.active .nav-icon {
+      opacity: 1
+    }
 
-/* Tooltip */
-[title]{position:relative;cursor:help}
+    .nav-badge {
+      margin-left: auto;
+      background: var(--red-bg);
+      color: var(--red);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 20px;
+      font-family: var(--mono)
+    }
 
-/* Action row */
-.action-row{display:flex;gap:6px;align-items:center}
-.danger-btn{color:var(--red) !important}
-.danger-btn:hover{background:var(--red-bg) !important}
-</style>
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 12px 8px;
+      border-top: 1px solid var(--border)
+    }
+
+    /* MAIN */
+    .main {
+      margin-left: var(--sidebar);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh
+    }
+
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 50
+    }
+
+    .topbar-title {
+      font-weight: 600;
+      font-size: 16px;
+      flex: 1
+    }
+
+    .topbar-subtitle {
+      font-size: 12px;
+      color: var(--text3);
+      font-family: var(--mono)
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: var(--radius);
+      border: none;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all var(--transition)
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff
+    }
+
+    .btn-primary:hover {
+      background: var(--accent2)
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text2);
+      border: 1px solid var(--border2)
+    }
+
+    .btn-ghost:hover {
+      background: var(--surface2);
+      color: var(--text)
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      justify-content: center
+    }
+
+    .content {
+      padding: 24px;
+      flex: 1
+    }
+
+    /* CONFIG BANNER */
+    .config-banner {
+      background: rgba(255, 180, 0, 0.08);
+      border: 1px solid rgba(255, 180, 0, 0.2);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .config-banner svg {
+      color: var(--amber);
+      flex-shrink: 0
+    }
+
+    .config-banner p {
+      font-size: 13px;
+      color: var(--amber);
+      line-height: 1.5
+    }
+
+    .config-banner code {
+      background: rgba(255, 180, 0, 0.15);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px
+    }
+
+    .config-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 10px;
+      margin-top: 12px
+    }
+
+    .config-form input {
+      background: var(--surface3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      width: 100%
+    }
+
+    .config-form input::placeholder {
+      color: var(--text3)
+    }
+
+    .config-form input:focus {
+      outline: none;
+      border-color: var(--accent)
+    }
+
+    /* STATS */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      position: relative;
+      overflow: hidden
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--accent-color, var(--accent))
+    }
+
+    .stat-label {
+      font-size: 11px;
+      color: var(--text3);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: var(--mono);
+      color: var(--text);
+      line-height: 1
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 6px
+    }
+
+    .stat-icon {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      opacity: 0.12;
+      font-size: 36px
+    }
+
+    /* TABLE */
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden
+    }
+
+    .table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px
+    }
+
+    .table-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      flex: 1
+    }
+
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap
+    }
+
+    .search-box {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 7px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 220px
+    }
+
+    .search-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      width: 100%
+    }
+
+    .search-box input::placeholder {
+      color: var(--text3)
+    }
+
+    select.filter-select {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 7px 10px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      cursor: pointer;
+      outline: none
+    }
+
+    select.filter-select:focus {
+      border-color: var(--accent)
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+      cursor: pointer
+    }
+
+    tbody tr:last-child {
+      border-bottom: none
+    }
+
+    tbody tr:hover {
+      background: var(--surface2)
+    }
+
+    td {
+      padding: 12px 16px;
+      font-size: 13px;
+      vertical-align: middle
+    }
+
+    .td-mono {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text2)
+    }
+
+    .td-main {
+      font-weight: 500;
+      color: var(--text)
+    }
+
+    .td-sub {
+      font-size: 11px;
+      color: var(--text3);
+      margin-top: 2px
+    }
+
+    /* BADGES */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      white-space: nowrap
+    }
+
+    .badge-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%
+    }
+
+    .badge-pendente {
+      background: var(--surface3);
+      color: var(--text2)
+    }
+
+    .badge-dot-pendente {
+      background: var(--text3)
+    }
+
+    .badge-em_andamento {
+      background: var(--blue-bg);
+      color: var(--blue)
+    }
+
+    .badge-dot-em_andamento {
+      background: var(--blue)
+    }
+
+    .badge-concluido {
+      background: var(--green-bg);
+      color: var(--green)
+    }
+
+    .badge-dot-concluido {
+      background: var(--green)
+    }
+
+    .badge-cancelado {
+      background: var(--red-bg);
+      color: var(--red)
+    }
+
+    .badge-dot-cancelado {
+      background: var(--red)
+    }
+
+    .badge-sem_cobranca {
+      background: var(--surface3);
+      color: var(--text3)
+    }
+
+    .badge-aguardando_nf {
+      background: var(--purple-bg);
+      color: var(--purple)
+    }
+
+    .badge-nf_emitida {
+      background: var(--blue-bg);
+      color: var(--blue)
+    }
+
+    .badge-aguardando_pagamento {
+      background: var(--amber-bg);
+      color: var(--amber)
+    }
+
+    .badge-pago {
+      background: var(--green-bg);
+      color: var(--green)
+    }
+
+    .badge-cancelado-fin {
+      background: var(--red-bg);
+      color: var(--red)
+    }
+
+    /* MODAL */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+      backdrop-filter: blur(4px)
+    }
+
+    .modal-overlay.hidden {
+      display: none
+    }
+
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 760px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column
+    }
+
+    .modal-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      z-index: 1
+    }
+
+    .modal-header h2 {
+      font-size: 15px;
+      font-weight: 600;
+      flex: 1
+    }
+
+    .modal-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      position: sticky;
+      bottom: 0;
+      background: var(--surface)
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 16px
+    }
+
+    .form-grid-2 {
+      grid-template-columns: 1fr 1fr
+    }
+
+    .form-grid-3 {
+      grid-template-columns: 1fr 1fr 1fr
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px
+    }
+
+    .form-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text3);
+      letter-spacing: 0.5px;
+      text-transform: uppercase
+    }
+
+    .form-control {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      padding: 9px 12px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 13px;
+      width: 100%;
+      transition: border-color var(--transition)
+    }
+
+    .form-control:focus {
+      outline: none;
+      border-color: var(--accent)
+    }
+
+    .form-control::placeholder {
+      color: var(--text3)
+    }
+
+    textarea.form-control {
+      resize: vertical;
+      min-height: 80px
+    }
+
+    select.form-control {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238891a8' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 30px
+    }
+
+    .form-section {
+      border-top: 1px solid var(--border);
+      padding-top: 16px
+    }
+
+    .form-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .form-section-title::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border)
+    }
+
+    /* DETAIL VIEW */
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px
+    }
+
+    .detail-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px
+    }
+
+    .detail-card h4 {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text3);
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 14px
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border)
+    }
+
+    .detail-row:last-child {
+      border-bottom: none
+    }
+
+    .detail-key {
+      font-size: 12px;
+      color: var(--text3);
+      flex-shrink: 0
+    }
+
+    .detail-val {
+      font-size: 12px;
+      color: var(--text);
+      text-align: right;
+      font-weight: 500
+    }
+
+    .detail-val.mono {
+      font-family: var(--mono)
+    }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 4px
+    }
+
+    .timeline-step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0
+    }
+
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0
+    }
+
+    .timeline-dot.done {
+      background: var(--green)
+    }
+
+    .timeline-dot.current {
+      background: var(--amber);
+      box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.2)
+    }
+
+    .timeline-dot.pending {
+      background: var(--surface3);
+      border: 1px solid var(--border2)
+    }
+
+    .timeline-text {
+      font-size: 12px;
+      color: var(--text2)
+    }
+
+    .timeline-step.done .timeline-text {
+      color: var(--green)
+    }
+
+    .timeline-step.current .timeline-text {
+      color: var(--amber);
+      font-weight: 500
+    }
+
+    /* EMPTY STATE */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text3)
+    }
+
+    .empty-state svg {
+      margin: 0 auto 16px;
+      display: block;
+      opacity: 0.3
+    }
+
+    .empty-state h3 {
+      font-size: 15px;
+      color: var(--text2);
+      margin-bottom: 6px
+    }
+
+    .empty-state p {
+      font-size: 13px;
+      margin-bottom: 16px
+    }
+
+    /* TOAST */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 9999
+    }
+
+    .toast {
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius-lg);
+      padding: 12px 16px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      animation: slideIn 0.2s ease;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      min-width: 280px
+    }
+
+    .toast.success {
+      border-left: 3px solid var(--green)
+    }
+
+    .toast.error {
+      border-left: 3px solid var(--red)
+    }
+
+    .toast.info {
+      border-left: 3px solid var(--blue)
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(100%);
+        opacity: 0
+      }
+
+      to {
+        transform: translateX(0);
+        opacity: 1
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1
+      }
+
+      to {
+        transform: translateX(100%);
+        opacity: 0
+      }
+    }
+
+    .toast.out {
+      animation: slideOut 0.2s ease forwards
+    }
+
+    /* PAGES */
+    .page {
+      display: none
+    }
+
+    .page.active {
+      display: block
+    }
+
+    /* TAGS */
+    .value-tag {
+      font-family: var(--mono);
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--green)
+    }
+
+    .value-negative {
+      color: var(--red)
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--surface2);
+      border-radius: var(--radius);
+      padding: 3px;
+      margin-bottom: 20px
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--text3);
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition)
+    }
+
+    .tab-btn.active {
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3)
+    }
+
+    /* PAGINATION */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border)
+    }
+
+    .page-info {
+      font-size: 12px;
+      color: var(--text3)
+    }
+
+    .page-btns {
+      display: flex;
+      gap: 4px
+    }
+
+    .page-btn {
+      padding: 5px 10px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text2);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all var(--transition)
+    }
+
+    .page-btn:hover {
+      background: var(--surface2);
+      color: var(--text)
+    }
+
+    .page-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff
+    }
+
+    .page-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed
+    }
+
+    /* LOADING */
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px;
+      color: var(--text3);
+      gap: 12px;
+      font-size: 13px
+    }
+
+    .spinner {
+      width: 20px;
+      height: 20px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    /* RESPONSIVE */
+    @media(max-width:1200px) {
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+    }
+
+    @media(max-width:768px) {
+      .sidebar {
+        transform: translateX(-100%)
+      }
+
+      .sidebar.open {
+        transform: translateX(0)
+      }
+
+      .main {
+        margin-left: 0
+      }
+
+      .form-grid-2,
+      .form-grid-3 {
+        grid-template-columns: 1fr
+      }
+
+      .detail-grid {
+        grid-template-columns: 1fr
+      }
+
+      .stats-grid {
+        grid-template-columns: 1fr 1fr
+      }
+    }
+
+    /* Empresa card */
+    .empresa-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 16px 20px;
+      cursor: pointer;
+      transition: all var(--transition)
+    }
+
+    .empresa-card:hover {
+      border-color: var(--border2);
+      background: var(--surface2)
+    }
+
+    .empresa-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px
+    }
+
+    .empresa-card p {
+      font-size: 12px;
+      color: var(--text3)
+    }
+
+    .empresa-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+      margin-top: 16px
+    }
+
+    .empresa-stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border)
+    }
+
+    .empresa-stat {
+      text-align: center
+    }
+
+    .empresa-stat-val {
+      font-size: 16px;
+      font-weight: 700;
+      font-family: var(--mono)
+    }
+
+    .empresa-stat-lbl {
+      font-size: 10px;
+      color: var(--text3);
+      margin-top: 2px
+    }
+
+    /* Tooltip */
+    [title] {
+      position: relative;
+      cursor: help
+    }
+
+    /* Action row */
+    .action-row {
+      display: flex;
+      gap: 6px;
+      align-items: center
+    }
+
+    .danger-btn {
+      color: var(--red) !important
+    }
+
+    .danger-btn:hover {
+      background: var(--red-bg) !important
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- SIDEBAR -->
-<nav class="sidebar" id="sidebar">
-  <div class="sidebar-logo">
-    <div class="logo-icon">⚡</div>
-    <div>
-      <div class="logo-text">TI Control</div>
-      <div class="logo-sub">v2.0 · GESTÃO DE CHAMADOS</div>
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Principal</div>
-    <div class="nav-item active" onclick="navigate('dashboard')">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Dashboard
-    </div>
-    <div class="nav-item" onclick="navigate('chamados')">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-      Chamados / RATs
-      <span class="nav-badge" id="badge-pendente">0</span>
-    </div>
-    <div class="nav-item" onclick="navigate('financeiro')">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-      Financeiro
-      <span class="nav-badge" id="badge-nf" style="display:none"></span>
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Cadastros</div>
-    <div class="nav-item" onclick="navigate('empresas')">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-      Empresas
-    </div>
-  </div>
-
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">Sistema</div>
-    <div class="nav-item" onclick="navigate('config')">
-      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a1 1 0 0 0-1.41 0l-.49.49a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 0 0-1.41 0l-.49.49a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 0 0-1.41 0L8.93 5a1 1 0 0 1-1.41 0L5.1 3.59a1 1 0 0 0-1.41 1.41L5.1 6.41a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l.49.49a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l.49.49a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l1.42 1.41a1 1 0 0 0 1.42 0l.49-.49a1 1 0 0 1 1.41 0l.49.49a1 1 0 0 0 1.42 0l.49-.49a1 1 0 0 1 1.41 0l.49.49a1 1 0 0 0 1.42 0l1.41-1.41a1 1 0 0 0 0-1.42l-.49-.49a1 1 0 0 1 0-1.41l.49-.49a1 1 0 0 0 0-1.42l-.49-.49a1 1 0 0 1 0-1.41l.49-.49a1 1 0 0 0 0-1.42z"/></svg>
-      Configurações
-    </div>
-  </div>
-
-  <div class="sidebar-footer">
-    <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">Status: <span id="conn-status" style="color:var(--amber)">⬤ aguardando</span></div>
-  </div>
-</nav>
-
-<!-- MAIN -->
-<main class="main">
-  <div class="topbar">
-    <div>
-      <div class="topbar-title" id="page-title">Dashboard</div>
-      <div class="topbar-subtitle" id="page-sub">Visão geral do sistema</div>
-    </div>
-    <div id="topbar-actions"></div>
-  </div>
-
-  <div class="content">
-
-    <!-- ==================== CONFIG PAGE ==================== -->
-    <div class="page active" id="page-config">
-      <div style="max-width:600px;margin:40px auto">
-        <div style="text-align:center;margin-bottom:32px">
-          <div style="font-size:40px;margin-bottom:12px">⚡</div>
-          <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">Configurar TI Control</h2>
-          <p style="color:var(--text3);font-size:13px">Conecte ao seu banco de dados Supabase para começar</p>
-        </div>
-
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
-          <h3 style="font-size:13px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-            Credenciais do Supabase
-          </h3>
-          <div class="form-grid" style="gap:12px">
-            <div class="form-group">
-              <label class="form-label">Project URL</label>
-              <input type="text" class="form-control" id="cfg-url" placeholder="https://xxxx.supabase.co">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Anon Key (Public)</label>
-              <input type="password" class="form-control" id="cfg-key" placeholder="eyJhbGciOi...">
-            </div>
-          </div>
-          <div style="margin-top:16px;display:flex;gap:8px">
-            <button class="btn btn-primary" onclick="salvarConfig()">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-              Conectar e Salvar
-            </button>
-            <button class="btn btn-ghost" onclick="testarConexao()">Testar Conexão</button>
-          </div>
-        </div>
-
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px">
-          <h3 style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">📋 Como configurar</h3>
-          <ol style="font-size:12px;color:var(--text3);line-height:2;padding-left:16px">
-            <li>Acesse <strong style="color:var(--text)">supabase.com</strong> e crie um projeto</li>
-            <li>Execute o arquivo <code style="background:var(--surface3);padding:2px 5px;border-radius:4px;font-family:var(--mono)">supabase_setup.sql</code> no SQL Editor</li>
-            <li>Em Settings → API, copie a <strong style="color:var(--text)">Project URL</strong> e <strong style="color:var(--text)">anon key</strong></li>
-            <li>Cole as credenciais acima e clique em Conectar</li>
-          </ol>
-        </div>
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">TI Control</div>
+        <div class="logo-sub">v2.0 · GESTÃO DE CHAMADOS</div>
       </div>
     </div>
 
-    <!-- ==================== DASHBOARD ==================== -->
-    <div class="page" id="page-dashboard">
-      <div class="stats-grid" id="stats-container">
-        <div class="stat-card" style="--accent-color:var(--blue)">
-          <div class="stat-label">Total de Chamados</div>
-          <div class="stat-value" id="stat-total">—</div>
-          <div class="stat-sub" id="stat-total-sub">Carregando...</div>
-          <div class="stat-icon">📋</div>
-        </div>
-        <div class="stat-card" style="--accent-color:var(--amber)">
-          <div class="stat-label">A Receber</div>
-          <div class="stat-value" id="stat-receber">—</div>
-          <div class="stat-sub" id="stat-receber-sub">aguardando</div>
-          <div class="stat-icon">⏳</div>
-        </div>
-        <div class="stat-card" style="--accent-color:var(--purple)">
-          <div class="stat-label">NFs a Emitir</div>
-          <div class="stat-value" id="stat-nf">—</div>
-          <div class="stat-sub">chamados sem nota</div>
-          <div class="stat-icon">📄</div>
-        </div>
-        <div class="stat-card" style="--accent-color:var(--green)">
-          <div class="stat-label">Recebido (Mês)</div>
-          <div class="stat-value" id="stat-pago">—</div>
-          <div class="stat-sub" id="stat-pago-sub">este mês</div>
-          <div class="stat-icon">✅</div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Principal</div>
+      <div class="nav-item active" onclick="navigate('dashboard')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="navigate('chamados')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+          <polyline points="10 9 9 9 8 9" />
+        </svg>
+        Chamados / RATs
+        <span class="nav-badge" id="badge-pendente">0</span>
+      </div>
+      <div class="nav-item" onclick="navigate('financeiro')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <line x1="12" y1="1" x2="12" y2="23" />
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+        </svg>
+        Financeiro
+        <span class="nav-badge" id="badge-nf" style="display:none"></span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Cadastros</div>
+      <div class="nav-item" onclick="navigate('empresas')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+          <polyline points="9 22 9 12 15 12 15 22" />
+        </svg>
+        Empresas
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Sistema</div>
+      <div class="nav-item" onclick="navigate('config')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.07 4.93a1 1 0 0 0-1.41 0l-.49.49a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 0 0-1.41 0l-.49.49a1 1 0 0 1-1.42 0l-.7-.7a1 1 0 0 0-1.41 0L8.93 5a1 1 0 0 1-1.41 0L5.1 3.59a1 1 0 0 0-1.41 1.41L5.1 6.41a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l.49.49a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l.49.49a1 1 0 0 1 0 1.41l-.49.49a1 1 0 0 0 0 1.42l1.42 1.41a1 1 0 0 0 1.42 0l.49-.49a1 1 0 0 1 1.41 0l.49.49a1 1 0 0 0 1.42 0l.49-.49a1 1 0 0 1 1.41 0l.49.49a1 1 0 0 0 1.42 0l1.41-1.41a1 1 0 0 0 0-1.42l-.49-.49a1 1 0 0 1 0-1.41l.49-.49a1 1 0 0 0 0-1.42l-.49-.49a1 1 0 0 1 0-1.41l.49-.49a1 1 0 0 0 0-1.42z" />
+        </svg>
+        Configurações
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div style="font-size:11px;color:var(--text3);font-family:var(--mono)">Status: <span id="conn-status"
+          style="color:var(--amber)">⬤ aguardando</span></div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <main class="main">
+    <div class="topbar">
+      <div>
+        <div class="topbar-title" id="page-title">Dashboard</div>
+        <div class="topbar-subtitle" id="page-sub">Visão geral do sistema</div>
+      </div>
+      <div id="topbar-actions"></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ==================== CONFIG PAGE ==================== -->
+      <div class="page active" id="page-config">
+        <div style="max-width:600px;margin:40px auto">
+          <div style="text-align:center;margin-bottom:32px">
+            <div style="font-size:40px;margin-bottom:12px">⚡</div>
+            <h2 style="font-size:20px;font-weight:700;margin-bottom:6px">Configurar TI Control</h2>
+            <p style="color:var(--text3);font-size:13px">Conecte ao seu banco de dados Supabase para começar</p>
+          </div>
+
+          <div
+            style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px">
+            <h3 style="font-size:13px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+              Credenciais do Supabase
+            </h3>
+            <div class="form-grid" style="gap:12px">
+              <div class="form-group">
+                <label class="form-label">Project URL</label>
+                <input type="text" class="form-control" id="cfg-url" placeholder="https://xxxx.supabase.co">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Anon Key (Public)</label>
+                <input type="password" class="form-control" id="cfg-key" placeholder="eyJhbGciOi...">
+              </div>
+            </div>
+            <div style="margin-top:16px;display:flex;gap:8px">
+              <button class="btn btn-primary" onclick="salvarConfig()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17 21 17 13 7 13 7 21" />
+                  <polyline points="7 3 7 8 15 8" />
+                </svg>
+                Conectar e Salvar
+              </button>
+              <button class="btn btn-ghost" onclick="testarConexao()">Testar Conexão</button>
+            </div>
+          </div>
+
+          <div
+            style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px">
+            <h3
+              style="font-size:12px;font-weight:600;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">
+              📋 Como configurar</h3>
+            <ol style="font-size:12px;color:var(--text3);line-height:2;padding-left:16px">
+              <li>Acesse <strong style="color:var(--text)">supabase.com</strong> e crie um projeto</li>
+              <li>Execute o arquivo <code
+                  style="background:var(--surface3);padding:2px 5px;border-radius:4px;font-family:var(--mono)">supabase_setup.sql</code>
+                no SQL Editor</li>
+              <li>Em Settings → API, copie a <strong style="color:var(--text)">Project URL</strong> e <strong
+                  style="color:var(--text)">anon key</strong></li>
+              <li>Cole as credenciais acima e clique em Conectar</li>
+            </ol>
+          </div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+      <!-- ==================== DASHBOARD ==================== -->
+      <div class="page" id="page-dashboard">
+        <div class="stats-grid" id="stats-container">
+          <div class="stat-card" style="--accent-color:var(--blue)">
+            <div class="stat-label">Total de Chamados</div>
+            <div class="stat-value" id="stat-total">—</div>
+            <div class="stat-sub" id="stat-total-sub">Carregando...</div>
+            <div class="stat-icon">📋</div>
+          </div>
+          <div class="stat-card" style="--accent-color:var(--amber)">
+            <div class="stat-label">A Receber</div>
+            <div class="stat-value" id="stat-receber">—</div>
+            <div class="stat-sub" id="stat-receber-sub">aguardando</div>
+            <div class="stat-icon">⏳</div>
+          </div>
+          <div class="stat-card" style="--accent-color:var(--purple)">
+            <div class="stat-label">NFs a Emitir</div>
+            <div class="stat-value" id="stat-nf">—</div>
+            <div class="stat-sub">chamados sem nota</div>
+            <div class="stat-icon">📄</div>
+          </div>
+          <div class="stat-card" style="--accent-color:var(--green)">
+            <div class="stat-label">Recebido (Mês)</div>
+            <div class="stat-value" id="stat-pago">—</div>
+            <div class="stat-sub" id="stat-pago-sub">este mês</div>
+            <div class="stat-icon">✅</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+          <div class="table-card">
+            <div class="table-header">
+              <h3>🔥 Pendências Financeiras</h3>
+            </div>
+            <div id="pendencias-list" style="padding:8px"></div>
+          </div>
+          <div class="table-card">
+            <div class="table-header">
+              <h3>📊 Por Status</h3>
+            </div>
+            <div id="status-breakdown" style="padding:16px"></div>
+          </div>
+        </div>
+
         <div class="table-card">
           <div class="table-header">
-            <h3>🔥 Pendências Financeiras</h3>
+            <h3>Chamados Recentes</h3>
+            <button class="btn btn-ghost btn-sm" onclick="navigate('chamados')">Ver todos →</button>
           </div>
-          <div id="pendencias-list" style="padding:8px"></div>
+          <div id="recent-chamados">
+            <div class="loading">
+              <div class="spinner"></div> Carregando...
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== CHAMADOS ==================== -->
+      <div class="page" id="page-chamados">
+        <div class="table-card">
+          <div class="table-header">
+            <h3>Todos os Chamados</h3>
+            <div class="filter-bar">
+              <div class="search-box">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input type="text" placeholder="Buscar chamado, empresa..." id="search-chamados"
+                  oninput="filtrarChamados()">
+              </div>
+              <select class="filter-select" id="filter-status" onchange="filtrarChamados()">
+                <option value="">Todos status</option>
+                <option value="pendente">Pendente</option>
+                <option value="em_andamento">Em andamento</option>
+                <option value="concluido">Concluído</option>
+                <option value="cancelado">Cancelado</option>
+              </select>
+              <select class="filter-select" id="filter-financeiro" onchange="filtrarChamados()">
+                <option value="">Status financeiro</option>
+                <option value="sem_cobranca">Sem cobrança</option>
+                <option value="aguardando_nf">Aguardando NF</option>
+                <option value="nf_emitida">NF emitida</option>
+                <option value="aguardando_pagamento">Ag. Pagamento</option>
+                <option value="pago">Pago</option>
+              </select>
+            </div>
+          </div>
+          <div id="chamados-table-container">
+            <div class="loading">
+              <div class="spinner"></div>
+            </div>
+          </div>
+          <div class="pagination" id="pagination-chamados"></div>
+        </div>
+      </div>
+
+      <!-- ==================== FINANCEIRO ==================== -->
+      <div class="page" id="page-financeiro">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="setFinanceiroTab('aguardando_nf',this)">🟣 Emitir NF</button>
+          <button class="tab-btn" onclick="setFinanceiroTab('nf_emitida',this)">🔵 NF Emitida</button>
+          <button class="tab-btn" onclick="setFinanceiroTab('aguardando_pagamento',this)">🟡 Ag. Pagamento</button>
+          <button class="tab-btn" onclick="setFinanceiroTab('pago',this)">🟢 Pagos</button>
+          <button class="tab-btn" onclick="setFinanceiroTab('',this)">📋 Todos</button>
         </div>
         <div class="table-card">
           <div class="table-header">
-            <h3>📊 Por Status</h3>
+            <h3 id="fin-tab-title">Chamados para Emitir NF</h3>
+            <div id="fin-valor-total" style="font-family:var(--mono);font-size:13px;color:var(--green)"></div>
           </div>
-          <div id="status-breakdown" style="padding:16px"></div>
-        </div>
-      </div>
-
-      <div class="table-card">
-        <div class="table-header">
-          <h3>Chamados Recentes</h3>
-          <button class="btn btn-ghost btn-sm" onclick="navigate('chamados')">Ver todos →</button>
-        </div>
-        <div id="recent-chamados"><div class="loading"><div class="spinner"></div> Carregando...</div></div>
-      </div>
-    </div>
-
-    <!-- ==================== CHAMADOS ==================== -->
-    <div class="page" id="page-chamados">
-      <div class="table-card">
-        <div class="table-header">
-          <h3>Todos os Chamados</h3>
-          <div class="filter-bar">
-            <div class="search-box">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input type="text" placeholder="Buscar chamado, empresa..." id="search-chamados" oninput="filtrarChamados()">
+          <div id="financeiro-table-container">
+            <div class="loading">
+              <div class="spinner"></div>
             </div>
-            <select class="filter-select" id="filter-status" onchange="filtrarChamados()">
-              <option value="">Todos status</option>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== EMPRESAS ==================== -->
+      <div class="page" id="page-empresas">
+        <div id="empresas-container">
+          <div class="loading">
+            <div class="spinner"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- TOAST CONTAINER -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- ==================== MODAL CHAMADO ==================== -->
+  <div class="modal-overlay hidden" id="modal-chamado">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-chamado-title">Novo Chamado</h2>
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-chamado')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="chamado-id">
+
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Empresa *</label>
+            <select class="form-control" id="chamado-empresa">
+              <option value="">Selecione a empresa...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo de Serviço</label>
+            <select class="form-control" id="chamado-tipo">
+              <option>Suporte</option>
+              <option>Infraestrutura</option>
+              <option>Redes</option>
+              <option>Manutenção</option>
+              <option>Instalação</option>
+              <option>Consultoria</option>
+              <option>Treinamento</option>
+              <option>Desenvolvimento</option>
+              <option>Outro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Título do Serviço *</label>
+          <input type="text" class="form-control" id="chamado-titulo"
+            placeholder="Ex: Configuração de servidor, Suporte técnico...">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Descrição / Observações</label>
+          <textarea class="form-control" id="chamado-descricao"
+            placeholder="Descreva o serviço realizado..."></textarea>
+        </div>
+
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label class="form-label">Data de Abertura</label>
+            <input type="date" class="form-control" id="chamado-abertura">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data de Atendimento</label>
+            <input type="date" class="form-control" id="chamado-atendimento">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Data de Conclusão</label>
+            <input type="date" class="form-control" id="chamado-conclusao">
+          </div>
+        </div>
+
+        <div class="form-grid form-grid-3">
+          <div class="form-group">
+            <label class="form-label">Horas Trabalhadas</label>
+            <input type="number" class="form-control" id="chamado-horas" placeholder="0.0" step="0.5" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Valor do Serviço (R$)</label>
+            <input type="number" class="form-control" id="chamado-valor" placeholder="0.00" step="0.01" min="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Técnico Responsável</label>
+            <input type="text" class="form-control" id="chamado-tecnico" placeholder="Nome do técnico">
+          </div>
+        </div>
+
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Status do Chamado</label>
+            <select class="form-control" id="chamado-status">
               <option value="pendente">Pendente</option>
-              <option value="em_andamento">Em andamento</option>
+              <option value="em_andamento">Em Andamento</option>
               <option value="concluido">Concluído</option>
               <option value="cancelado">Cancelado</option>
             </select>
-            <select class="filter-select" id="filter-financeiro" onchange="filtrarChamados()">
-              <option value="">Status financeiro</option>
-              <option value="sem_cobranca">Sem cobrança</option>
-              <option value="aguardando_nf">Aguardando NF</option>
-              <option value="nf_emitida">NF emitida</option>
-              <option value="aguardando_pagamento">Ag. Pagamento</option>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status Financeiro</label>
+            <select class="form-control" id="chamado-status-fin">
+              <option value="sem_cobranca">Sem Cobrança</option>
+              <option value="aguardando_nf">Aguardando Emissão de NF</option>
+              <option value="nf_emitida">NF Emitida</option>
+              <option value="aguardando_pagamento">Aguardando Pagamento</option>
               <option value="pago">Pago</option>
+              <option value="cancelado">Cancelado</option>
             </select>
           </div>
         </div>
-        <div id="chamados-table-container"><div class="loading"><div class="spinner"></div></div></div>
-        <div class="pagination" id="pagination-chamados"></div>
-      </div>
-    </div>
 
-    <!-- ==================== FINANCEIRO ==================== -->
-    <div class="page" id="page-financeiro">
-      <div class="tabs">
-        <button class="tab-btn active" onclick="setFinanceiroTab('aguardando_nf',this)">🟣 Emitir NF</button>
-        <button class="tab-btn" onclick="setFinanceiroTab('nf_emitida',this)">🔵 NF Emitida</button>
-        <button class="tab-btn" onclick="setFinanceiroTab('aguardando_pagamento',this)">🟡 Ag. Pagamento</button>
-        <button class="tab-btn" onclick="setFinanceiroTab('pago',this)">🟢 Pagos</button>
-        <button class="tab-btn" onclick="setFinanceiroTab('',this)">📋 Todos</button>
-      </div>
-      <div class="table-card">
-        <div class="table-header">
-          <h3 id="fin-tab-title">Chamados para Emitir NF</h3>
-          <div id="fin-valor-total" style="font-family:var(--mono);font-size:13px;color:var(--green)"></div>
-        </div>
-        <div id="financeiro-table-container"><div class="loading"><div class="spinner"></div></div></div>
-      </div>
-    </div>
-
-    <!-- ==================== EMPRESAS ==================== -->
-    <div class="page" id="page-empresas">
-      <div id="empresas-container"><div class="loading"><div class="spinner"></div></div></div>
-    </div>
-
-  </div>
-</main>
-
-<!-- TOAST CONTAINER -->
-<div class="toast-container" id="toast-container"></div>
-
-<!-- ==================== MODAL CHAMADO ==================== -->
-<div class="modal-overlay hidden" id="modal-chamado">
-  <div class="modal">
-    <div class="modal-header">
-      <h2 id="modal-chamado-title">Novo Chamado</h2>
-      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-chamado')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="chamado-id">
-
-      <div class="form-grid form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Empresa *</label>
-          <select class="form-control" id="chamado-empresa">
-            <option value="">Selecione a empresa...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Tipo de Serviço</label>
-          <select class="form-control" id="chamado-tipo">
-            <option>Suporte</option>
-            <option>Infraestrutura</option>
-            <option>Redes</option>
-            <option>Manutenção</option>
-            <option>Instalação</option>
-            <option>Consultoria</option>
-            <option>Treinamento</option>
-            <option>Desenvolvimento</option>
-            <option>Outro</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Título do Serviço *</label>
-        <input type="text" class="form-control" id="chamado-titulo" placeholder="Ex: Configuração de servidor, Suporte técnico...">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Descrição / Observações</label>
-        <textarea class="form-control" id="chamado-descricao" placeholder="Descreva o serviço realizado..."></textarea>
-      </div>
-
-      <div class="form-grid form-grid-3">
-        <div class="form-group">
-          <label class="form-label">Data de Abertura</label>
-          <input type="date" class="form-control" id="chamado-abertura">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Data de Atendimento</label>
-          <input type="date" class="form-control" id="chamado-atendimento">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Data de Conclusão</label>
-          <input type="date" class="form-control" id="chamado-conclusao">
-        </div>
-      </div>
-
-      <div class="form-grid form-grid-3">
-        <div class="form-group">
-          <label class="form-label">Horas Trabalhadas</label>
-          <input type="number" class="form-control" id="chamado-horas" placeholder="0.0" step="0.5" min="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Valor do Serviço (R$)</label>
-          <input type="number" class="form-control" id="chamado-valor" placeholder="0.00" step="0.01" min="0">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Técnico Responsável</label>
-          <input type="text" class="form-control" id="chamado-tecnico" placeholder="Nome do técnico">
-        </div>
-      </div>
-
-      <div class="form-grid form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Status do Chamado</label>
-          <select class="form-control" id="chamado-status">
-            <option value="pendente">Pendente</option>
-            <option value="em_andamento">Em Andamento</option>
-            <option value="concluido">Concluído</option>
-            <option value="cancelado">Cancelado</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Status Financeiro</label>
-          <select class="form-control" id="chamado-status-fin">
-            <option value="sem_cobranca">Sem Cobrança</option>
-            <option value="aguardando_nf">Aguardando Emissão de NF</option>
-            <option value="nf_emitida">NF Emitida</option>
-            <option value="aguardando_pagamento">Aguardando Pagamento</option>
-            <option value="pago">Pago</option>
-            <option value="cancelado">Cancelado</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-section">
-        <div class="form-section-title">Nota Fiscal</div>
-        <div class="form-grid form-grid-3">
-          <div class="form-group">
-            <label class="form-label">Número da NF</label>
-            <input type="text" class="form-control" id="chamado-nf" placeholder="NF-0001/2025">
+        <div class="form-section">
+          <div class="form-section-title">Nota Fiscal</div>
+          <div class="form-grid form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Número da NF</label>
+              <input type="text" class="form-control" id="chamado-nf" placeholder="NF-0001/2025">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Data de Emissão</label>
+              <input type="date" class="form-control" id="chamado-emissao-nf">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Vencimento</label>
+              <input type="date" class="form-control" id="chamado-vencimento">
+            </div>
           </div>
-          <div class="form-group">
-            <label class="form-label">Data de Emissão</label>
-            <input type="date" class="form-control" id="chamado-emissao-nf">
-          </div>
-          <div class="form-group">
-            <label class="form-label">Vencimento</label>
-            <input type="date" class="form-control" id="chamado-vencimento">
-          </div>
-        </div>
-        <div class="form-grid form-grid-2" style="margin-top:12px">
-          <div class="form-group">
-            <label class="form-label">Data de Pagamento</label>
-            <input type="date" class="form-control" id="chamado-pagamento">
+          <div class="form-grid form-grid-2" style="margin-top:12px">
+            <div class="form-group">
+              <label class="form-label">Data de Pagamento</label>
+              <input type="date" class="form-control" id="chamado-pagamento">
+            </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-chamado')">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarChamado()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Salvar Chamado
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL EMPRESA -->
-<div class="modal-overlay hidden" id="modal-empresa">
-  <div class="modal" style="max-width:500px">
-    <div class="modal-header">
-      <h2 id="modal-empresa-title">Nova Empresa</h2>
-      <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-empresa')">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-    </div>
-    <div class="modal-body">
-      <input type="hidden" id="empresa-id">
-      <div class="form-group">
-        <label class="form-label">Nome da Empresa *</label>
-        <input type="text" class="form-control" id="empresa-nome" placeholder="Razão social ou nome fantasia">
-      </div>
-      <div class="form-grid form-grid-2">
-        <div class="form-group">
-          <label class="form-label">CNPJ</label>
-          <input type="text" class="form-control" id="empresa-cnpj" placeholder="00.000.000/0001-00">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Telefone</label>
-          <input type="text" class="form-control" id="empresa-telefone" placeholder="(21) 99999-9999">
-        </div>
-      </div>
-      <div class="form-grid form-grid-2">
-        <div class="form-group">
-          <label class="form-label">Contato Principal</label>
-          <input type="text" class="form-control" id="empresa-contato" placeholder="Nome do responsável">
-        </div>
-        <div class="form-group">
-          <label class="form-label">E-mail</label>
-          <input type="email" class="form-control" id="empresa-email" placeholder="email@empresa.com">
-        </div>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Endereço</label>
-        <input type="text" class="form-control" id="empresa-endereco" placeholder="Endereço completo">
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-empresa')">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarEmpresa()">Salvar Empresa</button>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL DETALHE CHAMADO -->
-<div class="modal-overlay hidden" id="modal-detalhe">
-  <div class="modal" style="max-width:800px">
-    <div class="modal-header">
-      <div>
-        <h2 id="detalhe-rat" style="font-family:var(--mono);font-size:14px;color:var(--accent)"></h2>
-        <div id="detalhe-titulo" style="font-size:16px;font-weight:600;margin-top:2px"></div>
-      </div>
-      <div style="display:flex;gap:8px;margin-left:auto">
-        <button class="btn btn-ghost btn-sm" id="detalhe-edit-btn" onclick="">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Editar
-        </button>
-        <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-detalhe')">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-chamado')">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarChamado()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+            <polyline points="17 21 17 13 7 13 7 21" />
+            <polyline points="7 3 7 8 15 8" />
+          </svg>
+          Salvar Chamado
         </button>
       </div>
     </div>
-    <div class="modal-body" id="detalhe-body"></div>
   </div>
-</div>
 
-<script>
-// ==================== SUPABASE CONFIG ====================
-let supabase = null;
-let SUPABASE_URL = localStorage.getItem('ti_url') || '';
-let SUPABASE_KEY = localStorage.getItem('ti_key') || '';
+  <!-- MODAL EMPRESA -->
+  <div class="modal-overlay hidden" id="modal-empresa">
+    <div class="modal" style="max-width:500px">
+      <div class="modal-header">
+        <h2 id="modal-empresa-title">Nova Empresa</h2>
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-empresa')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="empresa-id">
+        <div class="form-group">
+          <label class="form-label">Nome da Empresa *</label>
+          <input type="text" class="form-control" id="empresa-nome" placeholder="Razão social ou nome fantasia">
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label class="form-label">CNPJ</label>
+            <input type="text" class="form-control" id="empresa-cnpj" placeholder="00.000.000/0001-00">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefone</label>
+            <input type="text" class="form-control" id="empresa-telefone" placeholder="(21) 99999-9999">
+          </div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label class="form-label">Contato Principal</label>
+            <input type="text" class="form-control" id="empresa-contato" placeholder="Nome do responsável">
+          </div>
+          <div class="form-group">
+            <label class="form-label">E-mail</label>
+            <input type="email" class="form-control" id="empresa-email" placeholder="email@empresa.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Endereço</label>
+          <input type="text" class="form-control" id="empresa-endereco" placeholder="Endereço completo">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-empresa')">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarEmpresa()">Salvar Empresa</button>
+      </div>
+    </div>
+  </div>
 
-function initSupabase(url, key) {
-  try {
-    supabase = window.supabase.createClient(url, key);
-    document.getElementById('conn-status').style.color = 'var(--green)';
-    document.getElementById('conn-status').textContent = '⬤ conectado';
-    return true;
-  } catch(e) {
-    document.getElementById('conn-status').style.color = 'var(--red)';
-    document.getElementById('conn-status').textContent = '⬤ erro';
-    return false;
-  }
-}
+  <!-- MODAL DETALHE CHAMADO -->
+  <div class="modal-overlay hidden" id="modal-detalhe">
+    <div class="modal" style="max-width:800px">
+      <div class="modal-header">
+        <div>
+          <h2 id="detalhe-rat" style="font-family:var(--mono);font-size:14px;color:var(--accent)"></h2>
+          <div id="detalhe-titulo" style="font-size:16px;font-weight:600;margin-top:2px"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-left:auto">
+          <button class="btn btn-ghost btn-sm" id="detalhe-edit-btn" onclick="">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+            Editar
+          </button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="closeModal('modal-detalhe')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body" id="detalhe-body"></div>
+    </div>
+  </div>
 
-async function salvarConfig() {
-  const url = document.getElementById('cfg-url').value.trim();
-  const key = document.getElementById('cfg-key').value.trim();
-  if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
-  
-  localStorage.setItem('ti_url', url);
-  localStorage.setItem('ti_key', key);
-  SUPABASE_URL = url;
-  SUPABASE_KEY = key;
-  
-  if (initSupabase(url, key)) {
-    toast('Conectado com sucesso!', 'success');
-    setTimeout(() => { navigate('dashboard'); loadAllData(); }, 500);
-  }
-}
+  <script>
+    // ==================== SUPABASE CONFIG ====================
+    let supabase = null;
+    let SUPABASE_URL = localStorage.getItem('ti_url') || '';
+    let SUPABASE_KEY = localStorage.getItem('ti_key') || '';
 
-async function testarConexao() {
-  const url = document.getElementById('cfg-url').value.trim();
-  const key = document.getElementById('cfg-key').value.trim();
-  if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
-  try {
-    const sb = window.supabase.createClient(url, key);
-    const { error } = await sb.from('empresas').select('id').limit(1);
-    if (error) toast('Erro: ' + error.message, 'error');
-    else toast('Conexão OK! Tabelas encontradas.', 'success');
-  } catch(e) { toast('Falha na conexão', 'error'); }
-}
+    function getSupabaseLib() {
+      // unpkg UMD expõe como window.supabase (objeto com createClient)
+      // fallback para outros formatos possíveis
+      if (window.supabase && typeof window.supabase.createClient === 'function') return window.supabase;
+      if (window.supabaseJs && typeof window.supabaseJs.createClient === 'function') return window.supabaseJs;
+      if (window.Supabase && typeof window.Supabase.createClient === 'function') return window.Supabase;
+      return null;
+    }
 
-// ==================== NAVIGATION ====================
-const pageMap = {
-  'dashboard': { title: 'Dashboard', sub: 'Visão geral · ' + new Date().toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'}), actions: '' },
-  'chamados': { title: 'Chamados / RATs', sub: 'Controle de todos os atendimentos', actions: '<button class="btn btn-primary" onclick="novoChamado()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo Chamado</button>' },
-  'financeiro': { title: 'Financeiro', sub: 'Notas fiscais e pagamentos', actions: '' },
-  'empresas': { title: 'Empresas', sub: 'Clientes cadastrados', actions: '<button class="btn btn-primary" onclick="novaEmpresa()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova Empresa</button>' },
-  'config': { title: 'Configurações', sub: 'Conexão com banco de dados', actions: '' },
-};
+    function initSupabase(url, key) {
+      try {
+        const lib = getSupabaseLib();
+        if (!lib) throw new Error('Biblioteca Supabase não carregada ainda');
+        supabase = lib.createClient(url, key);
+        document.getElementById('conn-status').style.color = 'var(--green)';
+        document.getElementById('conn-status').textContent = '⬤ conectado';
+        return true;
+      } catch (e) {
+        console.error('initSupabase error:', e);
+        document.getElementById('conn-status').style.color = 'var(--red)';
+        document.getElementById('conn-status').textContent = '⬤ erro';
+        return false;
+      }
+    }
 
-function navigate(page) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  document.querySelector(`[onclick="navigate('${page}')"]`)?.classList.add('active');
-  const info = pageMap[page];
-  document.getElementById('page-title').textContent = info.title;
-  document.getElementById('page-sub').textContent = info.sub;
-  document.getElementById('topbar-actions').innerHTML = info.actions;
+    async function salvarConfig() {
+      const url = document.getElementById('cfg-url').value.trim();
+      const key = document.getElementById('cfg-key').value.trim();
+      if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
 
-  if (!supabase && page !== 'config') {
-    navigate('config'); return;
-  }
-  if (page === 'dashboard') loadDashboard();
-  if (page === 'chamados') loadChamados();
-  if (page === 'financeiro') loadFinanceiro('aguardando_nf');
-  if (page === 'empresas') loadEmpresas();
-}
+      const lib = getSupabaseLib();
+      if (!lib) { toast('Biblioteca ainda carregando, aguarde...', 'error'); return; }
 
-// ==================== DATA STATE ====================
-let allChamados = [];
-let allEmpresas = [];
-let finTab = 'aguardando_nf';
-let chamadosPage = 1;
-const PER_PAGE = 15;
+      const btn = document.querySelector('[onclick="salvarConfig()"]');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Conectando...';
 
-async function loadAllData() {
-  await Promise.all([loadEmpresasData(), loadChamadosData()]);
-  updateBadges();
-}
+      try {
+        const sbTest = lib.createClient(url, key);
+        const { error } = await sbTest.from('empresas').select('id').limit(1);
+        if (error) {
+          toast('Erro ao conectar: ' + error.message, 'error');
+          btn.disabled = false; btn.innerHTML = originalText; return;
+        }
+        localStorage.setItem('ti_url', url);
+        localStorage.setItem('ti_key', key);
+        SUPABASE_URL = url; SUPABASE_KEY = key;
+        supabase = sbTest;
+        document.getElementById('conn-status').style.color = 'var(--green)';
+        document.getElementById('conn-status').textContent = '⬤ conectado';
+        toast('Conectado com sucesso!', 'success');
+        await loadAllData();
+        navigate('dashboard');
+      } catch (e) {
+        toast('Falha na conexão: ' + e.message, 'error');
+      }
+      btn.disabled = false; btn.innerHTML = originalText;
+    }
 
-async function loadEmpresasData() {
-  if (!supabase) return;
-  const { data } = await supabase.from('empresas').select('*').eq('ativa', true).order('nome');
-  allEmpresas = data || [];
-  const sel = document.getElementById('chamado-empresa');
-  if (sel) {
-    sel.innerHTML = '<option value="">Selecione a empresa...</option>' + allEmpresas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
-  }
-}
+    async function testarConexao() {
+      const url = document.getElementById('cfg-url').value.trim();
+      const key = document.getElementById('cfg-key').value.trim();
+      if (!url || !key) { toast('Preencha URL e Key', 'error'); return; }
 
-async function loadChamadosData() {
-  if (!supabase) return;
-  const { data } = await supabase.from('chamados').select('*, empresas(nome)').order('created_at', {ascending:false});
-  allChamados = data || [];
-}
+      const lib = getSupabaseLib();
+      if (!lib) { toast('Biblioteca ainda carregando, tente em 2s', 'error'); return; }
 
-function updateBadges() {
-  const pendentes = allChamados.filter(c => c.status === 'pendente' || c.status === 'em_andamento').length;
-  const nfs = allChamados.filter(c => c.status_financeiro === 'aguardando_nf').length;
-  const badge = document.getElementById('badge-pendente');
-  badge.textContent = pendentes;
-  badge.style.display = pendentes > 0 ? '' : 'none';
-  const badgeNf = document.getElementById('badge-nf');
-  if (nfs > 0) { badgeNf.textContent = nfs; badgeNf.style.display = ''; }
-  else badgeNf.style.display = 'none';
-}
+      const btn = document.querySelector('[onclick="testarConexao()"]');
+      const orig = btn.innerHTML;
+      btn.disabled = true; btn.innerHTML = '<div class="spinner" style="width:14px;height:14px;border-width:2px"></div> Testando...';
+      try {
+        const sb = lib.createClient(url, key);
+        const { error } = await sb.from('empresas').select('id').limit(1);
+        if (error) toast('Erro: ' + error.message + ' — verifique se executou o SQL no Supabase', 'error');
+        else toast('✅ Conexão OK! Banco de dados encontrado.', 'success');
+      } catch (e) { toast('Falha na conexão: ' + e.message, 'error'); }
+      btn.disabled = false; btn.innerHTML = orig;
+    }
 
-// ==================== DASHBOARD ====================
-async function loadDashboard() {
-  await loadChamadosData();
-  const c = allChamados;
-  document.getElementById('stat-total').textContent = c.length;
-  document.getElementById('stat-total-sub').textContent = `${c.filter(x=>x.status==='em_andamento').length} em andamento`;
+    // ==================== NAVIGATION ====================
+    const pageMap = {
+      'dashboard': { title: 'Dashboard', sub: 'Visão geral · ' + new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }), actions: '' },
+      'chamados': { title: 'Chamados / RATs', sub: 'Controle de todos os atendimentos', actions: '<button class="btn btn-primary" onclick="novoChamado()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Novo Chamado</button>' },
+      'financeiro': { title: 'Financeiro', sub: 'Notas fiscais e pagamentos', actions: '' },
+      'empresas': { title: 'Empresas', sub: 'Clientes cadastrados', actions: '<button class="btn btn-primary" onclick="novaEmpresa()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nova Empresa</button>' },
+      'config': { title: 'Configurações', sub: 'Conexão com banco de dados', actions: '' },
+    };
 
-  const aReceber = c.filter(x => ['aguardando_nf','nf_emitida','aguardando_pagamento'].includes(x.status_financeiro));
-  const totalReceber = aReceber.reduce((s,x) => s + (x.valor_servico||0), 0);
-  document.getElementById('stat-receber').textContent = 'R$ ' + totalReceber.toLocaleString('pt-BR',{minimumFractionDigits:2});
-  document.getElementById('stat-receber-sub').textContent = `${aReceber.length} chamados`;
+    function navigate(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById('page-' + page).classList.add('active');
+      document.querySelector(`[onclick="navigate('${page}')"]`)?.classList.add('active');
+      const info = pageMap[page];
+      document.getElementById('page-title').textContent = info.title;
+      document.getElementById('page-sub').textContent = info.sub;
+      document.getElementById('topbar-actions').innerHTML = info.actions;
 
-  const nfs = c.filter(x => x.status_financeiro === 'aguardando_nf').length;
-  document.getElementById('stat-nf').textContent = nfs;
+      if (!supabase && page !== 'config') {
+        navigate('config'); return;
+      }
+      if (page === 'dashboard') loadDashboard();
+      if (page === 'chamados') loadChamados();
+      if (page === 'financeiro') loadFinanceiro('aguardando_nf');
+      if (page === 'empresas') loadEmpresas();
+    }
 
-  const now = new Date();
-  const pagos = c.filter(x => x.status_financeiro==='pago' && x.data_pagamento && new Date(x.data_pagamento).getMonth()===now.getMonth() && new Date(x.data_pagamento).getFullYear()===now.getFullYear());
-  const totalPago = pagos.reduce((s,x) => s+(x.valor_servico||0), 0);
-  document.getElementById('stat-pago').textContent = 'R$ ' + totalPago.toLocaleString('pt-BR',{minimumFractionDigits:2});
-  document.getElementById('stat-pago-sub').textContent = `${pagos.length} pagamentos`;
+    // ==================== DATA STATE ====================
+    let allChamados = [];
+    let allEmpresas = [];
+    let finTab = 'aguardando_nf';
+    let chamadosPage = 1;
+    const PER_PAGE = 15;
 
-  // Pendências
-  const pend = c.filter(x => ['aguardando_nf','aguardando_pagamento','nf_emitida'].includes(x.status_financeiro)).slice(0,6);
-  document.getElementById('pendencias-list').innerHTML = pend.length ? pend.map(ch => `
+    async function loadAllData() {
+      await Promise.all([loadEmpresasData(), loadChamadosData()]);
+      updateBadges();
+    }
+
+    async function loadEmpresasData() {
+      if (!supabase) return;
+      const { data } = await supabase.from('empresas').select('*').eq('ativa', true).order('nome');
+      allEmpresas = data || [];
+      const sel = document.getElementById('chamado-empresa');
+      if (sel) {
+        sel.innerHTML = '<option value="">Selecione a empresa...</option>' + allEmpresas.map(e => `<option value="${e.id}">${e.nome}</option>`).join('');
+      }
+    }
+
+    async function loadChamadosData() {
+      if (!supabase) return;
+      const { data } = await supabase.from('chamados').select('*, empresas(nome)').order('created_at', { ascending: false });
+      allChamados = data || [];
+    }
+
+    function updateBadges() {
+      const pendentes = allChamados.filter(c => c.status === 'pendente' || c.status === 'em_andamento').length;
+      const nfs = allChamados.filter(c => c.status_financeiro === 'aguardando_nf').length;
+      const badge = document.getElementById('badge-pendente');
+      badge.textContent = pendentes;
+      badge.style.display = pendentes > 0 ? '' : 'none';
+      const badgeNf = document.getElementById('badge-nf');
+      if (nfs > 0) { badgeNf.textContent = nfs; badgeNf.style.display = ''; }
+      else badgeNf.style.display = 'none';
+    }
+
+    // ==================== DASHBOARD ====================
+    async function loadDashboard() {
+      await loadChamadosData();
+      const c = allChamados;
+      document.getElementById('stat-total').textContent = c.length;
+      document.getElementById('stat-total-sub').textContent = `${c.filter(x => x.status === 'em_andamento').length} em andamento`;
+
+      const aReceber = c.filter(x => ['aguardando_nf', 'nf_emitida', 'aguardando_pagamento'].includes(x.status_financeiro));
+      const totalReceber = aReceber.reduce((s, x) => s + (x.valor_servico || 0), 0);
+      document.getElementById('stat-receber').textContent = 'R$ ' + totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+      document.getElementById('stat-receber-sub').textContent = `${aReceber.length} chamados`;
+
+      const nfs = c.filter(x => x.status_financeiro === 'aguardando_nf').length;
+      document.getElementById('stat-nf').textContent = nfs;
+
+      const now = new Date();
+      const pagos = c.filter(x => x.status_financeiro === 'pago' && x.data_pagamento && new Date(x.data_pagamento).getMonth() === now.getMonth() && new Date(x.data_pagamento).getFullYear() === now.getFullYear());
+      const totalPago = pagos.reduce((s, x) => s + (x.valor_servico || 0), 0);
+      document.getElementById('stat-pago').textContent = 'R$ ' + totalPago.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+      document.getElementById('stat-pago-sub').textContent = `${pagos.length} pagamentos`;
+
+      // Pendências
+      const pend = c.filter(x => ['aguardando_nf', 'aguardando_pagamento', 'nf_emitida'].includes(x.status_financeiro)).slice(0, 6);
+      document.getElementById('pendencias-list').innerHTML = pend.length ? pend.map(ch => `
     <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer" onclick="verDetalhe('${ch.id}')">
       ${badgeFin(ch.status_financeiro)}
       <div style="flex:1;min-width:0">
         <div style="font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ch.titulo}</div>
-        <div style="font-size:11px;color:var(--text3)">${ch.empresas?.nome||'—'}</div>
+        <div style="font-size:11px;color:var(--text3)">${ch.empresas?.nome || '—'}</div>
       </div>
-      <div style="font-size:12px;font-family:var(--mono);color:var(--amber);flex-shrink:0">R$ ${(ch.valor_servico||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+      <div style="font-size:12px;font-family:var(--mono);color:var(--amber);flex-shrink:0">R$ ${(ch.valor_servico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
     </div>`).join('') : '<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px">✅ Nenhuma pendência</div>';
 
-  // Breakdown
-  const statusCount = {};
-  c.forEach(x => { statusCount[x.status] = (statusCount[x.status]||0)+1 });
-  const statusNames = {pendente:'Pendente',em_andamento:'Em Andamento',concluido:'Concluído',cancelado:'Cancelado'};
-  const statusColors = {pendente:'var(--text3)',em_andamento:'var(--blue)',concluido:'var(--green)',cancelado:'var(--red)'};
-  document.getElementById('status-breakdown').innerHTML = Object.entries(statusNames).map(([k,v]) => {
-    const n = statusCount[k]||0; const pct = c.length ? Math.round(n/c.length*100) : 0;
-    return `<div style="margin-bottom:14px">
+      // Breakdown
+      const statusCount = {};
+      c.forEach(x => { statusCount[x.status] = (statusCount[x.status] || 0) + 1 });
+      const statusNames = { pendente: 'Pendente', em_andamento: 'Em Andamento', concluido: 'Concluído', cancelado: 'Cancelado' };
+      const statusColors = { pendente: 'var(--text3)', em_andamento: 'var(--blue)', concluido: 'var(--green)', cancelado: 'var(--red)' };
+      document.getElementById('status-breakdown').innerHTML = Object.entries(statusNames).map(([k, v]) => {
+        const n = statusCount[k] || 0; const pct = c.length ? Math.round(n / c.length * 100) : 0;
+        return `<div style="margin-bottom:14px">
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
         <span style="font-size:12px;color:var(--text2)">${v}</span>
         <span style="font-size:12px;font-family:var(--mono);color:${statusColors[k]}">${n}</span>
@@ -831,76 +1875,76 @@ async function loadDashboard() {
         <div style="background:${statusColors[k]};height:100%;width:${pct}%;transition:width 0.5s ease"></div>
       </div>
     </div>`;
-  }).join('');
+      }).join('');
 
-  // Recentes
-  const recentes = c.slice(0,8);
-  document.getElementById('recent-chamados').innerHTML = renderChamadosTable(recentes, true);
-}
+      // Recentes
+      const recentes = c.slice(0, 8);
+      document.getElementById('recent-chamados').innerHTML = renderChamadosTable(recentes, true);
+    }
 
-// ==================== CHAMADOS ====================
-async function loadChamados() {
-  await loadChamadosData();
-  filtrarChamados();
-}
+    // ==================== CHAMADOS ====================
+    async function loadChamados() {
+      await loadChamadosData();
+      filtrarChamados();
+    }
 
-function filtrarChamados() {
-  chamadosPage = 1;
-  renderChamadosPage();
-}
+    function filtrarChamados() {
+      chamadosPage = 1;
+      renderChamadosPage();
+    }
 
-function renderChamadosPage() {
-  const q = document.getElementById('search-chamados')?.value.toLowerCase() || '';
-  const fs = document.getElementById('filter-status')?.value || '';
-  const ff = document.getElementById('filter-financeiro')?.value || '';
+    function renderChamadosPage() {
+      const q = document.getElementById('search-chamados')?.value.toLowerCase() || '';
+      const fs = document.getElementById('filter-status')?.value || '';
+      const ff = document.getElementById('filter-financeiro')?.value || '';
 
-  let filtered = allChamados.filter(c => {
-    const matchQ = !q || c.titulo?.toLowerCase().includes(q) || c.empresas?.nome?.toLowerCase().includes(q) || c.numero_rat?.toLowerCase().includes(q) || c.numero_nf?.toLowerCase().includes(q);
-    const matchS = !fs || c.status === fs;
-    const matchF = !ff || c.status_financeiro === ff;
-    return matchQ && matchS && matchF;
-  });
+      let filtered = allChamados.filter(c => {
+        const matchQ = !q || c.titulo?.toLowerCase().includes(q) || c.empresas?.nome?.toLowerCase().includes(q) || c.numero_rat?.toLowerCase().includes(q) || c.numero_nf?.toLowerCase().includes(q);
+        const matchS = !fs || c.status === fs;
+        const matchF = !ff || c.status_financeiro === ff;
+        return matchQ && matchS && matchF;
+      });
 
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-  chamadosPage = Math.min(chamadosPage, totalPages);
-  const slice = filtered.slice((chamadosPage-1)*PER_PAGE, chamadosPage*PER_PAGE);
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+      chamadosPage = Math.min(chamadosPage, totalPages);
+      const slice = filtered.slice((chamadosPage - 1) * PER_PAGE, chamadosPage * PER_PAGE);
 
-  document.getElementById('chamados-table-container').innerHTML = renderChamadosTable(slice, false);
-  
-  // Pagination
-  const pg = document.getElementById('pagination-chamados');
-  pg.innerHTML = `
-    <div class="page-info">Mostrando ${Math.min((chamadosPage-1)*PER_PAGE+1,total)}–${Math.min(chamadosPage*PER_PAGE,total)} de ${total}</div>
+      document.getElementById('chamados-table-container').innerHTML = renderChamadosTable(slice, false);
+
+      // Pagination
+      const pg = document.getElementById('pagination-chamados');
+      pg.innerHTML = `
+    <div class="page-info">Mostrando ${Math.min((chamadosPage - 1) * PER_PAGE + 1, total)}–${Math.min(chamadosPage * PER_PAGE, total)} de ${total}</div>
     <div class="page-btns">
-      <button class="page-btn" onclick="goPage(${chamadosPage-1})" ${chamadosPage===1?'disabled':''}>‹</button>
-      ${Array.from({length:totalPages},(_,i)=>i+1).filter(p=>Math.abs(p-chamadosPage)<=2).map(p=>`<button class="page-btn${p===chamadosPage?' active':''}" onclick="goPage(${p})">${p}</button>`).join('')}
-      <button class="page-btn" onclick="goPage(${chamadosPage+1})" ${chamadosPage===totalPages?'disabled':''}>›</button>
+      <button class="page-btn" onclick="goPage(${chamadosPage - 1})" ${chamadosPage === 1 ? 'disabled' : ''}>‹</button>
+      ${Array.from({ length: totalPages }, (_, i) => i + 1).filter(p => Math.abs(p - chamadosPage) <= 2).map(p => `<button class="page-btn${p === chamadosPage ? ' active' : ''}" onclick="goPage(${p})">${p}</button>`).join('')}
+      <button class="page-btn" onclick="goPage(${chamadosPage + 1})" ${chamadosPage === totalPages ? 'disabled' : ''}>›</button>
     </div>`;
-}
+    }
 
-function goPage(p) { chamadosPage = p; renderChamadosPage(); }
+    function goPage(p) { chamadosPage = p; renderChamadosPage(); }
 
-function renderChamadosTable(list, compact) {
-  if (!list.length) return `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg><h3>Nenhum chamado encontrado</h3><p>Tente ajustar os filtros ou crie um novo chamado.</p></div>`;
-  return `<table>
+    function renderChamadosTable(list, compact) {
+      if (!list.length) return `<div class="empty-state"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg><h3>Nenhum chamado encontrado</h3><p>Tente ajustar os filtros ou crie um novo chamado.</p></div>`;
+      return `<table>
     <thead><tr>
       <th>RAT</th><th>Empresa</th><th>Serviço</th>
-      ${!compact?'<th>Tipo</th>':''}
+      ${!compact ? '<th>Tipo</th>' : ''}
       <th>Data</th><th>Valor</th><th>Status</th><th>Financeiro</th>
-      ${!compact?'<th></th>':''}
+      ${!compact ? '<th></th>' : ''}
     </tr></thead>
-    <tbody>${list.map(c=>`
+    <tbody>${list.map(c => `
     <tr onclick="verDetalhe('${c.id}')">
-      <td><div class="td-mono">${c.numero_rat||'—'}</div></td>
-      <td><div class="td-main" style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.empresas?.nome||'—'}</div></td>
+      <td><div class="td-mono">${c.numero_rat || '—'}</div></td>
+      <td><div class="td-main" style="max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.empresas?.nome || '—'}</div></td>
       <td><div class="td-main" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.titulo}</div></td>
-      ${!compact?`<td><div class="td-mono" style="font-size:11px">${c.tipo_servico||'—'}</div></td>`:''}
+      ${!compact ? `<td><div class="td-mono" style="font-size:11px">${c.tipo_servico || '—'}</div></td>` : ''}
       <td><div class="td-mono">${formatDate(c.data_abertura)}</div></td>
-      <td><div class="value-tag">R$ ${(c.valor_servico||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div></td>
+      <td><div class="value-tag">R$ ${(c.valor_servico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div></td>
       <td>${badgeStatus(c.status)}</td>
       <td>${badgeFin(c.status_financeiro)}</td>
-      ${!compact?`<td onclick="event.stopPropagation()" style="white-space:nowrap">
+      ${!compact ? `<td onclick="event.stopPropagation()" style="white-space:nowrap">
         <div class="action-row">
           <button class="btn btn-ghost btn-sm btn-icon" title="Editar" onclick="editarChamado('${c.id}')">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -909,36 +1953,36 @@ function renderChamadosTable(list, compact) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           </button>
         </div>
-      </td>`:''}
+      </td>`: ''}
     </tr>`).join('')}</tbody></table>`;
-}
+    }
 
-// ==================== FINANCEIRO ====================
-async function loadFinanceiro(tab) {
-  finTab = tab;
-  const titles = {aguardando_nf:'Emitir Nota Fiscal',nf_emitida:'NF Emitida — Aguardando',aguardando_pagamento:'Aguardando Pagamento',pago:'Chamados Pagos','':`Todos os Chamados (Financeiro)`};
-  document.getElementById('fin-tab-title').textContent = titles[tab] || 'Todos';
+    // ==================== FINANCEIRO ====================
+    async function loadFinanceiro(tab) {
+      finTab = tab;
+      const titles = { aguardando_nf: 'Emitir Nota Fiscal', nf_emitida: 'NF Emitida — Aguardando', aguardando_pagamento: 'Aguardando Pagamento', pago: 'Chamados Pagos', '': `Todos os Chamados (Financeiro)` };
+      document.getElementById('fin-tab-title').textContent = titles[tab] || 'Todos';
 
-  let filtered = tab ? allChamados.filter(c => c.status_financeiro === tab) : allChamados.filter(c => c.status_financeiro !== 'sem_cobranca');
-  const total = filtered.reduce((s,c) => s+(c.valor_servico||0), 0);
-  document.getElementById('fin-valor-total').textContent = `Total: R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}`;
+      let filtered = tab ? allChamados.filter(c => c.status_financeiro === tab) : allChamados.filter(c => c.status_financeiro !== 'sem_cobranca');
+      const total = filtered.reduce((s, c) => s + (c.valor_servico || 0), 0);
+      document.getElementById('fin-valor-total').textContent = `Total: R$ ${total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
-  if (!filtered.length) {
-    document.getElementById('financeiro-table-container').innerHTML = `<div class="empty-state"><h3>Nenhum chamado nesta categoria</h3></div>`;
-    return;
-  }
+      if (!filtered.length) {
+        document.getElementById('financeiro-table-container').innerHTML = `<div class="empty-state"><h3>Nenhum chamado nesta categoria</h3></div>`;
+        return;
+      }
 
-  document.getElementById('financeiro-table-container').innerHTML = `<table>
+      document.getElementById('financeiro-table-container').innerHTML = `<table>
     <thead><tr><th>RAT</th><th>Empresa</th><th>Serviço</th><th>Emissão NF</th><th>Vencimento</th><th>Pagamento</th><th>Valor</th><th>Status</th><th></th></tr></thead>
-    <tbody>${filtered.map(c=>`
+    <tbody>${filtered.map(c => `
     <tr onclick="verDetalhe('${c.id}')">
-      <td><div class="td-mono">${c.numero_rat||'—'}</div><div style="font-size:10px;color:var(--text3)">${c.numero_nf||'sem NF'}</div></td>
-      <td><div class="td-main">${c.empresas?.nome||'—'}</div></td>
+      <td><div class="td-mono">${c.numero_rat || '—'}</div><div style="font-size:10px;color:var(--text3)">${c.numero_nf || 'sem NF'}</div></td>
+      <td><div class="td-main">${c.empresas?.nome || '—'}</div></td>
       <td><div style="font-size:12px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.titulo}</div></td>
-      <td><div class="td-mono">${formatDate(c.data_emissao_nf)||'—'}</div></td>
-      <td><div class="td-mono" style="${isVencido(c.data_vencimento,c.status_financeiro)?'color:var(--red)':''}">${formatDate(c.data_vencimento)||'—'}</div></td>
-      <td><div class="td-mono" style="color:var(--green)">${formatDate(c.data_pagamento)||'—'}</div></td>
-      <td><div class="value-tag">R$ ${(c.valor_servico||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div></td>
+      <td><div class="td-mono">${formatDate(c.data_emissao_nf) || '—'}</div></td>
+      <td><div class="td-mono" style="${isVencido(c.data_vencimento, c.status_financeiro) ? 'color:var(--red)' : ''}">${formatDate(c.data_vencimento) || '—'}</div></td>
+      <td><div class="td-mono" style="color:var(--green)">${formatDate(c.data_pagamento) || '—'}</div></td>
+      <td><div class="value-tag">R$ ${(c.valor_servico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div></td>
       <td>${badgeFin(c.status_financeiro)}</td>
       <td onclick="event.stopPropagation()">
         <button class="btn btn-ghost btn-sm btn-icon" onclick="editarChamado('${c.id}')">
@@ -946,38 +1990,38 @@ async function loadFinanceiro(tab) {
         </button>
       </td>
     </tr>`).join('')}</tbody></table>`;
-}
+    }
 
-function setFinanceiroTab(tab, el) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  loadFinanceiro(tab);
-}
+    function setFinanceiroTab(tab, el) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      el.classList.add('active');
+      loadFinanceiro(tab);
+    }
 
-function isVencido(data, status) {
-  if (!data || status === 'pago') return false;
-  return new Date(data) < new Date();
-}
+    function isVencido(data, status) {
+      if (!data || status === 'pago') return false;
+      return new Date(data) < new Date();
+    }
 
-// ==================== EMPRESAS ====================
-async function loadEmpresas() {
-  await loadEmpresasData();
-  const container = document.getElementById('empresas-container');
-  if (!allEmpresas.length) {
-    container.innerHTML = `<div class="empty-state"><h3>Nenhuma empresa cadastrada</h3><p>Adicione sua primeira empresa cliente.</p><button class="btn btn-primary" onclick="novaEmpresa()">Nova Empresa</button></div>`;
-    return;
-  }
-  
-  container.innerHTML = `<div class="empresa-grid">${allEmpresas.map(e => {
-    const chamadosEmp = allChamados.filter(c => c.empresa_id === e.id);
-    const totalFaturado = chamadosEmp.reduce((s,c)=>s+(c.valor_servico||0),0);
-    const pendentes = chamadosEmp.filter(c=>['aguardando_nf','nf_emitida','aguardando_pagamento'].includes(c.status_financeiro)).length;
-    return `<div class="empresa-card" onclick="verEmpresa('${e.id}')">
+    // ==================== EMPRESAS ====================
+    async function loadEmpresas() {
+      await loadEmpresasData();
+      const container = document.getElementById('empresas-container');
+      if (!allEmpresas.length) {
+        container.innerHTML = `<div class="empty-state"><h3>Nenhuma empresa cadastrada</h3><p>Adicione sua primeira empresa cliente.</p><button class="btn btn-primary" onclick="novaEmpresa()">Nova Empresa</button></div>`;
+        return;
+      }
+
+      container.innerHTML = `<div class="empresa-grid">${allEmpresas.map(e => {
+        const chamadosEmp = allChamados.filter(c => c.empresa_id === e.id);
+        const totalFaturado = chamadosEmp.reduce((s, c) => s + (c.valor_servico || 0), 0);
+        const pendentes = chamadosEmp.filter(c => ['aguardando_nf', 'nf_emitida', 'aguardando_pagamento'].includes(c.status_financeiro)).length;
+        return `<div class="empresa-card" onclick="verEmpresa('${e.id}')">
       <div style="display:flex;align-items:flex-start;justify-content:space-between">
         <div>
           <h3>${e.nome}</h3>
-          <p>${e.cnpj||'CNPJ não informado'}</p>
-          ${e.contato?`<p style="margin-top:2px">👤 ${e.contato}</p>`:''}
+          <p>${e.cnpj || 'CNPJ não informado'}</p>
+          ${e.contato ? `<p style="margin-top:2px">👤 ${e.contato}</p>` : ''}
         </div>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="event.stopPropagation();editarEmpresa('${e.id}')">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -989,209 +2033,209 @@ async function loadEmpresas() {
           <div class="empresa-stat-lbl">chamados</div>
         </div>
         <div class="empresa-stat">
-          <div class="empresa-stat-val" style="color:${pendentes>0?'var(--amber)':'var(--text3)'}">${pendentes}</div>
+          <div class="empresa-stat-val" style="color:${pendentes > 0 ? 'var(--amber)' : 'var(--text3)'}">${pendentes}</div>
           <div class="empresa-stat-lbl">pendentes</div>
         </div>
         <div class="empresa-stat">
-          <div class="empresa-stat-val" style="color:var(--green);font-size:13px">R$ ${totalFaturado.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <div class="empresa-stat-val" style="color:var(--green);font-size:13px">R$ ${totalFaturado.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           <div class="empresa-stat-lbl">faturado</div>
         </div>
       </div>
     </div>`;
-  }).join('')}</div>`;
-}
+      }).join('')}</div>`;
+    }
 
-function verEmpresa(id) {
-  const emp = allEmpresas.find(e => e.id === id);
-  if (!emp) return;
-  const chamadosEmp = allChamados.filter(c => c.empresa_id === id);
-  document.getElementById('filter-status').value = '';
-  document.getElementById('filter-financeiro').value = '';
-  document.getElementById('search-chamados').value = '';
-  navigate('chamados');
-  setTimeout(() => {
-    document.getElementById('search-chamados').value = emp.nome;
-    filtrarChamados();
-  }, 100);
-}
+    function verEmpresa(id) {
+      const emp = allEmpresas.find(e => e.id === id);
+      if (!emp) return;
+      const chamadosEmp = allChamados.filter(c => c.empresa_id === id);
+      document.getElementById('filter-status').value = '';
+      document.getElementById('filter-financeiro').value = '';
+      document.getElementById('search-chamados').value = '';
+      navigate('chamados');
+      setTimeout(() => {
+        document.getElementById('search-chamados').value = emp.nome;
+        filtrarChamados();
+      }, 100);
+    }
 
-// ==================== CRUD CHAMADOS ====================
-function novoChamado() {
-  document.getElementById('chamado-id').value = '';
-  document.getElementById('modal-chamado-title').textContent = 'Novo Chamado';
-  document.getElementById('chamado-abertura').value = new Date().toISOString().split('T')[0];
-  ['empresa','titulo','descricao','atendimento','conclusao','nf','emissao-nf','vencimento','pagamento','tecnico'].forEach(f => {
-    const el = document.getElementById('chamado-' + f);
-    if (el) el.value = '';
-  });
-  document.getElementById('chamado-horas').value = '';
-  document.getElementById('chamado-valor').value = '';
-  document.getElementById('chamado-status').value = 'pendente';
-  document.getElementById('chamado-status-fin').value = 'sem_cobranca';
-  document.getElementById('chamado-tipo').value = 'Suporte';
-  openModal('modal-chamado');
-}
+    // ==================== CRUD CHAMADOS ====================
+    function novoChamado() {
+      document.getElementById('chamado-id').value = '';
+      document.getElementById('modal-chamado-title').textContent = 'Novo Chamado';
+      document.getElementById('chamado-abertura').value = new Date().toISOString().split('T')[0];
+      ['empresa', 'titulo', 'descricao', 'atendimento', 'conclusao', 'nf', 'emissao-nf', 'vencimento', 'pagamento', 'tecnico'].forEach(f => {
+        const el = document.getElementById('chamado-' + f);
+        if (el) el.value = '';
+      });
+      document.getElementById('chamado-horas').value = '';
+      document.getElementById('chamado-valor').value = '';
+      document.getElementById('chamado-status').value = 'pendente';
+      document.getElementById('chamado-status-fin').value = 'sem_cobranca';
+      document.getElementById('chamado-tipo').value = 'Suporte';
+      openModal('modal-chamado');
+    }
 
-function editarChamado(id) {
-  const c = allChamados.find(x => x.id === id);
-  if (!c) return;
-  document.getElementById('chamado-id').value = c.id;
-  document.getElementById('modal-chamado-title').textContent = 'Editar Chamado — ' + (c.numero_rat||'');
-  document.getElementById('chamado-empresa').value = c.empresa_id || '';
-  document.getElementById('chamado-titulo').value = c.titulo || '';
-  document.getElementById('chamado-descricao').value = c.descricao || '';
-  document.getElementById('chamado-tipo').value = c.tipo_servico || 'Suporte';
-  document.getElementById('chamado-abertura').value = c.data_abertura || '';
-  document.getElementById('chamado-atendimento').value = c.data_atendimento || '';
-  document.getElementById('chamado-conclusao').value = c.data_conclusao || '';
-  document.getElementById('chamado-horas').value = c.horas_trabalhadas || '';
-  document.getElementById('chamado-valor').value = c.valor_servico || '';
-  document.getElementById('chamado-tecnico').value = c.tecnico || '';
-  document.getElementById('chamado-status').value = c.status || 'pendente';
-  document.getElementById('chamado-status-fin').value = c.status_financeiro || 'sem_cobranca';
-  document.getElementById('chamado-nf').value = c.numero_nf || '';
-  document.getElementById('chamado-emissao-nf').value = c.data_emissao_nf || '';
-  document.getElementById('chamado-vencimento').value = c.data_vencimento || '';
-  document.getElementById('chamado-pagamento').value = c.data_pagamento || '';
-  closeModal('modal-detalhe');
-  openModal('modal-chamado');
-}
+    function editarChamado(id) {
+      const c = allChamados.find(x => x.id === id);
+      if (!c) return;
+      document.getElementById('chamado-id').value = c.id;
+      document.getElementById('modal-chamado-title').textContent = 'Editar Chamado — ' + (c.numero_rat || '');
+      document.getElementById('chamado-empresa').value = c.empresa_id || '';
+      document.getElementById('chamado-titulo').value = c.titulo || '';
+      document.getElementById('chamado-descricao').value = c.descricao || '';
+      document.getElementById('chamado-tipo').value = c.tipo_servico || 'Suporte';
+      document.getElementById('chamado-abertura').value = c.data_abertura || '';
+      document.getElementById('chamado-atendimento').value = c.data_atendimento || '';
+      document.getElementById('chamado-conclusao').value = c.data_conclusao || '';
+      document.getElementById('chamado-horas').value = c.horas_trabalhadas || '';
+      document.getElementById('chamado-valor').value = c.valor_servico || '';
+      document.getElementById('chamado-tecnico').value = c.tecnico || '';
+      document.getElementById('chamado-status').value = c.status || 'pendente';
+      document.getElementById('chamado-status-fin').value = c.status_financeiro || 'sem_cobranca';
+      document.getElementById('chamado-nf').value = c.numero_nf || '';
+      document.getElementById('chamado-emissao-nf').value = c.data_emissao_nf || '';
+      document.getElementById('chamado-vencimento').value = c.data_vencimento || '';
+      document.getElementById('chamado-pagamento').value = c.data_pagamento || '';
+      closeModal('modal-detalhe');
+      openModal('modal-chamado');
+    }
 
-async function salvarChamado() {
-  const id = document.getElementById('chamado-id').value;
-  const empresa_id = document.getElementById('chamado-empresa').value;
-  const titulo = document.getElementById('chamado-titulo').value.trim();
-  if (!titulo) { toast('Título é obrigatório', 'error'); return; }
-  if (!empresa_id) { toast('Selecione uma empresa', 'error'); return; }
+    async function salvarChamado() {
+      const id = document.getElementById('chamado-id').value;
+      const empresa_id = document.getElementById('chamado-empresa').value;
+      const titulo = document.getElementById('chamado-titulo').value.trim();
+      if (!titulo) { toast('Título é obrigatório', 'error'); return; }
+      if (!empresa_id) { toast('Selecione uma empresa', 'error'); return; }
 
-  const payload = {
-    empresa_id: empresa_id || null,
-    titulo,
-    descricao: document.getElementById('chamado-descricao').value || null,
-    tipo_servico: document.getElementById('chamado-tipo').value,
-    data_abertura: document.getElementById('chamado-abertura').value || null,
-    data_atendimento: document.getElementById('chamado-atendimento').value || null,
-    data_conclusao: document.getElementById('chamado-conclusao').value || null,
-    horas_trabalhadas: parseFloat(document.getElementById('chamado-horas').value) || 0,
-    valor_servico: parseFloat(document.getElementById('chamado-valor').value) || 0,
-    tecnico: document.getElementById('chamado-tecnico').value || null,
-    status: document.getElementById('chamado-status').value,
-    status_financeiro: document.getElementById('chamado-status-fin').value,
-    numero_nf: document.getElementById('chamado-nf').value || null,
-    data_emissao_nf: document.getElementById('chamado-emissao-nf').value || null,
-    data_vencimento: document.getElementById('chamado-vencimento').value || null,
-    data_pagamento: document.getElementById('chamado-pagamento').value || null,
-  };
+      const payload = {
+        empresa_id: empresa_id || null,
+        titulo,
+        descricao: document.getElementById('chamado-descricao').value || null,
+        tipo_servico: document.getElementById('chamado-tipo').value,
+        data_abertura: document.getElementById('chamado-abertura').value || null,
+        data_atendimento: document.getElementById('chamado-atendimento').value || null,
+        data_conclusao: document.getElementById('chamado-conclusao').value || null,
+        horas_trabalhadas: parseFloat(document.getElementById('chamado-horas').value) || 0,
+        valor_servico: parseFloat(document.getElementById('chamado-valor').value) || 0,
+        tecnico: document.getElementById('chamado-tecnico').value || null,
+        status: document.getElementById('chamado-status').value,
+        status_financeiro: document.getElementById('chamado-status-fin').value,
+        numero_nf: document.getElementById('chamado-nf').value || null,
+        data_emissao_nf: document.getElementById('chamado-emissao-nf').value || null,
+        data_vencimento: document.getElementById('chamado-vencimento').value || null,
+        data_pagamento: document.getElementById('chamado-pagamento').value || null,
+      };
 
-  let error;
-  if (id) {
-    ({ error } = await supabase.from('chamados').update(payload).eq('id', id));
-  } else {
-    ({ error } = await supabase.from('chamados').insert([payload]));
-  }
+      let error;
+      if (id) {
+        ({ error } = await supabase.from('chamados').update(payload).eq('id', id));
+      } else {
+        ({ error } = await supabase.from('chamados').insert([payload]));
+      }
 
-  if (error) { toast('Erro: ' + error.message, 'error'); return; }
-  toast(id ? 'Chamado atualizado!' : 'Chamado criado!', 'success');
-  closeModal('modal-chamado');
-  await loadChamadosData();
-  updateBadges();
-  const currentPage = document.querySelector('.page.active')?.id?.replace('page-','');
-  if (currentPage === 'chamados') filtrarChamados();
-  if (currentPage === 'financeiro') loadFinanceiro(finTab);
-  if (currentPage === 'dashboard') loadDashboard();
-}
+      if (error) { toast('Erro: ' + error.message, 'error'); return; }
+      toast(id ? 'Chamado atualizado!' : 'Chamado criado!', 'success');
+      closeModal('modal-chamado');
+      await loadChamadosData();
+      updateBadges();
+      const currentPage = document.querySelector('.page.active')?.id?.replace('page-', '');
+      if (currentPage === 'chamados') filtrarChamados();
+      if (currentPage === 'financeiro') loadFinanceiro(finTab);
+      if (currentPage === 'dashboard') loadDashboard();
+    }
 
-async function excluirChamado(id) {
-  const c = allChamados.find(x => x.id === id);
-  if (!confirm(`Excluir chamado "${c?.titulo}"?\n\nEsta ação não pode ser desfeita.`)) return;
-  const { error } = await supabase.from('chamados').delete().eq('id', id);
-  if (error) { toast('Erro ao excluir', 'error'); return; }
-  toast('Chamado excluído', 'info');
-  await loadChamadosData();
-  updateBadges();
-  filtrarChamados();
-}
+    async function excluirChamado(id) {
+      const c = allChamados.find(x => x.id === id);
+      if (!confirm(`Excluir chamado "${c?.titulo}"?\n\nEsta ação não pode ser desfeita.`)) return;
+      const { error } = await supabase.from('chamados').delete().eq('id', id);
+      if (error) { toast('Erro ao excluir', 'error'); return; }
+      toast('Chamado excluído', 'info');
+      await loadChamadosData();
+      updateBadges();
+      filtrarChamados();
+    }
 
-// ==================== CRUD EMPRESAS ====================
-function novaEmpresa() {
-  document.getElementById('empresa-id').value = '';
-  document.getElementById('modal-empresa-title').textContent = 'Nova Empresa';
-  ['nome','cnpj','telefone','contato','email','endereco'].forEach(f => {
-    document.getElementById('empresa-' + f).value = '';
-  });
-  openModal('modal-empresa');
-}
+    // ==================== CRUD EMPRESAS ====================
+    function novaEmpresa() {
+      document.getElementById('empresa-id').value = '';
+      document.getElementById('modal-empresa-title').textContent = 'Nova Empresa';
+      ['nome', 'cnpj', 'telefone', 'contato', 'email', 'endereco'].forEach(f => {
+        document.getElementById('empresa-' + f).value = '';
+      });
+      openModal('modal-empresa');
+    }
 
-function editarEmpresa(id) {
-  const e = allEmpresas.find(x => x.id === id);
-  if (!e) return;
-  document.getElementById('empresa-id').value = e.id;
-  document.getElementById('modal-empresa-title').textContent = 'Editar Empresa';
-  document.getElementById('empresa-nome').value = e.nome || '';
-  document.getElementById('empresa-cnpj').value = e.cnpj || '';
-  document.getElementById('empresa-telefone').value = e.telefone || '';
-  document.getElementById('empresa-contato').value = e.contato || '';
-  document.getElementById('empresa-email').value = e.email || '';
-  document.getElementById('empresa-endereco').value = e.endereco || '';
-  openModal('modal-empresa');
-}
+    function editarEmpresa(id) {
+      const e = allEmpresas.find(x => x.id === id);
+      if (!e) return;
+      document.getElementById('empresa-id').value = e.id;
+      document.getElementById('modal-empresa-title').textContent = 'Editar Empresa';
+      document.getElementById('empresa-nome').value = e.nome || '';
+      document.getElementById('empresa-cnpj').value = e.cnpj || '';
+      document.getElementById('empresa-telefone').value = e.telefone || '';
+      document.getElementById('empresa-contato').value = e.contato || '';
+      document.getElementById('empresa-email').value = e.email || '';
+      document.getElementById('empresa-endereco').value = e.endereco || '';
+      openModal('modal-empresa');
+    }
 
-async function salvarEmpresa() {
-  const id = document.getElementById('empresa-id').value;
-  const nome = document.getElementById('empresa-nome').value.trim();
-  if (!nome) { toast('Nome é obrigatório', 'error'); return; }
+    async function salvarEmpresa() {
+      const id = document.getElementById('empresa-id').value;
+      const nome = document.getElementById('empresa-nome').value.trim();
+      if (!nome) { toast('Nome é obrigatório', 'error'); return; }
 
-  const payload = {
-    nome,
-    cnpj: document.getElementById('empresa-cnpj').value || null,
-    telefone: document.getElementById('empresa-telefone').value || null,
-    contato: document.getElementById('empresa-contato').value || null,
-    email: document.getElementById('empresa-email').value || null,
-    endereco: document.getElementById('empresa-endereco').value || null,
-  };
+      const payload = {
+        nome,
+        cnpj: document.getElementById('empresa-cnpj').value || null,
+        telefone: document.getElementById('empresa-telefone').value || null,
+        contato: document.getElementById('empresa-contato').value || null,
+        email: document.getElementById('empresa-email').value || null,
+        endereco: document.getElementById('empresa-endereco').value || null,
+      };
 
-  let error;
-  if (id) ({ error } = await supabase.from('empresas').update(payload).eq('id', id));
-  else ({ error } = await supabase.from('empresas').insert([payload]));
+      let error;
+      if (id) ({ error } = await supabase.from('empresas').update(payload).eq('id', id));
+      else ({ error } = await supabase.from('empresas').insert([payload]));
 
-  if (error) { toast('Erro: ' + error.message, 'error'); return; }
-  toast(id ? 'Empresa atualizada!' : 'Empresa cadastrada!', 'success');
-  closeModal('modal-empresa');
-  await loadEmpresasData();
-  loadEmpresas();
-}
+      if (error) { toast('Erro: ' + error.message, 'error'); return; }
+      toast(id ? 'Empresa atualizada!' : 'Empresa cadastrada!', 'success');
+      closeModal('modal-empresa');
+      await loadEmpresasData();
+      loadEmpresas();
+    }
 
-// ==================== DETALHE CHAMADO ====================
-function verDetalhe(id) {
-  const c = allChamados.find(x => x.id === id);
-  if (!c) return;
-  document.getElementById('detalhe-rat').textContent = c.numero_rat || 'SEM RAT';
-  document.getElementById('detalhe-titulo').textContent = c.titulo;
-  document.getElementById('detalhe-edit-btn').setAttribute('onclick', `editarChamado('${c.id}')`);
+    // ==================== DETALHE CHAMADO ====================
+    function verDetalhe(id) {
+      const c = allChamados.find(x => x.id === id);
+      if (!c) return;
+      document.getElementById('detalhe-rat').textContent = c.numero_rat || 'SEM RAT';
+      document.getElementById('detalhe-titulo').textContent = c.titulo;
+      document.getElementById('detalhe-edit-btn').setAttribute('onclick', `editarChamado('${c.id}')`);
 
-  const finSteps = ['sem_cobranca','aguardando_nf','nf_emitida','aguardando_pagamento','pago'];
-  const finLabels = {sem_cobranca:'Sem cobrança',aguardando_nf:'Aguardando emissão de NF',nf_emitida:'NF emitida',aguardando_pagamento:'Aguardando pagamento',pago:'Pago'};
-  const curFinIdx = finSteps.indexOf(c.status_financeiro);
+      const finSteps = ['sem_cobranca', 'aguardando_nf', 'nf_emitida', 'aguardando_pagamento', 'pago'];
+      const finLabels = { sem_cobranca: 'Sem cobrança', aguardando_nf: 'Aguardando emissão de NF', nf_emitida: 'NF emitida', aguardando_pagamento: 'Aguardando pagamento', pago: 'Pago' };
+      const curFinIdx = finSteps.indexOf(c.status_financeiro);
 
-  document.getElementById('detalhe-body').innerHTML = `
+      document.getElementById('detalhe-body').innerHTML = `
     <div class="detail-grid">
       <div style="display:flex;flex-direction:column;gap:12px">
         <div class="detail-card">
           <h4>Informações do Chamado</h4>
-          ${row('Empresa', c.empresas?.nome||'—')}
-          ${row('Tipo de serviço', c.tipo_servico||'—')}
-          ${row('Técnico', c.tecnico||'—')}
-          ${row('Abertura', formatDate(c.data_abertura)||'—')}
-          ${row('Atendimento', formatDate(c.data_atendimento)||'—')}
-          ${row('Conclusão', formatDate(c.data_conclusao)||'—')}
+          ${row('Empresa', c.empresas?.nome || '—')}
+          ${row('Tipo de serviço', c.tipo_servico || '—')}
+          ${row('Técnico', c.tecnico || '—')}
+          ${row('Abertura', formatDate(c.data_abertura) || '—')}
+          ${row('Atendimento', formatDate(c.data_atendimento) || '—')}
+          ${row('Conclusão', formatDate(c.data_conclusao) || '—')}
           ${row('Horas', c.horas_trabalhadas ? c.horas_trabalhadas + 'h' : '—')}
           ${c.descricao ? `<div style="margin-top:12px;padding:10px;background:var(--surface3);border-radius:var(--radius);font-size:12px;color:var(--text2);line-height:1.6">${c.descricao}</div>` : ''}
         </div>
         <div class="detail-card">
           <h4>Nota Fiscal</h4>
-          ${row('Número NF', c.numero_nf||'—')}
-          ${row('Emissão', formatDate(c.data_emissao_nf)||'—')}
-          ${row('Vencimento', c.data_vencimento ? `<span style="${isVencido(c.data_vencimento,c.status_financeiro)?'color:var(--red)':''}">${formatDate(c.data_vencimento)}</span>` : '—')}
+          ${row('Número NF', c.numero_nf || '—')}
+          ${row('Emissão', formatDate(c.data_emissao_nf) || '—')}
+          ${row('Vencimento', c.data_vencimento ? `<span style="${isVencido(c.data_vencimento, c.status_financeiro) ? 'color:var(--red)' : ''}">${formatDate(c.data_vencimento)}</span>` : '—')}
           ${row('Data pagamento', c.data_pagamento ? `<span style="color:var(--green)">${formatDate(c.data_pagamento)}</span>` : '—')}
         </div>
       </div>
@@ -1204,84 +2248,93 @@ function verDetalhe(id) {
         </div>
         <div class="detail-card">
           <h4>Valor</h4>
-          <div style="font-size:28px;font-family:var(--mono);font-weight:700;color:var(--green)">R$ ${(c.valor_servico||0).toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
+          <div style="font-size:28px;font-family:var(--mono);font-weight:700;color:var(--green)">R$ ${(c.valor_servico || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
         </div>
         <div class="detail-card">
           <h4>Progresso Financeiro</h4>
           <div class="timeline">
-            ${finSteps.map((s,i) => {
-              const state = i < curFinIdx ? 'done' : i === curFinIdx ? 'current' : '';
-              return `<div class="timeline-step ${state}">
+            ${finSteps.map((s, i) => {
+        const state = i < curFinIdx ? 'done' : i === curFinIdx ? 'current' : '';
+        return `<div class="timeline-step ${state}">
                 <div class="timeline-dot ${state}"></div>
                 <div class="timeline-text">${finLabels[s]}</div>
               </div>`;
-            }).join('')}
+      }).join('')}
           </div>
         </div>
       </div>
     </div>`;
-  openModal('modal-detalhe');
-}
-
-function row(key, val) {
-  return `<div class="detail-row"><span class="detail-key">${key}</span><span class="detail-val">${val}</span></div>`;
-}
-
-// ==================== BADGES ====================
-function badgeStatus(s) {
-  const labels = {pendente:'Pendente',em_andamento:'Em andamento',concluido:'Concluído',cancelado:'Cancelado'};
-  return `<span class="badge badge-${s}"><span class="badge-dot badge-dot-${s}"></span>${labels[s]||s}</span>`;
-}
-function badgeFin(s) {
-  const labels = {sem_cobranca:'Sem cobrança',aguardando_nf:'Emitir NF',nf_emitida:'NF Emitida',aguardando_pagamento:'Ag. Pagamento',pago:'Pago',cancelado:'Cancelado'};
-  const cls = s === 'cancelado' ? 'badge-cancelado-fin' : `badge-${s}`;
-  return `<span class="badge ${cls}">${labels[s]||s}</span>`;
-}
-
-// ==================== HELPERS ====================
-function formatDate(d) {
-  if (!d) return null;
-  const dt = new Date(d + 'T12:00:00');
-  return dt.toLocaleDateString('pt-BR');
-}
-
-function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
-function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
-
-function toast(msg, type='info') {
-  const tc = document.getElementById('toast-container');
-  const t = document.createElement('div');
-  t.className = `toast ${type}`;
-  const icons = {success:'✅',error:'❌',info:'ℹ️'};
-  t.innerHTML = `<span>${icons[type]||'•'}</span><span>${msg}</span>`;
-  tc.appendChild(t);
-  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 200); }, 3000);
-}
-
-// Close modal on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) overlay.classList.add('hidden');
-  });
-});
-
-// Keyboard ESC
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => m.classList.add('hidden'));
-});
-
-// ==================== INIT ====================
-(function init() {
-  if (SUPABASE_URL && SUPABASE_KEY) {
-    document.getElementById('cfg-url').value = SUPABASE_URL;
-    document.getElementById('cfg-key').value = SUPABASE_KEY;
-    if (initSupabase(SUPABASE_URL, SUPABASE_KEY)) {
-      loadAllData().then(() => navigate('dashboard'));
-      return;
+      openModal('modal-detalhe');
     }
-  }
-  navigate('config');
-})();
-</script>
+
+    function row(key, val) {
+      return `<div class="detail-row"><span class="detail-key">${key}</span><span class="detail-val">${val}</span></div>`;
+    }
+
+    // ==================== BADGES ====================
+    function badgeStatus(s) {
+      const labels = { pendente: 'Pendente', em_andamento: 'Em andamento', concluido: 'Concluído', cancelado: 'Cancelado' };
+      return `<span class="badge badge-${s}"><span class="badge-dot badge-dot-${s}"></span>${labels[s] || s}</span>`;
+    }
+    function badgeFin(s) {
+      const labels = { sem_cobranca: 'Sem cobrança', aguardando_nf: 'Emitir NF', nf_emitida: 'NF Emitida', aguardando_pagamento: 'Ag. Pagamento', pago: 'Pago', cancelado: 'Cancelado' };
+      const cls = s === 'cancelado' ? 'badge-cancelado-fin' : `badge-${s}`;
+      return `<span class="badge ${cls}">${labels[s] || s}</span>`;
+    }
+
+    // ==================== HELPERS ====================
+    function formatDate(d) {
+      if (!d) return null;
+      const dt = new Date(d + 'T12:00:00');
+      return dt.toLocaleDateString('pt-BR');
+    }
+
+    function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+    function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+    function toast(msg, type = 'info') {
+      const tc = document.getElementById('toast-container');
+      const t = document.createElement('div');
+      t.className = `toast ${type}`;
+      const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+      t.innerHTML = `<span>${icons[type] || '•'}</span><span>${msg}</span>`;
+      tc.appendChild(t);
+      setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 200); }, 3000);
+    }
+
+    // Close modal on overlay click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', e => {
+        if (e.target === overlay) overlay.classList.add('hidden');
+      });
+    });
+
+    // Keyboard ESC
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.querySelectorAll('.modal-overlay:not(.hidden)').forEach(m => m.classList.add('hidden'));
+    });
+
+    // ==================== INIT ====================
+    function tryAutoConnect() {
+      if (!SUPABASE_URL || !SUPABASE_KEY) { navigate('config'); return; }
+      document.getElementById('cfg-url').value = SUPABASE_URL;
+      document.getElementById('cfg-key').value = SUPABASE_KEY;
+      const lib = getSupabaseLib();
+      if (!lib) {
+        // biblioteca ainda carregando, tenta de novo em 500ms
+        setTimeout(tryAutoConnect, 500); return;
+      }
+      try {
+        supabase = lib.createClient(SUPABASE_URL, SUPABASE_KEY);
+        document.getElementById('conn-status').style.color = 'var(--green)';
+        document.getElementById('conn-status').textContent = '⬤ conectado';
+        loadAllData().then(() => navigate('dashboard'));
+      } catch (e) {
+        navigate('config');
+      }
+    }
+    document.addEventListener('DOMContentLoaded', tryAutoConnect);
+  </script>
 </body>
+
 </html>
