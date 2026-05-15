@@ -1208,7 +1208,7 @@
     </header>
 
     <div class="rise rise-1">
-      <p class="eyebrow">Olá, <span id="nomeColab">…</span></p>
+      <p class="eyebrow">Olá, <span id="nomeColab">…</span> <span id="empresaColab" class="muted small"></span></p>
       <h1 id="dataHoje">Cardápio de hoje</h1>
     </div>
 
@@ -1438,7 +1438,7 @@
           }
           return;
         }
-        setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, setor: resp.setor });
+        setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, empresa: resp.empresa });
         await abrirHome();
       } catch (err) {
         console.error(err);
@@ -1458,6 +1458,7 @@
       if (!colab) { showScreen("screen-login"); return; }
 
       $("nomeColab").textContent = colab.nome;
+      const empEl = $("empresaColab"); if (empEl && colab.empresa) { empEl.textContent = "· " + colab.empresa; }
       const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
       $("dataHoje").textContent = "Cardápio de " + hoje;
 
@@ -1506,13 +1507,37 @@
 
       let html = "";
 
+      // Pega configurações de abertura/fechamento do servidor
+      const { data: cfgHorarios } = await sb.from("configuracoes")
+        .select("chave, valor")
+        .in("chave", ["horario_abertura_pedidos", "horario_fechamento_pedidos"]);
+      const cfgMap = Object.fromEntries((cfgHorarios || []).map(c => [c.chave, c.valor]));
+      const horaAbertura = cfgMap.horario_abertura_pedidos || "07:00";
+      const horaFechamento = cfgMap.horario_fechamento_pedidos || "10:30";
+
+      // Detecta motivo predominante
+      const motivos = data.map(item => item.motivo_encerrado).filter(Boolean);
+      const motivoPred = motivos[0] || null;
+
       if (tudoEncerrado) {
+        let bannerMsg = "";
+        let bannerIcon = "⏰";
+        if (motivoPred === "antes_abertura") {
+          bannerMsg = `Pedidos abrem às <strong>${horaAbertura}</strong>. Volte mais tarde!`;
+          bannerIcon = "🕐";
+        } else if (motivoPred === "apos_fechamento" || motivoPred === "apos_limite") {
+          bannerMsg = `Pedidos encerrados às <strong>${horaFechamento}</strong>. Volte amanhã!`;
+          bannerIcon = "⏰";
+        } else {
+          bannerMsg = "Pedidos encerrados por hoje.";
+        }
         html += `<div class="card" style="background: rgba(210,152,34,.12); border: 1px solid rgba(210,152,34,.3); margin-bottom: 16px;">
           <div style="display:flex; gap:10px; align-items:flex-start;">
-            <div style="font-size:20px;">⏰</div>
+            <div style="font-size:20px;">${bannerIcon}</div>
             <div>
-              <div style="font-weight:600;">Pedidos encerrados</div>
-              <div class="small muted">O horário-limite para pedidos de hoje já passou. Tente amanhã!</div>
+              <div style="font-weight:600;">Fora do horário</div>
+              <div class="small muted">${bannerMsg}</div>
+              <div class="small muted" style="margin-top:4px;">Horário de pedidos: <strong>${horaAbertura}</strong> às <strong>${horaFechamento}</strong></div>
             </div>
           </div>
         </div>`;
@@ -1522,7 +1547,7 @@
         html += `<div class="fornecedor-bloco">
           <div class="fornecedor-head">
             <h2>${fornecedor.nome}</h2>
-            ${horario_limite ? `<span class="small muted">${encerrado ? '⏰ Encerrado' : 'Pedidos até ' + horario_limite.slice(0, 5)}</span>` : ''}
+            ${horario_limite ? `<span class="small muted">${encerrado ? '⏰ Enc. ' + horario_limite.slice(0, 5) : '🟢 Até ' + horario_limite.slice(0, 5)}</span>` : ''}
           </div>`;
         pratos.forEach(p => {
           html += `<div class="prato ${encerrado ? 'prato-encerrado' : ''}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${encerrado ? 'style="opacity:.55;"' : ''}>
@@ -1884,6 +1909,7 @@
 
       $("sucessoResumo").innerHTML = `
     <div><strong>${state.selPrato.fornecedor.nome}</strong></div>
+    <div class="small muted">${getColab()?.empresa ? "🏢 " + getColab().empresa : ""}</div>
     <div>${state.selPrato.nome}</div>
     ${nomesAcomp.length ? `<div class="small muted" style="margin-top:6px;">+ ${nomesAcomp.join(", ")}</div>` : ""}
     ${$("obs").value.trim() ? `<div class="small" style="margin-top:6px;">📝 ${$("obs").value.trim()}</div>` : ""}
@@ -2112,14 +2138,51 @@
       }
     }
 
-    // --- Service Worker (necessário para push em background) ---
+    // --- VAPID public key ---
+    const VAPID_PUBLIC_KEY = "BAuF3u4tWK84I2dHFN0fkKnZDBol3xK7WbGQrE7GntWxKNznJ10ZJ6VqCprvdutUqMYmNFrn6lgIW69sjg9aQTY";
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = "=".repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
+    // --- Registrar SW + subscrever push real ---
     async function registrarServiceWorker() {
-      if (!("serviceWorker" in navigator)) return;
-      try {
-        await navigator.serviceWorker.register("/marmita-sw.js");
-      } catch (e) {
-        console.warn("SW não registrado (ok em dev):", e.message);
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        console.warn("Push não suportado neste browser.");
+        return;
       }
+      try {
+        const reg = await navigator.serviceWorker.register("/marmita-sw.js");
+        await navigator.serviceWorker.ready;
+
+        // Verifica se já tem subscrição ativa
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+          });
+        }
+        await salvarSubscricao(sub);
+      } catch (e) {
+        console.warn("SW/Push não registrado:", e.message);
+      }
+    }
+
+    async function salvarSubscricao(sub) {
+      const colab = getColab();
+      if (!colab) return;
+      const j = sub.toJSON();
+      await sb.from("push_subscriptions").upsert({
+        colaborador_id: colab.id,
+        endpoint: j.endpoint,
+        p256dh: j.keys.p256dh,
+        auth: j.keys.auth,
+        user_agent: navigator.userAgent.slice(0, 200)
+      }, { onConflict: "endpoint" });
     }
 
     // --- Notificação local (sem SW, funciona com app aberto) ---
@@ -2235,6 +2298,41 @@
 
       await checarFiado();
       fiadorPollTimer = setInterval(checarFiado, 5 * 60 * 1000); // a cada 5 min
+    }
+
+    // =====================================================================
+    // LISTENER DE MENSAGENS DO SERVICE WORKER
+    // =====================================================================
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", async (event) => {
+        const { type, sub } = event.data || {};
+
+        // Rotação de chave VAPID: re-salva no Supabase
+        if (type === "PUSH_SUBSCRIPTION_CHANGED" && sub) {
+          const colab = getColab();
+          if (colab) {
+            await sb.from("push_subscriptions").upsert({
+              colaborador_id: colab.id,
+              endpoint: sub.endpoint,
+              p256dh: sub.keys.p256dh,
+              auth: sub.keys.auth,
+              user_agent: navigator.userAgent.slice(0, 200)
+            }, { onConflict: "endpoint" });
+          }
+        }
+
+        // Clique em notificação com app aberto: navega para a aba correta
+        if (type === "NOTIF_CLICK") {
+          if (event.data.url?.includes("meusPedidos")) {
+            document.querySelectorAll(".segmented button").forEach(b => {
+              b.classList.toggle("active", b.dataset.tab === "meusPedidos");
+            });
+            document.getElementById("tab-cardapio").classList.add("hidden");
+            document.getElementById("tab-meusPedidos").classList.remove("hidden");
+            await carregarMeusPedidos();
+          }
+        }
+      });
     }
 
     // =====================================================================

@@ -1560,7 +1560,7 @@
           id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em,
           prato:pratos ( nome ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
-          colaborador:colaboradores ( id, nome, setor, whatsapp ),
+          colaborador:colaboradores ( id, nome, empresa, whatsapp ),
           acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
         `)
         .eq("data", data)
@@ -1607,7 +1607,7 @@
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
           html += `<div class="pedido-linha">
             <div class="pl-info">
-              <strong>${p.colaborador?.nome ?? "—"}</strong> <span class="small muted">(${p.colaborador?.setor ?? ""})</span><br/>
+              <strong>${p.colaborador?.nome ?? "—"}</strong> <span class="small muted">(${p.colaborador?.empresa ?? ""})</span><br/>
               <span class="small">${p.prato?.nome}${acomps ? " + " + acomps : ""}</span>
               ${p.observacoes ? `<br/><span class="small muted">📝 ${p.observacoes}</span>` : ""}
             </div>
@@ -1732,7 +1732,7 @@ Bom apetite! 😋`;
           id, preco_total, observacoes, forma_pagamento, status_pagamento,
           prato:pratos ( nome, preco ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
-          colaborador:colaboradores ( nome, setor ),
+          colaborador:colaboradores ( nome, empresa ),
           acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome, preco_extra ) )
         `)
         .eq("data", data)
@@ -1779,7 +1779,7 @@ Bom apetite! 😋`;
                   <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
                     <div style="flex:1; min-width:0;">
                       <strong style="font-size:.92rem;">${p.colaborador?.nome}</strong>
-                      ${p.colaborador?.setor ? `<span class="small muted"> · ${p.colaborador.setor}</span>` : ""}
+                      ${p.colaborador?.empresa ? `<span class="small muted"> · ${p.colaborador.setor}</span>` : ""}
                       <div class="small" style="margin-top:2px;">${p.prato?.nome}${acomps.length ? ` <span class="muted">+ ${acomps.join(", ")}</span>` : ""}</div>
                       ${p.observacoes ? `<div class="small muted" style="margin-top:2px;">📝 ${p.observacoes}</div>` : ""}
                     </div>
@@ -1810,7 +1810,7 @@ Bom apetite! 😋`;
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
               <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="gerarMsgColetivo('${fid}', '${fornecedor.nome.replace(/'/g, "\\'")}', '${fornecedor.whatsapp}', ${peds.length}, ${subtotal}, ${JSON.stringify(peds.map(p => ({
           nome: p.colaborador?.nome,
-          setor: p.colaborador?.setor,
+          setor: p.colaborador?.empresa,
           prato: p.prato?.nome,
           acomps: (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean),
           obs: p.observacoes,
@@ -1863,19 +1863,32 @@ Bom apetite! 😋`;
       msg += `📅 ${dataFmt}\n`;
       msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-      pedidosData.forEach((p, i) => {
-        const precoComFrete = Number(p.preco) + fretePorPedido;
-        msg += `*${i + 1}. ${p.nome}*`;
-        if (p.setor) msg += ` _(${p.setor})_`;
-        msg += `\n`;
-        msg += `   🍽️ ${p.prato}`;
-        if (p.acomps && p.acomps.length) msg += `\n   ➕ ${p.acomps.join(", ")}`;
-        msg += `\n`;
-        if (p.obs) msg += `   📝 _${p.obs}_\n`;
-        msg += `   💰 Prato: *${fmtBRL(p.preco)}*`;
-        if (frete > 0) msg += ` + frete: *${fmtBRL(fretePorPedido)}* = *${fmtBRL(precoComFrete)}*`;
-        msg += `\n   💳 ${p.pag}\n\n`;
+      // Agrupa por empresa para mensagem organizada
+      const pedidosPorEmpresa = new Map();
+      pedidosData.forEach(p => {
+        const emp = p.empresa || "Sem empresa";
+        if (!pedidosPorEmpresa.has(emp)) pedidosPorEmpresa.set(emp, []);
+        pedidosPorEmpresa.get(emp).push(p);
       });
+
+      let numGlobal = 1;
+      for (const [empresa, peds] of [...pedidosPorEmpresa.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+        if (pedidosPorEmpresa.size > 1) {
+          msg += `🏢 *${empresa}*\n`;
+        }
+        peds.forEach(p => {
+          const precoComFrete = Number(p.preco) + fretePorPedido;
+          msg += `  *${numGlobal++}. ${p.nome}*\n`;
+          msg += `  🍽️ ${p.prato}`;
+          if (p.acomps && p.acomps.length) msg += ` ➕ ${p.acomps.join(", ")}`;
+          msg += `\n`;
+          if (p.obs) msg += `  📝 _${p.obs}_\n`;
+          msg += `  💰 *${fmtBRL(p.preco)}*`;
+          if (frete > 0) msg += ` + 🛵 *${fmtBRL(fretePorPedido)}* = *${fmtBRL(precoComFrete)}*`;
+          msg += `\n  💳 ${p.pag}\n`;
+        });
+        msg += `\n`;
+      }
 
       msg += `━━━━━━━━━━━━━━━━━━━━\n`;
       msg += `📦 *${qtd} marmita${qtd > 1 ? "s" : ""}*\n`;
@@ -2217,7 +2230,7 @@ Bom apetite! 😋`;
     // =====================================================================
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, setor, whatsapp, ativo").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, whatsapp, ativo").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
@@ -2226,7 +2239,7 @@ Bom apetite! 😋`;
         <tbody>${data.map(c => `<tr>
           <td><strong>${c.nome}</strong></td>
           <td data-label="Matrícula">${c.matricula || "—"}</td>
-          <td data-label="Setor">${c.setor || "—"}</td>
+          <td data-label="Empresa">${c.setor || "—"}</td>
           <td data-label="WhatsApp"><span class="small muted">${c.whatsapp || "—"}</span></td>
           <td data-label="Status">${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
@@ -2243,7 +2256,7 @@ Bom apetite! 😋`;
       $("modalBody").innerHTML = `
         <div class="field"><label>Nome</label><input id="cNome" class="input" value="${c?.nome ?? ""}"/></div>
         <div class="field"><label>Matrícula (login)</label><input id="cMat" class="input" inputmode="numeric" value="${c?.matricula ?? ""}"/></div>
-        <div class="field"><label>Setor</label><input id="cSetor" class="input" value="${c?.setor ?? ""}"/></div>
+        <div class="field"><label>Empresa (ex: RD Saúde, Ambev…)</label><input id="cSetor" class="input" value="${c?.empresa ?? ""}"/></div>
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="cWhats" class="input" inputmode="numeric" value="${c?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
         ${!c ? '<div class="field"><label>PIN (4 dígitos)</label><input id="cPin" class="input" maxlength="4" inputmode="numeric" placeholder="ex.: 1234"/></div>' : ""}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cAtivo" ${c?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
@@ -2254,7 +2267,7 @@ Bom apetite! 😋`;
         const payload = {
           nome: $("cNome").value.trim(),
           matricula: $("cMat").value.trim() || null,
-          setor: $("cSetor").value.trim() || null,
+          empresa: $("cSetor").value.trim() || null,
           whatsapp: $("cWhats").value.trim().replace(/\D/g, "") || null,
           ativo: $("cAtivo").checked
         };
