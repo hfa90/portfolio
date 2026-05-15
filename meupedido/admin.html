@@ -1243,7 +1243,8 @@
         <h1>Pedidos de <span id="pedidosData">hoje</span></h1>
         <div class="sh-actions">
           <input type="date" id="pedidosFiltroData" class="input" />
-          <button class="btn btn-primary btn-block" id="btnGerarWA">📱 Gerar WhatsApp</button>
+          <button class="btn btn-primary btn-block" id="btnGerarWA">📱 WhatsApp Fornecedor</button>
+          <button class="btn btn-olive btn-block" id="btnPedidoColetivo">🛵 Pedido Coletivo</button>
         </div>
       </div>
       <div id="pedidosStats" class="stats"></div>
@@ -1360,8 +1361,18 @@
             <input id="cfgFechDiaMes" type="number" min="1" max="31" class="input hidden" />
           </div>
         </div>
+        <div class="row" style="grid-template-columns:1fr 1fr;">
+          <div class="field">
+            <label>Abertura dos pedidos</label>
+            <input id="cfgHorarioAbertura" class="input" type="time" placeholder="07:00" />
+          </div>
+          <div class="field">
+            <label>Fechamento dos pedidos</label>
+            <input id="cfgHorarioFechamento" class="input" type="time" placeholder="10:30" />
+          </div>
+        </div>
         <div class="field">
-          <label>Horário-limite padrão</label>
+          <label>Horário-limite padrão (herdado pelo cardápio)</label>
           <input id="cfgHorarioLimite" class="input" type="time" />
         </div>
         <button class="btn btn-primary btn-block" id="btnSalvarConfig">Salvar configurações</button>
@@ -1712,8 +1723,198 @@ Bom apetite! 😋`;
     });
 
     // =====================================================================
-    // CARDÁPIO DO DIA
+    // PEDIDO COLETIVO (com frete dividido)
     // =====================================================================
+    $("btnPedidoColetivo").addEventListener("click", async () => {
+      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const { data: pedidos } = await sb.from("pedidos")
+        .select(`
+          id, preco_total, observacoes, forma_pagamento, status_pagamento,
+          prato:pratos ( nome, preco ),
+          fornecedor:fornecedores ( id, nome, whatsapp ),
+          colaborador:colaboradores ( nome, setor ),
+          acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome, preco_extra ) )
+        `)
+        .eq("data", data)
+        .neq("status", "cancelado")
+        .order("criado_em");
+
+      if (!pedidos || pedidos.length === 0) {
+        alert("Nenhum pedido para gerar mensagem coletiva.");
+        return;
+      }
+
+      const dataFmt = new Date(data + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+      const dataFmtCurta = new Date(data + "T12:00:00").toLocaleDateString("pt-BR");
+
+      // Agrupa por fornecedor
+      const grupos = new Map();
+      pedidos.forEach(p => {
+        const fid = p.fornecedor?.id;
+        if (!grupos.has(fid)) grupos.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
+        grupos.get(fid).pedidos.push(p);
+      });
+
+      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado" };
+
+      let bodyHtml = `<p class="small muted" style="margin-bottom:14px;">Informe o valor do frete para cada fornecedor — ele será dividido igualmente entre os pedidos.</p>`;
+
+      for (const { fornecedor, pedidos: peds } of grupos.values()) {
+        const subtotal = peds.reduce((s, p) => s + Number(p.preco_total), 0);
+        const fid = fornecedor.id;
+
+        bodyHtml += `
+          <div class="card" style="margin-bottom:14px;" id="coletivo-card-${fid}">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; gap:8px; flex-wrap:wrap;">
+              <h3 style="margin:0;">${fornecedor.nome}</h3>
+              <span class="badge aberto">${peds.length} pedido${peds.length > 1 ? "s" : ""}</span>
+            </div>
+
+            <!-- Lista de pedidos -->
+            <div style="margin-bottom:12px; border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden;">
+              ${peds.map((p, i) => {
+          const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean);
+          const acompsExtra = (p.acompanhamentos || []).reduce((s, a) => s + Number(a.acompanhamento?.preco_extra || 0), 0);
+          return `<div style="padding:10px 12px; ${i > 0 ? "border-top:1px dashed var(--line);" : ""}">
+                  <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">
+                    <div style="flex:1; min-width:0;">
+                      <strong style="font-size:.92rem;">${p.colaborador?.nome}</strong>
+                      ${p.colaborador?.setor ? `<span class="small muted"> · ${p.colaborador.setor}</span>` : ""}
+                      <div class="small" style="margin-top:2px;">${p.prato?.nome}${acomps.length ? ` <span class="muted">+ ${acomps.join(", ")}</span>` : ""}</div>
+                      ${p.observacoes ? `<div class="small muted" style="margin-top:2px;">📝 ${p.observacoes}</div>` : ""}
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                      <div style="font-weight:700; color:var(--brick);">${fmtBRL(p.preco_total)}</div>
+                      <div class="small muted">${payLabel[p.forma_pagamento] || p.forma_pagamento}</div>
+                    </div>
+                  </div>
+                </div>`;
+        }).join("")}
+            </div>
+
+            <!-- Input de frete -->
+            <div class="field" style="margin-bottom:10px;">
+              <label style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                <span>🛵 Valor do frete (R$)</span>
+                <span class="small muted">dividido entre ${peds.length} pedido${peds.length > 1 ? "s" : ""}</span>
+              </label>
+              <input id="frete-${fid}" class="input" type="number" step="0.01" min="0" placeholder="0,00" style="font-size:16px;" oninput="atualizarResumoColetivo('${fid}', ${peds.length}, ${subtotal})" />
+            </div>
+
+            <!-- Resumo dinâmico -->
+            <div id="resumo-${fid}" style="background:var(--bg-soft); border-radius:var(--radius-sm); padding:10px 12px; font-size:.85rem; display:none; margin-bottom:10px;"></div>
+
+            <!-- Preview WhatsApp -->
+            <div id="wapreview-${fid}" class="wa-preview" style="display:none; margin-bottom:10px;"></div>
+
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="gerarMsgColetivo('${fid}', '${fornecedor.nome.replace(/'/g, "\\'")}', '${fornecedor.whatsapp}', ${peds.length}, ${subtotal}, ${JSON.stringify(peds.map(p => ({
+          nome: p.colaborador?.nome,
+          setor: p.colaborador?.setor,
+          prato: p.prato?.nome,
+          acomps: (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean),
+          obs: p.observacoes,
+          preco: p.preco_total,
+          pag: payLabel[p.forma_pagamento]
+        }))).replace(/'/g, "&apos;")}, '${dataFmtCurta}')">👁 Visualizar</button>
+              <button class="btn btn-olive btn-sm" style="flex:1;" id="btnWA-${fid}" onclick="abrirWAColetivo('${fid}', '${fornecedor.whatsapp}')">📱 Abrir WA</button>
+              <button class="btn btn-ghost btn-sm" onclick="copiarMsgColetivo('${fid}', this)">📋 Copiar</button>
+            </div>
+          </div>`;
+      }
+
+      $("modalTitle").textContent = "🛵 Pedido Coletivo";
+      $("modalBody").innerHTML = bodyHtml;
+      $("modalSave").classList.add("hidden");
+      $("modal").classList.add("show");
+    });
+
+    // Atualiza resumo por fornecedor conforme frete digitado
+    window.atualizarResumoColetivo = (fid, qtd, subtotal) => {
+      const frete = parseFloat(document.getElementById("frete-" + fid)?.value || 0) || 0;
+      const fretePorPedido = qtd > 0 ? frete / qtd : 0;
+      const total = subtotal + frete;
+      const resumoEl = document.getElementById("resumo-" + fid);
+      if (!resumoEl) return;
+      resumoEl.style.display = "";
+      resumoEl.innerHTML = `
+        <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line);">
+          <span>Subtotal pedidos</span><strong>${fmtBRL(subtotal)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line);">
+          <span>Frete total</span><strong>${fmtBRL(frete)}</strong>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line);">
+          <span class="muted">Frete por pedido</span><span>${fmtBRL(fretePorPedido)}</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; padding:6px 0 0; font-size:.95rem;">
+          <strong>Total com frete</strong><strong style="color:var(--brick);">${fmtBRL(total)}</strong>
+        </div>`;
+    };
+
+    window._msgsColetivasCache = {};
+
+    window.gerarMsgColetivo = (fid, fornNome, fornWA, qtd, subtotal, pedidosData, dataFmt) => {
+      const frete = parseFloat(document.getElementById("frete-" + fid)?.value || 0) || 0;
+      const fretePorPedido = qtd > 0 ? frete / qtd : 0;
+      const total = subtotal + frete;
+
+      let msg = `🍱 *PEDIDO COLETIVO — ${fornNome}*\n`;
+      msg += `📅 ${dataFmt}\n`;
+      msg += `━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+      pedidosData.forEach((p, i) => {
+        const precoComFrete = Number(p.preco) + fretePorPedido;
+        msg += `*${i + 1}. ${p.nome}*`;
+        if (p.setor) msg += ` _(${p.setor})_`;
+        msg += `\n`;
+        msg += `   🍽️ ${p.prato}`;
+        if (p.acomps && p.acomps.length) msg += `\n   ➕ ${p.acomps.join(", ")}`;
+        msg += `\n`;
+        if (p.obs) msg += `   📝 _${p.obs}_\n`;
+        msg += `   💰 Prato: *${fmtBRL(p.preco)}*`;
+        if (frete > 0) msg += ` + frete: *${fmtBRL(fretePorPedido)}* = *${fmtBRL(precoComFrete)}*`;
+        msg += `\n   💳 ${p.pag}\n\n`;
+      });
+
+      msg += `━━━━━━━━━━━━━━━━━━━━\n`;
+      msg += `📦 *${qtd} marmita${qtd > 1 ? "s" : ""}*\n`;
+      msg += `🍽️ Subtotal: *${fmtBRL(subtotal)}*\n`;
+      if (frete > 0) {
+        msg += `🛵 Frete: *${fmtBRL(frete)}* (${fmtBRL(fretePorPedido)}/pedido)\n`;
+      }
+      msg += `✅ *TOTAL: ${fmtBRL(total)}*`;
+
+      window._msgsColetivasCache[fid] = msg;
+
+      // Atualiza preview
+      const previewEl = document.getElementById("wapreview-" + fid);
+      if (previewEl) {
+        previewEl.style.display = "";
+        previewEl.textContent = msg;
+      }
+
+      // Atualiza resumo também
+      atualizarResumoColetivo(fid, qtd, subtotal);
+    };
+
+    window.abrirWAColetivo = (fid, whatsapp) => {
+      const msg = window._msgsColetivasCache[fid];
+      if (!msg) { alert("Clique em 👁 Visualizar primeiro para gerar a mensagem."); return; }
+      const numero = (whatsapp || "").replace(/\D/g, "");
+      if (!numero) { alert("Fornecedor sem WhatsApp cadastrado."); return; }
+      window.open(`https://wa.me/${numero}?text=${encodeURIComponent(msg)}`, "_blank");
+    };
+
+    window.copiarMsgColetivo = (fid, btn) => {
+      const msg = window._msgsColetivasCache[fid];
+      if (!msg) { alert("Clique em 👁 Visualizar primeiro para gerar a mensagem."); return; }
+      navigator.clipboard.writeText(msg).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "✓ Copiado!";
+        setTimeout(() => btn.textContent = orig, 2000);
+      });
+    };
     $("cardapioFiltroData").value = new Date().toISOString().slice(0, 10);
     $("cardapioFiltroData").addEventListener("change", carregarCardapioAdmin);
 
@@ -2173,6 +2374,8 @@ Bom apetite! 😋`;
       $("cfgFechDiaSemana").value = map.fechamento_fiado_dia_semana || "5";
       $("cfgFechDiaMes").value = map.fechamento_fiado_dia_mes || "30";
       $("cfgHorarioLimite").value = (map.horario_limite_padrao || "08:30").slice(0, 5);
+      $("cfgHorarioAbertura").value = (map.horario_abertura_pedidos || "07:00").slice(0, 5);
+      $("cfgHorarioFechamento").value = (map.horario_fechamento_pedidos || "10:30").slice(0, 5);
       ajustarFechDia();
     }
 
@@ -2197,7 +2400,9 @@ Bom apetite! 😋`;
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
         { chave: "fechamento_fiado_dia_semana", valor: String($("cfgFechDiaSemana").value) },
         { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) },
-        { chave: "horario_limite_padrao", valor: $("cfgHorarioLimite").value || "08:30" }
+        { chave: "horario_limite_padrao", valor: $("cfgHorarioLimite").value || "08:30" },
+        { chave: "horario_abertura_pedidos", valor: $("cfgHorarioAbertura").value || "07:00" },
+        { chave: "horario_fechamento_pedidos", valor: $("cfgHorarioFechamento").value || "10:30" }
       ];
       for (const u of updates) {
         await sb.from("configuracoes").upsert(u, { onConflict: "chave" });
