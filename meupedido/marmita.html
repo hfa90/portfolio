@@ -1471,7 +1471,12 @@
       const lista = $("cardapioList");
       lista.innerHTML = '<div class="loading">Carregando cardápio…</div>';
 
-      const { data, error } = await sb.rpc("cardapio_hoje");
+      // Busca cardápio E configurações em paralelo
+      const [{ data, error }, { data: cfgHorarios }] = await Promise.all([
+        sb.rpc("cardapio_hoje"),
+        sb.from("configuracoes").select("chave, valor")
+          .in("chave", ["horario_abertura_pedidos", "horario_fechamento_pedidos"])
+      ]);
 
       if (error) { lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`; return; }
       if (!data || data.length === 0) {
@@ -1479,19 +1484,35 @@
         return;
       }
 
-      // Verifica se TUDO está encerrado (pra mostrar banner global)
-      const tudoEncerrado = data.every(item => item.encerrado);
+      // ── Hora LOCAL do browser — independe do fuso do servidor ──
+      const agora = new Date();
+      const horaLocal = agora.getHours() * 60 + agora.getMinutes();
 
-      // Agrupar por fornecedor (e respectivo horário-limite)
+      const cfgMap = Object.fromEntries((cfgHorarios || []).map(x => [x.chave, x.valor]));
+      const horaAbertura = cfgMap.horario_abertura_pedidos || "07:00";
+      const horaFechamento = cfgMap.horario_fechamento_pedidos || "10:30";
+
+      const toMin = (hhmm) => {
+        const [h, m] = (hhmm || "00:00").split(":").map(Number);
+        return h * 60 + m;
+      };
+
+      const minAbertura = toMin(horaAbertura);
+      const minFechamento = toMin(horaFechamento);
+      const dentroJanela = horaLocal >= minAbertura && horaLocal <= minFechamento;
+
+      // Recalcula encerrado com hora LOCAL por fornecedor
       const grupos = new Map();
       data.forEach(item => {
         const fid = item.fornecedor_id;
+        const minLimite = item.horario_limite ? toMin(item.horario_limite) : minFechamento;
+        const enc = !dentroJanela || horaLocal > minLimite;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
             fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
             pratos: [],
             horario_limite: item.horario_limite,
-            encerrado: item.encerrado
+            encerrado: enc
           });
         }
         grupos.get(fid).pratos.push({
@@ -1500,44 +1521,32 @@
         });
       });
 
-      state.cardapio = data;
+      state.cardapio = data.map(item => ({
+        ...item,
+        encerrado: grupos.get(item.fornecedor_id)?.encerrado ?? true
+      }));
 
-      // Agenda lembretes de horário-limite (se notificações ativas)
       agendarLembretes();
 
+      const tudoEncerrado = [...grupos.values()].every(g => g.encerrado);
       let html = "";
 
-      // Pega configurações de abertura/fechamento do servidor
-      const { data: cfgHorarios } = await sb.from("configuracoes")
-        .select("chave, valor")
-        .in("chave", ["horario_abertura_pedidos", "horario_fechamento_pedidos"]);
-      const cfgMap = Object.fromEntries((cfgHorarios || []).map(c => [c.chave, c.valor]));
-      const horaAbertura = cfgMap.horario_abertura_pedidos || "07:00";
-      const horaFechamento = cfgMap.horario_fechamento_pedidos || "10:30";
-
-      // Detecta motivo predominante
-      const motivos = data.map(item => item.motivo_encerrado).filter(Boolean);
-      const motivoPred = motivos[0] || null;
-
       if (tudoEncerrado) {
-        let bannerMsg = "";
-        let bannerIcon = "⏰";
-        if (motivoPred === "antes_abertura") {
+        let bannerMsg, bannerIcon;
+        if (horaLocal < minAbertura) {
           bannerMsg = `Pedidos abrem às <strong>${horaAbertura}</strong>. Volte mais tarde!`;
           bannerIcon = "🕐";
-        } else if (motivoPred === "apos_fechamento" || motivoPred === "apos_limite") {
+        } else {
           bannerMsg = `Pedidos encerrados às <strong>${horaFechamento}</strong>. Volte amanhã!`;
           bannerIcon = "⏰";
-        } else {
-          bannerMsg = "Pedidos encerrados por hoje.";
         }
-        html += `<div class="card" style="background: rgba(210,152,34,.12); border: 1px solid rgba(210,152,34,.3); margin-bottom: 16px;">
+        html += `<div class="card" style="background:rgba(210,152,34,.12); border:1px solid rgba(210,152,34,.3); margin-bottom:16px;">
           <div style="display:flex; gap:10px; align-items:flex-start;">
             <div style="font-size:20px;">${bannerIcon}</div>
             <div>
               <div style="font-weight:600;">Fora do horário</div>
               <div class="small muted">${bannerMsg}</div>
-              <div class="small muted" style="margin-top:4px;">Horário de pedidos: <strong>${horaAbertura}</strong> às <strong>${horaFechamento}</strong></div>
+              <div class="small muted" style="margin-top:4px;">Horário: <strong>${horaAbertura}</strong> às <strong>${horaFechamento}</strong></div>
             </div>
           </div>
         </div>`;
@@ -1562,17 +1571,15 @@
       }
       lista.innerHTML = html;
 
-      // Bind clicks (mas não permite clicar em pratos encerrados)
       lista.querySelectorAll(".prato:not(.prato-encerrado)").forEach(el => {
         el.addEventListener("click", () => abrirPedido(el.dataset.prato, el.dataset.fornecedor));
       });
       lista.querySelectorAll(".prato-encerrado").forEach(el => {
         el.addEventListener("click", () => {
-          alert("Os pedidos deste fornecedor já encerraram para hoje.");
+          alert(`Pedidos encerrados. Horário permitido: ${horaAbertura} às ${horaFechamento}.`);
         });
       });
     }
-
     async function carregarMeusPedidos() {
       const lista = $("meusPedidosList");
       lista.innerHTML = '<div class="loading">Carregando…</div>';
@@ -1730,7 +1737,12 @@
         alert("Este prato não está no cardápio de hoje.");
         return;
       }
-      if (disponivel.encerrado) {
+      // Recalcula encerrado com hora local
+      const _agora = new Date();
+      const _hMin = _agora.getHours() * 60 + _agora.getMinutes();
+      const _toMin = s => { const [h, m] = (s || "00:00").split(":").map(Number); return h * 60 + m; };
+      const _lim = disponivel.horario_limite ? _toMin(disponivel.horario_limite) : _toMin("10:30");
+      if (_hMin > _lim) {
         alert("Os pedidos deste fornecedor já encerraram para hoje.");
         return;
       }
