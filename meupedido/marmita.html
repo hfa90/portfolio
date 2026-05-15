@@ -1120,18 +1120,28 @@
           return;
         }
 
-        const colab = Array.isArray(data) ? data[0] : data;
-        if (!colab) {
-          alertEl.textContent = "Matrícula ou PIN incorretos."; alertEl.classList.add("show");
-          pin = ""; renderPin(); return;
+        // O retorno agora vem com: sucesso, mensagem_erro, bloqueado_ate, id, nome, ...
+        const resp = Array.isArray(data) ? data[0] : data;
+        if (!resp || !resp.sucesso) {
+          alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
+          alertEl.classList.add("show");
+          pin = ""; renderPin();
+          // se bloqueado, desabilita o botão até o horário
+          if (resp?.bloqueado_ate) {
+            $("btnEntrar").disabled = true;
+            $("btnEntrar").textContent = "Bloqueado";
+          }
+          return;
         }
-        setColab(colab);
+        setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, setor: resp.setor });
         await abrirHome();
       } catch (err) {
         console.error(err);
         alertEl.textContent = "Não foi possível conectar ao servidor."; alertEl.classList.add("show");
       } finally {
-        $("btnEntrar").disabled = false; $("btnEntrar").textContent = "Entrar";
+        if (!$("btnEntrar").textContent.includes("Bloqueado")) {
+          $("btnEntrar").disabled = false; $("btnEntrar").textContent = "Entrar";
+        }
       }
     });
 
@@ -1155,53 +1165,77 @@
       const lista = $("cardapioList");
       lista.innerHTML = '<div class="loading">Carregando cardápio…</div>';
 
-      const hoje = new Date().toISOString().slice(0, 10);
-      const { data, error } = await sb
-        .from("cardapio_dia")
-        .select(`
-      id, data, horario_limite,
-      prato:pratos ( id, nome, descricao, preco,
-        fornecedor:fornecedores ( id, nome, whatsapp, chave_pix ) )
-    `)
-        .eq("data", hoje)
-        .eq("disponivel", true);
+      const { data, error } = await sb.rpc("cardapio_hoje");
 
       if (error) { lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`; return; }
       if (!data || data.length === 0) {
-        lista.innerHTML = '<div class="card"><p class="muted">Nenhum cardápio publicado hoje. Aguarde o administrador montar o cardápio.</p></div>';
+        lista.innerHTML = '<div class="card empty"><div class="empty-icon">🍽️</div><p>Nenhum cardápio publicado hoje.<br/>Aguarde o administrador.</p></div>';
         return;
       }
 
-      // Agrupar por fornecedor
+      // Verifica se TUDO está encerrado (pra mostrar banner global)
+      const tudoEncerrado = data.every(item => item.encerrado);
+
+      // Agrupar por fornecedor (e respectivo horário-limite)
       const grupos = new Map();
       data.forEach(item => {
-        if (!item.prato) return;
-        const f = item.prato.fornecedor;
-        if (!grupos.has(f.id)) grupos.set(f.id, { fornecedor: f, pratos: [] });
-        grupos.get(f.id).pratos.push(item.prato);
+        const fid = item.fornecedor_id;
+        if (!grupos.has(fid)) {
+          grupos.set(fid, {
+            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
+            pratos: [],
+            horario_limite: item.horario_limite,
+            encerrado: item.encerrado
+          });
+        }
+        grupos.get(fid).pratos.push({
+          id: item.prato_id, nome: item.prato_nome,
+          descricao: item.prato_descricao, preco: item.prato_preco
+        });
       });
 
       state.cardapio = data;
       let html = "";
-      for (const { fornecedor, pratos } of grupos.values()) {
+
+      if (tudoEncerrado) {
+        html += `<div class="card" style="background: rgba(210,152,34,.12); border: 1px solid rgba(210,152,34,.3); margin-bottom: 16px;">
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <div style="font-size:20px;">⏰</div>
+            <div>
+              <div style="font-weight:600;">Pedidos encerrados</div>
+              <div class="small muted">O horário-limite para pedidos de hoje já passou. Tente amanhã!</div>
+            </div>
+          </div>
+        </div>`;
+      }
+
+      for (const { fornecedor, pratos, horario_limite, encerrado } of grupos.values()) {
         html += `<div class="fornecedor-bloco">
-      <div class="fornecedor-head"><h2>${fornecedor.nome}</h2></div>`;
+          <div class="fornecedor-head">
+            <h2>${fornecedor.nome}</h2>
+            ${horario_limite ? `<span class="small muted">${encerrado ? '⏰ Encerrado' : 'Pedidos até ' + horario_limite.slice(0, 5)}</span>` : ''}
+          </div>`;
         pratos.forEach(p => {
-          html += `<div class="prato" data-prato="${p.id}" data-fornecedor="${fornecedor.id}">
-        <div class="prato-info">
-          <div class="prato-nome">${p.nome}</div>
-          ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
-        </div>
-        <div class="prato-preco">${fmtBRL(p.preco)}</div>
-      </div>`;
+          html += `<div class="prato ${encerrado ? 'prato-encerrado' : ''}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${encerrado ? 'style="opacity:.55;"' : ''}>
+            <div class="prato-info">
+              <div class="prato-nome">${p.nome}</div>
+              ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
+            </div>
+            <div class="prato-preco">${fmtBRL(p.preco)}</div>
+          </div>`;
         });
         html += `</div>`;
       }
       lista.innerHTML = html;
 
-      // Bind clicks
-      lista.querySelectorAll(".prato").forEach(el => {
+      // Bind clicks (mas não permite clicar em pratos encerrados)
+      lista.querySelectorAll(".prato:not(.prato-encerrado)").forEach(el => {
         el.addEventListener("click", () => abrirPedido(el.dataset.prato, el.dataset.fornecedor));
+      });
+      lista.querySelectorAll(".prato-encerrado").forEach(el => {
+        el.addEventListener("click", () => {
+          alert("Os pedidos deste fornecedor já encerraram para hoje.");
+        });
       });
     }
 
@@ -1265,6 +1299,11 @@
             <span class="small muted">${payLabel[p.forma_pagamento] || p.forma_pagamento}</span>
             <span class="pedido-valor">${fmtBRL(p.preco_total)}</span>
           </div>
+          <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator);">
+            <button class="btn btn-secondary btn-sm btn-pill btn-block btn-repetir" data-pedido="${p.id}">
+              🔁 Pedir de novo
+            </button>
+          </div>
         </div>`;
       }
 
@@ -1312,6 +1351,66 @@
       }
 
       lista.innerHTML = html;
+
+      // Bind clicks nos botões "Pedir de novo"
+      lista.querySelectorAll(".btn-repetir").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await pedirDeNovo(btn.dataset.pedido);
+        });
+      });
+    }
+
+    // -------- Pedir de novo: busca pedido antigo e reabre tela de pedido --------
+    async function pedirDeNovo(pedidoId) {
+      const colab = getColab();
+      const { data, error } = await sb.rpc("buscar_pedido", {
+        p_pedido_id: pedidoId,
+        p_colaborador_id: colab.id
+      });
+      if (error || !data || data.length === 0) {
+        alert("Não consegui carregar este pedido.");
+        return;
+      }
+      const dados = data[0];
+
+      // Verifica se o prato ainda está disponível no cardápio de hoje
+      const { data: cardapio } = await sb.rpc("cardapio_hoje");
+      const disponivel = (cardapio || []).find(c => c.prato_id === dados.prato_id);
+
+      if (!disponivel) {
+        alert("Este prato não está no cardápio de hoje.");
+        return;
+      }
+      if (disponivel.encerrado) {
+        alert("Os pedidos deste fornecedor já encerraram para hoje.");
+        return;
+      }
+
+      // Abre a tela de pedido com os mesmos acompanhamentos/forma de pagamento
+      await abrirPedido(dados.prato_id, dados.fornecedor_id);
+
+      // Pré-seleciona acompanhamentos
+      if (dados.acompanhamentos && dados.acompanhamentos.length > 0) {
+        dados.acompanhamentos.forEach(acompId => {
+          state.selAcomp.add(acompId);
+          const chip = document.querySelector(`.chip[data-id="${acompId}"]`);
+          if (chip) chip.classList.add("selected");
+        });
+        atualizarTotal();
+      }
+
+      // Pré-preenche observações
+      if (dados.observacoes) {
+        $("obs").value = dados.observacoes;
+      }
+
+      // Pré-seleciona forma de pagamento
+      const payOpt = document.querySelector(`.pay-option[data-pay="${dados.forma_pagamento}"]`);
+      if (payOpt && !payOpt.style.pointerEvents) {
+        payOpt.classList.add("selected");
+        state.selPagamento = dados.forma_pagamento;
+      }
     }
 
     // Tabs / Segmented control

@@ -707,6 +707,11 @@
         <input type="date" id="cardapioFiltroData" class="input" style="width:auto;" />
       </div>
       <p class="muted small">Marque os pratos que estarão disponíveis na data selecionada.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+        <button class="btn btn-ghost btn-sm" id="btnCopiarOntem">📋 Copiar de ontem</button>
+        <button class="btn btn-ghost btn-sm" id="btnCopiarSemana">📅 Copiar mesmo dia da semana passada</button>
+        <button class="btn btn-ghost btn-sm" id="btnCopiarCustom">📆 Copiar de outra data…</button>
+      </div>
       <div id="cardapioLista" class="loading">Carregando…</div>
     </section>
 
@@ -876,15 +881,8 @@
       try {
         const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
         if (error) { alertEl.textContent = "Email ou senha inválidos."; alertEl.classList.add("show"); return; }
-        const { data: a, error: errAdmin } = await sb.from("admins").select("id, ativo").eq("id", data.user.id).maybeSingle();
-        if (errAdmin) {
-          await sb.auth.signOut();
-          console.error("Erro ao verificar admin:", errAdmin);
-          alertEl.textContent = "Erro de permissão ao ler tabela admins. Verifique se rodou o SQL de correção (RLS).";
-          alertEl.classList.add("show");
-          return;
-        }
-        if (!a || !a.ativo) { await sb.auth.signOut(); alertEl.textContent = "Usuário não está cadastrado como admin (ou está inativo)."; alertEl.classList.add("show"); return; }
+        const { data: a } = await sb.from("admins").select("id, ativo").eq("id", data.user.id).maybeSingle();
+        if (!a || !a.ativo) { await sb.auth.signOut(); alertEl.textContent = "Usuário não está cadastrado como admin."; alertEl.classList.add("show"); return; }
         adminAtual = await verificarSessao();
         abrirPainel();
       } finally {
@@ -946,7 +944,7 @@
       id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em,
       prato:pratos ( nome ),
       fornecedor:fornecedores ( id, nome, whatsapp ),
-      colaborador:colaboradores ( nome, setor ),
+      colaborador:colaboradores ( id, nome, setor, whatsapp ),
       acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
     `)
         .eq("data", data)
@@ -1003,7 +1001,18 @@
           <strong>${fmtBRL(p.preco_total)}</strong><br/>
           <span class="badge ${p.status_pagamento}">${p.status_pagamento}</span>
           <span class="small muted" style="display:block; margin-top:4px;">${payLabel[p.forma_pagamento]}</span>
-          ${p.status_pagamento === "pendente" ? `<button class="btn btn-olive btn-sm" style="margin-top:6px;" onclick="marcarPago('${p.id}')">Marcar pago</button>` : ""}
+          <div style="display:flex; gap:4px; justify-content:flex-end; margin-top:6px; flex-wrap:wrap;">
+            ${p.colaborador?.whatsapp ? `<button class="btn btn-olive btn-sm" onclick='enviarWhatsColaborador(${JSON.stringify({
+            wa: p.colaborador.whatsapp,
+            nome: p.colaborador.nome,
+            prato: p.prato?.nome,
+            acomps: acomps,
+            fornecedor: p.fornecedor?.nome,
+            total: p.preco_total,
+            pag: payLabel[p.forma_pagamento]
+          }).replace(/'/g, "&apos;")})'>📱 WhatsApp</button>` : ""}
+            ${p.status_pagamento === "pendente" ? `<button class="btn btn-olive btn-sm" onclick="marcarPago('${p.id}')">Marcar pago</button>` : ""}
+          </div>
         </div>
       </div>`;
         });
@@ -1011,6 +1020,25 @@
       }
       $("pedidosLista").innerHTML = html;
     }
+
+    window.enviarWhatsColaborador = (info) => {
+      const primeiroNome = (info.nome || "").split(" ")[0];
+      const msg = `Olá *${primeiroNome}*! 🍱
+
+Confirmando seu pedido:
+
+🍽️ *${info.prato}*${info.acomps ? `\n   + ${info.acomps}` : ""}
+🏪 ${info.fornecedor}
+💰 ${typeof info.total === 'number' ? "R$ " + info.total.toFixed(2).replace(".", ",") : info.total}
+💳 ${info.pag}
+
+Bom apetite! 😋`;
+
+      const numero = (info.wa || "").replace(/\D/g, "");
+      if (!numero) { alert("Colaborador sem WhatsApp cadastrado."); return; }
+      const url = `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+      window.open(url, "_blank");
+    };
 
     window.marcarPago = async (id) => {
       await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
@@ -1139,6 +1167,40 @@
         });
       });
     }
+
+    // ----- Copiar cardápio de outra data -----
+    async function copiarCardapioDe(dataOrigem) {
+      const dataDestino = $("cardapioFiltroData").value;
+      if (!dataDestino) { alert("Selecione a data de destino primeiro."); return; }
+      if (dataOrigem === dataDestino) { alert("Origem e destino são a mesma data."); return; }
+
+      const { data: count, error } = await sb.rpc("copiar_cardapio", {
+        p_data_origem: dataOrigem,
+        p_data_destino: dataDestino
+      });
+
+      if (error) { alert("Erro: " + error.message); return; }
+      alert(`✓ ${count} pratos copiados de ${new Date(dataOrigem + "T12:00:00").toLocaleDateString("pt-BR")} para ${new Date(dataDestino + "T12:00:00").toLocaleDateString("pt-BR")}.`);
+      carregarCardapioAdmin();
+    }
+
+    $("btnCopiarOntem").addEventListener("click", () => {
+      const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+      copiarCardapioDe(ontem.toISOString().slice(0, 10));
+    });
+
+    $("btnCopiarSemana").addEventListener("click", () => {
+      const semanaPassada = new Date(); semanaPassada.setDate(semanaPassada.getDate() - 7);
+      copiarCardapioDe(semanaPassada.toISOString().slice(0, 10));
+    });
+
+    $("btnCopiarCustom").addEventListener("click", () => {
+      const data = prompt("Digite a data de origem (AAAA-MM-DD):");
+      if (!data || !/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+        if (data) alert("Formato inválido. Use AAAA-MM-DD."); return;
+      }
+      copiarCardapioDe(data);
+    });
 
     // =====================================================================
     // FORNECEDORES
@@ -1352,17 +1414,18 @@
     // =====================================================================
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, setor, ativo").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, setor, whatsapp, ativo").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
       }
       $("colabLista").innerHTML = `<table class="tbl">
-    <thead><tr><th>Nome</th><th>Matrícula</th><th>Setor</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>Nome</th><th>Matrícula</th><th>Setor</th><th>WhatsApp</th><th>Status</th><th></th></tr></thead>
     <tbody>${data.map(c => `<tr>
       <td><strong>${c.nome}</strong></td>
       <td>${c.matricula || "—"}</td>
       <td>${c.setor || "—"}</td>
+      <td><span class="small muted">${c.whatsapp || "—"}</span></td>
       <td>${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
       <td class="actions">
         <button class="btn btn-ghost btn-sm" onclick='abrirModalColab(${JSON.stringify(c)})'>Editar</button>
@@ -1379,6 +1442,7 @@
     <div class="field"><label>Nome</label><input id="cNome" class="input" value="${c?.nome ?? ""}"/></div>
     <div class="field"><label>Matrícula (usada no login)</label><input id="cMat" class="input" value="${c?.matricula ?? ""}"/></div>
     <div class="field"><label>Setor</label><input id="cSetor" class="input" value="${c?.setor ?? ""}"/></div>
+    <div class="field"><label>WhatsApp (com DDI/DDD, ex.: 5511999999999)</label><input id="cWhats" class="input" value="${c?.whatsapp ?? ""}"/></div>
     ${!c ? '<div class="field"><label>PIN (4 dígitos numéricos)</label><input id="cPin" class="input" maxlength="4" inputmode="numeric" placeholder="ex.: 1234"/></div>' : ""}
     <div class="field"><label><input type="checkbox" id="cAtivo" ${c?.ativo !== false ? "checked" : ""}/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
@@ -1389,6 +1453,7 @@
           nome: $("cNome").value.trim(),
           matricula: $("cMat").value.trim() || null,
           setor: $("cSetor").value.trim() || null,
+          whatsapp: $("cWhats").value.trim().replace(/\D/g, "") || null,
           ativo: $("cAtivo").checked
         };
         if (!payload.nome) { $("modalAlert").textContent = "Informe o nome."; $("modalAlert").classList.add("show"); return; }
