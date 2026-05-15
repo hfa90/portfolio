@@ -1505,7 +1505,10 @@
       const grupos = new Map();
       data.forEach(item => {
         const fid = item.fornecedor_id;
-        const minLimite = item.horario_limite ? toMin(item.horario_limite) : minFechamento;
+        // O limite efetivo é o MAIOR entre o horário-limite do cardápio e o fechamento global
+        // Assim o fechamento global (ex: 18:30) prevalece sobre limites menores (ex: 10:30)
+        const minLimiteCardapio = item.horario_limite ? toMin(item.horario_limite) : minFechamento;
+        const minLimite = Math.max(minLimiteCardapio, minFechamento);
         const enc = !dentroJanela || horaLocal > minLimite;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
@@ -1741,7 +1744,10 @@
       const _agora = new Date();
       const _hMin = _agora.getHours() * 60 + _agora.getMinutes();
       const _toMin = s => { const [h, m] = (s || "00:00").split(":").map(Number); return h * 60 + m; };
-      const _lim = disponivel.horario_limite ? _toMin(disponivel.horario_limite) : _toMin("10:30");
+      const { data: _cfg2 } = await sb.from("configuracoes").select("chave, valor").eq("chave", "horario_fechamento_pedidos").maybeSingle();
+      const _fech = _cfg2?.valor || "18:30";
+      const _limCard = disponivel.horario_limite ? _toMin(disponivel.horario_limite) : _toMin(_fech);
+      const _lim = Math.max(_limCard, _toMin(_fech));
       if (_hMin > _lim) {
         alert("Os pedidos deste fornecedor já encerraram para hoje.");
         return;
