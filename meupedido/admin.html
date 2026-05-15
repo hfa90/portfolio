@@ -1757,11 +1757,32 @@ Bom apetite! 😋`;
 
       const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado" };
 
+      // Store seguro: guarda dados por fid sem passar JSON em onclick
+      window._coletivoDados = window._coletivoDados || {};
+
       let bodyHtml = `<p class="small muted" style="margin-bottom:14px;">Informe o valor do frete para cada fornecedor — ele será dividido igualmente entre os pedidos.</p>`;
 
       for (const { fornecedor, pedidos: peds } of grupos.values()) {
         const subtotal = peds.reduce((s, p) => s + Number(p.preco_total), 0);
         const fid = fornecedor.id;
+
+        // Salva dados deste fornecedor no store para os botões usarem
+        window._coletivoDados[fid] = {
+          fornNome: fornecedor.nome,
+          fornWA: fornecedor.whatsapp,
+          qtd: peds.length,
+          subtotal,
+          dataFmt: dataFmtCurta,
+          pedidos: peds.map(p => ({
+            nome: p.colaborador?.nome,
+            empresa: p.colaborador?.empresa,
+            prato: p.prato?.nome,
+            acomps: (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean),
+            obs: p.observacoes,
+            preco: p.preco_total,
+            pag: payLabel[p.forma_pagamento]
+          }))
+        };
 
         bodyHtml += `
           <div class="card" style="margin-bottom:14px;" id="coletivo-card-${fid}">
@@ -1808,17 +1829,9 @@ Bom apetite! 😋`;
             <div id="wapreview-${fid}" class="wa-preview" style="display:none; margin-bottom:10px;"></div>
 
             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-              <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="gerarMsgColetivo('${fid}', '${fornecedor.nome.replace(/'/g, "\\'")}', '${fornecedor.whatsapp}', ${peds.length}, ${subtotal}, ${JSON.stringify(peds.map(p => ({
-          nome: p.colaborador?.nome,
-          setor: p.colaborador?.empresa,
-          prato: p.prato?.nome,
-          acomps: (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean),
-          obs: p.observacoes,
-          preco: p.preco_total,
-          pag: payLabel[p.forma_pagamento]
-        }))).replace(/'/g, "&apos;")}, '${dataFmtCurta}')">👁 Visualizar</button>
-              <button class="btn btn-olive btn-sm" style="flex:1;" id="btnWA-${fid}" onclick="abrirWAColetivo('${fid}', '${fornecedor.whatsapp}')">📱 Abrir WA</button>
-              <button class="btn btn-ghost btn-sm" onclick="copiarMsgColetivo('${fid}', this)">📋 Copiar</button>
+              <button class="btn btn-ghost btn-sm" style="flex:1;" data-action="gerar" data-fid="${fid}">👁 Visualizar</button>
+              <button class="btn btn-olive btn-sm" style="flex:1;" data-action="abrir-wa" data-fid="${fid}" data-wa="${fornecedor.whatsapp}">📱 Abrir WA</button>
+              <button class="btn btn-ghost btn-sm" data-action="copiar" data-fid="${fid}">📋 Copiar</button>
             </div>
           </div>`;
       }
@@ -1827,6 +1840,23 @@ Bom apetite! 😋`;
       $("modalBody").innerHTML = bodyHtml;
       $("modalSave").classList.add("hidden");
       $("modal").classList.add("show");
+
+      // Event delegation para os botões do pedido coletivo
+      $("modalBody").addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action]");
+        if (!btn) return;
+        const fid = btn.dataset.fid;
+        const d = window._coletivoDados?.[fid];
+        if (!d) return;
+        const action = btn.dataset.action;
+        if (action === "gerar") {
+          gerarMsgColetivo(fid, d.fornNome, d.fornWA, d.qtd, d.subtotal, d.pedidos, d.dataFmt);
+        } else if (action === "abrir-wa") {
+          abrirWAColetivo(fid, btn.dataset.wa);
+        } else if (action === "copiar") {
+          copiarMsgColetivo(fid, btn);
+        }
+      });
     });
 
     // Atualiza resumo por fornecedor conforme frete digitado
