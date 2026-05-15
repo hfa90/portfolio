@@ -1,0 +1,2320 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <!-- iOS: bloqueia zoom-on-tap e zoom-on-input-focus -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Marmita" />
+  <meta name="theme-color" content="#f6efe3" />
+  <title>Marmita — pedir almoço</title>
+
+  <!-- =====================================================================
+     CONFIGURAÇÃO DO SUPABASE
+     Cole aqui a URL e a anon key do seu projeto (Project Settings > API)
+     ===================================================================== -->
+  <script>
+    window.SUPABASE_URL = "https://cazbhqfwlxesthwsbsoj.supabase.co";
+    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhemJocWZ3bHhlc3Rod3Nic29qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3NzYsImV4cCI6MjA5NDM5NDc3Nn0.0kg4zOnXkzwvVVwgE9W56CMbG0zsMq2gdkbwRbUfYY8";
+  </script>
+
+  <style>
+    /* ===================================================================
+   DESIGN SYSTEM — paleta terracota / oliva / creme
+   Fonte display: Fraunces  |  Fonte texto: Manrope
+   =================================================================== */
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,900&display=swap');
+
+    :root {
+      /* Paleta - mantém identidade terracota mas usa cinzas neutros iOS para texto */
+      --bg: #f6efe3;
+      --bg-soft: #efe5d2;
+      --paper: #fffaf0;
+      --ink: #1c1c1e;
+      /* iOS label primary */
+      --ink-soft: #6b594b;
+      --ink-tertiary: #8e8e93;
+      /* iOS gray tertiary */
+      --line: #d9c9ad;
+      --separator: rgba(60, 60, 67, .18);
+      /* iOS separator */
+      --brick: #b94a2a;
+      --brick-dark: #8d3219;
+      --olive: #5e6b3a;
+      --mustard: #d29822;
+      --crimson: #c53030;
+      --green-ios: #34c759;
+      --blue-ios: #007aff;
+
+      /* Tamanhos seguindo HIG iOS */
+      --radius: 12px;
+      --radius-sm: 8px;
+      --radius-lg: 18px;
+      --radius-xl: 28px;
+      --tap: 44px;
+      /* área mínima de toque HIG */
+
+      --shadow-sm: 0 1px 2px rgba(42, 31, 23, .08);
+      --shadow: 0 6px 24px -8px rgba(42, 31, 23, .18);
+      --transition: 180ms cubic-bezier(.2, .7, .3, 1);
+
+      /* Safe area p/ notch e home indicator */
+      --safe-top: env(safe-area-inset-top);
+      --safe-bottom: env(safe-area-inset-bottom);
+
+      /* Tipografia: SF Pro do sistema p/ texto, Fraunces p/ display */
+      --font-display: 'Fraunces', Georgia, serif;
+      --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro', system-ui, sans-serif;
+      --font-rounded: -apple-system-rounded, -apple-system, system-ui, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+      /* sem flash cinza ao tocar */
+    }
+
+    html {
+      -webkit-text-size-adjust: 100%;
+      /* iOS não aumenta texto automaticamente */
+      touch-action: manipulation;
+      /* desabilita zoom de double-tap */
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--font-body);
+      font-size: 17px;
+      /* iOS body size; >=16px evita zoom no focus */
+      line-height: 1.4;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior-y: contain;
+      /* sem bounce indesejado */
+    }
+
+    /* desabilita seleção em UI; mantém em inputs */
+    body,
+    button,
+    .pin-key,
+    .chip,
+    .pay-option,
+    .prato,
+    .tab,
+    .segmented button {
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    input,
+    textarea {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background: radial-gradient(circle at 20% 10%, rgba(185, 74, 42, .06), transparent 40%),
+        radial-gradient(circle at 80% 90%, rgba(94, 107, 58, .07), transparent 40%);
+    }
+
+    h1,
+    h2,
+    h3 {
+      font-family: var(--font-display);
+      font-weight: 900;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin: 0 0 .3em;
+    }
+
+    h1 {
+      font-size: 34px;
+      /* iOS Large Title */
+      line-height: 1.1;
+    }
+
+    h2 {
+      font-size: 22px;
+      /* iOS Title 2 */
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    h3 {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0 0 .8em;
+      color: var(--ink-soft);
+    }
+
+    .muted {
+      color: var(--ink-tertiary);
+    }
+
+    .small {
+      font-size: 13px;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--brick);
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: calc(20px + var(--safe-top)) 20px calc(40px + var(--safe-bottom));
+      position: relative;
+      z-index: 1;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid rgba(0, 0, 0, .04);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+    }
+
+    .card-lg {
+      padding: 24px;
+      border-radius: var(--radius-xl);
+      background: linear-gradient(180deg, #fff8e7 0%, var(--paper) 100%);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+    }
+
+    .card+.card {
+      margin-top: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: var(--tap);
+      /* HIG: 44px mínimo */
+      padding: 0 20px;
+      border-radius: 14px;
+      border: none;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 17px;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background-color 150ms;
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+      /* micro-feedback iOS */
+    }
+
+    .btn-primary {
+      background: var(--brick);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: var(--brick-dark);
+    }
+
+    .btn-primary:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--brick);
+    }
+
+    .btn-ghost:hover {
+      background: rgba(185, 74, 42, .08);
+    }
+
+    .btn-secondary {
+      background: rgba(185, 74, 42, .12);
+      color: var(--brick);
+    }
+
+    .btn-block {
+      width: 100%;
+    }
+
+    .btn-pill {
+      border-radius: 999px;
+    }
+
+    .btn-sm {
+      min-height: 36px;
+      padding: 0 14px;
+      font-size: 15px;
+    }
+
+    .btn-olive {
+      background: var(--olive);
+      color: #fff;
+    }
+
+    .btn-danger {
+      background: transparent;
+      color: var(--crimson);
+      border-color: var(--crimson);
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-soft);
+      margin-bottom: 6px;
+      padding-left: 4px;
+    }
+
+    .input,
+    select,
+    textarea {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      padding: 14px 16px;
+      border: none;
+      /* iOS: sem borda, só fundo */
+      background: rgba(118, 118, 128, .08);
+      /* iOS field background */
+      border-radius: 12px;
+      font-family: var(--font-body);
+      font-size: 17px;
+      /* >=16px evita zoom no focus */
+      color: var(--ink);
+      transition: background 150ms;
+    }
+
+    .input::placeholder,
+    textarea::placeholder {
+      color: var(--ink-tertiary);
+    }
+
+    .input:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      background: rgba(118, 118, 128, .14);
+    }
+
+    textarea {
+      resize: none;
+      min-height: 70px;
+    }
+
+    /* PIN pad */
+    .pin-display {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      margin: 24px 0;
+    }
+
+    .pin-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(0, 0, 0, .2);
+      background: transparent;
+      transition: all 150ms ease;
+    }
+
+    .pin-dot.filled {
+      background: var(--brick);
+      border-color: var(--brick);
+      transform: scale(1.1);
+    }
+
+    .pin-pad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      max-width: 340px;
+      margin: 0 auto;
+    }
+
+    .pin-key {
+      height: 64px;
+      /* tecla alta estilo iOS */
+      border: none;
+      background: rgba(255, 255, 255, .85);
+      border-radius: 18px;
+      /* arredondado iOS */
+      font-family: var(--font-rounded);
+      font-size: 28px;
+      font-weight: 400;
+      /* iOS usa regular, não bold */
+      color: var(--ink);
+      cursor: pointer;
+      box-shadow: 0 1px 0 rgba(0, 0, 0, .04);
+      transition: background 100ms, transform 80ms;
+    }
+
+    .pin-key:active {
+      background: rgba(0, 0, 0, .08);
+      transform: scale(0.95);
+      /* micro-feedback iOS */
+    }
+
+    .pin-key.action {
+      background: transparent;
+      box-shadow: none;
+      font-size: 15px;
+      color: var(--brick);
+      font-weight: 500;
+    }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      display: none;
+    }
+
+    .alert.show {
+      display: block;
+      animation: shake 400ms ease;
+    }
+
+    .alert-error {
+      background: rgba(197, 48, 48, .1);
+      color: var(--crimson);
+    }
+
+    .alert-success {
+      background: rgba(52, 199, 89, .12);
+      color: var(--olive);
+    }
+
+    @keyframes shake {
+
+      0%,
+      100% {
+        transform: translateX(0);
+      }
+
+      25% {
+        transform: translateX(-4px);
+      }
+
+      75% {
+        transform: translateX(4px);
+      }
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .rise {
+      animation: rise 400ms cubic-bezier(.2, .7, .3, 1) backwards;
+    }
+
+    .rise-1 {
+      animation-delay: 60ms;
+    }
+
+    .rise-2 {
+      animation-delay: 120ms;
+    }
+
+    .rise-3 {
+      animation-delay: 180ms;
+    }
+
+    .app-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 0 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      background: var(--brick);
+      color: #fff;
+      border-radius: 10px;
+      transform: rotate(-4deg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Cardápio */
+    .fornecedor-bloco {
+      margin-bottom: 22px;
+    }
+
+    .fornecedor-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin: 0 4px 10px;
+    }
+
+    .fornecedor-head h2 {
+      margin: 0;
+    }
+
+    .prato {
+      display: flex;
+      gap: 14px;
+      padding: 14px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-lg);
+      background: var(--paper);
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 150ms;
+    }
+
+    .prato:active {
+      transform: scale(0.985);
+      background: var(--bg-soft);
+    }
+
+    .prato-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .prato-nome {
+      font-weight: 600;
+      color: var(--ink);
+      font-size: 17px;
+      margin-bottom: 2px;
+    }
+
+    .prato-desc {
+      font-size: 14px;
+      color: var(--ink-tertiary);
+      line-height: 1.3;
+    }
+
+    .prato-preco {
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--brick);
+      font-size: 19px;
+      white-space: nowrap;
+      align-self: center;
+    }
+
+    /* Acompanhamentos chips */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 10px 16px;
+      min-height: 38px;
+      border: none;
+      background: rgba(118, 118, 128, .08);
+      color: var(--ink);
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 120ms;
+    }
+
+    .chip:active {
+      transform: scale(0.95);
+    }
+
+    .chip.selected {
+      background: var(--brick);
+      color: #fff;
+    }
+
+    .chip .extra {
+      font-size: 13px;
+      opacity: .8;
+    }
+
+    /* Pagamento options */
+    .pay-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .pay-option {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px;
+      min-height: 64px;
+      border: 2px solid transparent;
+      border-radius: var(--radius-lg);
+      cursor: pointer;
+      transition: all 150ms;
+      background: var(--paper);
+    }
+
+    .pay-option:active {
+      transform: scale(0.98);
+    }
+
+    .pay-option.selected {
+      border-color: var(--brick);
+      background: #fff5ee;
+    }
+
+    .pay-icon {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      background: var(--bg-soft);
+      border-radius: 10px;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .pay-title {
+      font-weight: 600;
+      font-size: 16px;
+    }
+
+    .pay-desc {
+      font-size: 13px;
+      color: var(--ink-tertiary);
+      margin-top: 2px;
+    }
+
+    .pay-check {
+      margin-left: auto;
+      opacity: 0;
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      background: var(--brick);
+      color: #fff;
+      border-radius: 50%;
+      font-size: 13px;
+      transition: opacity 150ms;
+    }
+
+    .pay-option.selected .pay-check {
+      opacity: 1;
+    }
+
+    /* Bottom bar */
+    /* Bottom bar */
+    .totalbar {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(255, 250, 240, .92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-top: 0.5px solid var(--separator);
+      padding: 12px 20px calc(12px + var(--safe-bottom));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    .totalbar .total {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 22px;
+      color: var(--brick);
+    }
+
+    /* Lista de pedidos */
+    .pedido-card {
+      background: var(--paper);
+      border: 1px solid rgba(0, 0, 0, .04);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      margin-bottom: 8px;
+    }
+
+    .pedido-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .pedido-prato {
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--ink);
+    }
+
+    .pedido-meta {
+      font-size: 13px;
+      color: var(--ink-tertiary);
+      margin-top: 2px;
+    }
+
+    .pedido-foot {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .pedido-valor {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: 18px;
+      color: var(--brick);
+    }
+
+    .pedido-obs {
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin-top: 6px;
+      font-style: italic;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .badge.pendente {
+      background: rgba(210, 152, 34, .18);
+      color: #8a5a00;
+    }
+
+    .badge.pago {
+      background: rgba(52, 199, 89, .18);
+      color: #1a7a36;
+    }
+
+    .badge.cancelado {
+      background: rgba(197, 48, 48, .15);
+      color: var(--crimson);
+    }
+
+    .badge.fiado {
+      background: rgba(0, 122, 255, .15);
+      color: var(--blue-ios);
+    }
+
+    /* Tabs (compat. com tab antiga + segmented novo) */
+    .tabs,
+    .segmented {
+      display: flex;
+      padding: 3px;
+      background: rgba(118, 118, 128, .12);
+      border-radius: 9px;
+      margin-bottom: 16px;
+    }
+
+    .tab,
+    .segmented button {
+      flex: 1;
+      padding: 7px 0;
+      border: none;
+      background: transparent;
+      font-family: var(--font-body);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--ink);
+      border-radius: 7px;
+      cursor: pointer;
+      transition: all 200ms;
+    }
+
+    .tab.active,
+    .segmented button.active {
+      background: #fff;
+      font-weight: 600;
+      color: var(--ink);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, .05), 0 1px 1px rgba(0, 0, 0, .04);
+    }
+
+    /* Stats em Meus Pedidos */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .stat-mini {
+      background: var(--paper);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+
+    .stat-mini-label {
+      font-size: 12px;
+      color: var(--ink-tertiary);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .stat-mini-value {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 22px;
+      margin-top: 2px;
+      color: var(--ink);
+    }
+
+    .stat-mini-value.brick {
+      color: var(--brick);
+    }
+
+    .stat-mini-value.olive {
+      color: var(--olive);
+    }
+
+    .stat-mini-value.mustard {
+      color: #b07b00;
+    }
+
+    .stat-mini-value.blue {
+      color: var(--blue-ios);
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--ink-tertiary);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin: 22px 4px 8px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--ink-tertiary);
+    }
+
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 8px;
+      opacity: .5;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--ink-tertiary);
+      font-size: 14px;
+    }
+
+    /* Footer link */
+    .footer-link {
+      text-align: center;
+      margin-top: 22px;
+      font-size: 14px;
+      color: var(--ink-tertiary);
+    }
+
+    .footer-link a {
+      color: var(--brick);
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    /* ===================================================================
+       QR CODE PIX — bottom sheet
+       =================================================================== */
+    .pix-sheet-bg {
+      position: fixed;
+      inset: 0;
+      background: rgba(28, 28, 30, .55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
+      align-items: flex-end;
+    }
+
+    .pix-sheet-bg.show {
+      display: flex;
+      animation: fadeInBg 220ms ease-out;
+    }
+
+    @keyframes fadeInBg {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    .pix-sheet {
+      width: 100%;
+      background: var(--paper);
+      border-top-left-radius: 24px;
+      border-top-right-radius: 24px;
+      padding: 8px 20px calc(24px + var(--safe-bottom));
+      box-shadow: 0 -8px 40px rgba(0, 0, 0, .18);
+      animation: slideUpSheet 340ms cubic-bezier(.32, .72, 0, 1);
+      max-height: 92vh;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    @keyframes slideUpSheet {
+      from {
+        transform: translateY(100%);
+      }
+
+      to {
+        transform: translateY(0);
+      }
+    }
+
+    .pix-handle {
+      width: 36px;
+      height: 5px;
+      background: var(--line);
+      border-radius: 999px;
+      margin: 0 auto 18px;
+    }
+
+    .pix-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .pix-close {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(118, 118, 128, .12);
+      color: var(--ink-soft);
+      font-size: 18px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+    }
+
+    .pix-qr-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      margin: 18px 0;
+    }
+
+    .pix-qr-wrap canvas,
+    .pix-qr-wrap img {
+      border-radius: 16px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, .10);
+      display: block;
+    }
+
+    .pix-valor-badge {
+      font-family: var(--font-display);
+      font-weight: 900;
+      font-size: 32px;
+      color: var(--brick);
+      letter-spacing: -0.02em;
+    }
+
+    .pix-chave-box {
+      background: rgba(118, 118, 128, .08);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 14px;
+      word-break: break-all;
+      color: var(--ink-soft);
+      margin-bottom: 14px;
+    }
+
+    .pix-chave-box strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+    }
+
+    .pix-copy-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    /* ===================================================================
+       NOTIFICAÇÕES — banner de permissão + toast
+       =================================================================== */
+    .notif-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      background: rgba(0, 122, 255, .08);
+      border: 1px solid rgba(0, 122, 255, .2);
+      border-radius: 14px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+
+    .notif-banner .nb-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .notif-banner .nb-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .notif-banner .nb-title {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--ink);
+      margin-bottom: 2px;
+    }
+
+    .notif-banner .nb-desc {
+      font-size: 13px;
+      color: var(--ink-soft);
+      line-height: 1.4;
+    }
+
+    .notif-banner .nb-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      top: calc(12px + var(--safe-top));
+      left: 16px;
+      right: 16px;
+      max-width: 420px;
+      margin: 0 auto;
+      background: rgba(28, 28, 30, .92);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      color: #fff;
+      border-radius: 14px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      z-index: 300;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .25);
+      transform: translateY(-120%);
+      transition: transform 380ms cubic-bezier(.32, .72, 0, 1);
+      pointer-events: none;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    .toast-icon {
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .toast-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .toast-title {
+      font-weight: 700;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+
+    .toast-msg {
+      font-size: 13px;
+      opacity: .8;
+      line-height: 1.3;
+    }
+
+    .toast-close {
+      background: transparent;
+      border: none;
+      color: rgba(255, 255, 255, .5);
+      font-size: 18px;
+      cursor: pointer;
+      flex-shrink: 0;
+      padding: 0;
+      line-height: 1;
+    }
+
+    /* Botão PIX flutuante na aba meus pedidos */
+    .pix-fab {
+      position: sticky;
+      bottom: calc(16px + var(--safe-bottom));
+      width: 100%;
+      margin-top: 16px;
+      z-index: 5;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ===================================================================
+     TELA 1 — LOGIN COLABORADOR
+     =================================================================== -->
+  <main class="container" id="screen-login">
+    <header class="app-header rise">
+      <div class="brand">
+        <span class="brand-mark">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 11h18l-1.5 9a2 2 0 0 1-2 1.7H6.5A2 2 0 0 1 4.5 20L3 11z" />
+            <path d="M7 11V8a5 5 0 0 1 10 0v3" />
+          </svg>
+        </span> Marmita
+      </div>
+    </header>
+
+    <section class="card card-lg rise rise-1">
+      <p class="eyebrow">Acesso do colaborador</p>
+      <h1>Bom apetite.<br />Vamos pedir?</h1>
+      <p class="muted small">Digite sua matrícula e PIN para entrar.</p>
+
+      <div id="loginAlert" class="alert alert-error"></div>
+
+      <div class="field rise rise-2">
+        <label for="matricula">Matrícula</label>
+        <input id="matricula" class="input" type="text" inputmode="numeric" placeholder="Ex.: 001" maxlength="20" />
+      </div>
+
+      <div class="rise rise-3">
+        <label class="small muted" style="display:block; text-align:center; margin-bottom:4px">PIN</label>
+        <div class="pin-display" id="pinDisplay">
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+          <span class="pin-dot"></span><span class="pin-dot"></span>
+        </div>
+        <div class="pin-pad">
+          <button class="pin-key" data-key="1">1</button>
+          <button class="pin-key" data-key="2">2</button>
+          <button class="pin-key" data-key="3">3</button>
+          <button class="pin-key" data-key="4">4</button>
+          <button class="pin-key" data-key="5">5</button>
+          <button class="pin-key" data-key="6">6</button>
+          <button class="pin-key" data-key="7">7</button>
+          <button class="pin-key" data-key="8">8</button>
+          <button class="pin-key" data-key="9">9</button>
+          <button class="pin-key action" data-key="clear">Limpar</button>
+          <button class="pin-key" data-key="0">0</button>
+          <button class="pin-key action" data-key="back">⌫</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 24px;">
+        <button id="btnEntrar" class="btn btn-primary btn-block">Entrar</button>
+      </div>
+
+      <p class="footer-link">É administrador? <a href="admin.html">Acessar painel</a></p>
+    </section>
+  </main>
+
+  <!-- ===================================================================
+     TELA 2 — CARDÁPIO + MEUS PEDIDOS
+     =================================================================== -->
+  <main class="container hidden" id="screen-home">
+    <header class="app-header rise">
+      <div class="brand">
+        <span class="brand-mark">🍱</span> Marmita
+      </div>
+      <button class="btn btn-ghost btn-sm" id="btnSair">Sair</button>
+    </header>
+
+    <div class="rise rise-1">
+      <p class="eyebrow">Olá, <span id="nomeColab">…</span></p>
+      <h1 id="dataHoje">Cardápio de hoje</h1>
+    </div>
+
+    <div class="segmented rise rise-2">
+      <button class="active" data-tab="cardapio">Cardápio</button>
+      <button data-tab="meusPedidos">Meus pedidos</button>
+    </div>
+
+    <!-- Aba Cardápio -->
+    <div id="tab-cardapio" class="rise rise-3">
+      <div id="cardapioList" class="loading">Carregando cardápio…</div>
+    </div>
+
+    <!-- Aba Meus Pedidos -->
+    <div id="tab-meusPedidos" class="hidden rise rise-3">
+      <!-- Banner de permissão de notificações (aparece só se ainda não concedida) -->
+      <div id="notifBanner" class="notif-banner hidden">
+        <div class="nb-icon">🔔</div>
+        <div class="nb-body">
+          <div class="nb-title">Ativar notificações</div>
+          <div class="nb-desc">Receba lembretes antes do horário limite e aviso quando o fiado fechar.</div>
+          <div class="nb-actions">
+            <button class="btn btn-secondary btn-sm btn-pill" id="btnAtivarNotif">Ativar</button>
+            <button class="btn btn-ghost btn-sm btn-pill" id="btnIgnorarNotif">Agora não</button>
+          </div>
+        </div>
+      </div>
+      <div id="meusPedidosList" class="loading">Carregando…</div>
+    </div>
+  </main>
+
+  <!-- ===================================================================
+     TELA 3 — MONTAR PEDIDO
+     =================================================================== -->
+  <main class="container hidden" id="screen-pedido" style="padding-bottom: 110px;">
+    <header class="app-header rise">
+      <button class="btn btn-ghost btn-sm" id="btnVoltar">← Voltar</button>
+      <button class="btn btn-ghost btn-sm" id="btnSair2">Sair</button>
+    </header>
+
+    <div class="card card-lg rise rise-1">
+      <p class="eyebrow" id="pedidoFornecedor">…</p>
+      <h1 id="pedidoPrato" style="font-size: 28px;">…</h1>
+      <p class="muted" id="pedidoDesc"></p>
+    </div>
+
+    <div class="card rise rise-2" style="margin-top: 14px;">
+      <h3 style="margin-bottom:10px;">Acompanhamentos</h3>
+      <div id="acompList" class="chips"></div>
+    </div>
+
+    <div class="card rise rise-2" style="margin-top: 14px;">
+      <h3 style="margin-bottom:10px;">Observações</h3>
+      <textarea id="obs" rows="2" placeholder="Ex.: sem cebola, ponto da carne ao ponto…"></textarea>
+    </div>
+
+    <div class="rise rise-3" style="margin-top: 18px;">
+      <div class="section-title" style="margin-top: 0;">Forma de pagamento</div>
+      <div class="pay-options" id="payOptions"></div>
+    </div>
+
+    <div id="pedidoAlert" class="alert alert-error" style="margin-top: 14px;"></div>
+
+    <div class="totalbar">
+      <div>
+        <div class="small muted">Total</div>
+        <div class="total" id="totalPreco">R$ 0,00</div>
+      </div>
+      <button id="btnConfirmar" class="btn btn-primary btn-pill">Confirmar pedido</button>
+    </div>
+  </main>
+
+  <!-- ===================================================================
+     TELA 4 — CONFIRMAÇÃO
+     =================================================================== -->
+  <main class="container hidden" id="screen-sucesso">
+    <section class="card card-lg rise rise-1" style="text-align: center; margin-top: 60px;">
+      <div style="font-size: 4rem; margin-bottom: 14px;">🎉</div>
+      <h1>Pedido confirmado!</h1>
+      <p class="muted">Seu pedido foi registrado. O administrador será notificado.</p>
+      <div id="sucessoResumo"
+        style="text-align:left; margin: 22px 0; padding: 16px; background: var(--bg-soft); border-radius: var(--radius);">
+      </div>
+      <button class="btn btn-primary btn-block btn-pill" id="btnVoltarHome">Voltar ao cardápio</button>
+    </section>
+  </main>
+
+  <!-- ===================================================================
+     QR CODE PIX — BOTTOM SHEET
+     =================================================================== -->
+  <!-- QR Code lib (peso ~15 KB) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+  <div class="pix-sheet-bg" id="pixSheetBg">
+    <div class="pix-sheet">
+      <div class="pix-handle"></div>
+      <div class="pix-header">
+        <div>
+          <p class="eyebrow" style="margin:0;">Pagar com</p>
+          <h2 style="margin:0;">PIX 📲</h2>
+        </div>
+        <button class="pix-close" id="pixClose" aria-label="Fechar">×</button>
+      </div>
+      <p class="small muted" id="pixSubtitle">Seu saldo de fiado em aberto</p>
+
+      <div class="pix-qr-wrap">
+        <div class="pix-valor-badge" id="pixValor">R$ 0,00</div>
+        <canvas id="pixQrCanvas"></canvas>
+        <p class="small muted" id="pixBeneficiario" style="text-align:center; margin:0;"></p>
+      </div>
+
+      <div class="pix-chave-box">
+        <strong>Código Copia e Cola</strong>
+        <span id="pixCopiaCola" style="word-break:break-all; font-size:12px; line-height:1.5; display:block;"></span>
+      </div>
+
+      <div class="pix-copy-row">
+        <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPix">📋 Copiar código PIX</button>
+      </div>
+      <div id="pixAlert" class="alert alert-success" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+  <!-- ===================================================================
+     TOAST DE NOTIFICAÇÃO
+     =================================================================== -->
+  <div class="toast" id="toastNotif" role="alert" aria-live="polite">
+    <div class="toast-icon" id="toastIcon">🔔</div>
+    <div class="toast-body">
+      <div class="toast-title" id="toastTitle"></div>
+      <div class="toast-msg" id="toastMsg"></div>
+    </div>
+    <button class="toast-close" id="toastClose" aria-label="Fechar">×</button>
+  </div>
+
+  <!-- ===================================================================
+     SCRIPT (Supabase + lógica)
+     =================================================================== -->
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON, {
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+
+    // ===== Sessão (localStorage) =====
+    const COLAB_KEY = "marmita.colaborador";
+    const getColab = () => { try { return JSON.parse(localStorage.getItem(COLAB_KEY)); } catch { return null; } };
+    const setColab = (c) => localStorage.setItem(COLAB_KEY, JSON.stringify(c));
+    const clearColab = () => localStorage.removeItem(COLAB_KEY);
+
+    // ===== Helpers UI =====
+    const $ = (id) => document.getElementById(id);
+    const fmtBRL = (v) => "R$ " + Number(v).toFixed(2).replace(".", ",");
+    const screens = ["screen-login", "screen-home", "screen-pedido", "screen-sucesso"];
+    function showScreen(id) {
+      screens.forEach(s => $(s).classList.toggle("hidden", s !== id));
+      window.scrollTo(0, 0);
+    }
+
+    // ===== ESTADO GLOBAL =====
+    const state = {
+      fornecedores: [],
+      cardapio: [],         // [{ prato_id, prato, fornecedor }]
+      acompanhamentos: [],  // por fornecedor_id
+      configEmpresa: {},
+      // pedido em andamento:
+      selPrato: null,
+      selAcomp: new Set(),
+      selPagamento: null
+    };
+
+    // =====================================================================
+    // LOGIN
+    // =====================================================================
+    const PIN_LEN = 4;
+    let pin = "";
+    const dots = [...$("pinDisplay").querySelectorAll(".pin-dot")];
+    const renderPin = () => dots.forEach((d, i) => d.classList.toggle("filled", i < pin.length));
+
+    document.querySelectorAll(".pin-key").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.key;
+        if (k === "clear") pin = "";
+        else if (k === "back") pin = pin.slice(0, -1);
+        else if (pin.length < PIN_LEN) pin += k;
+        renderPin();
+        $("loginAlert").classList.remove("show");
+      });
+    });
+    document.addEventListener("keydown", (e) => {
+      if ($("screen-login").classList.contains("hidden")) return;
+      if (document.activeElement === $("matricula")) return;
+      if (/^[0-9]$/.test(e.key)) { if (pin.length < PIN_LEN) { pin += e.key; renderPin(); } }
+      else if (e.key === "Backspace") { pin = pin.slice(0, -1); renderPin(); }
+      else if (e.key === "Enter") $("btnEntrar").click();
+    });
+
+    $("btnEntrar").addEventListener("click", async () => {
+      const matricula = $("matricula").value.trim();
+      const alertEl = $("loginAlert");
+      alertEl.classList.remove("show");
+
+      if (!matricula) { alertEl.textContent = "Informe sua matrícula."; alertEl.classList.add("show"); return; }
+      if (pin.length !== PIN_LEN) { alertEl.textContent = `O PIN tem ${PIN_LEN} dígitos.`; alertEl.classList.add("show"); return; }
+
+      $("btnEntrar").disabled = true; $("btnEntrar").textContent = "Entrando…";
+      try {
+        const { data, error } = await sb.rpc("login_colaborador", { p_matricula: matricula, p_pin: pin });
+        if (error) {
+          console.error("Erro RPC login_colaborador:", error);
+          alertEl.textContent = "Erro ao conectar: " + (error.message || "verifique o console (F12).");
+          alertEl.classList.add("show");
+          return;
+        }
+
+        // O retorno agora vem com: sucesso, mensagem_erro, bloqueado_ate, id, nome, ...
+        const resp = Array.isArray(data) ? data[0] : data;
+        if (!resp || !resp.sucesso) {
+          alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
+          alertEl.classList.add("show");
+          pin = ""; renderPin();
+          // se bloqueado, desabilita o botão até o horário
+          if (resp?.bloqueado_ate) {
+            $("btnEntrar").disabled = true;
+            $("btnEntrar").textContent = "Bloqueado";
+          }
+          return;
+        }
+        setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, setor: resp.setor });
+        await abrirHome();
+      } catch (err) {
+        console.error(err);
+        alertEl.textContent = "Não foi possível conectar ao servidor."; alertEl.classList.add("show");
+      } finally {
+        if (!$("btnEntrar").textContent.includes("Bloqueado")) {
+          $("btnEntrar").disabled = false; $("btnEntrar").textContent = "Entrar";
+        }
+      }
+    });
+
+    // =====================================================================
+    // HOME (cardápio + meus pedidos)
+    // =====================================================================
+    async function abrirHome() {
+      const colab = getColab();
+      if (!colab) { showScreen("screen-login"); return; }
+
+      $("nomeColab").textContent = colab.nome;
+      const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+      $("dataHoje").textContent = "Cardápio de " + hoje;
+
+      showScreen("screen-home");
+      await carregarCardapio();
+      await carregarMeusPedidos();
+    }
+
+    async function carregarCardapio() {
+      const lista = $("cardapioList");
+      lista.innerHTML = '<div class="loading">Carregando cardápio…</div>';
+
+      const { data, error } = await sb.rpc("cardapio_hoje");
+
+      if (error) { lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`; return; }
+      if (!data || data.length === 0) {
+        lista.innerHTML = '<div class="card empty"><div class="empty-icon">🍽️</div><p>Nenhum cardápio publicado hoje.<br/>Aguarde o administrador.</p></div>';
+        return;
+      }
+
+      // Verifica se TUDO está encerrado (pra mostrar banner global)
+      const tudoEncerrado = data.every(item => item.encerrado);
+
+      // Agrupar por fornecedor (e respectivo horário-limite)
+      const grupos = new Map();
+      data.forEach(item => {
+        const fid = item.fornecedor_id;
+        if (!grupos.has(fid)) {
+          grupos.set(fid, {
+            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
+            pratos: [],
+            horario_limite: item.horario_limite,
+            encerrado: item.encerrado
+          });
+        }
+        grupos.get(fid).pratos.push({
+          id: item.prato_id, nome: item.prato_nome,
+          descricao: item.prato_descricao, preco: item.prato_preco
+        });
+      });
+
+      state.cardapio = data;
+
+      // Agenda lembretes de horário-limite (se notificações ativas)
+      agendarLembretes();
+
+      let html = "";
+
+      if (tudoEncerrado) {
+        html += `<div class="card" style="background: rgba(210,152,34,.12); border: 1px solid rgba(210,152,34,.3); margin-bottom: 16px;">
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <div style="font-size:20px;">⏰</div>
+            <div>
+              <div style="font-weight:600;">Pedidos encerrados</div>
+              <div class="small muted">O horário-limite para pedidos de hoje já passou. Tente amanhã!</div>
+            </div>
+          </div>
+        </div>`;
+      }
+
+      for (const { fornecedor, pratos, horario_limite, encerrado } of grupos.values()) {
+        html += `<div class="fornecedor-bloco">
+          <div class="fornecedor-head">
+            <h2>${fornecedor.nome}</h2>
+            ${horario_limite ? `<span class="small muted">${encerrado ? '⏰ Encerrado' : 'Pedidos até ' + horario_limite.slice(0, 5)}</span>` : ''}
+          </div>`;
+        pratos.forEach(p => {
+          html += `<div class="prato ${encerrado ? 'prato-encerrado' : ''}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${encerrado ? 'style="opacity:.55;"' : ''}>
+            <div class="prato-info">
+              <div class="prato-nome">${p.nome}</div>
+              ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
+            </div>
+            <div class="prato-preco">${fmtBRL(p.preco)}</div>
+          </div>`;
+        });
+        html += `</div>`;
+      }
+      lista.innerHTML = html;
+
+      // Bind clicks (mas não permite clicar em pratos encerrados)
+      lista.querySelectorAll(".prato:not(.prato-encerrado)").forEach(el => {
+        el.addEventListener("click", () => abrirPedido(el.dataset.prato, el.dataset.fornecedor));
+      });
+      lista.querySelectorAll(".prato-encerrado").forEach(el => {
+        el.addEventListener("click", () => {
+          alert("Os pedidos deste fornecedor já encerraram para hoje.");
+        });
+      });
+    }
+
+    async function carregarMeusPedidos() {
+      const lista = $("meusPedidosList");
+      lista.innerHTML = '<div class="loading">Carregando…</div>';
+      const colab = getColab();
+
+      // Usa a RPC meus_pedidos (retorna acompanhamentos concatenados também)
+      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+
+      if (error) {
+        lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`;
+        return;
+      }
+      if (!data || data.length === 0) {
+        lista.innerHTML = '<div class="card empty"><div class="empty-icon">📋</div><p>Você ainda não fez pedidos.</p></div>';
+        return;
+      }
+
+      // -------- Stats --------
+      const pedidos = data.filter(p => p.status !== "cancelado");
+      const totalGasto = pedidos.reduce((s, p) => s + Number(p.preco_total), 0);
+      const pendentes = pedidos.filter(p => p.status_pagamento === "pendente");
+      const fiados = pendentes.filter(p => p.forma_pagamento === "fiado");
+      const totalPendente = pendentes.reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalFiado = fiados.reduce((s, p) => s + Number(p.preco_total), 0);
+
+      // -------- Hoje + Histórico agrupado por data --------
+      const hoje = new Date().toISOString().slice(0, 10);
+      const pedidoHoje = pedidos.find(p => p.data === hoje);
+      const historico = pedidos.filter(p => p.data !== hoje);
+      const grupos = new Map();
+      historico.forEach(p => {
+        if (!grupos.has(p.data)) grupos.set(p.data, []);
+        grupos.get(p.data).push(p);
+      });
+
+      const payLabel = {
+        pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
+        dinheiro: "Dinheiro", fiado: "Fiado semanal"
+      };
+
+      const fmtDataLonga = (d) => new Date(d).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+
+      function renderPedidoCard(p) {
+        const isFiado = p.forma_pagamento === "fiado" && p.status_pagamento === "pendente";
+        const badgeClass = isFiado ? "fiado" : p.status_pagamento;
+        const badgeText = isFiado ? "Fiado" : p.status_pagamento;
+        return `<div class="pedido-card">
+          <div class="pedido-head">
+            <div style="flex:1; min-width:0;">
+              <div class="pedido-prato">${p.prato_nome ?? "—"}</div>
+              <div class="pedido-meta">${p.fornecedor_nome ?? ""}</div>
+              ${p.acompanhamentos ? `<div class="pedido-meta">+ ${p.acompanhamentos}</div>` : ""}
+              ${p.observacoes ? `<div class="pedido-obs">📝 ${p.observacoes}</div>` : ""}
+            </div>
+            <span class="badge ${badgeClass}">${badgeText}</span>
+          </div>
+          <div class="pedido-foot">
+            <span class="small muted">${payLabel[p.forma_pagamento] || p.forma_pagamento}</span>
+            <span class="pedido-valor">${fmtBRL(p.preco_total)}</span>
+          </div>
+          <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator);">
+            <button class="btn btn-secondary btn-sm btn-pill btn-block btn-repetir" data-pedido="${p.id}">
+              🔁 Pedir de novo
+            </button>
+          </div>
+        </div>`;
+      }
+
+      // -------- Render --------
+      let html = `
+        <div class="stats-row">
+          <div class="stat-mini">
+            <div class="stat-mini-label">Total gasto</div>
+            <div class="stat-mini-value brick">${fmtBRL(totalGasto)}</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-label">Em aberto</div>
+            <div class="stat-mini-value mustard">${fmtBRL(totalPendente)}</div>
+          </div>
+        </div>`;
+
+      if (totalFiado > 0) {
+        html += `
+          <div class="card" style="background: rgba(0,122,255,.06); border: 1px solid rgba(0,122,255,.15);">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
+              <div>
+                <div class="small" style="color: var(--blue-ios); font-weight: 600;">📒 Fiado em aberto</div>
+                <div class="small muted">${fiados.length} ${fiados.length === 1 ? "pedido" : "pedidos"} aguardando fechamento</div>
+              </div>
+              <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalFiado)}</div>
+            </div>
+            <button class="btn btn-block btn-pill btn-sm" id="btnAbrirPix"
+              style="margin-top:12px; background: var(--blue-ios); color:#fff; min-height:42px;">
+              📲 Pagar com PIX
+            </button>
+          </div>`;
+      }
+
+      if (pedidoHoje) {
+        html += `<div class="section-title">Hoje</div>` + renderPedidoCard(pedidoHoje);
+      }
+
+      if (grupos.size > 0) {
+        html += `<div class="section-title">Histórico</div>`;
+        const datas = [...grupos.keys()].sort().reverse();
+        for (const d of datas) {
+          const ped = grupos.get(d);
+          const dataLabel = fmtDataLonga(d + "T12:00:00");
+          html += `<div style="font-size: 13px; color: var(--ink-tertiary); margin: 14px 4px 6px; font-weight: 500;">
+            ${dataLabel.charAt(0).toUpperCase() + dataLabel.slice(1)}
+          </div>`;
+          ped.forEach(p => { html += renderPedidoCard(p); });
+        }
+      }
+
+      lista.innerHTML = html;
+
+      // Bind botão PIX (se existir)
+      const btnPix = document.getElementById("btnAbrirPix");
+      if (btnPix) btnPix.addEventListener("click", abrirPixFiado);
+
+      // Mostra banner de notificações se ainda não concedida
+      verificarBannerNotificacoes();
+
+      // Inicia polling de fiado
+      iniciarPollingFiado();
+
+      // Bind clicks nos botões "Pedir de novo"
+      lista.querySelectorAll(".btn-repetir").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await pedirDeNovo(btn.dataset.pedido);
+        });
+      });
+    }
+
+    // -------- Pedir de novo: busca pedido antigo e reabre tela de pedido --------
+    async function pedirDeNovo(pedidoId) {
+      const colab = getColab();
+      const { data, error } = await sb.rpc("buscar_pedido", {
+        p_pedido_id: pedidoId,
+        p_colaborador_id: colab.id
+      });
+      if (error || !data || data.length === 0) {
+        alert("Não consegui carregar este pedido.");
+        return;
+      }
+      const dados = data[0];
+
+      // Verifica se o prato ainda está disponível no cardápio de hoje
+      const { data: cardapio } = await sb.rpc("cardapio_hoje");
+      const disponivel = (cardapio || []).find(c => c.prato_id === dados.prato_id);
+
+      if (!disponivel) {
+        alert("Este prato não está no cardápio de hoje.");
+        return;
+      }
+      if (disponivel.encerrado) {
+        alert("Os pedidos deste fornecedor já encerraram para hoje.");
+        return;
+      }
+
+      // Abre a tela de pedido com os mesmos acompanhamentos/forma de pagamento
+      await abrirPedido(dados.prato_id, dados.fornecedor_id);
+
+      // Pré-seleciona acompanhamentos
+      if (dados.acompanhamentos && dados.acompanhamentos.length > 0) {
+        dados.acompanhamentos.forEach(acompId => {
+          state.selAcomp.add(acompId);
+          const chip = document.querySelector(`.chip[data-id="${acompId}"]`);
+          if (chip) chip.classList.add("selected");
+        });
+        atualizarTotal();
+      }
+
+      // Pré-preenche observações
+      if (dados.observacoes) {
+        $("obs").value = dados.observacoes;
+      }
+
+      // Pré-seleciona forma de pagamento
+      const payOpt = document.querySelector(`.pay-option[data-pay="${dados.forma_pagamento}"]`);
+      if (payOpt && !payOpt.style.pointerEvents) {
+        payOpt.classList.add("selected");
+        state.selPagamento = dados.forma_pagamento;
+      }
+    }
+
+    // Tabs / Segmented control
+    document.querySelectorAll(".segmented button, .tab").forEach(t => {
+      t.addEventListener("click", () => {
+        document.querySelectorAll(".segmented button, .tab").forEach(x => x.classList.toggle("active", x === t));
+        const target = t.dataset.tab;
+        $("tab-cardapio").classList.toggle("hidden", target !== "cardapio");
+        $("tab-meusPedidos").classList.toggle("hidden", target !== "meusPedidos");
+        if (target === "meusPedidos") carregarMeusPedidos();
+      });
+    });
+
+    $("btnSair").addEventListener("click", () => { clearColab(); showScreen("screen-login"); });
+    $("btnSair2").addEventListener("click", () => { clearColab(); showScreen("screen-login"); });
+
+    // =====================================================================
+    // MONTAR PEDIDO
+    // =====================================================================
+    async function abrirPedido(pratoId, fornecedorId) {
+      // Buscar prato e acompanhamentos
+      const { data: prato } = await sb.from("pratos")
+        .select("id, nome, descricao, preco, fornecedor:fornecedores(id, nome, chave_pix)")
+        .eq("id", pratoId).single();
+      const { data: acomp } = await sb.from("acompanhamentos")
+        .select("id, nome, preco_extra")
+        .eq("fornecedor_id", fornecedorId)
+        .eq("ativo", true);
+      const { data: config } = await sb.from("configuracoes")
+        .select("chave, valor")
+        .in("chave", ["pix_empresa", "nome_empresa"]);
+
+      state.selPrato = prato;
+      state.selAcomp = new Set();
+      state.selPagamento = null;
+      state.acompanhamentos = acomp || [];
+      state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
+
+      $("pedidoFornecedor").textContent = prato.fornecedor.nome;
+      $("pedidoPrato").textContent = prato.nome;
+      $("pedidoDesc").textContent = prato.descricao || "";
+      $("obs").value = "";
+      $("pedidoAlert").classList.remove("show");
+
+      // Render acompanhamentos
+      $("acompList").innerHTML = state.acompanhamentos.length
+        ? state.acompanhamentos.map(a => `
+        <div class="chip" data-id="${a.id}">
+          ${a.nome}${Number(a.preco_extra) > 0 ? `<span class="extra">+${fmtBRL(a.preco_extra)}</span>` : ""}
+        </div>`).join("")
+        : '<p class="small muted">Este fornecedor não tem acompanhamentos cadastrados.</p>';
+
+      $("acompList").querySelectorAll(".chip").forEach(c => {
+        c.addEventListener("click", () => {
+          const id = c.dataset.id;
+          if (state.selAcomp.has(id)) state.selAcomp.delete(id);
+          else state.selAcomp.add(id);
+          c.classList.toggle("selected");
+          atualizarTotal();
+        });
+      });
+
+      // Render pagamento
+      const pixEmpresa = state.configEmpresa.pix_empresa;
+      const pixFornecedor = prato.fornecedor.chave_pix;
+      const opts = [
+        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
+        { id: "pix_fornecedor", icon: "🏪", title: "Pix Fornecedor", desc: pixFornecedor ? `Chave: ${pixFornecedor}` : "Fornecedor sem chave Pix", disabled: !pixFornecedor },
+        { id: "dinheiro", icon: "💵", title: "Dinheiro", desc: "Pago na entrega" },
+        { id: "fiado", icon: "📒", title: "Fiado semanal", desc: "Acumula até o fechamento" }
+      ];
+      $("payOptions").innerHTML = opts.map(o => `
+    <div class="pay-option" data-pay="${o.id}" ${o.disabled ? 'style="opacity:.45; pointer-events:none;"' : ""}>
+      <div class="pay-icon">${o.icon}</div>
+      <div style="flex:1; min-width:0;">
+        <div class="pay-title">${o.title}</div>
+        <div class="pay-desc">${o.desc}</div>
+      </div>
+      <div class="pay-check">✓</div>
+    </div>
+  `).join("");
+
+      $("payOptions").querySelectorAll(".pay-option").forEach(opt => {
+        opt.addEventListener("click", () => {
+          $("payOptions").querySelectorAll(".pay-option").forEach(x => x.classList.remove("selected"));
+          opt.classList.add("selected");
+          state.selPagamento = opt.dataset.pay;
+        });
+      });
+
+      atualizarTotal();
+      showScreen("screen-pedido");
+    }
+
+    function calcTotal() {
+      let total = Number(state.selPrato.preco);
+      state.acompanhamentos.forEach(a => {
+        if (state.selAcomp.has(a.id)) total += Number(a.preco_extra);
+      });
+      return total;
+    }
+    function atualizarTotal() { $("totalPreco").textContent = fmtBRL(calcTotal()); }
+
+    $("btnVoltar").addEventListener("click", () => showScreen("screen-home"));
+
+    $("btnConfirmar").addEventListener("click", async () => {
+      const alertEl = $("pedidoAlert"); alertEl.classList.remove("show");
+      if (!state.selPagamento) {
+        alertEl.textContent = "Escolha a forma de pagamento."; alertEl.classList.add("show");
+        return;
+      }
+      $("btnConfirmar").disabled = true; $("btnConfirmar").textContent = "Enviando…";
+
+      const colab = getColab();
+      const total = calcTotal();
+      const acompArr = [...state.selAcomp];
+
+      // Usa a RPC criar_pedido (SECURITY DEFINER, contorna o RLS de forma segura)
+      const { data: pedidoId, error: errPedido } = await sb.rpc("criar_pedido", {
+        p_colaborador_id: colab.id,
+        p_prato_id: state.selPrato.id,
+        p_forma_pagamento: state.selPagamento,
+        p_observacoes: $("obs").value.trim() || null,
+        p_acompanhamentos: acompArr
+      });
+
+      if (errPedido) {
+        console.error("Erro criar_pedido:", errPedido);
+        alertEl.textContent = "Erro ao registrar pedido: " + errPedido.message;
+        alertEl.classList.add("show");
+        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+        return;
+      }
+
+      // Mostrar tela de sucesso
+      const nomesAcomp = state.acompanhamentos
+        .filter(a => state.selAcomp.has(a.id))
+        .map(a => a.nome);
+
+      // Notificação de confirmação
+      notificarPedidoConfirmado(state.selPrato.nome, state.selPrato.fornecedor.nome);
+      mostrarToast("✅", "Pedido confirmado!", `${state.selPrato.nome} registrado com sucesso.`);
+
+      const payLabel = {
+        pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
+        dinheiro: "Dinheiro", fiado: "Fiado semanal"
+      }[state.selPagamento];
+
+      $("sucessoResumo").innerHTML = `
+    <div><strong>${state.selPrato.fornecedor.nome}</strong></div>
+    <div>${state.selPrato.nome}</div>
+    ${nomesAcomp.length ? `<div class="small muted" style="margin-top:6px;">+ ${nomesAcomp.join(", ")}</div>` : ""}
+    ${$("obs").value.trim() ? `<div class="small" style="margin-top:6px;">📝 ${$("obs").value.trim()}</div>` : ""}
+    <div style="margin-top:10px; display:flex; justify-content:space-between;">
+      <span class="small muted">${payLabel}</span>
+      <strong style="color:var(--brick);">${fmtBRL(total)}</strong>
+    </div>
+  `;
+      showScreen("screen-sucesso");
+      $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+    });
+
+    $("btnVoltarHome").addEventListener("click", abrirHome);
+
+
+    // =====================================================================
+    // =====================================================================
+    // PIX QR CODE
+    // =====================================================================
+    // =====================================================================
+
+    // --- Gerador de payload PIX (padrão BACEN EMV) ---
+    function gerarPayloadPix({ chave, nome, cidade, valor, txid = "FIADO", descricao = "" }) {
+      const fmt = (id, val) => {
+        const v = String(val);
+        return id + v.length.toString().padStart(2, "0") + v;
+      };
+
+      // 26 — Merchant Account Info
+      const gui = fmt("00", "BR.GOV.BCB.PIX");
+      const chaveField = fmt("01", chave.trim());
+      const descField = descricao ? fmt("02", descricao.slice(0, 72)) : "";
+      const mai = fmt("26", gui + chaveField + descField);
+
+      // 54 — Valor (obrigatório com casas decimais, sem "R$")
+      const valorStr = Number(valor).toFixed(2);
+
+      // 62 — Additional Data (txid)
+      const txidSafe = (txid || "***").replace(/[^A-Za-z0-9]/g, "").slice(0, 25) || "***";
+      const addData = fmt("62", fmt("05", txidSafe));
+
+      // Payload sem CRC
+      const nomeNorm = nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]/g, "").trim().slice(0, 25);
+      const cidadeNorm = cidade.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]/g, "").trim().slice(0, 15);
+
+      const payload =
+        fmt("00", "01") +          // Payload Format Indicator
+        fmt("01", "12") +          // Point of Initiation (12 = dinâmico / só 1 uso)
+        mai +
+        fmt("52", "0000") +        // MCC
+        fmt("53", "986") +         // Currency BRL
+        fmt("54", valorStr) +      // Valor
+        fmt("58", "BR") +          // Country
+        fmt("59", nomeNorm) +      // Nome beneficiário
+        fmt("60", cidadeNorm) +    // Cidade
+        addData +
+        "6304";                    // CRC placeholder
+
+      // CRC-16/CCITT-FALSE
+      const crc = calcCrc16(payload);
+      return payload + crc;
+    }
+
+    function calcCrc16(str) {
+      let crc = 0xFFFF;
+      for (let i = 0; i < str.length; i++) {
+        crc ^= str.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) {
+          crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+        }
+      }
+      return ((crc & 0xFFFF).toString(16).toUpperCase().padStart(4, "0"));
+    }
+
+    // --- Abre o sheet de PIX para o fiado em aberto ---
+    let pixQrInstance = null;
+
+    async function abrirPixFiado() {
+      const colab = getColab();
+
+      // Busca config da empresa
+      const { data: cfg } = await sb.from("configuracoes")
+        .select("chave, valor")
+        .in("chave", ["pix_empresa", "nome_empresa"]);
+      const config = Object.fromEntries((cfg || []).map(c => [c.chave, c.valor]));
+
+      if (!config.pix_empresa) {
+        mostrarToast("⚠️", "PIX não configurado", "O administrador ainda não cadastrou a chave PIX da empresa.");
+        return;
+      }
+
+      // Busca saldo de fiado pendente
+      const { data: pedidos } = await sb.from("pedidos")
+        .select("preco_total")
+        .eq("colaborador_id", colab.id)
+        .eq("forma_pagamento", "fiado")
+        .eq("status_pagamento", "pendente")
+        .neq("status", "cancelado");
+
+      const totalFiado = (pedidos || []).reduce((s, p) => s + Number(p.preco_total), 0);
+
+      if (totalFiado <= 0) {
+        mostrarToast("✅", "Sem fiado em aberto", "Você não tem saldo de fiado pendente.");
+        return;
+      }
+
+      // Gera payload
+      const payload = gerarPayloadPix({
+        chave: config.pix_empresa,
+        nome: (config.nome_empresa || "Empresa").slice(0, 25),
+        cidade: "SAO PAULO",
+        valor: totalFiado,
+        txid: "FIADO" + colab.id.replace(/-/g, "").slice(0, 10).toUpperCase(),
+        descricao: `Fiado ${colab.nome.split(" ")[0]}`
+      });
+
+      // Preenche UI
+      document.getElementById("pixValor").textContent = fmtBRL(totalFiado);
+      document.getElementById("pixBeneficiario").textContent = config.nome_empresa || "Empresa";
+      document.getElementById("pixCopiaCola").textContent = payload;
+      document.getElementById("pixAlert").classList.remove("show");
+
+      // Gera QR Code
+      const canvas = document.getElementById("pixQrCanvas");
+      canvas.innerHTML = "";
+      if (pixQrInstance) { try { pixQrInstance.clear(); } catch { } }
+      pixQrInstance = new QRCode(canvas, {
+        text: payload,
+        width: 220,
+        height: 220,
+        colorDark: "#2a1f17",
+        colorLight: "#fffaf0",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+
+      document.getElementById("pixSheetBg").classList.add("show");
+      document.body.style.overflow = "hidden";
+    }
+
+    // Fechar sheet PIX
+    document.getElementById("pixClose").addEventListener("click", fecharPixSheet);
+    document.getElementById("pixSheetBg").addEventListener("click", e => {
+      if (e.target === document.getElementById("pixSheetBg")) fecharPixSheet();
+    });
+
+    function fecharPixSheet() {
+      document.getElementById("pixSheetBg").classList.remove("show");
+      document.body.style.overflow = "";
+    }
+
+    // Copiar código PIX
+    document.getElementById("btnCopiarPix").addEventListener("click", async () => {
+      const codigo = document.getElementById("pixCopiaCola").textContent;
+      const alertEl = document.getElementById("pixAlert");
+      try {
+        await navigator.clipboard.writeText(codigo);
+        alertEl.textContent = "✅ Código copiado! Cole no seu app de pagamentos.";
+        alertEl.className = "alert alert-success show";
+        setTimeout(() => alertEl.classList.remove("show"), 3000);
+      } catch {
+        alertEl.textContent = "Selecione e copie o código manualmente.";
+        alertEl.className = "alert alert-error show";
+      }
+    });
+
+    // =====================================================================
+    // =====================================================================
+    // NOTIFICAÇÕES WEB PUSH
+    // =====================================================================
+    // =====================================================================
+
+    const NOTIF_IGNORED_KEY = "marmita.notif_ignorado";
+    let notifPermissao = typeof Notification !== "undefined" ? Notification.permission : "denied";
+
+    // --- Toast UI ---
+    let toastTimer = null;
+    function mostrarToast(icon, titulo, msg, duracao = 4000) {
+      const t = document.getElementById("toastNotif");
+      document.getElementById("toastIcon").textContent = icon;
+      document.getElementById("toastTitle").textContent = titulo;
+      document.getElementById("toastMsg").textContent = msg;
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), duracao);
+    }
+
+    document.getElementById("toastClose").addEventListener("click", () => {
+      document.getElementById("toastNotif").classList.remove("show");
+      clearTimeout(toastTimer);
+    });
+
+    // --- Verificar se deve mostrar banner de notificações ---
+    function verificarBannerNotificacoes() {
+      if (typeof Notification === "undefined") return; // browser sem suporte
+      if (Notification.permission === "granted") return; // já concedido
+      if (Notification.permission === "denied") return;  // bloqueado pelo user
+      if (localStorage.getItem(NOTIF_IGNORED_KEY)) return; // ignorou antes
+
+      document.getElementById("notifBanner").classList.remove("hidden");
+    }
+
+    document.getElementById("btnAtivarNotif").addEventListener("click", async () => {
+      await solicitarPermissaoNotificacoes();
+    });
+
+    document.getElementById("btnIgnorarNotif").addEventListener("click", () => {
+      localStorage.setItem(NOTIF_IGNORED_KEY, "1");
+      document.getElementById("notifBanner").classList.add("hidden");
+    });
+
+    async function solicitarPermissaoNotificacoes() {
+      if (typeof Notification === "undefined") {
+        mostrarToast("⚠️", "Não suportado", "Seu navegador não suporta notificações.");
+        return;
+      }
+      const perm = await Notification.requestPermission();
+      notifPermissao = perm;
+      document.getElementById("notifBanner").classList.add("hidden");
+
+      if (perm === "granted") {
+        mostrarToast("🔔", "Notificações ativadas!", "Você receberá lembretes antes do horário limite.");
+        await registrarServiceWorker();
+        agendarLembretes();
+      } else {
+        mostrarToast("😶", "Notificações bloqueadas", "Você pode ativar depois nas configurações do navegador.");
+      }
+    }
+
+    // --- VAPID public key ---
+    const VAPID_PUBLIC_KEY = "BAuF3u4tWK84I2dHFN0fkKnZDBol3xK7WbGQrE7GntWxKNznJ10ZJ6VqCprvdutUqMYmNFrn6lgIW69sjg9aQTY";
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = "=".repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
+    // --- Registrar SW + subscrever push real ---
+    async function registrarServiceWorker() {
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+        console.warn("Push não suportado neste browser.");
+        return;
+      }
+      try {
+        const reg = await navigator.serviceWorker.register("/marmita-sw.js");
+        await navigator.serviceWorker.ready;
+
+        // Verifica se já tem subscrição ativa
+        let sub = await reg.pushManager.getSubscription();
+        if (!sub) {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+          });
+        }
+        await salvarSubscricao(sub);
+      } catch (e) {
+        console.warn("SW/Push não registrado:", e.message);
+      }
+    }
+
+    async function salvarSubscricao(sub) {
+      const colab = getColab();
+      if (!colab) return;
+      const j = sub.toJSON();
+      await sb.from("push_subscriptions").upsert({
+        colaborador_id: colab.id,
+        endpoint: j.endpoint,
+        p256dh: j.keys.p256dh,
+        auth: j.keys.auth,
+        user_agent: navigator.userAgent.slice(0, 200)
+      }, { onConflict: "endpoint" });
+    }
+
+    // --- Notificação local (sem SW, funciona com app aberto) ---
+    function notificarLocal(titulo, corpo, icon = "🍱") {
+      if (notifPermissao !== "granted") return;
+      try {
+        new Notification(titulo, {
+          body: corpo,
+          icon: "/icon-192.png",
+          badge: "/icon-192.png",
+          tag: "marmita-" + Date.now(),
+          silent: false
+        });
+      } catch (e) {
+        // fallback: toast
+        mostrarToast(icon, titulo, corpo);
+      }
+    }
+
+    // --- Agendar lembretes baseados no horário-limite do cardápio ---
+    let lembreteTimers = [];
+
+    function agendarLembretes() {
+      // Cancela timers anteriores
+      lembreteTimers.forEach(clearTimeout);
+      lembreteTimers = [];
+
+      if (notifPermissao !== "granted") return;
+      if (!state.cardapio || state.cardapio.length === 0) return;
+
+      // Pega os horários únicos do cardápio de hoje
+      const horarios = [...new Set(
+        state.cardapio
+          .filter(item => item.horario_limite && !item.encerrado)
+          .map(item => item.horario_limite)
+      )];
+
+      const agora = new Date();
+
+      horarios.forEach(horarioStr => {
+        // horarioStr é "HH:MM:SS"
+        const [h, m] = horarioStr.split(":").map(Number);
+        const limite = new Date();
+        limite.setHours(h, m, 0, 0);
+
+        const trinta = new Date(limite.getTime() - 30 * 60 * 1000);
+        const dez = new Date(limite.getTime() - 10 * 60 * 1000);
+
+        if (trinta > agora) {
+          lembreteTimers.push(setTimeout(() => {
+            notificarLocal(
+              "🍱 Pedido em 30 minutos",
+              `O horário limite para pedir é ${horarioStr.slice(0, 5)}. Não esqueça de fazer seu pedido!`
+            );
+            mostrarToast("⏰", "Pedido em 30 minutos", `Horário limite: ${horarioStr.slice(0, 5)}`);
+          }, trinta - agora));
+        }
+
+        if (dez > agora) {
+          lembreteTimers.push(setTimeout(() => {
+            notificarLocal(
+              "⚠️ Últimos 10 minutos!",
+              `O cardápio fecha às ${horarioStr.slice(0, 5)}. Corre lá!`
+            );
+            mostrarToast("⚠️", "Últimos 10 minutos!", `Cardápio fecha às ${horarioStr.slice(0, 5)}.`);
+          }, dez - agora));
+        }
+      });
+    }
+
+    // --- Notificação de confirmação de pedido (chamada após criar_pedido) ---
+    function notificarPedidoConfirmado(nomePrato, fornecedor) {
+      notificarLocal(
+        "✅ Pedido confirmado!",
+        `${nomePrato} de ${fornecedor} foi registrado com sucesso.`
+      );
+    }
+
+    // --- Polling: verifica mudança de status de fiado a cada 5min ---
+    let fiadorPollTimer = null;
+    let ultimoStatusFiado = null;
+
+    async function iniciarPollingFiado() {
+      if (fiadorPollTimer) clearInterval(fiadorPollTimer);
+
+      async function checarFiado() {
+        const colab = getColab();
+        if (!colab) return;
+        const { data } = await sb.from("pedidos")
+          .select("id, status_pagamento")
+          .eq("colaborador_id", colab.id)
+          .eq("forma_pagamento", "fiado")
+          .neq("status", "cancelado");
+
+        if (!data) return;
+        const pendentes = data.filter(p => p.status_pagamento === "pendente").length;
+        const pagos = data.filter(p => p.status_pagamento === "pago").length;
+        const statusAtual = `${pendentes}:${pagos}`;
+
+        if (ultimoStatusFiado !== null && ultimoStatusFiado !== statusAtual) {
+          // Houve mudança — provavelmente o admin fechou o fiado
+          const fiadosAntes = Number(ultimoStatusFiado.split(":")[0]);
+          if (pendentes < fiadosAntes) {
+            notificarLocal(
+              "💸 Fiado atualizado!",
+              "Seu saldo de fiado foi fechado pelo administrador."
+            );
+            mostrarToast("💸", "Fiado atualizado!", "Seu saldo de fiado foi fechado pelo administrador.");
+          }
+        }
+        ultimoStatusFiado = statusAtual;
+      }
+
+      await checarFiado();
+      fiadorPollTimer = setInterval(checarFiado, 5 * 60 * 1000); // a cada 5 min
+    }
+
+    // =====================================================================
+    // LISTENER DE MENSAGENS DO SERVICE WORKER
+    // =====================================================================
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", async (event) => {
+        const { type, sub } = event.data || {};
+
+        // Rotação de chave VAPID: re-salva no Supabase
+        if (type === "PUSH_SUBSCRIPTION_CHANGED" && sub) {
+          const colab = getColab();
+          if (colab) {
+            await sb.from("push_subscriptions").upsert({
+              colaborador_id: colab.id,
+              endpoint: sub.endpoint,
+              p256dh: sub.keys.p256dh,
+              auth: sub.keys.auth,
+              user_agent: navigator.userAgent.slice(0, 200)
+            }, { onConflict: "endpoint" });
+          }
+        }
+
+        // Clique em notificação com app aberto: navega para a aba correta
+        if (type === "NOTIF_CLICK") {
+          if (event.data.url?.includes("meusPedidos")) {
+            document.querySelectorAll(".segmented button").forEach(b => {
+              b.classList.toggle("active", b.dataset.tab === "meusPedidos");
+            });
+            document.getElementById("tab-cardapio").classList.add("hidden");
+            document.getElementById("tab-meusPedidos").classList.remove("hidden");
+            await carregarMeusPedidos();
+          }
+        }
+      });
+    }
+
+    // =====================================================================
+    // INIT
+    // =====================================================================
+    if (getColab()) abrirHome();
+    else showScreen("screen-login");
+  </script>
+</body>
+
+</html>
