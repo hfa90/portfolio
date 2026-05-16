@@ -582,18 +582,18 @@
 
     .prato-badge-add {
       position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 28px;
-      height: 28px;
+      bottom: 14px;
+      right: 14px;
+      width: 24px;
+      height: 24px;
       border-radius: 50%;
-      background: var(--brick);
-      color: #fff;
+      background: rgba(185, 74, 42, .12);
+      color: var(--brick);
       display: grid;
       place-items: center;
-      font-size: 18px;
-      font-weight: 300;
-      box-shadow: 0 2px 8px rgba(185, 74, 42, .3);
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1;
     }
 
     /* Acompanhamentos chips */
@@ -1747,9 +1747,10 @@
       const pedidos = data.filter(p => p.status !== "cancelado");
       const totalGasto = pedidos.reduce((s, p) => s + Number(p.preco_total), 0);
       const pendentes = pedidos.filter(p => p.status_pagamento === "pendente");
-      const fiados = pendentes.filter(p => p.forma_pagamento === "fiado");
       const totalPendente = pendentes.reduce((s, p) => s + Number(p.preco_total), 0);
-      const totalFiado = fiados.reduce((s, p) => s + Number(p.preco_total), 0);
+      // Pendentes que podem pagar via PIX (fiado, pix_empresa, pix_fornecedor)
+      const pixPendentes = pendentes.filter(p => ["fiado", "pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento));
+      const totalPixPendente = pixPendentes.reduce((s, p) => s + Number(p.preco_total), 0);
 
       // -------- Hoje + Histórico agrupado por data --------
       const hoje = new Date().toISOString().slice(0, 10);
@@ -1807,15 +1808,15 @@
           </div>
         </div>`;
 
-      if (totalFiado > 0) {
+      if (totalPixPendente > 0) {
         html += `
           <div class="card" style="background: rgba(0,122,255,.06); border: 1px solid rgba(0,122,255,.15);">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div>
-                <div class="small" style="color: var(--blue-ios); font-weight: 600;">📒 Fiado em aberto</div>
-                <div class="small muted">${fiados.length} ${fiados.length === 1 ? "pedido" : "pedidos"} aguardando fechamento</div>
+                <div class="small" style="color: var(--blue-ios); font-weight: 600;">💰 Pagamento pendente</div>
+                <div class="small muted">${pixPendentes.length} ${pixPendentes.length === 1 ? "pedido" : "pedidos"} aguardando pagamento</div>
               </div>
-              <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalFiado)}</div>
+              <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalPixPendente)}</div>
             </div>
             <button class="btn btn-block btn-pill btn-sm" id="btnAbrirPix"
               style="margin-top:12px; background: var(--blue-ios); color:#fff; min-height:42px;">
@@ -2152,22 +2153,22 @@
       const config = Object.fromEntries((cfg || []).map(c => [c.chave, c.valor]));
 
       if (!config.pix_empresa) {
-        mostrarToast("⚠️", "PIX não configurado", "O administrador ainda não cadastrou a chave PIX da empresa.");
+        mostrarToast("\u26a0\ufe0f", "PIX n\u00e3o configurado", "O administrador ainda n\u00e3o cadastrou a chave PIX da empresa.");
         return;
       }
 
-      // Busca saldo de fiado pendente
+      // Busca TODOS os pedidos pendentes (fiado, pix_empresa, pix_fornecedor)
       const { data: pedidos } = await sb.from("pedidos")
         .select("preco_total")
         .eq("colaborador_id", colab.id)
-        .eq("forma_pagamento", "fiado")
+        .in("forma_pagamento", ["fiado", "pix_empresa", "pix_fornecedor"])
         .eq("status_pagamento", "pendente")
         .neq("status", "cancelado");
 
-      const totalFiado = (pedidos || []).reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalPendente = (pedidos || []).reduce((s, p) => s + Number(p.preco_total), 0);
 
-      if (totalFiado <= 0) {
-        mostrarToast("✅", "Sem fiado em aberto", "Você não tem saldo de fiado pendente.");
+      if (totalPendente <= 0) {
+        mostrarToast("\u2705", "Tudo pago!", "Voc\u00ea n\u00e3o tem saldo pendente.");
         return;
       }
 
@@ -2175,14 +2176,14 @@
       const payload = gerarPayloadPix({
         chave: config.pix_empresa,
         nome: (config.nome_empresa || "Empresa").slice(0, 25),
-        cidade: "SAO PAULO",
-        valor: totalFiado,
-        txid: "FIADO" + colab.id.replace(/-/g, "").slice(0, 10).toUpperCase(),
-        descricao: `Fiado ${colab.nome.split(" ")[0]}`
+        cidade: "MANAUS",
+        valor: totalPendente,
+        txid: "PAG" + colab.id.replace(/-/g, "").slice(0, 12).toUpperCase(),
+        descricao: "Pedidos " + colab.nome.split(" ")[0]
       });
 
       // Preenche UI
-      document.getElementById("pixValor").textContent = fmtBRL(totalFiado);
+      document.getElementById("pixValor").textContent = fmtBRL(totalPendente);
       document.getElementById("pixBeneficiario").textContent = config.nome_empresa || "Empresa";
       document.getElementById("pixCopiaCola").textContent = payload;
       document.getElementById("pixAlert").classList.remove("show");
