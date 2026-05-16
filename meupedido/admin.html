@@ -1330,6 +1330,37 @@
     <!-- ============ Configurações ============ -->
     <section id="section-config" class="hidden rise rise-1">
       <h1>Configurações</h1>
+
+      <!-- Toggle pedidos abertos/fechados -->
+      <div class="card" style="margin-bottom: 14px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-weight:700; font-size:16px; color:var(--ink);">Pedidos</div>
+            <div id="pedidosStatusLabel" class="small" style="color:var(--ink-soft); margin-top:2px;">Carregando…</div>
+          </div>
+          <!-- Toggle switch estilo iOS -->
+          <button id="btnTogglePedidos" role="switch" aria-checked="false" style="
+              position:relative; flex-shrink:0;
+              width:58px; height:32px;
+              border:none; border-radius:999px;
+              background:#e5e5ea;
+              cursor:pointer; padding:0;
+              transition: background 300ms ease;
+              box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+            ">
+            <span id="toggleThumb" style="
+              position:absolute; top:3px; left:3px;
+              width:26px; height:26px;
+              border-radius:50%;
+              background:#fff;
+              box-shadow:0 2px 6px rgba(0,0,0,.22);
+              transition: transform 300ms cubic-bezier(.32,.72,0,1);
+              display:block;
+            "></span>
+          </button>
+        </div>
+      </div>
+
       <div class="card">
         <div class="field">
           <label>Nome da empresa</label>
@@ -1360,20 +1391,6 @@
             </select>
             <input id="cfgFechDiaMes" type="number" min="1" max="31" class="input hidden" />
           </div>
-        </div>
-        <div class="row" style="grid-template-columns:1fr 1fr;">
-          <div class="field">
-            <label>Abertura dos pedidos</label>
-            <input id="cfgHorarioAbertura" class="input" type="time" placeholder="07:00" />
-          </div>
-          <div class="field">
-            <label>Fechamento dos pedidos</label>
-            <input id="cfgHorarioFechamento" class="input" type="time" placeholder="10:30" />
-          </div>
-        </div>
-        <div class="field">
-          <label>Horário-limite padrão (herdado pelo cardápio)</label>
-          <input id="cfgHorarioLimite" class="input" type="time" />
         </div>
         <button class="btn btn-primary btn-block" id="btnSalvarConfig">Salvar configurações</button>
         <div id="cfgAlert" class="alert alert-success" style="margin-top: 12px;"></div>
@@ -2406,8 +2423,31 @@ Bom apetite! 😋`;
     }
 
     // =====================================================================
-    // CONFIGURAÇÕES
+    // CONFIGURAÇÕES — Toggle pedidos abertos/fechados
     // =====================================================================
+    let pedidosAbertos = true;
+
+    function aplicarEstadoToggle(aberto) {
+      pedidosAbertos = aberto;
+      const btn = $("btnTogglePedidos");
+      const thumb = $("toggleThumb");
+      const label = $("pedidosStatusLabel");
+      btn.setAttribute("aria-checked", aberto ? "true" : "false");
+      btn.style.background = aberto ? "#34c759" : "#e5e5ea";
+      thumb.style.transform = aberto ? "translateX(26px)" : "translateX(0)";
+      label.textContent = aberto ? "\uD83D\uDFE2 Pedidos abertos \u2014 clientes podem fazer pedidos" : "\uD83D\uDD34 Pedidos fechados \u2014 card\u00E1pio bloqueado";
+      label.style.color = aberto ? "var(--olive)" : "var(--crimson)";
+    }
+
+    $("btnTogglePedidos").addEventListener("click", async () => {
+      const novoEstado = !pedidosAbertos;
+      aplicarEstadoToggle(novoEstado);
+      await sb.from("configuracoes").upsert(
+        { chave: "pedidos_abertos", valor: novoEstado ? "true" : "false" },
+        { onConflict: "chave" }
+      );
+    });
+
     async function carregarConfig() {
       const { data } = await sb.from("configuracoes").select("*");
       const map = Object.fromEntries((data || []).map(c => [c.chave, c.valor]));
@@ -2416,9 +2456,7 @@ Bom apetite! 😋`;
       $("cfgFechPeriodo").value = map.fechamento_fiado_periodo || "semanal";
       $("cfgFechDiaSemana").value = map.fechamento_fiado_dia_semana || "5";
       $("cfgFechDiaMes").value = map.fechamento_fiado_dia_mes || "30";
-      $("cfgHorarioLimite").value = (map.horario_limite_padrao || "10:30").slice(0, 5);
-      $("cfgHorarioAbertura").value = (map.horario_abertura_pedidos || "07:00").slice(0, 5);
-      $("cfgHorarioFechamento").value = (map.horario_fechamento_pedidos || "10:30").slice(0, 5);
+      aplicarEstadoToggle(map.pedidos_abertos !== "false");
       ajustarFechDia();
     }
 
@@ -2429,7 +2467,7 @@ Bom apetite! 😋`;
         $("cfgFechDiaSemana").classList.remove("hidden");
         $("cfgFechDiaMes").classList.add("hidden");
       } else {
-        $("cfgFechDiaLabel").textContent = "Dia do mês";
+        $("cfgFechDiaLabel").textContent = "Dia do m\u00EAs";
         $("cfgFechDiaSemana").classList.add("hidden");
         $("cfgFechDiaMes").classList.remove("hidden");
       }
@@ -2442,15 +2480,12 @@ Bom apetite! 😋`;
         { chave: "pix_empresa", valor: $("cfgPixEmpresa").value.trim() },
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
         { chave: "fechamento_fiado_dia_semana", valor: String($("cfgFechDiaSemana").value) },
-        { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) },
-        { chave: "horario_limite_padrao", valor: $("cfgHorarioLimite").value || "08:30" },
-        { chave: "horario_abertura_pedidos", valor: $("cfgHorarioAbertura").value || "07:00" },
-        { chave: "horario_fechamento_pedidos", valor: $("cfgHorarioFechamento").value || "10:30" }
+        { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) }
       ];
       for (const u of updates) {
         await sb.from("configuracoes").upsert(u, { onConflict: "chave" });
       }
-      $("cfgAlert").textContent = "Configurações salvas com sucesso!";
+      $("cfgAlert").textContent = "Configura\u00E7\u00F5es salvas com sucesso!";
       $("cfgAlert").classList.add("show");
       setTimeout(() => $("cfgAlert").classList.remove("show"), 3000);
     });
