@@ -1061,6 +1061,81 @@
       justify-content: center;
       padding: 24px 16px;
     }
+
+    /* ==================================================================
+   SEGMENTED CONTROL & GLASS PANELS (Novo Design)
+   ================================================================== */
+    .segmented-control {
+      display: flex;
+      background: rgba(118, 118, 128, 0.12);
+      padding: 4px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      background: transparent;
+      font-weight: 700;
+      font-family: var(--font-body);
+      color: var(--ink-soft);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+
+    .tab-btn.active {
+      background: #fff;
+      color: var(--brick);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08), 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.8);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 24px -8px rgba(0, 0, 0, 0.1);
+    }
+
+    .glass-panel h2 {
+      font-size: 1.1rem;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .item-caixa {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px;
+      background: #fff;
+      border-radius: var(--radius);
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .item-caixa .info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .item-caixa .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
   </style>
 </head>
 
@@ -1243,16 +1318,31 @@
 
     <!-- ============ Pedidos do dia ============ -->
     <section id="section-pedidos" class="rise rise-1">
-      <div class="section-head">
-        <h1>Pedidos de <span id="pedidosData">hoje</span></h1>
-        <div class="sh-actions">
+      <div class="section-head" style="margin-bottom: 12px;">
+        <h1>Painel de Hoje: <span id="pedidosData" style="color:var(--brick);"></span></h1>
+        <div class="sh-actions" style="max-width: 200px;">
           <input type="date" id="pedidosFiltroData" class="input" />
-          <button class="btn btn-primary btn-block" id="btnGerarWA">📱 WhatsApp Fornecedor</button>
-          <button class="btn btn-olive btn-block" id="btnPedidoColetivo">🛵 Pedido Coletivo</button>
         </div>
       </div>
+
+      <div class="segmented-control">
+        <button id="btnTabCaixa" class="tab-btn active">💰 Caixa & Recebimentos</button>
+        <button id="btnTabCozinha" class="tab-btn">🍽️ Envio p/ Cozinha</button>
+      </div>
+
       <div id="pedidosStats" class="stats"></div>
-      <div id="pedidosLista" class="loading">Carregando…</div>
+
+      <div id="viewCaixa">
+        <div id="listaCaixa" class="loading">Carregando informações financeiras…</div>
+      </div>
+
+      <div id="viewCozinha" class="hidden">
+        <div style="display:flex; gap:8px; margin-bottom: 16px;">
+          <button class="btn btn-primary btn-block" id="btnGerarWA">📱 Msg Padrão WhatsApp</button>
+          <button class="btn btn-olive btn-block" id="btnPedidoColetivo">🛵 Modo Coletivo (Dividir Frete)</button>
+        </div>
+        <div id="pedidosLista" class="loading">Carregando lista de fornecedores…</div>
+      </div>
     </section>
 
     <!-- ============ Pedidos Coletivos ============ -->
@@ -1649,94 +1739,248 @@
     $("pedidosFiltroData").value = new Date().toISOString().slice(0, 10);
     $("pedidosFiltroData").addEventListener("change", carregarPedidos);
 
-    async function carregarPedidos() {
-      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
-      $("pedidosData").textContent = fmtData(data);
-      $("pedidosLista").innerHTML = '<div class="loading">Carregando…</div>';
+    // Controle de Abas na tela principal
+    $("btnTabCaixa").addEventListener("click", () => {
+      $("btnTabCaixa").classList.add("active");
+      $("btnTabCozinha").classList.remove("active");
+      $("viewCaixa").classList.remove("hidden");
+      $("viewCozinha").classList.add("hidden");
+    });
 
+    $("btnTabCozinha").addEventListener("click", () => {
+      $("btnTabCozinha").classList.add("active");
+      $("btnTabCaixa").classList.remove("active");
+      $("viewCozinha").classList.remove("hidden");
+      $("viewCaixa").classList.add("hidden");
+    });
+
+    // FUNÇÃO PRINCIPAL DE CARREGAMENTO (Super Otimizada)
+    async function carregarPedidos() {
+      const dataFiltro = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      $("pedidosData").textContent = fmtData(dataFiltro);
+
+      $("listaCaixa").innerHTML = '<div class="loading">Carregando caixa…</div>';
+      $("pedidosLista").innerHTML = '<div class="loading">Carregando logística…</div>';
+
+      // Buscamos: Pedidos da data SELECIONADA *OU* pedidos PENDENTES de qualquer data (para cobrar fiados atrasados)
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
-          id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em,
-          prato:pratos ( nome ),
-          fornecedor:fornecedores ( id, nome, whatsapp ),
-          colaborador:colaboradores ( id, nome, empresa, whatsapp ),
-          acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
-        `)
-        .eq("data", data)
+      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_url,
+      prato:pratos ( nome ),
+      fornecedor:fornecedores ( id, nome, whatsapp ),
+      colaborador:colaboradores ( id, nome, empresa, whatsapp ),
+      acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
+    `)
+        .or(`data.eq.${dataFiltro},status_pagamento.eq.pendente`)
+        .neq("status", "cancelado")
         .order("criado_em", { ascending: true });
 
-      if (error) { $("pedidosLista").innerHTML = `<div class="alert alert-error show">${error.message}</div>`; return; }
-
-      const total = pedidos.reduce((s, p) => s + Number(p.preco_total), 0);
-      const totalPago = pedidos.filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
-      const totalPendente = total - totalPago;
-
-      $("pedidosStats").innerHTML = `
-        <div class="stat"><div class="stat-label">Pedidos</div><div class="stat-value">${pedidos.length}</div></div>
-        <div class="stat"><div class="stat-label">Total</div><div class="stat-value brick">${fmtBRL(total)}</div></div>
-        <div class="stat"><div class="stat-label">Pago</div><div class="stat-value olive">${fmtBRL(totalPago)}</div></div>
-        <div class="stat"><div class="stat-label">Pendente</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
-      `;
-
-      if (pedidos.length === 0) {
-        $("pedidosLista").innerHTML = '<div class="card empty">Nenhum pedido nesta data.</div>';
+      if (error) {
+        $("listaCaixa").innerHTML = `<div class="alert alert-error show">${error.message}</div>`;
         return;
       }
 
-      const grupos = new Map();
-      pedidos.forEach(p => {
+      const pedidosHoje = pedidos.filter(p => p.data === dataFiltro);
+
+      // STATS GERAIS DO DIA
+      const totalDia = pedidosHoje.reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalPago = pedidosHoje.filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalPendente = totalDia - totalPago;
+
+      $("pedidosStats").innerHTML = `
+    <div class="stat"><div class="stat-label">Pedidos Hoje</div><div class="stat-value">${pedidosHoje.length}</div></div>
+    <div class="stat"><div class="stat-label">Faturado Hoje</div><div class="stat-value brick">${fmtBRL(totalDia)}</div></div>
+    <div class="stat"><div class="stat-label">Já Pago</div><div class="stat-value olive">${fmtBRL(totalPago)}</div></div>
+    <div class="stat"><div class="stat-label">Pendente Hoje</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
+  `;
+
+      // ==========================================================
+      // RENDERIZAÇÃO DA ABA 1: CAIXA E RECEBIMENTOS (AÇÃO IMEDIATA)
+      // ==========================================================
+
+      // 1. PIX Aguardando Aprovação
+      const pixPendentes = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente");
+
+      // 2. Dinheiro a Receber (Somente hoje)
+      const dinheiroHoje = pedidosHoje.filter(p => p.forma_pagamento === "dinheiro" && p.status_pagamento === "pendente");
+
+      // 3. Fiados (Devedores Gerais)
+      const fiadosPendentes = pedidos.filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente");
+
+      let caixaHtml = "";
+
+      // Bloco PIX
+      if (pixPendentes.length > 0) {
+        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--blue-ios);">
+      <h2>📲 PIX — Aguardando Aprovação</h2>`;
+        pixPendentes.forEach(p => {
+          const hasComprovante = !!p.comprovante_url;
+          caixaHtml += `
+        <div class="item-caixa">
+          <div class="info">
+            <strong>${p.colaborador?.nome ?? "Desconhecido"}</strong>
+            <div class="small muted">${fmtData(p.data)} · ${p.prato?.nome}</div>
+            <strong style="color:var(--blue-ios); display:block; margin-top:2px;">${fmtBRL(p.preco_total)}</strong>
+          </div>
+          <div class="actions">
+            ${hasComprovante
+              ? `<button class="btn btn-primary btn-sm btn-pill" onclick="abrirModalComprovante('${p.comprovante_url}', '${p.id}', '${p.colaborador?.nome}')">📎 Ver Comprovante</button>`
+              : `<span class="badge pendente" style="padding:6px 10px;">⏳ Aguardando Cliente Enviar</span>`
+            }
+            <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard('${p.id}')">✓ Aprovar</button>
+          </div>
+        </div>`;
+        });
+        caixaHtml += `</div>`;
+      }
+
+      // Bloco Dinheiro
+      if (dinheiroHoje.length > 0) {
+        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--olive);">
+      <h2>💵 Dinheiro — Receber na Entrega</h2>`;
+        dinheiroHoje.forEach(p => {
+          caixaHtml += `
+        <div class="item-caixa">
+          <div class="info">
+            <strong>${p.colaborador?.nome ?? "Desconhecido"}</strong>
+            <div class="small muted">${p.prato?.nome}</div>
+            <strong style="color:var(--olive); display:block; margin-top:2px;">${fmtBRL(p.preco_total)}</strong>
+          </div>
+          <div class="actions">
+            <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard('${p.id}')">✓ Marcar Recebido</button>
+          </div>
+        </div>`;
+        });
+        caixaHtml += `</div>`;
+      }
+
+      // Bloco Fiado (Agrupado por Cliente)
+      if (fiadosPendentes.length > 0) {
+        const mapaFiado = new Map();
+        fiadosPendentes.forEach(p => {
+          const colabId = p.colaborador?.id;
+          if (!colabId) return;
+          if (!mapaFiado.has(colabId)) mapaFiado.set(colabId, { nome: p.colaborador.nome, zap: p.colaborador.whatsapp, total: 0, ids: [] });
+          mapaFiado.get(colabId).total += Number(p.preco_total);
+          mapaFiado.get(colabId).ids.push(p.id);
+        });
+
+        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--crimson);">
+      <h2>📒 Fiados — Devedores</h2>`;
+        for (const [colabId, dados] of mapaFiado.entries()) {
+          const waLink = dados.zap ? `https://wa.me/${dados.zap.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${dados.nome.split(' ')[0]}! Você tem ${fmtBRL(dados.total)} pendentes no fiado das marmitas. Quando puder, dá uma olhada lá no app! 😊`)}` : "#";
+
+          caixaHtml += `
+        <div class="item-caixa">
+          <div class="info">
+            <strong>${dados.nome}</strong>
+            <div class="small muted">${dados.ids.length} pedidos pendentes</div>
+            <strong style="color:var(--crimson); display:block; margin-top:2px;">${fmtBRL(dados.total)}</strong>
+          </div>
+          <div class="actions">
+            ${dados.zap ? `<a href="${waLink}" target="_blank" class="btn btn-ghost btn-sm" style="border-radius: 8px;">📱 Cobrar</a>` : ""}
+            <button class="btn btn-primary btn-sm" style="border-radius: 8px;" onclick="marcarVariosPagos('${dados.ids.join(',')}')">✅ Quitar Dívida</button>
+          </div>
+        </div>`;
+        }
+        caixaHtml += `</div>`;
+      }
+
+      if (!caixaHtml) {
+        caixaHtml = '<div class="empty card" style="text-align:center; padding:40px;">🎉<br/>Tudo limpo! Não há recebimentos pendentes.</div>';
+      }
+
+      $("listaCaixa").innerHTML = caixaHtml;
+
+
+      // ==========================================================
+      // RENDERIZAÇÃO DA ABA 2: LOGÍSTICA (ENVIAR PARA COZINHA)
+      // ==========================================================
+      if (pedidosHoje.length === 0) {
+        $("pedidosLista").innerHTML = '<div class="card empty">Nenhum pedido registrado para a data selecionada.</div>';
+        return;
+      }
+
+      const gruposFornecedor = new Map();
+      pedidosHoje.forEach(p => {
         const fid = p.fornecedor?.id;
-        if (!grupos.has(fid)) grupos.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
-        grupos.get(fid).pedidos.push(p);
+        if (!gruposFornecedor.has(fid)) gruposFornecedor.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
+        gruposFornecedor.get(fid).pedidos.push(p);
       });
 
-      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Forn.", dinheiro: "Dinheiro", fiado: "Fiado" };
+      const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado" };
+      let logisticaHtml = "";
 
-      let html = "";
-      for (const { fornecedor, pedidos } of grupos.values()) {
-        const subtotal = pedidos.reduce((s, p) => s + Number(p.preco_total), 0);
-        html += `<div class="fornecedor-bloco-admin">
-          <div class="fh">
-            <div style="min-width:0; flex:1;">
-              <h3 style="margin:0;">${fornecedor.nome}</h3>
-              <span class="small muted">${pedidos.length} pedidos · ${fmtBRL(subtotal)}</span>
-            </div>
-          </div>`;
-        pedidos.forEach(p => {
+      for (const { fornecedor, pedidos: pedsForn } of gruposFornecedor.values()) {
+        const subtotal = pedsForn.reduce((s, p) => s + Number(p.preco_total), 0);
+        logisticaHtml += `
+      <div class="fornecedor-bloco-admin">
+        <div class="fh">
+          <div style="min-width:0; flex:1;">
+            <h3 style="margin:0;">${fornecedor.nome}</h3>
+            <span class="small muted">${pedsForn.length} marmitas · ${fmtBRL(subtotal)}</span>
+          </div>
+        </div>`;
+
+        pedsForn.forEach(p => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
-          html += `<div class="pedido-linha">
-            <div class="pl-info">
-              <strong>${p.colaborador?.nome ?? "—"}</strong> <span class="small muted">(${p.colaborador?.empresa ?? ""})</span><br/>
-              <span class="small">${p.prato?.nome}${acomps ? " + " + acomps : ""}</span>
-              ${p.observacoes ? `<br/><span class="small muted">📝 ${p.observacoes}</span>` : ""}
-            </div>
-            <div class="pl-right">
-              <div class="pl-meta">
-                <strong>${fmtBRL(p.preco_total)}</strong>
-                <div>
-                  <span class="badge ${p.status_pagamento}">${p.status_pagamento}</span>
-                </div>
-                <span class="small muted">${payLabel[p.forma_pagamento]}</span>
-              </div>
-              <div class="pl-actions">
-                ${p.colaborador?.whatsapp ? `<button class="btn btn-olive btn-sm" onclick='enviarWhatsColaborador(${JSON.stringify({
-            wa: p.colaborador.whatsapp,
-            nome: p.colaborador.nome,
-            prato: p.prato?.nome,
-            acomps: acomps,
-            fornecedor: p.fornecedor?.nome,
-            total: p.preco_total,
-            pag: payLabel[p.forma_pagamento]
-          }).replace(/'/g, "&apos;")})'>📱 WhatsApp</button>` : ""}
-                ${p.status_pagamento === "pendente" ? `<button class="btn btn-olive btn-sm" onclick="marcarPago('${p.id}')">Marcar pago</button>` : ""}
-              </div>
-            </div>
-          </div>`;
+          logisticaHtml += `
+        <div class="pedido-linha">
+          <div class="pl-info">
+            <strong>${p.colaborador?.nome ?? "—"}</strong>
+            <span class="small" style="display:block;">${p.prato?.nome}${acomps ? " <span class='muted'>+ " + acomps + "</span>" : ""}</span>
+            ${p.observacoes ? `<span class="small" style="color:var(--brick); font-weight:600;">📝 Obs: ${p.observacoes}</span>` : ""}
+          </div>
+          <div style="text-align:right;">
+             <strong>${fmtBRL(p.preco_total)}</strong>
+             <div class="small muted">${payLabel[p.forma_pagamento]}</div>
+          </div>
+        </div>`;
         });
-        html += `</div>`;
+        logisticaHtml += `</div>`;
       }
-      $("pedidosLista").innerHTML = html;
+
+      $("pedidosLista").innerHTML = logisticaHtml;
     }
+
+    // Funções Auxiliares para Aprovação no Dashboard
+    window.marcarPagoDashboard = async (id) => {
+      $("btnRefresh").querySelector("svg").style.animation = "spin 1s linear infinite"; // feedback visual
+      await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
+      await carregarPedidos(); // Atualiza a tela imediatamente
+      fecharModal();
+    };
+
+    window.marcarVariosPagos = async (idsStr) => {
+      if (!confirm("Confirmar a quitação total dessa dívida?")) return;
+      const ids = idsStr.split(",");
+      for (const id of ids) {
+        await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
+      }
+      await carregarPedidos();
+    };
+
+    // MODAL PARA APROVAR O COMPROVANTE DO PIX
+    window.abrirModalComprovante = (url, pedidoId, nomeCliente) => {
+      $("modalTitle").textContent = `Comprovante - ${nomeCliente}`;
+      $("modalBody").innerHTML = `
+    <div style="text-align: center; background: var(--bg-soft); padding: 10px; border-radius: var(--radius); margin-bottom: 20px;">
+      <p class="small muted" style="margin-bottom: 12px;">Analise o comprovante enviado pelo cliente via Supabase.</p>
+      
+      ${url.toLowerCase().endsWith('.pdf')
+          ? `<a href="${url}" target="_blank" class="btn btn-secondary btn-block">Abrir PDF em nova guia</a>`
+          : `<img src="${url}" style="width: 100%; max-height: 50vh; object-fit: contain; border-radius: 12px; box-shadow: var(--shadow-sm);" />`
+        }
+    </div>
+    
+    <div style="display:flex; gap:10px;">
+      <button class="btn btn-danger btn-block" style="flex:1;" onclick="fecharModal()">Fechar</button>
+      <button class="btn btn-olive btn-block" style="flex:2;" onclick="marcarPagoDashboard('${pedidoId}')">✅ Aprovar e Baixar PIX</button>
+    </div>
+  `;
+      $("modalSave").classList.add("hidden");
+      $("modal").classList.add("show");
+    };
 
     window.enviarWhatsColaborador = (info) => {
       const primeiroNome = (info.nome || "").split(" ")[0];
