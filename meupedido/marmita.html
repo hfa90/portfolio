@@ -1292,6 +1292,33 @@
       <div id="sucessoResumo"
         style="text-align:left; margin: 22px 0; padding: 16px; background: var(--bg-soft); border-radius: var(--radius);">
       </div>
+
+      <!-- PIX QR Code inline (aparece só quando pagamento é PIX) -->
+      <div id="sucessoPixWrap" class="hidden" style="margin: 0 0 22px;">
+        <div class="card"
+          style="background: rgba(0,122,255,.06); border: 1px solid rgba(0,122,255,.15); text-align:center;">
+          <p class="eyebrow" style="margin-bottom:4px;">Pagar com</p>
+          <h2 style="margin:0 0 4px;">PIX 📲</h2>
+          <p id="sucessoPixBeneficiario" class="small muted" style="margin:0 0 14px;"></p>
+          <div
+            style="font-family:var(--font-display); font-weight:900; font-size:32px; color:var(--brick); margin-bottom:14px;"
+            id="sucessoPixValor">R$ 0,00</div>
+          <div style="display:flex; justify-content:center; margin-bottom:14px;">
+            <canvas id="sucessoPixQr"></canvas>
+          </div>
+          <div
+            style="background:rgba(118,118,128,.08); border-radius:12px; padding:14px 16px; text-align:left; margin-bottom:14px;">
+            <strong
+              style="display:block; font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink); margin-bottom:4px;">Código
+              Copia e Cola</strong>
+            <span id="sucessoPixCodigo"
+              style="word-break:break-all; font-size:12px; line-height:1.5; display:block; color:var(--ink-soft);"></span>
+          </div>
+          <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPixSucesso">📋 Copiar código PIX</button>
+          <div id="sucessoPixAlert" class="alert alert-success" style="margin-top:12px;"></div>
+        </div>
+      </div>
+
       <button class="btn btn-primary btn-block btn-pill" id="btnVoltarHome">Voltar ao cardápio</button>
     </section>
   </main>
@@ -1889,6 +1916,70 @@
   `;
       showScreen("screen-sucesso");
       $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+
+      // --- Se pagou com PIX, mostra QR Code na tela de sucesso ---
+      const isPix = state.selPagamento === "pix_empresa" || state.selPagamento === "pix_fornecedor";
+      const pixWrap = $("sucessoPixWrap");
+
+      if (isPix) {
+        // Determina a chave PIX correta
+        let chavePix, nomeBeneficiario;
+        if (state.selPagamento === "pix_empresa") {
+          chavePix = state.configEmpresa.pix_empresa;
+          nomeBeneficiario = state.configEmpresa.nome_empresa || "Empresa";
+        } else {
+          chavePix = state.selPrato.fornecedor.chave_pix;
+          nomeBeneficiario = state.selPrato.fornecedor.nome;
+        }
+
+        if (chavePix) {
+          const pixPayload = gerarPayloadPix({
+            chave: chavePix,
+            nome: (nomeBeneficiario).slice(0, 25),
+            cidade: "MANAUS",
+            valor: total,
+            txid: "PED" + (pedidoId || "").replace(/-/g, "").slice(0, 15).toUpperCase(),
+            descricao: state.selPrato.nome.slice(0, 40)
+          });
+
+          $("sucessoPixValor").textContent = fmtBRL(total);
+          $("sucessoPixBeneficiario").textContent = nomeBeneficiario;
+          $("sucessoPixCodigo").textContent = pixPayload;
+
+          // Gera QR Code
+          const qrCanvas = $("sucessoPixQr");
+          qrCanvas.innerHTML = "";
+          new QRCode(qrCanvas, {
+            text: pixPayload,
+            width: 220,
+            height: 220,
+            colorDark: "#2a1f17",
+            colorLight: "#fffaf0",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+
+          pixWrap.classList.remove("hidden");
+        } else {
+          pixWrap.classList.add("hidden");
+        }
+      } else {
+        pixWrap.classList.add("hidden");
+      }
+    });
+
+    // Copiar PIX da tela de sucesso
+    $("btnCopiarPixSucesso").addEventListener("click", async () => {
+      const codigo = $("sucessoPixCodigo").textContent;
+      const alertEl = $("sucessoPixAlert");
+      try {
+        await navigator.clipboard.writeText(codigo);
+        alertEl.textContent = "\u2705 Código copiado! Cole no seu app de pagamentos.";
+        alertEl.className = "alert alert-success show";
+        setTimeout(() => alertEl.classList.remove("show"), 3000);
+      } catch {
+        alertEl.textContent = "Não foi possível copiar. Selecione manualmente.";
+        alertEl.className = "alert alert-error show";
+      }
     });
 
     $("btnVoltarHome").addEventListener("click", abrirHome);
