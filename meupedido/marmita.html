@@ -1454,6 +1454,32 @@
       <div class="pay-options" id="payOptions"></div>
     </div>
 
+    <!-- Área de upload de comprovante PIX (aparece ao selecionar PIX) -->
+    <div id="pixComprovanteArea" class="card rise rise-3 hidden"
+      style="margin-top: 14px; border: 2px dashed rgba(0,122,255,.3); background: rgba(0,122,255,.04);">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <span style="font-size:22px;">🧾</span>
+        <div>
+          <div style="font-weight:700; font-size:15px; color: var(--blue-ios);">Comprovante de pagamento</div>
+          <div class="small muted">Anexe o comprovante PIX para agilizar a confirmação</div>
+        </div>
+      </div>
+      <label id="pixComprovanteLabel" style="display:block; cursor:pointer;">
+        <input type="file" id="pixComprovanteInput" accept="image/*,application/pdf" style="display:none;" />
+        <div id="pixComprovanteBtn" class="btn btn-secondary btn-block btn-pill"
+          style="border: 1.5px dashed rgba(0,122,255,.4); background: rgba(0,122,255,.07); color: var(--blue-ios);">
+          📎 Selecionar comprovante
+        </div>
+      </label>
+      <div id="pixComprovantePreview" class="hidden" style="margin-top:10px; text-align:center;">
+        <img id="pixComprovanteImg"
+          style="max-width:100%; max-height:180px; border-radius:10px; box-shadow: var(--shadow-sm);" />
+        <div id="pixComprovanteNome" class="small muted" style="margin-top:6px;"></div>
+        <button id="pixComprovanteRemover" class="btn btn-ghost btn-sm" style="margin-top:6px; color:var(--crimson);">✕
+          Remover</button>
+      </div>
+    </div>
+
     <div id="pedidoAlert" class="alert alert-error" style="margin-top: 14px;"></div>
 
     <div class="totalbar">
@@ -1748,9 +1774,13 @@
       const totalGasto = pedidos.reduce((s, p) => s + Number(p.preco_total), 0);
       const pendentes = pedidos.filter(p => p.status_pagamento === "pendente");
       const totalPendente = pendentes.reduce((s, p) => s + Number(p.preco_total), 0);
-      // Pendentes que podem pagar via PIX (fiado, pix_empresa, pix_fornecedor)
-      const pixPendentes = pendentes.filter(p => ["fiado", "pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento));
+
+      // Separar fiado de pix
+      const fiadosPendentes = pendentes.filter(p => p.forma_pagamento === "fiado");
+      const totalFiado = fiadosPendentes.reduce((s, p) => s + Number(p.preco_total), 0);
+      const pixPendentes = pendentes.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento));
       const totalPixPendente = pixPendentes.reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalPixPago = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
 
       // -------- Hoje + Histórico agrupado por data --------
       const hoje = new Date().toISOString().slice(0, 10);
@@ -1806,21 +1836,58 @@
             <div class="stat-mini-label">Em aberto</div>
             <div class="stat-mini-value mustard">${fmtBRL(totalPendente)}</div>
           </div>
+        </div>
+        <div class="stats-row">
+          <div class="stat-mini">
+            <div class="stat-mini-label">Pix pago</div>
+            <div class="stat-mini-value olive">${fmtBRL(totalPixPago)}</div>
+          </div>
+          <div class="stat-mini">
+            <div class="stat-mini-label">Fiado devendo</div>
+            <div class="stat-mini-value blue">${fmtBRL(totalFiado)}</div>
+          </div>
         </div>`;
 
+      // Card de fiado pendente com datas
+      if (fiadosPendentes.length > 0) {
+        const fiadoRows = fiadosPendentes.map(p => {
+          const d = new Date(p.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(0,122,255,.12);">
+            <span class="small">${d} — ${p.prato_nome ?? "—"}</span>
+            <strong class="small" style="color:var(--blue-ios);">${fmtBRL(p.preco_total)}</strong>
+          </div>`;
+        }).join("");
+        html += `
+          <div class="card" style="background: rgba(0,122,255,.05); border: 1px solid rgba(0,122,255,.18); margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:8px;">
+              <div>
+                <div class="small" style="color: var(--blue-ios); font-weight: 700;">📒 Fiado em aberto</div>
+                <div class="small muted">${fiadosPendentes.length} pedido${fiadosPendentes.length > 1 ? "s" : ""} · inclui +R$10,00 cada</div>
+              </div>
+              <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalFiado)}</div>
+            </div>
+            <div style="max-height:160px; overflow-y:auto; padding:0 2px;">${fiadoRows}</div>
+            <button class="btn btn-block btn-pill btn-sm" id="btnAbrirPixFiado"
+              style="margin-top:12px; background: var(--blue-ios); color:#fff; min-height:42px;">
+              📲 Pagar fiado com PIX
+            </button>
+          </div>`;
+      }
+
+      // Card de PIX pendente
       if (totalPixPendente > 0) {
         html += `
-          <div class="card" style="background: rgba(0,122,255,.06); border: 1px solid rgba(0,122,255,.15);">
+          <div class="card" style="background: rgba(0,122,255,.04); border: 1px solid rgba(0,122,255,.12); margin-bottom:10px;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div>
-                <div class="small" style="color: var(--blue-ios); font-weight: 600;">💰 Pagamento pendente</div>
-                <div class="small muted">${pixPendentes.length} ${pixPendentes.length === 1 ? "pedido" : "pedidos"} aguardando pagamento</div>
+                <div class="small" style="color: var(--blue-ios); font-weight: 600;">💰 PIX aguardando confirmação</div>
+                <div class="small muted">${pixPendentes.length} ${pixPendentes.length === 1 ? "pedido" : "pedidos"} com comprovante pendente</div>
               </div>
               <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalPixPendente)}</div>
             </div>
             <button class="btn btn-block btn-pill btn-sm" id="btnAbrirPix"
               style="margin-top:12px; background: var(--blue-ios); color:#fff; min-height:42px;">
-              📲 Pagar com PIX
+              📲 Ver QR Code / Comprovante
             </button>
           </div>`;
       }
@@ -1844,9 +1911,13 @@
 
       lista.innerHTML = html;
 
-      // Bind botão PIX (se existir)
+      // Bind botão PIX fiado
+      const btnPixFiado = document.getElementById("btnAbrirPixFiado");
+      if (btnPixFiado) btnPixFiado.addEventListener("click", () => abrirPixSheet(totalFiado, "fiado"));
+
+      // Bind botão PIX normal (pix_empresa/pix_fornecedor)
       const btnPix = document.getElementById("btnAbrirPix");
-      if (btnPix) btnPix.addEventListener("click", abrirPixFiado);
+      if (btnPix) btnPix.addEventListener("click", () => abrirPixSheet(totalPixPendente, "pix"));
 
       // Mostra banner de notificações se ainda não concedida
       verificarBannerNotificacoes();
@@ -1984,7 +2055,7 @@
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
         { id: "pix_fornecedor", icon: "🏪", title: "Pix Fornecedor", desc: pixFornecedor ? `Chave: ${pixFornecedor}` : "Fornecedor sem chave Pix", disabled: !pixFornecedor },
         { id: "dinheiro", icon: "💵", title: "Dinheiro", desc: "Pago na entrega" },
-        { id: "fiado", icon: "📒", title: "Fiado semanal", desc: "Acumula até o fechamento" }
+        { id: "fiado", icon: "📒", title: "Fiado semanal", desc: "Acumula até o fechamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>" }
       ];
       $("payOptions").innerHTML = opts.map(o => `
     <div class="pay-option" data-pay="${o.id}" ${o.disabled ? 'style="opacity:.45; pointer-events:none;"' : ""}>
@@ -2002,6 +2073,13 @@
           $("payOptions").querySelectorAll(".pay-option").forEach(x => x.classList.remove("selected"));
           opt.classList.add("selected");
           state.selPagamento = opt.dataset.pay;
+          atualizarTotal(); // recalcula (fiado adiciona +R$10)
+          // Mostrar/esconder área de upload de comprovante PIX
+          const uploadArea = $("pixComprovanteArea");
+          if (uploadArea) {
+            const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
+            uploadArea.classList.toggle("hidden", !isPix);
+          }
         });
       });
 
@@ -2009,14 +2087,62 @@
       showScreen("screen-pedido");
     }
 
+    const FIADO_TAXA = 10.00; // acréscimo fiado
+
     function calcTotal() {
       let total = Number(state.selPrato.preco);
       state.acompanhamentos.forEach(a => {
         if (state.selAcomp.has(a.id)) total += Number(a.preco_extra);
       });
+      if (state.selPagamento === "fiado") total += FIADO_TAXA;
       return total;
     }
     function atualizarTotal() { $("totalPreco").textContent = fmtBRL(calcTotal()); }
+
+    // =====================================================================
+    // COMPROVANTE PIX — upload e preview
+    // =====================================================================
+    let pixComprovanteFile = null;
+
+    $("pixComprovanteInput").addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      pixComprovanteFile = file;
+      $("pixComprovanteNome").textContent = file.name;
+      $("pixComprovanteBtn").textContent = "✅ " + file.name.slice(0, 28) + (file.name.length > 28 ? "…" : "");
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          $("pixComprovanteImg").src = ev.target.result;
+          $("pixComprovanteImg").classList.remove("hidden");
+        };
+        reader.readAsDataURL(file);
+      } else {
+        $("pixComprovanteImg").classList.add("hidden");
+      }
+      $("pixComprovantePreview").classList.remove("hidden");
+    });
+
+    $("pixComprovanteRemover").addEventListener("click", () => {
+      pixComprovanteFile = null;
+      $("pixComprovanteInput").value = "";
+      $("pixComprovantePreview").classList.add("hidden");
+      $("pixComprovanteBtn").textContent = "📎 Selecionar comprovante";
+    });
+
+    async function uploadComprovante(pedidoId, file) {
+      if (!file) return null;
+      try {
+        const ext = file.name.split(".").pop();
+        const path = `comprovantes/${pedidoId}.${ext}`;
+        const { error } = await sb.storage.from("comprovantes-pix").upload(path, file, { upsert: true });
+        if (error) { console.warn("Upload comprovante:", error.message); return null; }
+        const { data: { publicUrl } } = sb.storage.from("comprovantes-pix").getPublicUrl(path);
+        return publicUrl;
+      } catch (e) {
+        console.warn("Upload comprovante erro:", e); return null;
+      }
+    }
 
     $("btnVoltar").addEventListener("click", () => showScreen("screen-home"));
 
@@ -2049,6 +2175,23 @@
         return;
       }
 
+      // Se houver acréscimo de fiado (R$10), atualizar o preco_total no banco
+      if (state.selPagamento === "fiado" && pedidoId) {
+        await sb.from("pedidos").update({ preco_total: total }).eq("id", pedidoId);
+      }
+
+      // Upload comprovante PIX (se houver)
+      if (pixComprovanteFile && pedidoId) {
+        const comprovanteUrl = await uploadComprovante(pedidoId, pixComprovanteFile);
+        if (comprovanteUrl) {
+          await sb.from("pedidos").update({ comprovante_url: comprovanteUrl }).eq("id", pedidoId);
+        }
+        pixComprovanteFile = null;
+        $("pixComprovanteInput").value = "";
+        $("pixComprovantePreview").classList.add("hidden");
+        $("pixComprovanteBtn").textContent = "📎 Selecionar comprovante";
+      }
+
       // Mostrar tela de sucesso
       const nomesAcomp = state.acompanhamentos
         .filter(a => state.selAcomp.has(a.id))
@@ -2063,6 +2206,9 @@
         dinheiro: "Dinheiro", fiado: "Fiado semanal"
       }[state.selPagamento];
 
+      const isFiado = state.selPagamento === "fiado";
+      const precoBase = calcTotal() - (isFiado ? FIADO_TAXA : 0);
+
       $("sucessoResumo").innerHTML = `
     <div><strong>${state.selPrato.fornecedor.nome}</strong></div>
     <div class="small muted">${getColab()?.empresa ? "🏢 " + getColab().empresa : ""}</div>
@@ -2071,8 +2217,13 @@
     ${$("obs").value.trim() ? `<div class="small" style="margin-top:6px;">📝 ${$("obs").value.trim()}</div>` : ""}
     <div style="margin-top:10px; display:flex; justify-content:space-between;">
       <span class="small muted">${payLabel}</span>
-      <strong style="color:var(--brick);">${fmtBRL(total)}</strong>
+      <span>
+        ${isFiado ? `<span class="small muted" style="text-decoration:line-through; margin-right:4px;">${fmtBRL(precoBase)}</span>` : ""}
+        <strong style="color:var(--brick);">${fmtBRL(total)}</strong>
+        ${isFiado ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+R$10 fiado)</span>` : ""}
+      </span>
     </div>
+    ${pixComprovanteFile ? `<div class="small" style="margin-top:8px; color:var(--olive);">✅ Comprovante anexado</div>` : ""}
   `;
       showScreen("screen-sucesso");
       $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
@@ -2140,10 +2291,10 @@
       return ((crc & 0xFFFF).toString(16).toUpperCase().padStart(4, "0"));
     }
 
-    // --- Abre o sheet de PIX para o fiado em aberto ---
+    // --- Abre o sheet de PIX ---
     let pixQrInstance = null;
 
-    async function abrirPixFiado() {
+    async function abrirPixSheet(totalPendente, tipo = "fiado") {
       const colab = getColab();
 
       // Busca config da empresa
@@ -2153,22 +2304,12 @@
       const config = Object.fromEntries((cfg || []).map(c => [c.chave, c.valor]));
 
       if (!config.pix_empresa) {
-        mostrarToast("\u26a0\ufe0f", "PIX n\u00e3o configurado", "O administrador ainda n\u00e3o cadastrou a chave PIX da empresa.");
+        mostrarToast("⚠️", "PIX não configurado", "O administrador ainda não cadastrou a chave PIX da empresa.");
         return;
       }
 
-      // Busca TODOS os pedidos pendentes (fiado, pix_empresa, pix_fornecedor)
-      const { data: pedidos } = await sb.from("pedidos")
-        .select("preco_total")
-        .eq("colaborador_id", colab.id)
-        .in("forma_pagamento", ["fiado", "pix_empresa", "pix_fornecedor"])
-        .eq("status_pagamento", "pendente")
-        .neq("status", "cancelado");
-
-      const totalPendente = (pedidos || []).reduce((s, p) => s + Number(p.preco_total), 0);
-
       if (totalPendente <= 0) {
-        mostrarToast("\u2705", "Tudo pago!", "Voc\u00ea n\u00e3o tem saldo pendente.");
+        mostrarToast("✅", "Tudo pago!", "Você não tem saldo pendente.");
         return;
       }
 
@@ -2179,13 +2320,16 @@
         cidade: "MANAUS",
         valor: totalPendente,
         txid: "PAG" + colab.id.replace(/-/g, "").slice(0, 12).toUpperCase(),
-        descricao: "Pedidos " + colab.nome.split(" ")[0]
+        descricao: (tipo === "fiado" ? "Fiado " : "Pix ") + colab.nome.split(" ")[0]
       });
 
       // Preenche UI
       document.getElementById("pixValor").textContent = fmtBRL(totalPendente);
       document.getElementById("pixBeneficiario").textContent = config.nome_empresa || "Empresa";
       document.getElementById("pixCopiaCola").textContent = payload;
+      document.getElementById("pixSubtitle").textContent = tipo === "fiado"
+        ? "Saldo de fiado em aberto"
+        : "PIX aguardando confirmação";
       document.getElementById("pixAlert").classList.remove("show");
 
       // Gera QR Code
@@ -2204,6 +2348,9 @@
       document.getElementById("pixSheetBg").classList.add("show");
       document.body.style.overflow = "hidden";
     }
+
+    // Mantém compatibilidade com chamadas antigas
+    async function abrirPixFiado() { await abrirPixSheet(0, "fiado"); }
 
     // Fechar sheet PIX
     document.getElementById("pixClose").addEventListener("click", fecharPixSheet);

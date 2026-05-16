@@ -1331,12 +1331,21 @@
     <!-- ============ Financeiro ============ -->
     <section id="section-financeiro" class="hidden rise rise-1">
       <h1>Financeiro</h1>
-      <p class="muted small">Saldos em aberto e pagamentos recebidos.</p>
+      <p class="muted small">Saldos, fiado, PIX e pagamentos recebidos.</p>
       <div id="finStats" class="stats"></div>
+
       <div class="card" style="margin-top: 12px;">
-        <h2>Saldo em aberto por colaborador</h2>
+        <h2>📒 Fiado em aberto por colaborador</h2>
+        <p class="small muted" style="margin-bottom:10px;">Pedidos comprados no fiado (+R$10) ainda pendentes</p>
         <div id="finSaldos" class="loading">Carregando…</div>
       </div>
+
+      <div class="card" style="margin-top: 12px;">
+        <h2>🧾 PIX aguardando confirmação</h2>
+        <p class="small muted" style="margin-bottom:10px;">Pagamentos PIX com comprovante ainda não confirmados</p>
+        <div id="finPixPendente" class="loading">Carregando…</div>
+      </div>
+
       <div class="card" style="margin-top: 12px;">
         <h2>A pagar por fornecedor (mês)</h2>
         <div id="finFornecedores" class="loading">Carregando…</div>
@@ -1750,7 +1759,10 @@ Bom apetite! 😋`;
 
     window.marcarPago = async (id) => {
       await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
-      carregarPedidos();
+      // Atualiza a lista adequada
+      const secAtiva = document.querySelector(".drawer-item.active")?.dataset?.section;
+      if (secAtiva === "financeiro") carregarFinanceiro();
+      else carregarPedidos();
     };
 
     $("btnGerarWA").addEventListener("click", async () => {
@@ -2441,37 +2453,93 @@ Bom apetite! 😋`;
       const totalPago = (pedidosMes || []).filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
       const totalPendente = totalMes - totalPago;
       const totalFiado = (pedidosMes || []).filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente").reduce((s, p) => s + Number(p.preco_total), 0);
+      const totalPixPago = (pedidosMes || []).filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
 
       $("finStats").innerHTML = `
         <div class="stat"><div class="stat-label">Faturado mês</div><div class="stat-value brick">${fmtBRL(totalMes)}</div></div>
         <div class="stat"><div class="stat-label">Recebido</div><div class="stat-value olive">${fmtBRL(totalPago)}</div></div>
         <div class="stat"><div class="stat-label">Pendente</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
-        <div class="stat"><div class="stat-label">Fiado aberto</div><div class="stat-value">${fmtBRL(totalFiado)}</div></div>
+        <div class="stat"><div class="stat-label">Fiado aberto</div><div class="stat-value" style="color:var(--blue-ios);">${fmtBRL(totalFiado)}</div></div>
+        <div class="stat"><div class="stat-label">PIX confirmado</div><div class="stat-value olive">${fmtBRL(totalPixPago)}</div></div>
       `;
 
+      // ---- FIADO: por colaborador com detalhes de cada pedido ----
       const { data: fiados } = await sb.from("pedidos")
-        .select("preco_total, colaborador:colaboradores(id, nome)")
+        .select("id, preco_total, data, criado_em, comprovante_url, colaborador:colaboradores(id, nome, whatsapp)")
         .eq("forma_pagamento", "fiado").eq("status_pagamento", "pendente")
-        .neq("status", "cancelado");
+        .neq("status", "cancelado")
+        .order("data", { ascending: false });
 
       const mapa = new Map();
       (fiados || []).forEach(p => {
         if (!p.colaborador) return;
         const id = p.colaborador.id;
-        if (!mapa.has(id)) mapa.set(id, { nome: p.colaborador.nome, total: 0 });
+        if (!mapa.has(id)) mapa.set(id, { nome: p.colaborador.nome, whatsapp: p.colaborador.whatsapp, total: 0, pedidos: [] });
         mapa.get(id).total += Number(p.preco_total);
+        mapa.get(id).pedidos.push(p);
       });
 
-      if (mapa.size === 0) $("finSaldos").innerHTML = '<div class="empty">Ninguém com saldo em aberto. 🎉</div>';
+      if (mapa.size === 0) $("finSaldos").innerHTML = '<div class="card empty">Ninguém com fiado em aberto. 🎉</div>';
       else {
         const arr = [...mapa.values()].sort((a, b) => b.total - a.total);
-        $("finSaldos").innerHTML = arr.map(x =>
-          `<div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed var(--line); gap:8px;">
-            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">${x.nome}</span>
-            <strong style="flex-shrink:0;">${fmtBRL(x.total)}</strong>
-          </div>`).join("");
+        $("finSaldos").innerHTML = arr.map(x => {
+          const pedidosHtml = x.pedidos.map(p => {
+            const d = fmtData(p.data);
+            const taxa = Number(p.preco_total);
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:5px 0 5px 10px; border-left:3px solid rgba(0,122,255,.2); margin:4px 0; gap:8px;">
+              <div style="flex:1; min-width:0;">
+                <span class="small">${d}</span>
+                ${p.comprovante_url ? `<a href="${p.comprovante_url}" target="_blank" class="small" style="color:var(--olive); font-weight:600; margin-left:8px;">🧾 Ver comprovante</a>` : `<span class="small muted" style="margin-left:8px;">Sem comprovante</span>`}
+              </div>
+              <strong class="small" style="flex-shrink:0; color:var(--blue-ios);">${fmtBRL(taxa)}</strong>
+              <button class="btn btn-olive btn-sm" style="flex-shrink:0; padding:0 10px; min-height:30px; font-size:12px;" onclick="marcarFiadoPago('${p.id}')">✓ Pago</button>
+            </div>`;
+          }).join("");
+          const waMsg = x.whatsapp ? `<a href="https://wa.me/${x.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${x.nome.split(' ')[0]}! Seu fiado em aberto é de ${fmtBRL(x.total)}. Por favor, regularize o pagamento. 😊`)}" target="_blank" class="btn btn-olive btn-sm" style="flex-shrink:0;">📱 Cobrar</a>` : "";
+          return `<div class="card" style="margin-bottom:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div style="flex:1; min-width:0;">
+                <strong style="font-size:15px;">${x.nome}</strong>
+                <div class="small muted">${x.pedidos.length} pedido${x.pedidos.length > 1 ? 's' : ''} em aberto</div>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                <strong style="color:var(--blue-ios); font-size:18px;">${fmtBRL(x.total)}</strong>
+                ${waMsg}
+                <button class="btn btn-primary btn-sm" onclick="marcarTodosFiadoPago('${x.pedidos.map(p => p.id).join(',')}')">✅ Quitar tudo</button>
+              </div>
+            </div>
+            <div style="margin-top:10px;">${pedidosHtml}</div>
+          </div>`;
+        }).join("");
       }
 
+      // ---- PIX com comprovante pendente ----
+      const { data: pixPend } = await sb.from("pedidos")
+        .select("id, preco_total, data, comprovante_url, colaborador:colaboradores(id, nome)")
+        .in("forma_pagamento", ["pix_empresa", "pix_fornecedor"])
+        .eq("status_pagamento", "pendente")
+        .neq("status", "cancelado")
+        .order("data", { ascending: false });
+
+      const pixHtml = (pixPend || []).map(p => `
+        <div class="card" style="margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:0;">
+              <strong>${p.colaborador?.nome ?? "—"}</strong>
+              <div class="small muted">${fmtData(p.data)} · ${fmtBRL(p.preco_total)}</div>
+              ${p.comprovante_url
+          ? `<a href="${p.comprovante_url}" target="_blank" style="color:var(--olive); font-weight:600; font-size:13px;">🧾 Ver comprovante</a>`
+          : `<span class="small" style="color:var(--crimson);">⚠️ Sem comprovante</span>`}
+            </div>
+            <button class="btn btn-olive btn-sm" onclick="marcarPago('${p.id}')">✓ Confirmar</button>
+          </div>
+        </div>`).join("") || '<div class="card empty">Nenhum PIX pendente de confirmação.</div>';
+
+      // Adicionar seção de PIX pendentes ao DOM (após finSaldos)
+      const finPix = document.getElementById("finPixPendente");
+      if (finPix) finPix.innerHTML = pixHtml;
+
+      // ---- Faturamento por fornecedor ----
       const { data: forn } = await sb.from("pedidos")
         .select("preco_total, fornecedor:fornecedores(id, nome)")
         .gte("data", inicioMesStr).neq("status", "cancelado");
@@ -2494,6 +2562,21 @@ Bom apetite! 😋`;
           </div>`).join("");
       }
     }
+
+    window.marcarFiadoPago = async (id) => {
+      if (!confirm("Marcar este item de fiado como pago?")) return;
+      await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
+      carregarFinanceiro();
+    };
+
+    window.marcarTodosFiadoPago = async (idsStr) => {
+      const ids = idsStr.split(",");
+      if (!confirm(`Quitar ${ids.length} pedido${ids.length > 1 ? 's' : ''} de fiado?`)) return;
+      for (const id of ids) {
+        await sb.from("pedidos").update({ status_pagamento: "pago", pago_em: new Date().toISOString() }).eq("id", id);
+      }
+      carregarFinanceiro();
+    };
 
     // =====================================================================
     // CONFIGURAÇÕES — Toggle pedidos abertos/fechados
