@@ -1143,6 +1143,10 @@
         </span>
         Pedidos
       </button>
+      <button class="drawer-item" data-section="coletivos">
+        <span class="di-icon">👥</span>
+        <span>Coletivos</span>
+      </button>
       <button class="drawer-item" data-section="cardapio">
         <span class="di-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -1249,6 +1253,18 @@
       </div>
       <div id="pedidosStats" class="stats"></div>
       <div id="pedidosLista" class="loading">Carregando…</div>
+    </section>
+
+    <!-- ============ Pedidos Coletivos ============ -->
+    <section id="section-coletivos" class="hidden rise rise-1">
+      <div class="section-head">
+        <h1>Pedidos Coletivos</h1>
+        <div class="sh-actions">
+          <input type="date" id="coletivosFiltroData" class="input" />
+        </div>
+      </div>
+      <p class="muted small">Pedidos feitos em grupo por colaboradores.</p>
+      <div id="coletivosLista" class="loading">Carregando…</div>
     </section>
 
     <!-- ============ Cardápio do dia ============ -->
@@ -1437,6 +1453,7 @@
     // =====================================================================
     const SECTION_TITLES = {
       pedidos: "Pedidos",
+      coletivos: "Coletivos",
       cardapio: "Cardápio",
       fornecedores: "Fornecedores",
       pratos: "Pratos",
@@ -1541,6 +1558,7 @@
 
     const carregadores = {
       pedidos: carregarPedidos,
+      coletivos: carregarColetivos,
       cardapio: carregarCardapioAdmin,
       fornecedores: carregarFornecedores,
       pratos: carregarPratos,
@@ -1553,7 +1571,7 @@
     function navegar(section) {
       document.querySelectorAll(".drawer-item[data-section]").forEach(b =>
         b.classList.toggle("active", b.dataset.section === section));
-      ["pedidos", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "config"].forEach(s => {
+      ["pedidos", "coletivos", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "config"].forEach(s => {
         $("section-" + s).classList.toggle("hidden", s !== section);
       });
       $("appBarTitle").textContent = SECTION_TITLES[section] || "";
@@ -1562,6 +1580,61 @@
     }
 
     // =====================================================================
+    // PEDIDOS COLETIVOS
+    // =====================================================================
+    $("coletivosFiltroData").value = new Date().toISOString().slice(0, 10);
+    $("coletivosFiltroData").addEventListener("change", carregarColetivos);
+
+    async function carregarColetivos() {
+      const data = $("coletivosFiltroData").value || new Date().toISOString().slice(0, 10);
+      $("coletivosLista").innerHTML = '<div class="loading">Carregando\u2026</div>';
+
+      const { data: grupos, error } = await sb.rpc("listar_pedidos_coletivos", { p_data: data });
+
+      if (error) {
+        $("coletivosLista").innerHTML = '<div class="alert alert-error show">' + error.message + '</div>';
+        return;
+      }
+
+      if (!grupos || grupos.length === 0) {
+        $("coletivosLista").innerHTML = '<div class="card empty">Nenhum pedido coletivo nesta data.</div>';
+        return;
+      }
+
+      let html = "";
+      grupos.forEach(g => {
+        const horario = new Date(g.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        html += '<div class="card" style="margin-bottom:14px;">';
+        html += '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; flex-wrap:wrap; gap:8px;">';
+        html += '<div>';
+        html += '<h3 style="margin:0;">\ud83d\udc65 ' + g.criado_por_nome + '</h3>';
+        html += '<span class="small muted">' + (g.criado_por_empresa || '') + ' \u00b7 ' + horario + '</span>';
+        html += '</div>';
+        html += '<div style="text-align:right;">';
+        html += '<span class="badge aberto">' + g.qtd_pessoas + ' pessoa' + (g.qtd_pessoas > 1 ? 's' : '') + '</span>';
+        html += '<div style="font-weight:700; color:var(--brick); font-size:1.1rem; margin-top:4px;">' + fmtBRL(g.total) + '</div>';
+        html += '</div></div>';
+
+        // Itens
+        html += '<div style="border:1px solid var(--line); border-radius:var(--radius-sm); overflow:hidden;">';
+        const itens = g.itens || [];
+        itens.forEach((item, i) => {
+          html += '<div style="padding:10px 12px;' + (i > 0 ? ' border-top:1px dashed var(--line);' : '') + '">';
+          html += '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px;">';
+          html += '<div style="flex:1; min-width:0;">';
+          html += '<strong>' + item.nome_pessoa + '</strong>';
+          html += '<div class="small" style="margin-top:2px;">' + item.prato_nome + ' <span class="muted">(' + item.fornecedor_nome + ')</span></div>';
+          if (item.observacoes) html += '<div class="small muted" style="margin-top:2px;">\ud83d\udcdd ' + item.observacoes + '</div>';
+          html += '</div>';
+          html += '<strong style="color:var(--brick); flex-shrink:0;">' + fmtBRL(item.preco) + '</strong>';
+          html += '</div></div>';
+        });
+        html += '</div></div>';
+      });
+
+      $("coletivosLista").innerHTML = html;
+    }
+
     // PEDIDOS DO DIA
     // =====================================================================
     $("pedidosFiltroData").value = new Date().toISOString().slice(0, 10);

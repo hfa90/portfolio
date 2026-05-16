@@ -2503,28 +2503,27 @@
       $("btnConfirmarColetivo").disabled = true;
       $("btnConfirmarColetivo").textContent = "Enviando...";
 
-      let enviados = 0, erros = [];
+      // Monta array de itens para a RPC at\u00f4mica
+      const itens = coletivoState.pessoas.map(p => ({
+        nome: p.nome.trim(),
+        prato_id: p.pratoId,
+        fornecedor_id: p.fornecedorId,
+        observacoes: p.obs.trim() || null
+      }));
 
-      for (const pessoa of coletivoState.pessoas) {
-        const obsText = (pessoa.nome.trim() + (pessoa.obs.trim() ? " | " + pessoa.obs.trim() : "")).slice(0, 200);
-        const { error } = await sb.rpc("criar_pedido", {
-          p_colaborador_id: colab.id,
-          p_prato_id: pessoa.pratoId,
-          p_forma_pagamento: "fiado",
-          p_observacoes: obsText,
-          p_acompanhamentos: []
-        });
-        if (error) erros.push(pessoa.nome + ": " + error.message);
-        else enviados++;
-      }
+      const { data: coletivoId, error: errColetivo } = await sb.rpc("criar_pedido_coletivo", {
+        p_colaborador_id: colab.id,
+        p_itens: itens
+      });
 
       $("btnConfirmarColetivo").disabled = false;
       $("btnConfirmarColetivo").textContent = "Enviar todos";
 
-      if (erros.length > 0 && enviados === 0) {
-        alertEl.textContent = "Erro: " + erros[0]; alertEl.classList.add("show"); return;
+      if (errColetivo) {
+        alertEl.textContent = "Erro: " + errColetivo.message; alertEl.classList.add("show"); return;
       }
 
+      const enviados = coletivoState.pessoas.length;
       $("coletivoSucessoMsg").textContent = enviados + " pedido" + (enviados > 1 ? "s" : "") + " registrado" + (enviados > 1 ? "s" : "") + " com sucesso.";
 
       let resumo = "";
@@ -2533,7 +2532,6 @@
       });
       const totalG = coletivoState.pessoas.reduce((s, p) => s + p.pratoPreco, 0);
       resumo += '<div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--separator);"><strong>Total do grupo</strong><strong style="color:var(--brick); font-family:var(--font-display); font-size:20px;">' + fmtBRL(totalG) + '</strong></div>';
-      if (erros.length > 0) resumo += '<div class="alert alert-error show" style="margin-top:12px;">Falhas: ' + erros.join("; ") + '</div>';
       $("coletivoSucessoResumo").innerHTML = resumo;
 
       showScreen("screen-sucesso-coletivo");
