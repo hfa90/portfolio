@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel do Cliente — ServiçoHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="../css/global.css">
+  <style>
+    .app-layout { height: 100vh; overflow: hidden; }
+    .main-content { height: 100vh; overflow-y: auto; }
+    .section { display: none; }
+    .section.active { display: flex; flex-direction: column; gap: 20px; }
+    .sidebar-footer {
+      margin-top: auto; padding-top: 16px;
+      border-top: 1px solid rgba(0,0,0,0.07);
+    }
+    .demand-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .proposals-list { display: flex; flex-direction: column; gap: 12px; }
+    .proposal-item {
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur-sm);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 18px 20px; display: flex; align-items: center; gap: 16px;
+      transition: var(--transition-spring);
+    }
+    .proposal-item:hover { transform: translateX(4px); box-shadow: var(--glass-shadow); }
+    .proposal-info { flex: 1; min-width: 0; }
+    .proposal-name { font-weight: 700; font-size: 0.95rem; font-family: var(--font-display); }
+    .proposal-demand { font-size: 0.82rem; color: var(--text-muted); }
+    .proposal-msg { font-size: 0.88rem; color: var(--text-secondary); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .proposal-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+    /* Search results */
+    .results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .filters-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 14px 18px;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur-sm);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+    }
+    .filter-select {
+      padding: 7px 32px 7px 12px; border-radius: var(--radius-sm);
+      background: rgba(255,255,255,0.7); border: 1.5px solid rgba(255,255,255,0.8);
+      font-family: var(--font-body); font-size: 0.85rem; color: var(--text-primary);
+      cursor: pointer; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+      outline: none; transition: var(--transition);
+    }
+    .filter-select:focus { border-color: var(--primary); }
+
+    /* Chat panel */
+    .chat-panel {
+      display: flex; flex-direction: column;
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur-sm);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      height: 420px; overflow: hidden;
+    }
+    .chat-header {
+      padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.6);
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.5);
+    }
+
+    /* New demand modal */
+    .modal-form { display: flex; flex-direction: column; gap: 14px; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <div class="app-layout flex">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a href="index.html" class="sidebar-logo">
+        <i class="ti ti-bolt" style="color:var(--primary);font-size:22px"></i>
+        ServiçoHub
+      </a>
+
+      <div class="nav-section-title">Menu</div>
+      <button class="nav-item active" onclick="showSection('overview')">
+        <i class="ti ti-layout-dashboard"></i> Visão Geral
+      </button>
+      <button class="nav-item" onclick="showSection('demands')">
+        <i class="ti ti-clipboard-list"></i> Minhas Demandas
+        <span class="nav-badge" id="badge-demands">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('proposals')">
+        <i class="ti ti-users"></i> Candidatos
+        <span class="nav-badge" id="badge-proposals">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('search')">
+        <i class="ti ti-search"></i> Buscar Profissionais
+      </button>
+
+      <div class="nav-section-title" style="margin-top:8px">Conta</div>
+      <button class="nav-item" onclick="showSection('profile')">
+        <i class="ti ti-user-circle"></i> Meu Perfil
+      </button>
+
+      <div class="sidebar-footer">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;margin-bottom:8px">
+          <div class="avatar avatar-sm" id="sidebar-avatar" style="background:var(--primary)">?</div>
+          <div style="min-width:0">
+            <div id="sidebar-name" style="font-size:0.88rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Cliente</div>
+          </div>
+        </div>
+        <button class="nav-item" onclick="handleSignOut()" style="color:var(--danger)">
+          <i class="ti ti-logout"></i> Sair
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+
+      <!-- OVERVIEW -->
+      <section class="section active" id="section-overview">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Olá, <span id="welcome-name">...</span> 👋</h1>
+            <p class="topbar-subtitle">Veja o que está acontecendo nas suas demandas</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-new-demand')">
+            <i class="ti ti-plus"></i> Nova Demanda
+          </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-3" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-blue"><i class="ti ti-clipboard-list"></i></div>
+            <div><div class="stat-value" id="stat-demands">0</div><div class="stat-label">Demandas ativas</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-green"><i class="ti ti-users"></i></div>
+            <div><div class="stat-value" id="stat-proposals">0</div><div class="stat-label">Candidatos recebidos</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-purple"><i class="ti ti-message-dots"></i></div>
+            <div><div class="stat-value" id="stat-messages">0</div><div class="stat-label">Conversas</div></div>
+          </div>
+        </div>
+
+        <!-- Demandas recentes -->
+        <div class="glass-card" style="padding:22px">
+          <div class="flex justify-between items-center" style="margin-bottom:16px">
+            <h2 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700">Demandas Recentes</h2>
+            <button class="btn btn-secondary btn-sm" onclick="showSection('demands')">Ver todas</button>
+          </div>
+          <div id="recent-demands-list">
+            <div class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda ainda</h3><p>Crie sua primeira demanda para receber candidatos</p></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MINHAS DEMANDAS -->
+      <section class="section" id="section-demands">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Minhas Demandas</h1>
+            <p class="topbar-subtitle">Gerencie todos os seus anúncios de serviço</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('modal-new-demand')">
+            <i class="ti ti-plus"></i> Nova Demanda
+          </button>
+        </div>
+        <div class="demand-grid" id="demands-grid">
+          <div style="grid-column:1/-1" class="empty-state"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>
+        </div>
+      </section>
+
+      <!-- CANDIDATOS / PROPOSTAS -->
+      <section class="section" id="section-proposals">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Candidatos</h1>
+            <p class="topbar-subtitle">Profissionais interessados nas suas demandas</p>
+          </div>
+        </div>
+        <div class="proposals-list" id="proposals-list">
+          <div class="empty-state"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>
+        </div>
+      </section>
+
+      <!-- BUSCAR PROFISSIONAIS -->
+      <section class="section" id="section-search">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Buscar Profissionais</h1>
+            <p class="topbar-subtitle">Encontre o profissional ideal para sua necessidade</p>
+          </div>
+        </div>
+
+        <!-- Barra de busca -->
+        <div class="search-bar">
+          <i class="ti ti-search"></i>
+          <input type="text" id="search-input" placeholder="Ex: desenvolvedor web, faxineira, eletricista..." oninput="debounceSearch(this.value)">
+          <button class="btn btn-primary btn-sm" onclick="doSearch()" style="margin-right:2px">Buscar</button>
+        </div>
+
+        <div class="filters-bar">
+          <i class="ti ti-adjustments-horizontal" style="color:var(--text-muted)"></i>
+          <select class="filter-select" id="filter-category" onchange="doSearch()">
+            <option value="">Todas as categorias</option>
+          </select>
+          <select class="filter-select" id="filter-modality" onchange="doSearch()">
+            <option value="">Qualquer modalidade</option>
+            <option value="remote">Remoto</option>
+            <option value="presential">Presencial</option>
+            <option value="hybrid">Híbrido</option>
+          </select>
+          <input type="text" class="filter-select" id="filter-city" placeholder="Cidade..." style="min-width:130px" oninput="debounceSearch(document.getElementById('search-input').value)">
+        </div>
+
+        <div class="results-grid" id="search-results">
+          <div style="grid-column:1/-1" class="empty-state"><i class="ti ti-search"></i><h3>Busque por profissionais</h3><p>Digite o nome, área ou especialidade</p></div>
+        </div>
+      </section>
+
+      <!-- PERFIL -->
+      <section class="section" id="section-profile">
+        <div class="topbar">
+          <h1 class="topbar-title">Meu Perfil</h1>
+        </div>
+        <div class="glass-card" style="padding:28px;max-width:560px">
+          <div class="flex items-center gap-16" style="margin-bottom:24px">
+            <div class="avatar avatar-xl" id="profile-avatar">?</div>
+            <div>
+              <h2 id="profile-name" style="font-family:var(--font-display);font-size:1.3rem;font-weight:700">—</h2>
+              <p id="profile-email" style="color:var(--text-muted);font-size:0.88rem">—</p>
+              <div class="badge badge-primary" style="margin-top:8px">Cliente</div>
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <div class="form-group"><label class="form-label">WhatsApp</label><div id="profile-whatsapp" style="padding:10px 16px;background:rgba(255,255,255,0.6);border-radius:var(--radius);font-size:0.9rem">—</div></div>
+            <div class="form-group"><label class="form-label">Endereço</label><div id="profile-address" style="padding:10px 16px;background:rgba(255,255,255,0.6);border-radius:var(--radius);font-size:0.9rem">—</div></div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL NOVA DEMANDA -->
+  <div class="overlay" id="modal-new-demand">
+    <div class="modal" style="max-width:580px">
+      <div class="modal-header">
+        <h3 class="modal-title">Publicar Nova Demanda</h3>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-new-demand')"><i class="ti ti-x"></i></button>
+      </div>
+      <form class="modal-form" id="demand-form" onsubmit="handleCreateDemand(event)">
+        <div class="form-group">
+          <label class="form-label">Título da Demanda <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="dem-title" class="form-input" placeholder="Ex: Preciso de desenvolvedor React para app mobile" required>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Categoria</label>
+            <select id="dem-category" class="form-input form-select" onchange="loadNiches(this.value)">
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Nicho específico</label>
+            <select id="dem-niche" class="form-input form-select">
+              <option value="">Selecione a categoria</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Modalidade</label>
+            <select id="dem-modality" class="form-input form-select" required>
+              <option value="remote">Remoto</option>
+              <option value="presential">Presencial</option>
+              <option value="hybrid">Híbrido</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tipo de Contrato</label>
+            <select id="dem-contract" class="form-input form-select" required>
+              <option value="freelance">Freelance</option>
+              <option value="clt">CLT</option>
+              <option value="pj">PJ</option>
+              <option value="any">Qualquer um</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Orçamento (R$)</label>
+            <input type="number" id="dem-budget" class="form-input" placeholder="Opcional" min="0" step="0.01">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Localização</label>
+            <input type="text" id="dem-location" class="form-input" placeholder="Cidade ou Remoto">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Descrição e Requisitos <span style="color:var(--danger)">*</span></label>
+          <textarea id="dem-description" class="form-input" placeholder="Descreva o que precisa, quais habilidades busca, prazo, etc." required style="min-height:120px"></textarea>
+        </div>
+        <div class="flex gap-12" style="margin-top:4px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('modal-new-demand')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="demand-submit-btn"><i class="ti ti-send"></i> Publicar Demanda</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CHAT -->
+  <div class="overlay" id="modal-chat">
+    <div class="modal" style="max-width:560px;padding:0;overflow:hidden;height:540px;display:flex;flex-direction:column">
+      <div class="chat-header">
+        <div class="avatar avatar-sm" id="chat-avatar">?</div>
+        <div>
+          <div id="chat-name" style="font-weight:700;font-size:0.95rem">—</div>
+          <div id="chat-demand" style="font-size:0.78rem;color:var(--text-muted)">—</div>
+        </div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-chat')" style="margin-left:auto"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" class="form-input" placeholder="Digite uma mensagem..." onkeydown="if(event.key==='Enter')sendMessage()" style="flex:1">
+        <button class="btn btn-primary btn-icon" onclick="sendMessage()"><i class="ti ti-send"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module">
+    import { supabase, getCurrentUser } from '../js/supabase.js';
+    import { toast, setLoading, formatCurrency, timeAgo, getInitials, renderAvatar, openModal, closeModal } from '../js/utils.js';
+
+    let currentUser = null;
+    let currentProposalId = null;
+    let searchTimer = null;
+    let categories = [];
+
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+
+    // ---- INIT ----
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { window.location.href = 'index.html'; return; }
+      currentUser = await getCurrentUser();
+      if (!currentUser) { window.location.href = 'index.html'; return; }
+      if (currentUser.user_type !== 'client') { window.location.href = 'professional-dashboard.html'; return; }
+
+      const displayName = currentUser.company_name || currentUser.name || 'Cliente';
+      document.getElementById('welcome-name').textContent = displayName.split(' ')[0];
+      document.getElementById('sidebar-name').textContent = displayName;
+      document.getElementById('sidebar-avatar').textContent = getInitials(displayName);
+
+      // Profile section
+      document.getElementById('profile-name').textContent = displayName;
+      document.getElementById('profile-email').textContent = currentUser.email;
+      document.getElementById('profile-avatar').textContent = getInitials(displayName);
+      const city = currentUser.city ? `${currentUser.street || ''} ${currentUser.number || ''}, ${currentUser.city} - ${currentUser.state}` : '—';
+      document.getElementById('profile-address').textContent = city;
+      document.getElementById('profile-whatsapp').textContent = currentUser.whatsapp || '—';
+
+      await loadCategories();
+      await loadDashboardData();
+    }
+
+    async function loadCategories() {
+      const { data } = await supabase.from('categories').select('*').order('name');
+      categories = data || [];
+      // Popula selects
+      ['dem-category', 'filter-category'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        categories.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id; opt.textContent = c.name;
+          sel.appendChild(opt);
+        });
+      });
+    }
+
+    async function loadDashboardData() {
+      const [demandsRes, proposalsRes] = await Promise.all([
+        supabase.from('demands').select('*, categories(name)').eq('client_id', currentUser.id).order('created_at', { ascending: false }),
+        supabase.from('proposals').select('*, users(name, company_name, avatar_url), demands(title)').in('demand_id',
+          (await supabase.from('demands').select('id').eq('client_id', currentUser.id)).data?.map(d => d.id) || []
+        ).order('created_at', { ascending: false })
+      ]);
+
+      const demands = demandsRes.data || [];
+      const proposals = proposalsRes.data || [];
+      const active = demands.filter(d => d.status === 'open').length;
+
+      // Stats
+      document.getElementById('stat-demands').textContent = active;
+      document.getElementById('stat-proposals').textContent = proposals.length;
+      document.getElementById('stat-messages').textContent = proposals.filter(p => p.status === 'accepted').length;
+      document.getElementById('badge-demands').textContent = active;
+      document.getElementById('badge-proposals').textContent = proposals.filter(p => p.status === 'pending').length;
+
+      // Recent demands
+      const recentEl = document.getElementById('recent-demands-list');
+      if (demands.length === 0) {
+        recentEl.innerHTML = `<div class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda ainda</h3><p>Clique em "Nova Demanda" para começar</p></div>`;
+      } else {
+        recentEl.innerHTML = '';
+        demands.slice(0, 4).forEach(d => recentEl.appendChild(buildDemandCard(d)));
+      }
+
+      // Demands grid
+      const grid = document.getElementById('demands-grid');
+      if (demands.length === 0) {
+        grid.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda publicada</h3><p>Publique uma demanda para receber propostas de profissionais</p><button class="btn btn-primary" onclick="openModal('modal-new-demand')"><i class="ti ti-plus"></i>Nova Demanda</button></div>`;
+      } else {
+        grid.innerHTML = '';
+        demands.forEach(d => grid.appendChild(buildDemandCard(d)));
+      }
+
+      // Proposals list
+      renderProposals(proposals);
+    }
+
+    function buildDemandCard(d) {
+      const statusMap = { open: ['badge-success', 'Aberta'], in_progress: ['badge-warning', 'Em andamento'], closed: ['badge-gray', 'Encerrada'], cancelled: ['badge-danger', 'Cancelada'] };
+      const [sc, st] = statusMap[d.status] || ['badge-gray', d.status];
+      const modMap = { remote: 'Remoto', presential: 'Presencial', hybrid: 'Híbrido' };
+      const contractMap = { freelance: 'Freelance', clt: 'CLT', pj: 'PJ', any: 'Qualquer' };
+      const el = document.createElement('div');
+      el.className = 'demand-card';
+      el.innerHTML = `
+        <div class="demand-card-header">
+          <div>
+            <div class="demand-card-title">${d.title}</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px">${timeAgo(d.created_at)}</div>
+          </div>
+          <span class="badge ${sc}">${st}</span>
+        </div>
+        <p class="demand-card-desc">${d.description?.slice(0, 120)}${d.description?.length > 120 ? '...' : ''}</p>
+        <div class="demand-card-footer">
+          <span class="badge badge-primary"><i class="ti ti-map-pin" style="font-size:11px"></i>${modMap[d.modality] || d.modality}</span>
+          <span class="badge badge-purple">${contractMap[d.contract_type] || d.contract_type}</span>
+          ${d.budget ? `<span class="badge badge-success">${formatCurrency(d.budget)}</span>` : ''}
+          ${d.categories?.name ? `<span class="badge badge-gray">${d.categories.name}</span>` : ''}
+        </div>
+        ${d.status === 'open' ? `
+        <div class="flex gap-8" style="margin-top:4px">
+          <button class="btn btn-ghost btn-sm" onclick="closeDemand('${d.id}',event)"><i class="ti ti-lock"></i>Encerrar</button>
+        </div>` : ''}
+      `;
+      return el;
+    }
+
+    function renderProposals(proposals) {
+      const el = document.getElementById('proposals-list');
+      if (!proposals.length) {
+        el.innerHTML = `<div class="empty-state"><i class="ti ti-users-off"></i><h3>Nenhum candidato ainda</h3><p>Publique demandas para receber propostas de profissionais</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      proposals.forEach(p => {
+        const name = p.users?.company_name || p.users?.name || '—';
+        const initials = getInitials(name);
+        const colors = ['#5b7cfa','#a78bfa','#34d399','#f87171'];
+        const c = colors[name.charCodeAt(0) % colors.length];
+        const statusMap = { pending: ['badge-warning','Aguardando'], accepted: ['badge-success','Aceito'], rejected: ['badge-danger','Recusado'], withdrawn: ['badge-gray','Retirado'] };
+        const [sc, st] = statusMap[p.status] || ['badge-gray', p.status];
+        const item = document.createElement('div');
+        item.className = 'proposal-item';
+        item.innerHTML = `
+          <div class="avatar avatar-md" style="background:${c}">${initials}</div>
+          <div class="proposal-info">
+            <div class="proposal-name">${name}</div>
+            <div class="proposal-demand">Para: ${p.demands?.title || '—'}</div>
+            <div class="proposal-msg">${p.message}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
+            <span class="badge ${sc}">${st}</span>
+            ${p.proposed_value ? `<span style="font-size:0.8rem;font-weight:700;color:var(--primary)">${formatCurrency(p.proposed_value)}</span>` : ''}
+            <div class="proposal-actions">
+              ${p.status === 'pending' ? `
+                <button class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#059669" onclick="updateProposal('${p.id}','accepted')"><i class="ti ti-check"></i></button>
+                <button class="btn btn-sm" style="background:rgba(248,113,113,0.15);color:#dc2626" onclick="updateProposal('${p.id}','rejected')"><i class="ti ti-x"></i></button>
+              ` : ''}
+              <button class="btn btn-sm btn-secondary" onclick="openChat('${p.id}','${name}','${p.demands?.title || ''}')"><i class="ti ti-message-dots"></i></button>
+              ${p.users?.whatsapp ? `<a class="btn btn-sm" style="background:rgba(37,211,102,0.12);color:#128C7E;text-decoration:none" href="https://wa.me/55${p.users.whatsapp}" target="_blank"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+            </div>
+          </div>
+        `;
+        el.appendChild(item);
+      });
+    }
+
+    window.closeDemand = async (id, e) => {
+      e.stopPropagation();
+      const { error } = await supabase.from('demands').update({ status: 'closed' }).eq('id', id);
+      if (error) { toast('Erro ao encerrar demanda.', 'error'); return; }
+      toast('Demanda encerrada.', 'success');
+      loadDashboardData();
+    };
+
+    window.updateProposal = async (id, status) => {
+      await supabase.from('proposals').update({ status }).eq('id', id);
+      toast(status === 'accepted' ? 'Candidato aceito!' : 'Candidato recusado.', status === 'accepted' ? 'success' : 'info');
+      loadDashboardData();
+    };
+
+    // ---- NOVA DEMANDA ----
+    window.handleCreateDemand = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('demand-submit-btn');
+      setLoading(btn, true, 'Publicando...');
+      const payload = {
+        client_id: currentUser.id,
+        title: document.getElementById('dem-title').value.trim(),
+        description: document.getElementById('dem-description').value.trim(),
+        modality: document.getElementById('dem-modality').value,
+        contract_type: document.getElementById('dem-contract').value,
+        status: 'open',
+        budget: document.getElementById('dem-budget').value || null,
+        location: document.getElementById('dem-location').value || null,
+        category_id: document.getElementById('dem-category').value || null,
+        niche_id: document.getElementById('dem-niche').value || null,
+      };
+      const { error } = await supabase.from('demands').insert(payload);
+      setLoading(btn, false);
+      if (error) { toast('Erro: ' + error.message, 'error'); return; }
+      toast('Demanda publicada com sucesso!', 'success');
+      closeModal('modal-new-demand');
+      document.getElementById('demand-form').reset();
+      loadDashboardData();
+    };
+
+    window.loadNiches = async (categoryId) => {
+      const sel = document.getElementById('dem-niche');
+      sel.innerHTML = '<option value="">Carregando...</option>';
+      if (!categoryId) { sel.innerHTML = '<option value="">Selecione a categoria</option>'; return; }
+      const { data } = await supabase.from('niches').select('*').eq('category_id', categoryId).order('name');
+      sel.innerHTML = '<option value="">Todos os nichos</option>';
+      (data || []).forEach(n => {
+        const opt = document.createElement('option');
+        opt.value = n.id; opt.textContent = n.name;
+        sel.appendChild(opt);
+      });
+    };
+
+    // ---- BUSCA ----
+    window.debounceSearch = (val) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => doSearch(), 450);
+    };
+
+    window.doSearch = async () => {
+      const query = document.getElementById('search-input').value.trim();
+      const categoryId = document.getElementById('filter-category').value;
+      const city = document.getElementById('filter-city').value.trim();
+      const el = document.getElementById('search-results');
+      el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:32px"><span class="spinner spinner-dark"></span></div>`;
+
+      if (!query && !categoryId && !city) {
+        el.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-search"></i><h3>Busque por profissionais</h3><p>Digite um nome, área ou especialidade</p></div>`;
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('search_professionals', {
+        query_text: query || 'a',
+        p_category_id: categoryId || null,
+        p_city: city || null,
+        result_limit: 24
+      });
+
+      if (error || !data?.length) {
+        el.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-user-off"></i><h3>Nenhum profissional encontrado</h3><p>Tente outros termos ou filtros</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      data.forEach(pro => {
+        const name = pro.company_name || pro.name || '—';
+        const colors = ['#5b7cfa','#a78bfa','#34d399','#f87171','#fbbf24'];
+        const c = colors[name.charCodeAt(0) % colors.length];
+        const card = document.createElement('div');
+        card.className = 'pro-card';
+        card.innerHTML = `
+          <div class="flex items-center gap-12">
+            <div class="avatar avatar-md" style="background:${c}">${getInitials(name)}</div>
+            <div>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:0.95rem">${name}</div>
+              ${pro.city ? `<div style="font-size:0.78rem;color:var(--text-muted)"><i class="ti ti-map-pin" style="font-size:12px"></i> ${pro.city}${pro.state ? ', '+pro.state : ''}</div>` : ''}
+            </div>
+          </div>
+          ${pro.description ? `<p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5">${pro.description.slice(0,110)}${pro.description.length>110?'...':''}</p>` : ''}
+          <div class="flex justify-between items-center">
+            ${pro.min_price ? `<span class="badge badge-success">A partir de ${formatCurrency(pro.min_price)}</span>` : '<span></span>'}
+            <button class="btn btn-primary btn-sm" onclick="inviteProfessional('${pro.id}','${name.replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> Convidar</button>
+          </div>
+        `;
+        el.appendChild(card);
+      });
+    };
+
+    window.inviteProfessional = async (proId, name) => {
+      toast(`Convite enviado para ${name}!`, 'success');
+    };
+
+    // ---- CHAT ----
+    window.openChat = async (proposalId, proName, demandTitle) => {
+      currentProposalId = proposalId;
+      document.getElementById('chat-name').textContent = proName;
+      document.getElementById('chat-demand').textContent = demandTitle;
+      const initials = getInitials(proName);
+      const c = ['#5b7cfa','#a78bfa','#34d399'][proName.charCodeAt(0)%3];
+      document.getElementById('chat-avatar').textContent = initials;
+      document.getElementById('chat-avatar').style.background = c;
+      await loadMessages();
+      openModal('modal-chat');
+    };
+
+    async function loadMessages() {
+      if (!currentProposalId) return;
+      const { data } = await supabase.from('messages').select('*').eq('proposal_id', currentProposalId).order('sent_at');
+      const el = document.getElementById('chat-messages');
+      if (!data?.length) {
+        el.innerHTML = `<div class="empty-state" style="padding:24px"><i class="ti ti-message-off"></i><p>Inicie a conversa!</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      data.forEach(m => {
+        const isMine = m.sender_id === currentUser.id;
+        const div = document.createElement('div');
+        div.className = `chat-msg ${isMine ? 'mine' : 'theirs'}`;
+        div.innerHTML = `<div class="chat-bubble">${m.content}</div><div class="chat-time">${timeAgo(m.sent_at)}</div>`;
+        el.appendChild(div);
+      });
+      el.scrollTop = el.scrollHeight;
+    }
+
+    window.sendMessage = async () => {
+      const input = document.getElementById('chat-input');
+      const content = input.value.trim();
+      if (!content || !currentProposalId) return;
+      input.value = '';
+      await supabase.from('messages').insert({ proposal_id: currentProposalId, sender_id: currentUser.id, content });
+      await loadMessages();
+    };
+
+    // ---- NAVIGATION ----
+    window.showSection = (name) => {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      document.getElementById(`section-${name}`)?.classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => {
+        if (n.textContent.toLowerCase().includes(name === 'overview' ? 'visão' : name === 'demands' ? 'demandas' : name === 'proposals' ? 'candidatos' : name === 'search' ? 'buscar' : 'perfil')) {
+          n.classList.add('active');
+        }
+      });
+    };
+
+    window.handleSignOut = async () => {
+      await supabase.auth.signOut();
+      window.location.href = 'index.html';
+    };
+
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel do Profissional — ServiçoHub</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+  <link rel="stylesheet" href="../css/global.css">
+  <style>
+    .app-layout { height: 100vh; overflow: hidden; }
+    .main-content { height: 100vh; overflow-y: auto; }
+    .section { display: none; }
+    .section.active { display: flex; flex-direction: column; gap: 20px; }
+    .sidebar-footer {
+      margin-top: auto; padding-top: 16px;
+      border-top: 1px solid rgba(0,0,0,0.07);
+    }
+
+    /* Demand grid */
+    .demands-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+
+    /* My proposals */
+    .my-proposal-card {
+      background: var(--glass-bg); backdrop-filter: var(--glass-blur-sm);
+      border: 1px solid var(--glass-border); border-radius: var(--radius-lg);
+      padding: 20px; display: flex; flex-direction: column; gap: 12px;
+      transition: var(--transition-spring);
+    }
+    .my-proposal-card:hover { transform: translateY(-2px); box-shadow: var(--glass-shadow); }
+
+    /* Invites */
+    .invite-card {
+      background: linear-gradient(135deg, rgba(91,124,250,0.08), rgba(167,139,250,0.08));
+      border: 1.5px solid rgba(91,124,250,0.2);
+      border-radius: var(--radius-lg); padding: 20px;
+      display: flex; gap: 16px; align-items: flex-start;
+      transition: var(--transition-spring);
+    }
+    .invite-card:hover { transform: translateY(-2px); box-shadow: var(--glass-shadow); }
+
+    /* Profile edit */
+    .profile-section {
+      display: grid; grid-template-columns: 300px 1fr; gap: 24px;
+    }
+    .profile-card-left { display: flex; flex-direction: column; gap: 16px; }
+    .resume-drop {
+      border: 2px dashed rgba(91,124,250,0.3); border-radius: var(--radius-lg);
+      padding: 24px; text-align: center; cursor: pointer;
+      transition: var(--transition); color: var(--text-muted);
+      background: rgba(91,124,250,0.03);
+    }
+    .resume-drop:hover { border-color: var(--primary); background: rgba(91,124,250,0.06); color: var(--primary); }
+    .resume-drop i { font-size: 32px; margin-bottom: 8px; }
+    .resume-drop.dragover { border-color: var(--primary); background: rgba(91,124,250,0.1); }
+
+    /* Niches chips multi-select */
+    .niches-container { display: flex; flex-wrap: wrap; gap: 8px; max-height: 200px; overflow-y: auto; }
+
+    /* Proposal modal */
+    .modal-form { display: flex; flex-direction: column; gap: 14px; }
+    .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .modal-title { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
+
+    /* Toggle disponibilidade */
+    .availability-toggle {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; border-radius: var(--radius-lg);
+      background: var(--glass-bg-dark); border: 1px solid var(--glass-border);
+    }
+    .toggle-switch { position: relative; width: 44px; height: 24px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0; background: rgba(0,0,0,0.15);
+      border-radius: 999px; cursor: pointer; transition: 0.3s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute; width: 18px; height: 18px;
+      left: 3px; top: 3px; background: white; border-radius: 50%; transition: 0.3s;
+    }
+    input:checked + .toggle-slider { background: var(--accent); }
+    input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    @media (max-width: 860px) {
+      .profile-section { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <div class="app-layout flex">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a href="index.html" class="sidebar-logo">
+        <i class="ti ti-bolt" style="color:var(--primary);font-size:22px"></i>
+        ServiçoHub
+      </a>
+
+      <div class="nav-section-title">Menu</div>
+      <button class="nav-item active" onclick="showSection('overview')">
+        <i class="ti ti-layout-dashboard"></i> Visão Geral
+      </button>
+      <button class="nav-item" onclick="showSection('demands')">
+        <i class="ti ti-search"></i> Buscar Demandas
+      </button>
+      <button class="nav-item" onclick="showSection('my-proposals')">
+        <i class="ti ti-file-check"></i> Minhas Propostas
+        <span class="nav-badge" id="badge-proposals">0</span>
+      </button>
+      <button class="nav-item" onclick="showSection('invites')">
+        <i class="ti ti-mail"></i> Convites
+        <span class="nav-badge" id="badge-invites">0</span>
+      </button>
+
+      <div class="nav-section-title" style="margin-top:8px">Conta</div>
+      <button class="nav-item" onclick="showSection('profile')">
+        <i class="ti ti-user-circle"></i> Meu Perfil
+      </button>
+
+      <div class="sidebar-footer">
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 14px;margin-bottom:8px">
+          <div class="avatar avatar-sm" id="sidebar-avatar" style="background:var(--primary)">?</div>
+          <div style="min-width:0">
+            <div id="sidebar-name" style="font-size:0.88rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Carregando...</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">Profissional</div>
+          </div>
+        </div>
+        <button class="nav-item" onclick="handleSignOut()" style="color:var(--danger)">
+          <i class="ti ti-logout"></i> Sair
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+
+      <!-- OVERVIEW -->
+      <section class="section active" id="section-overview">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Olá, <span id="welcome-name">...</span> 👋</h1>
+            <p class="topbar-subtitle">Encontre as melhores oportunidades do dia</p>
+          </div>
+          <div class="availability-toggle">
+            <label class="toggle-switch">
+              <input type="checkbox" id="availability-toggle" checked onchange="toggleAvailability(this)">
+              <span class="toggle-slider"></span>
+            </label>
+            <div>
+              <div style="font-size:0.88rem;font-weight:600" id="availability-label">Disponível</div>
+              <div style="font-size:0.75rem;color:var(--text-muted)">Para novas demandas</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid-3" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-blue"><i class="ti ti-file-check"></i></div>
+            <div><div class="stat-value" id="stat-proposals">0</div><div class="stat-label">Propostas enviadas</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-green"><i class="ti ti-check"></i></div>
+            <div><div class="stat-value" id="stat-accepted">0</div><div class="stat-label">Aceitas</div></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon stat-icon-purple"><i class="ti ti-mail"></i></div>
+            <div><div class="stat-value" id="stat-invites">0</div><div class="stat-label">Convites recebidos</div></div>
+          </div>
+        </div>
+
+        <!-- Demandas recomendadas -->
+        <div class="glass-card" style="padding:22px">
+          <div class="flex justify-between items-center" style="margin-bottom:16px">
+            <h2 style="font-family:var(--font-display);font-size:1.05rem;font-weight:700">Demandas na sua Área</h2>
+            <button class="btn btn-secondary btn-sm" onclick="showSection('demands')">Ver todas</button>
+          </div>
+          <div class="demands-grid" id="recommended-demands">
+            <div style="grid-column:1/-1;text-align:center;padding:24px"><span class="spinner spinner-dark"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- BUSCAR DEMANDAS -->
+      <section class="section" id="section-demands">
+        <div class="topbar">
+          <div>
+            <h1 class="topbar-title">Buscar Demandas</h1>
+            <p class="topbar-subtitle">Encontre oportunidades que combinam com você</p>
+          </div>
+        </div>
+
+        <div class="search-bar">
+          <i class="ti ti-search"></i>
+          <input type="text" id="demand-search" placeholder="Ex: desenvolvedor React, faxina semanal, instalação elétrica..." oninput="debounceDemandSearch()">
+          <button class="btn btn-primary btn-sm" onclick="searchDemands()" style="margin-right:2px">Buscar</button>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;background:var(--glass-bg);backdrop-filter:var(--glass-blur-sm);border:1px solid var(--glass-border);border-radius:var(--radius-lg)">
+          <i class="ti ti-adjustments-horizontal" style="color:var(--text-muted)"></i>
+          <select class="filter-select" id="d-filter-category" onchange="searchDemands()" style="padding:7px 32px 7px 12px;border-radius:8px;background:rgba(255,255,255,0.7);border:1.5px solid rgba(255,255,255,0.8);font-family:var(--font-body);font-size:0.85rem;color:var(--text-primary);cursor:pointer;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;outline:none">
+            <option value="">Todas as categorias</option>
+          </select>
+          <select id="d-filter-modality" onchange="searchDemands()" style="padding:7px 32px 7px 12px;border-radius:8px;background:rgba(255,255,255,0.7);border:1.5px solid rgba(255,255,255,0.8);font-family:var(--font-body);font-size:0.85rem;color:var(--text-primary);cursor:pointer;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;outline:none">
+            <option value="">Qualquer modalidade</option>
+            <option value="remote">Remoto</option>
+            <option value="presential">Presencial</option>
+            <option value="hybrid">Híbrido</option>
+          </select>
+          <select id="d-filter-contract" onchange="searchDemands()" style="padding:7px 32px 7px 12px;border-radius:8px;background:rgba(255,255,255,0.7);border:1.5px solid rgba(255,255,255,0.8);font-family:var(--font-body);font-size:0.85rem;color:var(--text-primary);cursor:pointer;appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;outline:none">
+            <option value="">Qualquer contrato</option>
+            <option value="freelance">Freelance</option>
+            <option value="clt">CLT</option>
+            <option value="pj">PJ</option>
+          </select>
+        </div>
+
+        <div class="demands-grid" id="demands-results">
+          <div style="grid-column:1/-1" class="empty-state"><i class="ti ti-search"></i><h3>Busque por demandas</h3><p>Digite o serviço que você oferece</p></div>
+        </div>
+      </section>
+
+      <!-- MINHAS PROPOSTAS -->
+      <section class="section" id="section-my-proposals">
+        <div class="topbar">
+          <h1 class="topbar-title">Minhas Propostas</h1>
+          <p class="topbar-subtitle" style="margin-top:2px">Acompanhe o status das suas candidaturas</p>
+        </div>
+        <div id="my-proposals-list" style="display:flex;flex-direction:column;gap:12px">
+          <div class="empty-state"><span class="spinner spinner-dark"></span></div>
+        </div>
+      </section>
+
+      <!-- CONVITES -->
+      <section class="section" id="section-invites">
+        <div class="topbar">
+          <h1 class="topbar-title">Convites Recebidos</h1>
+          <p class="topbar-subtitle" style="margin-top:2px">Clientes interessados no seu perfil</p>
+        </div>
+        <div id="invites-list" style="display:flex;flex-direction:column;gap:12px">
+          <div class="empty-state"><span class="spinner spinner-dark"></span></div>
+        </div>
+      </section>
+
+      <!-- MEU PERFIL -->
+      <section class="section" id="section-profile">
+        <div class="topbar">
+          <h1 class="topbar-title">Meu Perfil Profissional</h1>
+        </div>
+        <div class="profile-section">
+          <!-- Coluna esquerda -->
+          <div class="profile-card-left">
+            <div class="glass-card" style="padding:24px;text-align:center">
+              <div class="avatar avatar-xl" id="profile-avatar" style="margin:0 auto 12px"></div>
+              <h3 id="profile-name" style="font-family:var(--font-display);font-weight:700">—</h3>
+              <p id="profile-email" style="color:var(--text-muted);font-size:0.85rem;margin-top:4px">—</p>
+              <div class="badge badge-purple" style="margin-top:10px">Profissional</div>
+            </div>
+
+            <!-- Upload de currículo -->
+            <div class="glass-card" style="padding:20px">
+              <h4 style="font-family:var(--font-display);font-size:0.95rem;font-weight:700;margin-bottom:12px"><i class="ti ti-file-cv" style="color:var(--primary)"></i> Currículo</h4>
+              <div class="resume-drop" id="resume-drop" onclick="document.getElementById('resume-input').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                <i class="ti ti-upload"></i>
+                <div style="font-size:0.88rem;font-weight:600" id="resume-label">Arraste ou clique para enviar</div>
+                <div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px">PDF, DOC ou DOCX • Máx 5MB</div>
+              </div>
+              <input type="file" id="resume-input" accept=".pdf,.doc,.docx" style="display:none" onchange="uploadResume(this)">
+              <div id="resume-current" class="hidden" style="margin-top:10px">
+                <a id="resume-link" href="#" target="_blank" class="btn btn-secondary btn-sm btn-full"><i class="ti ti-file-download"></i> Ver currículo atual</a>
+              </div>
+            </div>
+
+            <!-- Disponibilidade -->
+            <div class="glass-card" style="padding:20px">
+              <h4 style="font-family:var(--font-display);font-size:0.95rem;font-weight:700;margin-bottom:12px">Valor mínimo por serviço</h4>
+              <div class="input-wrapper">
+                <i class="ti ti-currency-real input-icon"></i>
+                <input type="number" id="min-price" class="form-input" placeholder="Ex: 150,00" min="0" step="0.01" oninput="debounceSaveProfile()">
+              </div>
+              <p class="form-hint" style="margin-top:6px">Deixe em branco para não exibir</p>
+            </div>
+          </div>
+
+          <!-- Coluna direita -->
+          <div style="display:flex;flex-direction:column;gap:16px">
+            <div class="glass-card" style="padding:24px">
+              <h4 style="font-family:var(--font-display);font-size:1rem;font-weight:700;margin-bottom:16px">Informações profissionais</h4>
+              <div style="display:flex;flex-direction:column;gap:14px">
+                <div class="form-group">
+                  <label class="form-label">Nome / Nome da Empresa</label>
+                  <input type="text" id="edit-name" class="form-input" oninput="debounceSaveProfile()">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">WhatsApp</label>
+                  <div class="input-wrapper">
+                    <i class="ti ti-brand-whatsapp input-icon"></i>
+                    <input type="text" id="edit-whatsapp" class="form-input" oninput="debounceSaveProfile()">
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Descrição profissional</label>
+                  <textarea id="edit-description" class="form-input" placeholder="Descreva sua experiência, habilidades e diferenciais..." oninput="debounceSaveProfile()" style="min-height:130px"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- Nichos -->
+            <div class="glass-card" style="padding:24px">
+              <div class="flex justify-between items-center" style="margin-bottom:14px">
+                <h4 style="font-family:var(--font-display);font-size:1rem;font-weight:700">Áreas de Atuação</h4>
+                <span class="badge badge-primary" id="niches-count">0 selecionadas</span>
+              </div>
+              <div style="margin-bottom:12px">
+                <select id="niche-category-filter" class="form-input form-select" onchange="loadNichesForProfile(this.value)">
+                  <option value="">Filtrar por categoria...</option>
+                </select>
+              </div>
+              <div class="niches-container" id="niches-container">
+                <div class="empty-state" style="padding:16px"><span class="spinner spinner-dark" style="width:18px;height:18px"></span></div>
+              </div>
+              <button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="saveNiches()"><i class="ti ti-check"></i> Salvar áreas</button>
+            </div>
+
+            <div class="flex justify-end">
+              <button class="btn btn-primary" id="save-profile-btn" onclick="saveProfile()"><i class="ti ti-device-floppy"></i> Salvar Perfil</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL ENVIAR PROPOSTA -->
+  <div class="overlay" id="modal-proposal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 class="modal-title">Enviar Proposta</h3>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-proposal')"><i class="ti ti-x"></i></button>
+      </div>
+      <div style="margin-bottom:16px;padding:14px;background:rgba(91,124,250,0.06);border-radius:var(--radius);border:1px solid rgba(91,124,250,0.15)">
+        <div id="proposal-demand-title" style="font-family:var(--font-display);font-weight:700;font-size:0.95rem"></div>
+        <div id="proposal-demand-info" style="font-size:0.82rem;color:var(--text-muted);margin-top:4px"></div>
+      </div>
+      <form class="modal-form" id="proposal-form" onsubmit="submitProposal(event)">
+        <input type="hidden" id="proposal-demand-id">
+        <div class="form-group">
+          <label class="form-label">Sua mensagem / apresentação <span style="color:var(--danger)">*</span></label>
+          <textarea id="proposal-message" class="form-input" placeholder="Apresente-se, explique por que você é o profissional certo e como pode ajudar..." required style="min-height:120px"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valor proposto (R$)</label>
+          <div class="input-wrapper">
+            <i class="ti ti-currency-real input-icon"></i>
+            <input type="number" id="proposal-value" class="form-input" placeholder="Opcional" min="0" step="0.01">
+          </div>
+          <span class="form-hint">Deixe em branco para negociar</span>
+        </div>
+        <div class="flex gap-12" style="justify-content:flex-end;margin-top:4px">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('modal-proposal')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="proposal-submit-btn"><i class="ti ti-send"></i> Enviar Proposta</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CHAT -->
+  <div class="overlay" id="modal-chat">
+    <div class="modal" style="max-width:540px;padding:0;overflow:hidden;height:520px;display:flex;flex-direction:column">
+      <div style="padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.6);display:flex;align-items:center;gap:12px;background:rgba(255,255,255,0.5)">
+        <div class="avatar avatar-sm" id="chat-avatar">?</div>
+        <div>
+          <div id="chat-name" style="font-weight:700;font-size:0.95rem">—</div>
+          <div id="chat-demand" style="font-size:0.78rem;color:var(--text-muted)">—</div>
+        </div>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-chat')" style="margin-left:auto"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="chat-messages" id="chat-messages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chat-input" class="form-input" placeholder="Digite uma mensagem..." onkeydown="if(event.key==='Enter')sendMessage()" style="flex:1">
+        <button class="btn btn-primary btn-icon" onclick="sendMessage()"><i class="ti ti-send"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast-container"></div>
+
+  <script type="module">
+    import { supabase, getCurrentUser } from '../js/supabase.js';
+    import { toast, setLoading, formatCurrency, timeAgo, getInitials, openModal, closeModal } from '../js/utils.js';
+
+    let currentUser = null;
+    let currentProposalId = null;
+    let searchTimer = null;
+    let profileTimer = null;
+    let allNiches = [];
+    let selectedNiches = new Set();
+
+    window.openModal = openModal;
+    window.closeModal = closeModal;
+
+    // ---- INIT ----
+    async function init() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { window.location.href = 'index.html'; return; }
+      currentUser = await getCurrentUser();
+      if (!currentUser) { window.location.href = 'index.html'; return; }
+      if (currentUser.user_type !== 'professional') { window.location.href = 'client-dashboard.html'; return; }
+
+      const displayName = currentUser.company_name || currentUser.name || 'Profissional';
+      document.getElementById('welcome-name').textContent = displayName.split(' ')[0];
+      document.getElementById('sidebar-name').textContent = displayName;
+      document.getElementById('sidebar-avatar').textContent = getInitials(displayName);
+      document.getElementById('availability-toggle').checked = currentUser.is_available !== false;
+      document.getElementById('availability-label').textContent = currentUser.is_available !== false ? 'Disponível' : 'Indisponível';
+
+      // Prefill profile
+      document.getElementById('profile-name').textContent = displayName;
+      document.getElementById('profile-email').textContent = currentUser.email;
+      const av = document.getElementById('profile-avatar');
+      av.textContent = getInitials(displayName);
+      av.style.background = '#5b7cfa';
+      document.getElementById('edit-name').value = currentUser.company_name || currentUser.name || '';
+      document.getElementById('edit-whatsapp').value = currentUser.whatsapp || '';
+      document.getElementById('edit-description').value = currentUser.description || '';
+      document.getElementById('min-price').value = currentUser.min_price || '';
+      if (currentUser.resume_url) {
+        document.getElementById('resume-current').classList.remove('hidden');
+        document.getElementById('resume-link').href = currentUser.resume_url;
+        document.getElementById('resume-label').textContent = 'Currículo enviado ✓';
+      }
+
+      await loadCategories();
+      await loadAllNiches();
+      await loadDashboardData();
+    }
+
+    async function loadCategories() {
+      const { data } = await supabase.from('categories').select('*').order('name');
+      const cats = data || [];
+      ['d-filter-category', 'niche-category-filter'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        cats.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.id; opt.textContent = c.name;
+          sel.appendChild(opt);
+        });
+      });
+    }
+
+    async function loadAllNiches() {
+      const { data } = await supabase.from('niches').select('*, categories(name)').order('name');
+      allNiches = data || [];
+      // User niches
+      const { data: userNiches } = await supabase.from('user_niches').select('niche_id').eq('user_id', currentUser.id);
+      (userNiches || []).forEach(un => selectedNiches.add(un.niche_id));
+      updateNichesCount();
+      renderNiches(allNiches);
+    }
+
+    function renderNiches(niches) {
+      const container = document.getElementById('niches-container');
+      container.innerHTML = '';
+      if (!niches.length) { container.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem">Nenhum nicho nesta categoria</p>'; return; }
+      niches.forEach(n => {
+        const chip = document.createElement('div');
+        chip.className = `chip ${selectedNiches.has(n.id) ? 'active' : ''}`;
+        chip.textContent = n.name;
+        chip.onclick = () => {
+          if (selectedNiches.has(n.id)) { selectedNiches.delete(n.id); chip.classList.remove('active'); }
+          else { selectedNiches.add(n.id); chip.classList.add('active'); }
+          updateNichesCount();
+        };
+        container.appendChild(chip);
+      });
+    }
+
+    function updateNichesCount() {
+      document.getElementById('niches-count').textContent = `${selectedNiches.size} selecionada${selectedNiches.size !== 1 ? 's' : ''}`;
+    }
+
+    window.loadNichesForProfile = (catId) => {
+      const filtered = catId ? allNiches.filter(n => n.categories?.id === catId || allNiches.find(nn => nn.id === n.id && nn.category_id === catId)) : allNiches;
+      // Re-filter by category_id
+      const f = catId ? allNiches.filter(n => n.category_id === catId) : allNiches;
+      renderNiches(f);
+    };
+
+    window.saveNiches = async () => {
+      // Remove old, insert new
+      await supabase.from('user_niches').delete().eq('user_id', currentUser.id);
+      if (selectedNiches.size > 0) {
+        const rows = Array.from(selectedNiches).map(niche_id => ({ user_id: currentUser.id, niche_id }));
+        await supabase.from('user_niches').insert(rows);
+      }
+      toast('Áreas de atuação salvas!', 'success');
+    };
+
+    async function loadDashboardData() {
+      const [proposalsRes, invitesRes] = await Promise.all([
+        supabase.from('proposals').select('*, demands(title, modality, contract_type, budget)').eq('professional_id', currentUser.id).order('created_at', { ascending: false }),
+        supabase.from('invites').select('*, demands(title, description, budget), users!invites_client_id_fkey(name, company_name)').eq('professional_id', currentUser.id).order('created_at', { ascending: false })
+      ]);
+
+      const proposals = proposalsRes.data || [];
+      const invites = invitesRes.data || [];
+      const accepted = proposals.filter(p => p.status === 'accepted').length;
+      const pendingInvites = invites.filter(i => i.status === 'pending').length;
+
+      document.getElementById('stat-proposals').textContent = proposals.length;
+      document.getElementById('stat-accepted').textContent = accepted;
+      document.getElementById('stat-invites').textContent = invites.length;
+      document.getElementById('badge-proposals').textContent = proposals.filter(p => p.status === 'pending').length;
+      document.getElementById('badge-invites').textContent = pendingInvites;
+
+      // Recommended demands
+      await loadRecommendedDemands();
+
+      // My proposals
+      renderMyProposals(proposals);
+
+      // Invites
+      renderInvites(invites);
+    }
+
+    async function loadRecommendedDemands() {
+      const { data } = await supabase.from('demands')
+        .select('*, categories(name)')
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(6);
+      const el = document.getElementById('recommended-demands');
+      if (!data?.length) {
+        el.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda aberta</h3></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      data.forEach(d => el.appendChild(buildDemandCard(d)));
+    }
+
+    function buildDemandCard(d) {
+      const modMap = { remote: ['badge-primary','Remoto'], presential: ['badge-purple','Presencial'], hybrid: ['badge-warning','Híbrido'] };
+      const contractMap = { freelance: 'Freelance', clt: 'CLT', pj: 'PJ', any: 'Qualquer' };
+      const [mc, ml] = modMap[d.modality] || ['badge-gray', d.modality];
+      const el = document.createElement('div');
+      el.className = 'demand-card';
+      el.innerHTML = `
+        <div class="demand-card-header">
+          <div>
+            <div class="demand-card-title">${d.title}</div>
+            <div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px">${timeAgo(d.created_at)}</div>
+          </div>
+          <span class="badge ${mc}">${ml}</span>
+        </div>
+        <p class="demand-card-desc">${d.description?.slice(0, 110)}${d.description?.length > 110 ? '...' : ''}</p>
+        <div class="demand-card-footer">
+          <span class="badge badge-gray">${contractMap[d.contract_type] || d.contract_type}</span>
+          ${d.budget ? `<span class="badge badge-success">${formatCurrency(d.budget)}</span>` : ''}
+          ${d.categories?.name ? `<span class="badge badge-gray">${d.categories.name}</span>` : ''}
+        </div>
+        <button class="btn btn-primary btn-sm btn-full" onclick="openProposalModal('${d.id}','${d.title.replace(/'/g,"\\'")}','${modMap[d.modality]?.[1]||d.modality}','${d.budget||''}')">
+          <i class="ti ti-send"></i> Enviar Proposta
+        </button>
+      `;
+      return el;
+    }
+
+    function renderMyProposals(proposals) {
+      const el = document.getElementById('my-proposals-list');
+      if (!proposals.length) {
+        el.innerHTML = `<div class="empty-state"><i class="ti ti-file-off"></i><h3>Nenhuma proposta enviada</h3><p>Busque demandas e envie suas propostas</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      proposals.forEach(p => {
+        const statusMap = { pending: ['badge-warning','⏳ Aguardando'], accepted: ['badge-success','✅ Aceita'], rejected: ['badge-danger','❌ Recusada'], withdrawn: ['badge-gray','Retirada'] };
+        const [sc, st] = statusMap[p.status] || ['badge-gray', p.status];
+        const modMap = { remote: 'Remoto', presential: 'Presencial', hybrid: 'Híbrido' };
+        const card = document.createElement('div');
+        card.className = 'my-proposal-card';
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <div style="font-family:var(--font-display);font-weight:700;font-size:0.95rem">${p.demands?.title || '—'}</div>
+              <div style="font-size:0.78rem;color:var(--text-muted);margin-top:3px">${timeAgo(p.created_at)} · ${modMap[p.demands?.modality] || ''}</div>
+            </div>
+            <span class="badge ${sc}">${st}</span>
+          </div>
+          <p style="font-size:0.88rem;color:var(--text-secondary)">${p.message?.slice(0,130)}${p.message?.length>130?'...':''}</p>
+          <div class="flex items-center justify-between">
+            ${p.proposed_value ? `<span class="badge badge-success">${formatCurrency(p.proposed_value)}</span>` : '<span></span>'}
+            ${p.status === 'accepted' ? `<button class="btn btn-secondary btn-sm" onclick="openChat('${p.id}','Cliente','${p.demands?.title||''}')"><i class="ti ti-message-dots"></i> Conversar</button>` : ''}
+          </div>
+        `;
+        el.appendChild(card);
+      });
+    }
+
+    function renderInvites(invites) {
+      const el = document.getElementById('invites-list');
+      if (!invites.length) {
+        el.innerHTML = `<div class="empty-state"><i class="ti ti-mail-off"></i><h3>Nenhum convite ainda</h3><p>Complete seu perfil para aparecer nas buscas dos clientes</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      invites.forEach(inv => {
+        const clientName = inv.users?.company_name || inv.users?.name || '—';
+        const statusMap = { pending: ['badge-warning','Aguardando'], accepted: ['badge-success','Aceito'], rejected: ['badge-danger','Recusado'] };
+        const [sc, st] = statusMap[inv.status] || ['badge-gray', inv.status];
+        const c = ['#5b7cfa','#a78bfa','#34d399'][clientName.charCodeAt(0)%3];
+        const card = document.createElement('div');
+        card.className = 'invite-card';
+        card.innerHTML = `
+          <div class="avatar avatar-md" style="background:${c}">${getInitials(clientName)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="flex justify-between items-start">
+              <div>
+                <div style="font-weight:700;font-family:var(--font-display)">${clientName}</div>
+                <div style="font-size:0.82rem;color:var(--text-muted)">Para: ${inv.demands?.title || '—'}</div>
+              </div>
+              <span class="badge ${sc}">${st}</span>
+            </div>
+            ${inv.message ? `<p style="font-size:0.85rem;color:var(--text-secondary);margin-top:8px">${inv.message}</p>` : ''}
+            ${inv.demands?.budget ? `<div style="margin-top:8px"><span class="badge badge-success">${formatCurrency(inv.demands.budget)}</span></div>` : ''}
+            ${inv.status === 'pending' ? `
+            <div class="flex gap-10" style="margin-top:12px">
+              <button class="btn btn-primary btn-sm" onclick="respondInvite('${inv.id}','accepted')"><i class="ti ti-check"></i> Aceitar</button>
+              <button class="btn btn-ghost btn-sm" onclick="respondInvite('${inv.id}','rejected')"><i class="ti ti-x"></i> Recusar</button>
+            </div>` : ''}
+          </div>
+        `;
+        el.appendChild(card);
+      });
+    }
+
+    window.respondInvite = async (id, status) => {
+      await supabase.from('invites').update({ status }).eq('id', id);
+      toast(status === 'accepted' ? 'Convite aceito!' : 'Convite recusado.', status === 'accepted' ? 'success' : 'info');
+      loadDashboardData();
+    };
+
+    // ---- PROPOSTA ----
+    window.openProposalModal = (demandId, title, modality, budget) => {
+      document.getElementById('proposal-demand-id').value = demandId;
+      document.getElementById('proposal-demand-title').textContent = title;
+      document.getElementById('proposal-demand-info').textContent = `${modality}${budget ? ' · ' + formatCurrency(budget) : ''}`;
+      document.getElementById('proposal-message').value = '';
+      document.getElementById('proposal-value').value = '';
+      openModal('modal-proposal');
+    };
+
+    window.submitProposal = async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('proposal-submit-btn');
+      setLoading(btn, true, 'Enviando...');
+      const demandId = document.getElementById('proposal-demand-id').value;
+      const { error } = await supabase.from('proposals').insert({
+        demand_id: demandId,
+        professional_id: currentUser.id,
+        message: document.getElementById('proposal-message').value.trim(),
+        proposed_value: document.getElementById('proposal-value').value || null,
+        status: 'pending'
+      });
+      setLoading(btn, false);
+      if (error) {
+        if (error.code === '23505') toast('Você já enviou uma proposta para esta demanda.', 'warning');
+        else toast('Erro: ' + error.message, 'error');
+        return;
+      }
+      toast('Proposta enviada com sucesso!', 'success');
+      closeModal('modal-proposal');
+      loadDashboardData();
+    };
+
+    // ---- BUSCA DEMANDAS ----
+    window.debounceDemandSearch = () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(searchDemands, 400);
+    };
+
+    window.searchDemands = async () => {
+      const query = document.getElementById('demand-search').value.trim();
+      const categoryId = document.getElementById('d-filter-category').value;
+      const modality = document.getElementById('d-filter-modality').value;
+      const contract = document.getElementById('d-filter-contract').value;
+      const el = document.getElementById('demands-results');
+      el.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:32px"><span class="spinner spinner-dark"></span></div>`;
+
+      if (!query && !categoryId && !modality && !contract) {
+        const { data } = await supabase.from('demands').select('*, categories(name)').eq('status','open').order('created_at',{ascending:false}).limit(24);
+        el.innerHTML = '';
+        if (!data?.length) { el.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda aberta</h3></div>`; return; }
+        data.forEach(d => el.appendChild(buildDemandCard(d)));
+        return;
+      }
+
+      const { data, error } = await supabase.rpc('search_demands', {
+        query_text: query || 'a',
+        p_category_id: categoryId || null,
+        p_modality: modality || null,
+        p_contract: contract || null,
+        result_limit: 24
+      });
+      el.innerHTML = '';
+      if (error || !data?.length) {
+        el.innerHTML = `<div style="grid-column:1/-1" class="empty-state"><i class="ti ti-clipboard-off"></i><h3>Nenhuma demanda encontrada</h3><p>Tente outros termos ou filtros</p></div>`;
+        return;
+      }
+      data.forEach(d => el.appendChild(buildDemandCard(d)));
+    };
+
+    // ---- PERFIL ----
+    window.debounceSaveProfile = () => {
+      clearTimeout(profileTimer);
+      profileTimer = setTimeout(() => {}, 1000);
+    };
+
+    window.saveProfile = async () => {
+      const btn = document.getElementById('save-profile-btn');
+      setLoading(btn, true, 'Salvando...');
+      const { error } = await supabase.from('users').update({
+        name: document.getElementById('edit-name').value.trim(),
+        whatsapp: document.getElementById('edit-whatsapp').value.replace(/\D/g,''),
+        description: document.getElementById('edit-description').value.trim(),
+        min_price: document.getElementById('min-price').value || null,
+      }).eq('id', currentUser.id);
+      setLoading(btn, false);
+      if (error) { toast('Erro ao salvar: ' + error.message, 'error'); return; }
+      toast('Perfil atualizado!', 'success');
+      currentUser = await (await import('../js/supabase.js')).getCurrentUser();
+    };
+
+    // ---- RESUME UPLOAD ----
+    window.handleDragOver = (e) => { e.preventDefault(); document.getElementById('resume-drop').classList.add('dragover'); };
+    window.handleDragLeave = () => document.getElementById('resume-drop').classList.remove('dragover');
+    window.handleDrop = (e) => {
+      e.preventDefault();
+      document.getElementById('resume-drop').classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) processResumeFile(file);
+    };
+
+    window.uploadResume = (input) => {
+      if (input.files[0]) processResumeFile(input.files[0]);
+    };
+
+    async function processResumeFile(file) {
+      if (file.size > 5 * 1024 * 1024) { toast('Arquivo muito grande. Máximo 5MB.', 'error'); return; }
+      const ext = file.name.split('.').pop();
+      const path = `resumes/${currentUser.id}.${ext}`;
+      document.getElementById('resume-label').textContent = 'Enviando...';
+      const { error: upErr } = await supabase.storage.from('resumes').upload(path, file, { upsert: true });
+      if (upErr) { toast('Erro no upload: ' + upErr.message, 'error'); document.getElementById('resume-label').textContent = 'Arraste ou clique para enviar'; return; }
+      const { data: urlData } = supabase.storage.from('resumes').getPublicUrl(path);
+      await supabase.from('users').update({ resume_url: urlData.publicUrl }).eq('id', currentUser.id);
+      document.getElementById('resume-label').textContent = `${file.name} ✓`;
+      document.getElementById('resume-current').classList.remove('hidden');
+      document.getElementById('resume-link').href = urlData.publicUrl;
+      toast('Currículo enviado!', 'success');
+    }
+
+    // ---- AVAILABILITY ----
+    window.toggleAvailability = async (checkbox) => {
+      await supabase.from('users').update({ is_available: checkbox.checked }).eq('id', currentUser.id);
+      document.getElementById('availability-label').textContent = checkbox.checked ? 'Disponível' : 'Indisponível';
+      toast(checkbox.checked ? 'Você está disponível para novas demandas!' : 'Você foi marcado como indisponível.', 'info');
+    };
+
+    // ---- CHAT ----
+    window.openChat = async (proposalId, name, demandTitle) => {
+      currentProposalId = proposalId;
+      document.getElementById('chat-name').textContent = name;
+      document.getElementById('chat-demand').textContent = demandTitle;
+      const c = '#5b7cfa';
+      document.getElementById('chat-avatar').textContent = getInitials(name);
+      document.getElementById('chat-avatar').style.background = c;
+      await loadMessages();
+      openModal('modal-chat');
+    };
+
+    async function loadMessages() {
+      if (!currentProposalId) return;
+      const { data } = await supabase.from('messages').select('*').eq('proposal_id', currentProposalId).order('sent_at');
+      const el = document.getElementById('chat-messages');
+      if (!data?.length) {
+        el.innerHTML = `<div class="empty-state" style="padding:24px"><i class="ti ti-message-off"></i><p>Inicie a conversa!</p></div>`;
+        return;
+      }
+      el.innerHTML = '';
+      data.forEach(m => {
+        const isMine = m.sender_id === currentUser.id;
+        const div = document.createElement('div');
+        div.className = `chat-msg ${isMine ? 'mine' : 'theirs'}`;
+        div.innerHTML = `<div class="chat-bubble">${m.content}</div><div class="chat-time">${timeAgo(m.sent_at)}</div>`;
+        el.appendChild(div);
+      });
+      el.scrollTop = el.scrollHeight;
+    }
+
+    window.sendMessage = async () => {
+      const input = document.getElementById('chat-input');
+      const content = input.value.trim();
+      if (!content || !currentProposalId) return;
+      input.value = '';
+      await supabase.from('messages').insert({ proposal_id: currentProposalId, sender_id: currentUser.id, content });
+      await loadMessages();
+    };
+
+    // ---- NAVIGATION ----
+    window.showSection = (name) => {
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      const secEl = document.getElementById(`section-${name}`);
+      if (secEl) secEl.classList.add('active');
+      // Load section data on demand
+      if (name === 'demands') searchDemands();
+    };
+
+    window.handleSignOut = async () => {
+      await supabase.auth.signOut();
+      window.location.href = 'index.html';
+    };
+
+    init();
+  </script>
+</body>
+</html>
