@@ -334,6 +334,55 @@
     </div>
   </div>
 
+
+  <!-- MODAL FINALIZAR SERVIÇO + AVALIAÇÃO -->
+  <div class="overlay" id="modal-review">
+    <div class="modal" style="max-width:500px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h3 style="font-family:var(--font-display);font-size:1.25rem;font-weight:700">
+          <i class="ti ti-star" style="color:var(--warning)"></i> Avaliar Serviço
+        </h3>
+        <button class="btn btn-ghost btn-icon" onclick="closeModal('modal-review')"><i class="ti ti-x"></i></button>
+      </div>
+
+      <div id="review-proposal-info" style="padding:14px;background:rgba(91,124,250,0.06);border-radius:var(--radius);border:1px solid rgba(91,124,250,0.15);margin-bottom:18px">
+        <div id="review-pro-name" style="font-weight:700;font-size:0.95rem"></div>
+        <div id="review-demand-title" style="font-size:0.82rem;color:var(--text-muted);margin-top:3px"></div>
+      </div>
+
+      <form id="review-form" onsubmit="submitReview(event)" style="display:flex;flex-direction:column;gap:16px">
+        <input type="hidden" id="review-proposal-id">
+        <input type="hidden" id="review-professional-id">
+
+        <div class="form-group">
+          <label class="form-label">Sua avaliação <span style="color:var(--danger)">*</span></label>
+          <div id="star-selector" style="display:flex;gap:8px;padding:8px 0">
+            ${[1,2,3,4,5].map(n => `
+              <i class="ti ti-star star-btn" data-value="${n}"
+                 style="font-size:36px;color:#e2e8f0;cursor:pointer;transition:all 0.15s"
+                 onmouseover="hoverStars(${n})" onmouseout="resetStars()"
+                 onclick="selectStar(${n})"></i>
+            `).join('')}
+          </div>
+          <input type="hidden" id="review-rating" value="0" required>
+          <div id="star-label" style="font-size:0.85rem;color:var(--text-muted);height:18px"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Comentário</label>
+          <textarea id="review-comment" class="form-input" placeholder="Conte como foi o serviço, pontualidade, qualidade do trabalho..." style="min-height:100px"></textarea>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:flex-end">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('modal-review')">Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="review-submit-btn">
+            <i class="ti ti-star"></i> Publicar Avaliação
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <div id="toast-container"></div>
 
   <script type="module">
@@ -348,26 +397,125 @@
     window.openModal = openModal;
     window.closeModal = closeModal;
 
+
+    // ---- STAR RATING ----
+    let currentRating = 0;
+    const starLabels = ['','Péssimo','Ruim','Regular','Bom','Excelente'];
+
+    window.hoverStars = (n) => {
+      document.querySelectorAll('.star-btn').forEach((s, i) => {
+        s.className = i < n ? 'ti ti-star-filled star-btn' : 'ti ti-star star-btn';
+        s.style.color = i < n ? '#f59e0b' : '#e2e8f0';
+        s.style.transform = i < n ? 'scale(1.15)' : 'scale(1)';
+      });
+      document.getElementById('star-label').textContent = starLabels[n];
+    };
+
+    window.resetStars = () => {
+      const n = currentRating;
+      document.querySelectorAll('.star-btn').forEach((s, i) => {
+        s.className = i < n ? 'ti ti-star-filled star-btn' : 'ti ti-star star-btn';
+        s.style.color = i < n ? '#f59e0b' : '#e2e8f0';
+        s.style.transform = 'scale(1)';
+      });
+      document.getElementById('star-label').textContent = n > 0 ? starLabels[n] : '';
+    };
+
+    window.selectStar = (n) => {
+      currentRating = n;
+      document.getElementById('review-rating').value = n;
+      resetStars();
+    };
+
+    window.openReviewModal = (proposalId, professionalId, proName, demandTitle) => {
+      currentRating = 0;
+      document.getElementById('review-rating').value = '0';
+      document.getElementById('review-comment').value = '';
+      document.getElementById('review-proposal-id').value = proposalId;
+      document.getElementById('review-professional-id').value = professionalId;
+      document.getElementById('review-pro-name').textContent = proName;
+      document.getElementById('review-demand-title').textContent = demandTitle;
+      document.querySelectorAll('.star-btn').forEach(s => {
+        s.className = 'ti ti-star star-btn';
+        s.style.color = '#e2e8f0';
+        s.style.transform = 'scale(1)';
+      });
+      document.getElementById('star-label').textContent = '';
+      openModal('modal-review');
+    };
+
+    window.submitReview = async (e) => {
+      e.preventDefault();
+      const rating = parseInt(document.getElementById('review-rating').value);
+      if (!rating) { toast('Selecione uma nota de 1 a 5 estrelas.', 'warning'); return; }
+
+      const btn = document.getElementById('review-submit-btn');
+      setLoading(btn, true, 'Publicando...');
+
+      const proposalId     = document.getElementById('review-proposal-id').value;
+      const professionalId = document.getElementById('review-professional-id').value;
+      const comment        = document.getElementById('review-comment').value.trim();
+
+      // Marca proposta como concluída
+      await supabase.from('proposals')
+        .update({ status: 'accepted', completed_at: new Date().toISOString() })
+        .eq('id', proposalId);
+
+      // Insere avaliação
+      const { error } = await supabase.from('reviews').insert({
+        proposal_id:     proposalId,
+        client_id:       currentUser.id,
+        professional_id: professionalId,
+        rating,
+        comment: comment || null,
+      });
+
+      setLoading(btn, false);
+      if (error) {
+        if (error.code === '23505') toast('Você já avaliou este serviço.', 'warning');
+        else toast('Erro: ' + error.message, 'error');
+        return;
+      }
+
+      toast('Avaliação publicada! Obrigado pelo feedback.', 'success');
+      closeModal('modal-review');
+      loadDashboardData();
+    };
+
+    window.viewProfessionalProfile = (id) => {
+      window.open(`professional-profile.html?id=${id}`, '_blank');
+    };
+
     // ---- INIT ----
     async function init() {
+      // Só redireciona se NÃO há sessão Auth — nunca redireciona por falta de perfil na tabela
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { window.location.href = 'index.html'; return; }
-      currentUser = await getCurrentUser();
-      if (!currentUser) { window.location.href = 'index.html'; return; }
-      if (currentUser.user_type !== 'client') { window.location.href = 'professional-dashboard.html'; return; }
 
-      const displayName = currentUser.company_name || currentUser.name || 'Cliente';
+      currentUser = await getCurrentUser();
+      // currentUser nunca é null para usuário autenticado (supabase.js garante fallback)
+      if (currentUser.user_type === 'professional') {
+        window.location.href = 'professional-dashboard.html'; return;
+      }
+
+      const displayName = currentUser.company_name || currentUser.name || user.email.split('@')[0];
       document.getElementById('welcome-name').textContent = displayName.split(' ')[0];
       document.getElementById('sidebar-name').textContent = displayName;
       document.getElementById('sidebar-avatar').textContent = getInitials(displayName);
 
       // Profile section
       document.getElementById('profile-name').textContent = displayName;
-      document.getElementById('profile-email').textContent = currentUser.email;
+      document.getElementById('profile-email').textContent = currentUser.email || user.email;
       document.getElementById('profile-avatar').textContent = getInitials(displayName);
-      const city = currentUser.city ? `${currentUser.street || ''} ${currentUser.number || ''}, ${currentUser.city} - ${currentUser.state}` : '—';
+      const city = currentUser.city
+        ? `${currentUser.street || ''} ${currentUser.number || ''}, ${currentUser.city} - ${currentUser.state}`
+        : '—';
       document.getElementById('profile-address').textContent = city;
       document.getElementById('profile-whatsapp').textContent = currentUser.whatsapp || '—';
+
+      if (currentUser._incomplete) {
+        toast('Complete seu perfil para aproveitar todos os recursos.', 'warning', 5000);
+      }
 
       await loadCategories();
       await loadDashboardData();
@@ -391,7 +539,7 @@
     async function loadDashboardData() {
       const [demandsRes, proposalsRes] = await Promise.all([
         supabase.from('demands').select('*, categories(name)').eq('client_id', currentUser.id).order('created_at', { ascending: false }),
-        supabase.from('proposals').select('*, users(name, company_name, avatar_url), demands(title)').in('demand_id',
+        supabase.from('proposals').select('*, professional_id, completed_at, users(name, company_name, avatar_url, whatsapp), demands(title)').in('demand_id',
           (await supabase.from('demands').select('id').eq('client_id', currentUser.id)).data?.map(d => d.id) || []
         ).order('created_at', { ascending: false })
       ]);
@@ -471,27 +619,51 @@
         const initials = getInitials(name);
         const colors = ['#5b7cfa','#a78bfa','#34d399','#f87171'];
         const c = colors[name.charCodeAt(0) % colors.length];
-        const statusMap = { pending: ['badge-warning','Aguardando'], accepted: ['badge-success','Aceito'], rejected: ['badge-danger','Recusado'], withdrawn: ['badge-gray','Retirado'] };
+        const statusMap = {
+          pending:   ['badge-warning', '⏳ Aguardando'],
+          accepted:  ['badge-success', '✅ Aceito'],
+          rejected:  ['badge-danger',  '❌ Recusado'],
+          withdrawn: ['badge-gray',    'Retirado']
+        };
         const [sc, st] = statusMap[p.status] || ['badge-gray', p.status];
+        const isCompleted = !!p.completed_at;
+        const proId = p.professional_id || p.users?.id || '';
+
         const item = document.createElement('div');
         item.className = 'proposal-item';
         item.innerHTML = `
-          <div class="avatar avatar-md" style="background:${c}">${initials}</div>
+          <div class="avatar avatar-md" style="background:${c};cursor:pointer" onclick="viewProfessionalProfile('${proId}')" title="Ver perfil completo">${initials}</div>
           <div class="proposal-info">
-            <div class="proposal-name">${name}</div>
+            <div class="proposal-name" style="cursor:pointer" onclick="viewProfessionalProfile('${proId}')">${name}
+              <i class="ti ti-external-link" style="font-size:13px;color:var(--primary);margin-left:4px"></i>
+            </div>
             <div class="proposal-demand">Para: ${p.demands?.title || '—'}</div>
             <div class="proposal-msg">${p.message}</div>
           </div>
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0">
             <span class="badge ${sc}">${st}</span>
+            ${isCompleted ? '<span class="badge badge-success"><i class="ti ti-circle-check" style="font-size:11px"></i> Concluído</span>' : ''}
             ${p.proposed_value ? `<span style="font-size:0.8rem;font-weight:700;color:var(--primary)">${formatCurrency(p.proposed_value)}</span>` : ''}
-            <div class="proposal-actions">
+            <div class="proposal-actions" style="flex-wrap:wrap;justify-content:flex-end">
               ${p.status === 'pending' ? `
-                <button class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#059669" onclick="updateProposal('${p.id}','accepted')"><i class="ti ti-check"></i></button>
-                <button class="btn btn-sm" style="background:rgba(248,113,113,0.15);color:#dc2626" onclick="updateProposal('${p.id}','rejected')"><i class="ti ti-x"></i></button>
+                <button class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#059669" title="Aceitar" onclick="updateProposal('${p.id}','accepted')"><i class="ti ti-check"></i></button>
+                <button class="btn btn-sm" style="background:rgba(248,113,113,0.15);color:#dc2626" title="Recusar" onclick="updateProposal('${p.id}','rejected')"><i class="ti ti-x"></i></button>
               ` : ''}
-              <button class="btn btn-sm btn-secondary" onclick="openChat('${p.id}','${name}','${p.demands?.title || ''}')"><i class="ti ti-message-dots"></i></button>
-              ${p.users?.whatsapp ? `<a class="btn btn-sm" style="background:rgba(37,211,102,0.12);color:#128C7E;text-decoration:none" href="https://wa.me/55${p.users.whatsapp}" target="_blank"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+              ${p.status === 'accepted' && !isCompleted ? `
+                <button class="btn btn-sm" style="background:rgba(52,211,153,0.15);color:#059669;font-size:0.78rem"
+                  onclick="openReviewModal('${p.id}','${proId}','${name.replace(/'/g,"\'")}','${(p.demands?.title||'').replace(/'/g,"\'")}')">
+                  <i class="ti ti-star"></i> Finalizar e Avaliar
+                </button>
+              ` : ''}
+              ${isCompleted && !p._hasReview ? `
+                <button class="btn btn-sm" style="background:rgba(251,191,36,0.15);color:#b45309;font-size:0.78rem"
+                  onclick="openReviewModal('${p.id}','${proId}','${name.replace(/'/g,"\'")}','${(p.demands?.title||'').replace(/'/g,"\'")}')">
+                  <i class="ti ti-star"></i> Avaliar
+                </button>
+              ` : ''}
+              <button class="btn btn-sm btn-secondary" title="Chat" onclick="openChat('${p.id}','${name.replace(/'/g,"\'")}','${(p.demands?.title||'').replace(/'/g,"\'")}')"><i class="ti ti-message-dots"></i></button>
+              ${p.users?.whatsapp ? `<a class="btn btn-sm" style="background:rgba(37,211,102,0.12);color:#128C7E;text-decoration:none" title="WhatsApp" href="https://wa.me/55${p.users.whatsapp}" target="_blank"><i class="ti ti-brand-whatsapp"></i></a>` : ''}
+              <button class="btn btn-sm btn-ghost" title="Ver perfil" onclick="viewProfessionalProfile('${proId}')"><i class="ti ti-user-circle"></i></button>
             </div>
           </div>
         `;
@@ -599,7 +771,10 @@
           ${pro.description ? `<p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5">${pro.description.slice(0,110)}${pro.description.length>110?'...':''}</p>` : ''}
           <div class="flex justify-between items-center">
             ${pro.min_price ? `<span class="badge badge-success">A partir de ${formatCurrency(pro.min_price)}</span>` : '<span></span>'}
-            <button class="btn btn-primary btn-sm" onclick="inviteProfessional('${pro.id}','${name.replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> Convidar</button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" onclick="viewProfessionalProfile('${pro.id}')"><i class="ti ti-user-circle"></i> Perfil</button>
+              <button class="btn btn-primary btn-sm" onclick="inviteProfessional('${pro.id}','${name.replace(/'/g,"\\'")}')"><i class="ti ti-send"></i> Convidar</button>
+            </div>
           </div>
         `;
         el.appendChild(card);
