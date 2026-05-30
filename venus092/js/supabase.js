@@ -4,7 +4,7 @@
 //  Dashboard → Settings → API
 // ============================================================
 
-const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co/rest/v1/';   // ← altere aqui
+const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';   // ← altere aqui
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';            // ← altere aqui
 const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
 
