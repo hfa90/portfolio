@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="css/cadastro.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/supabase.js"></script>
 </head>
 
 <body>
@@ -403,6 +402,24 @@
   </main>
 
   <script>
+    // ── Supabase init (inline para evitar conflito de carregamento) ──
+    const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+    const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
+    const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    function toast(msg, tipo = 'info') {
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.cssText = `
+        position:fixed;bottom:24px;right:24px;z-index:9999;max-width:320px;
+        background:${tipo === 'erro' ? '#c0392b' : tipo === 'ok' ? '#27ae60' : '#2c2c3a'};
+        color:#fff;padding:12px 20px;border-radius:8px;font-size:.9rem;
+        box-shadow:0 4px 20px rgba(0,0,0,.5);`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4500);
+    }
+
     // ── Variáveis globais ─────────────────────────────────────────
     let currentStep = 1;
     let uploadedFiles = [];
@@ -496,14 +513,15 @@
     }
 
     function coletarLocais() {
-      const locaisMap = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
+      const locaisValidos = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
       const result = [];
-      document.querySelectorAll('.check-opt input[type=checkbox]').forEach(cb => {
-        if (cb.checked) {
-          const label = cb.closest('.check-opt')?.textContent?.trim() ?? '';
-          const match = locaisMap.find(l => label.includes(l.split(' ')[0]));
-          if (match) result.push(match);
-        }
+      document.querySelectorAll('.check-opt').forEach(label => {
+        const cb = label.querySelector('input[type=checkbox]');
+        if (!cb?.checked) return;
+        // Pega o texto do label ignorando o ícone (último text node)
+        const texto = label.textContent.trim();
+        const match = locaisValidos.find(l => texto.includes(l));
+        if (match) result.push(match);
       });
       return result;
     }
@@ -554,14 +572,15 @@
         termos_aceitos: termos,
         conteudo_adulto_aceito: adulto,
 
-        nome_artistico: document.querySelector('#step2 input[placeholder*="rtístic"], #step2 input[placeholder*="hamada"]')?.value?.trim() || '',
+        // step2 — usa placeholder exato do HTML
+        nome_artistico: document.querySelector('#step2 input[placeholder="Como você quer ser chamada(o)"]')?.value?.trim() || '',
         categoria: document.querySelector('#step2 select')?.value || '',
         bio: document.querySelector('#step2 textarea')?.value?.trim() || '',
-        idade: Number(document.querySelector('#step2 input[placeholder="Ex: 25"], #step2 input[placeholder="25"]')?.value) || null,
-        altura: document.querySelector('#step2 input[placeholder*="68"]')?.value?.replace(',', '.') || null,
-        peso: document.querySelector('#step2 input[placeholder*="58"]')?.value || null,
+        idade: Number(document.querySelector('#step2 input[placeholder="Ex: 25"]')?.value) || null,
+        altura: document.querySelector('#step2 input[placeholder="1,68"]')?.value?.replace(',', '.') || null,
+        peso: document.querySelector('#step2 input[placeholder="58"]')?.value || null,
         etnia: document.querySelectorAll('#step2 select')[1]?.value || null,
-        idiomas: (document.querySelector('#step2 input[placeholder*="nglês"], #step2 input[placeholder*="dioma"]')?.value || '')
+        idiomas: (document.querySelector('#step2 input[placeholder="Ex: Português, Inglês"]')?.value || '')
           .split(',').map(s => s.trim()).filter(Boolean),
 
         cep: document.getElementById('cepInput')?.value?.replace(/\D/g, '') || null,
@@ -591,7 +610,7 @@
       }
 
       // 2. Login automático
-      const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password: senha });
+      const { error: loginErr } = await _supabase.auth.signInWithPassword({ email, password: senha });
       if (loginErr) {
         toast('Conta criada! Confirme seu e-mail e faça login.', 'ok');
         setTimeout(() => window.location.href = 'login.html', 2500);
@@ -601,7 +620,7 @@
       // 3. Upload das fotos (opcional, não bloqueia)
       if (uploadedFiles.length > 0) {
         try {
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session } } = await _supabase.auth.getSession();
           const token = session?.access_token;
           const form = new FormData();
           uploadedFiles.forEach(f => form.append('fotos', f));
