@@ -402,10 +402,11 @@
   </main>
 
   <script>
-    // ── Supabase init (inline para evitar conflito de carregamento) ──
+    // ── Supabase init ─────────────────────────────────────────────
     const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
     const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
+    // Sempre cria _supabase inline — não depende de supabase.js externo
     const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     function toast(msg, tipo = 'info') {
@@ -601,7 +602,13 @@
           body: JSON.stringify(payload),
         });
         const json = await res.json();
-        if (!json.ok) throw new Error(json.error ?? 'Erro ao cadastrar');
+        console.log('RESPOSTA SERVIDOR:', json); // debug
+        if (!json.ok) {
+          const msg = json.campos
+            ? 'Campos inválidos: ' + json.campos.join(' | ')
+            : (json.error ?? 'Erro ao cadastrar');
+          throw new Error(msg);
+        }
       } catch (err) {
         toast(err.message, 'erro');
         btn.disabled = false;
