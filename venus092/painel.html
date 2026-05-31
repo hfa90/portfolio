@@ -120,6 +120,28 @@
       margin-top: 4px;
     }
 
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 12px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      color: var(--red);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(248, 113, 113, 0.18);
+      border-color: var(--red);
+    }
+
     /* HEADER */
     header {
       position: fixed;
@@ -738,11 +760,12 @@
     <div class="sidebar-bottom">
       <div class="plan-badge">PLANO GRATUITO</div>
       <div class="plan-sub">Upgrade em breve</div>
+      <button class="btn-logout" onclick="logout()">🚪 Sair</button>
     </div>
   </aside>
 
   <header>
-    <a class="hdr-link" href="#" onclick="goPage('perfil')">🔗 Ver meu perfil</a>
+    <a class="hdr-link" href="perfil.html" target="_blank">🔗 Ver meu perfil</a>
     <div class="avatar" id="avatarInitials">?</div>
     <span id="headerName" style="font-size:0.875rem;color:var(--text-muted)"></span>
   </header>
@@ -1111,6 +1134,15 @@
     let currentProfile = null;
 
     // ============================================================
+    // LOGOUT
+    // ============================================================
+    async function logout() {
+      if (!confirm('Deseja sair do painel?')) return;
+      await sb.auth.signOut();
+      window.location.href = 'login.html';
+    }
+
+    // ============================================================
     // INIT
     // ============================================================
     async function init() {
@@ -1422,14 +1454,26 @@
         const ext = file.name.split('.').pop();
         const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: upErr } = await sb.storage.from('fotos').upload(path, file, { upsert: false });
-        if (upErr) { done++; bar.style.width = (done / files.length * 100) + '%'; continue; }
+        if (upErr) {
+          console.error('Erro storage:', upErr);
+          done++;
+          bar.style.width = (done / files.length * 100) + '%';
+          txt.textContent = `Erro no storage: ${upErr.message}`;
+          continue;
+        }
         const { data: urlData } = sb.storage.from('fotos').getPublicUrl(path);
         const { error: dbErr } = await sb.from('profile_photos').insert({
           profile_id: currentUser.id, storage_path: path, url: urlData.publicUrl,
           is_cover: false, ordem: 0, status: 'pending',
           mime_type: file.type, size_bytes: file.size
         });
-        if (!dbErr) success++;
+        if (dbErr) {
+          console.error('Erro DB:', dbErr);
+          // Remove do storage se falhou no DB
+          await sb.storage.from('fotos').remove([path]);
+        } else {
+          success++;
+        }
         done++;
         bar.style.width = (done / files.length * 100) + '%';
       }
@@ -1438,7 +1482,7 @@
       setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0'; }, 3000);
       input.value = '';
       if (success > 0) showToast(`${success} foto(s) enviada(s) para aprovação!`);
-      else showToast('Nenhuma foto foi enviada. Verifique o storage.', 'error');
+      else showToast('Nenhuma foto enviada. Verifique o console (F12) para o erro do storage.', 'error');
       loadFotos();
     }
 
