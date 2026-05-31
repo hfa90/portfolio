@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title id="pageTitle">Perfil — Vênus</title>
+    <link rel="stylesheet" href="css/global.css" />
+    <link rel="stylesheet" href="css/perfil.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+
+<body>
+
+    <nav class="navbar">
+        <a href="index.html" class="navbar-brand"><em>Vênus</em></a>
+        <div class="navbar-search">
+            <i class="ti ti-search search-icon"></i>
+            <input type="text" placeholder="Buscar por cidade, bairro ou nome…" />
+        </div>
+        <nav class="navbar-nav">
+            <a href="catalogo.html" class="nav-link">Catálogo</a>
+            <a href="login.html" class="btn btn-outline btn-sm">Entrar</a>
+            <a href="cadastro.html" class="btn btn-gold btn-sm">Anuncie grátis</a>
+        </nav>
+    </nav>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loadingOverlay"
+        style="position:fixed;inset:0;background:#0E0E0F;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:16px">
+        <div
+            style="width:40px;height:40px;border:3px solid rgba(201,168,76,0.2);border-top-color:#C9A84C;border-radius:50%;animation:spin 0.7s linear infinite">
+        </div>
+        <p style="color:#888;font-size:0.9rem;font-family:Segoe UI,sans-serif">Carregando perfil…</p>
+    </div>
+    <style>
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
+    </style>
+
+    <main class="page">
+        <div class="container">
+
+            <!-- BREADCRUMB -->
+            <div class="breadcrumb">
+                <a href="index.html">Início</a>
+                <i class="ti ti-chevron-right"></i>
+                <a href="catalogo.html">Catálogo</a>
+                <i class="ti ti-chevron-right"></i>
+                <a href="catalogo.html" id="breadcrumbCategoria">Perfil</a>
+                <i class="ti ti-chevron-right"></i>
+                <span id="breadcrumbNome">—</span>
+            </div>
+
+            <div class="perfil-layout">
+
+                <!-- COLUNA ESQUERDA -->
+                <div class="perfil-left">
+
+                    <!-- GALERIA -->
+                    <div class="galeria">
+                        <div class="galeria-main">
+                            <div class="galeria-main-img" id="mainImg">
+                                <div class="placeholder-galeria-main" id="mainImgPlaceholder"></div>
+                                <img id="mainImgEl" src="" alt=""
+                                    style="display:none;width:100%;height:100%;object-fit:cover;border-radius:inherit" />
+                                <div class="galeria-overlay">
+                                    <button class="galeria-nav galeria-prev" onclick="galeriaPrev()">
+                                        <i class="ti ti-chevron-left"></i>
+                                    </button>
+                                    <button class="galeria-nav galeria-next" onclick="galeiaNext()">
+                                        <i class="ti ti-chevron-right"></i>
+                                    </button>
+                                </div>
+                                <div class="galeria-counter" id="galeriaCounter">— / —</div>
+                            </div>
+                        </div>
+                        <div class="galeria-thumbs" id="galeriaThumbs">
+                            <!-- preenchido pelo JS -->
+                        </div>
+                    </div>
+
+                    <!-- INFO MOBILE -->
+                    <div class="perfil-info-mobile">
+                        <div class="perfil-name-row">
+                            <div>
+                                <h1 class="perfil-name" id="mobileNome">—</h1>
+                                <div class="perfil-meta-row">
+                                    <span class="badge badge-gold" id="mobileCategoria">—</span>
+                                    <span class="badge badge-green" id="mobileOnline" style="display:none">● Online
+                                        agora</span>
+                                    <span class="badge badge-blue" id="mobileVerif" style="display:none">Verificada
+                                        ✓</span>
+                                </div>
+                            </div>
+                            <button class="perfil-fav-btn" id="favBtn" onclick="toggleFav()">
+                                <i class="ti ti-heart"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SOBRE -->
+                    <div class="perfil-card" id="cardBio" style="display:none">
+                        <h2 class="perfil-section-title">Sobre mim</h2>
+                        <p class="perfil-bio" id="bioParagraph"></p>
+                    </div>
+
+                    <!-- CARACTERÍSTICAS -->
+                    <div class="perfil-card">
+                        <h2 class="perfil-section-title">Características</h2>
+                        <div class="caract-grid" id="caractGrid">
+                            <!-- preenchido pelo JS -->
+                        </div>
+                    </div>
+
+                    <!-- SERVIÇOS -->
+                    <div class="perfil-card" id="cardServicos" style="display:none">
+                        <h2 class="perfil-section-title">Serviços e preços</h2>
+                        <div class="servicos-list" id="servicosList">
+                            <!-- preenchido pelo JS -->
+                        </div>
+                    </div>
+
+                    <!-- LOCALIZAÇÃO -->
+                    <div class="perfil-card">
+                        <h2 class="perfil-section-title">Localização</h2>
+                        <div class="perfil-localizacao" id="localizacaoInfo">
+                            <!-- preenchido pelo JS -->
+                        </div>
+                        <div class="perfil-map-placeholder">
+                            <i class="ti ti-map-2"></i>
+                            <p id="localizacaoMap">—</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- COLUNA DIREITA -->
+                <div class="perfil-right">
+                    <div class="perfil-sticky">
+
+                        <!-- NOME E STATUS -->
+                        <div class="perfil-name-row-desktop">
+                            <div>
+                                <h1 class="perfil-name" id="desktopNome">—</h1>
+                                <div class="perfil-meta-row">
+                                    <span class="badge badge-gold" id="desktopCategoria">—</span>
+                                    <span class="badge badge-green" id="desktopOnline" style="display:none">●
+                                        Online</span>
+                                </div>
+                            </div>
+                            <button class="perfil-fav-btn" onclick="toggleFav()">
+                                <i class="ti ti-heart"></i>
+                            </button>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- PREÇO DESTAQUE -->
+                        <div class="perfil-price-box" id="priceBox" style="display:none">
+                            <span class="perfil-price-label">A partir de</span>
+                            <span class="perfil-price" id="priceValue">—</span>
+                            <span class="perfil-price-unit">/hora</span>
+                        </div>
+
+                        <!-- CTA PRINCIPAL -->
+                        <a id="whatsappBtn" href="#" target="_blank" class="btn btn-gold btn-lg perfil-cta-btn"
+                            style="pointer-events:none;opacity:0.5">
+                            <i class="ti ti-brand-whatsapp"></i>
+                            Chamar no WhatsApp
+                        </a>
+
+                        <!-- STATS -->
+                        <div class="perfil-stats">
+                            <div class="perfil-stat">
+                                <i class="ti ti-eye"></i>
+                                <div>
+                                    <strong id="statViews">—</strong>
+                                    <span>Visualizações</span>
+                                </div>
+                            </div>
+                            <div class="perfil-stat">
+                                <i class="ti ti-heart"></i>
+                                <div>
+                                    <strong id="statFavs">—</strong>
+                                    <span>Favoritos</span>
+                                </div>
+                            </div>
+                            <div class="perfil-stat">
+                                <i class="ti ti-calendar"></i>
+                                <div>
+                                    <strong id="statMembro">—</strong>
+                                    <span>Membro desde</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- ATENDIMENTO -->
+                        <div class="perfil-atendimento">
+                            <p class="perfil-section-title" style="margin-bottom:0.75rem;">Atendimento</p>
+                            <div class="atend-list" id="atendList">
+                                <!-- preenchido pelo JS -->
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- DISPONIBILIDADE -->
+                        <div>
+                            <p class="perfil-section-title" style="margin-bottom:0.75rem;">Disponibilidade</p>
+                            <div class="disponib-grid" id="disponibGrid">
+                                <!-- preenchido pelo JS -->
+                            </div>
+                            <p class="disponib-horario" id="disponibHorario" style="display:none">
+                                <i class="ti ti-clock"></i> <span id="disponibHorarioTxt"></span>
+                            </p>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <button class="btn-reportar">
+                            <i class="ti ti-flag"></i> Reportar anúncio
+                        </button>
+
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- PERFIS SIMILARES -->
+            <div class="perfil-similares">
+                <div class="section-header">
+                    <div>
+                        <p class="section-label">Você também pode gostar</p>
+                        <h2 class="section-title" style="font-size:1.5rem;">Perfis similares</h2>
+                    </div>
+                    <a href="catalogo.html" class="btn btn-outline">Ver catálogo <i class="ti ti-arrow-right"></i></a>
+                </div>
+                <div class="grid-profiles" id="similaresList">
+                    <!-- preenchido pelo JS -->
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // ============================================================
+        // CONFIG SUPABASE
+        // ============================================================
+        const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+        const { createClient } = supabase;
+        const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ============================================================
+        // HELPERS
+        // ============================================================
+        function getProfileId() {
+            // Aceita ?id=UUID na URL ou usa o usuário logado como fallback
+            const params = new URLSearchParams(window.location.search);
+            return params.get('id') || null;
+        }
+
+        function fmt(val, suffix = '') {
+            return val !== null && val !== undefined && val !== '' ? val + suffix : null;
+        }
+
+        function localIcon(local) {
+            const map = {
+                'Local próprio': 'ti-home',
+                'A domicílio': 'ti-car',
+                'Motel / Hotel': 'ti-moon',
+                'Online': 'ti-device-laptop',
+                'A combinar': 'ti-building'
+            };
+            return map[local] || 'ti-map-pin';
+        }
+
+        // ============================================================
+        // GALERIA (fotos aprovadas via URL assinada — bucket privado)
+        // ============================================================
+        let photos = [];
+        let currentPhoto = 0;
+
+        async function loadFotos(profileId) {
+            // Busca apenas fotos aprovadas
+            const { data } = await sb
+                .from('profile_photos')
+                .select('storage_path, is_cover')
+                .eq('profile_id', profileId)
+                .eq('status', 'approved')
+                .order('is_cover', { ascending: false })
+                .order('ordem');
+
+            if (!data || data.length === 0) return;
+
+            // Gera URLs assinadas (privadas, expiram em 1 hora)
+            const paths = data.map(p => p.storage_path);
+            const { data: signed } = await sb.storage.from('fotos').createSignedUrls(paths, 3600);
+
+            photos = (signed || []).map(s => s.signedUrl).filter(Boolean);
+            renderGaleria();
+        }
+
+        function renderGaleria() {
+            if (!photos.length) return;
+
+            const mainImgEl = document.getElementById('mainImgEl');
+            const mainImgPlaceholder = document.getElementById('mainImgPlaceholder');
+            const thumbsEl = document.getElementById('galeriaThumbs');
+
+            mainImgPlaceholder.style.display = 'none';
+            mainImgEl.style.display = 'block';
+            mainImgEl.src = photos[0];
+            document.getElementById('galeriaCounter').textContent = `1 / ${photos.length}`;
+
+            thumbsEl.innerHTML = photos.map((url, i) => `
+    <div class="galeria-thumb ${i === 0 ? 'active' : ''}"
+         style="background-image:url('${url}');background-size:cover;background-position:center;cursor:pointer"
+         onclick="gotoPhoto(${i})"></div>
+  `).join('');
+        }
+
+        function gotoPhoto(i) {
+            if (!photos.length) return;
+            document.querySelectorAll('.galeria-thumb').forEach((t, idx) => t.classList.toggle('active', idx === i));
+            currentPhoto = i;
+            document.getElementById('mainImgEl').src = photos[i];
+            document.getElementById('galeriaCounter').textContent = `${i + 1} / ${photos.length}`;
+        }
+
+        function galeriaPrev() { gotoPhoto((currentPhoto - 1 + photos.length) % photos.length); }
+        function galeiaNext() { gotoPhoto((currentPhoto + 1) % photos.length); }
+
+        // ============================================================
+        // CARREGAR PERFIL
+        // ============================================================
+        async function loadPerfil() {
+            let profileId = getProfileId();
+
+            // Se não veio ?id= na URL, tenta usar o usuário logado
+            if (!profileId) {
+                const { data: { session } } = await sb.auth.getSession();
+                if (session) profileId = session.user.id;
+            }
+
+            if (!profileId) {
+                document.getElementById('loadingOverlay').style.display = 'none';
+                return;
+            }
+
+            // Busca perfil + silicone + serviços + locais + disponibilidade em paralelo
+            const [
+                { data: p },
+                { data: silicone },
+                { data: servicos },
+                { data: locais },
+                { data: disponib }
+            ] = await Promise.all([
+                sb.from('profiles').select('*').eq('id', profileId).single(),
+                sb.from('profile_silicone').select('local').eq('profile_id', profileId),
+                sb.from('services').select('*').eq('profile_id', profileId).eq('ativo', true).order('ordem'),
+                sb.from('attendance_locations').select('tipo').eq('profile_id', profileId),
+                sb.from('availability').select('*').eq('profile_id', profileId).order('dia_semana')
+            ]);
+
+            if (!p) { document.getElementById('loadingOverlay').style.display = 'none'; return; }
+
+            // Carrega fotos (bucket privado — URLs assinadas)
+            await loadFotos(profileId);
+
+            // Registra visualização assíncrona (não bloqueia o render)
+            sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'view' });
+
+            // Stats
+            const { count: views } = await sb.from('profile_analytics')
+                .select('*', { count: 'exact', head: true })
+                .eq('profile_id', profileId).eq('evento', 'view');
+            const { count: favs } = await sb.from('profile_analytics')
+                .select('*', { count: 'exact', head: true })
+                .eq('profile_id', profileId).eq('evento', 'favorite');
+
+            // ---- Preenche a UI ----
+
+            const nome = p.nome_artistico || 'Perfil';
+            document.title = `${nome} — Vênus`;
+            document.getElementById('pageTitle').textContent = `${nome} — Vênus`;
+            document.getElementById('breadcrumbNome').textContent = nome;
+            document.getElementById('breadcrumbCategoria').textContent = p.categoria || 'Catálogo';
+
+            ['mobileNome', 'desktopNome'].forEach(id => document.getElementById(id).textContent = nome);
+            ['mobileCategoria', 'desktopCategoria'].forEach(id => document.getElementById(id).textContent = p.categoria || '');
+
+            if (p.online_now) {
+                ['mobileOnline', 'desktopOnline'].forEach(id => document.getElementById(id).style.display = '');
+            }
+            if (p.verificada) {
+                document.getElementById('mobileVerif').style.display = '';
+            }
+
+            // Bio
+            if (p.bio) {
+                document.getElementById('cardBio').style.display = '';
+                document.getElementById('bioParagraph').textContent = p.bio;
+            }
+
+            // Características
+            const siliconeList = (silicone || []).map(s => s.local);
+            const caractData = [
+                { label: 'Idade', value: fmt(p.idade, ' anos') },
+                { label: 'Altura', value: p.altura ? p.altura.toFixed(2).replace('.', ',') + ' m' : null },
+                { label: 'Peso', value: fmt(p.peso, ' kg') },
+                { label: 'Etnia', value: p.etnia },
+                { label: 'Cabelo', value: p.cabelo },
+                { label: 'Olhos', value: p.olhos },
+                { label: 'Silicone', value: siliconeList.length ? siliconeList.join(', ') : 'Não' },
+                { label: 'Idiomas', value: p.idiomas?.length ? p.idiomas.map(i => i.slice(0, 2).toUpperCase()).join(', ') : null }
+            ].filter(c => c.value);
+
+            document.getElementById('caractGrid').innerHTML = caractData.map(c => `
+    <div class="caract-item">
+      <span class="caract-label">${c.label}</span>
+      <span class="caract-value">${c.value}</span>
+    </div>
+  `).join('');
+
+            // Serviços
+            if (servicos && servicos.length) {
+                document.getElementById('cardServicos').style.display = '';
+                const minPreco = Math.min(...servicos.filter(s => s.preco).map(s => s.preco));
+                if (isFinite(minPreco)) {
+                    document.getElementById('priceBox').style.display = '';
+                    document.getElementById('priceValue').textContent = 'R$ ' + minPreco.toLocaleString('pt-BR');
+                }
+                document.getElementById('servicosList').innerHTML = servicos.map(s => `
+      <div class="servico-item">
+        <div class="servico-info">
+          <span class="servico-nome">${s.nome}</span>
+          <span class="servico-local"><i class="ti ${localIcon(s.local)}"></i> ${s.local || 'A combinar'}</span>
+        </div>
+        <span class="servico-preco">${s.preco ? 'R$ ' + parseFloat(s.preco).toLocaleString('pt-BR') : 'A combinar'}</span>
+      </div>
+    `).join('');
+            }
+
+            // WhatsApp
+            if (p.whatsapp) {
+                const wa = document.getElementById('whatsappBtn');
+                const num = p.whatsapp.replace(/\D/g, '');
+                wa.href = `https://wa.me/55${num}`;
+                wa.style.pointerEvents = '';
+                wa.style.opacity = '';
+                wa.addEventListener('click', () => {
+                    sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'whatsapp_click' });
+                });
+            }
+
+            // Stats
+            document.getElementById('statViews').textContent = (views || 0).toLocaleString('pt-BR');
+            document.getElementById('statFavs').textContent = favs || 0;
+            const membro = p.created_at
+                ? new Date(p.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+                : '—';
+            document.getElementById('statMembro').textContent = membro;
+
+            // Atendimento
+            const todosLocais = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
+            const tiposAtivos = (locais || []).map(l => l.tipo);
+            document.getElementById('atendList').innerHTML = todosLocais.map(l => `
+    <div class="atend-item ${tiposAtivos.includes(l) ? 'atend-sim' : 'atend-nao'}">
+      <i class="ti ${tiposAtivos.includes(l) ? 'ti-check' : 'ti-x'}"></i> ${l}
+    </div>
+  `).join('');
+
+            // Disponibilidade
+            const DIAS_CURTOS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+            const diasAtivos = (disponib || []).map(d => d.dia_semana);
+            document.getElementById('disponibGrid').innerHTML = DIAS_CURTOS.map((d, i) => `
+    <div class="disponib-day ${diasAtivos.includes(i) ? 'avail' : ''}">${d}</div>
+  `).join('');
+
+            if (disponib && disponib.length) {
+                const horas = disponib.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
+                const ini = horas[0].hora_inicio.slice(0, 5);
+                const fim = horas[horas.length - 1].hora_fim.slice(0, 5);
+                document.getElementById('disponibHorario').style.display = '';
+                document.getElementById('disponibHorarioTxt').textContent = `${ini} às ${fim}`;
+            }
+
+            // Localização
+            const locParts = [p.bairro, p.cidade, p.uf].filter(Boolean);
+            document.getElementById('localizacaoInfo').innerHTML = [
+                p.bairro ? `<div class="loc-item"><i class="ti ti-map-pin"></i> <strong>Bairro:</strong> ${p.bairro}</div>` : '',
+                p.cidade ? `<div class="loc-item"><i class="ti ti-building-community"></i> <strong>Cidade:</strong> ${p.cidade}</div>` : '',
+                p.uf ? `<div class="loc-item"><i class="ti ti-map"></i> <strong>Estado:</strong> ${p.uf}</div>` : ''
+            ].join('');
+            document.getElementById('localizacaoMap').textContent = locParts.join(', ') || '—';
+
+            // Similares (mesma categoria, excluindo o perfil atual)
+            if (p.categoria) {
+                const { data: simData } = await sb.from('profiles')
+                    .select('id, nome_artistico, cidade, bairro, online_now, categoria')
+                    .eq('categoria', p.categoria)
+                    .neq('id', profileId)
+                    .limit(4);
+
+                if (simData && simData.length) {
+                    document.getElementById('similaresList').innerHTML = simData.map(s => `
+        <div class="profile-card" onclick="location.href='perfil.html?id=${s.id}'">
+          <div class="profile-card-img">
+            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1c1820,#282030);"></div>
+            <div class="card-overlay"></div>
+            <div class="card-badges">
+              ${s.online_now ? '<span class="badge badge-green">● Online</span>' : ''}
+            </div>
+            <button class="card-fav"><i class="ti ti-heart"></i></button>
+          </div>
+          <div class="profile-card-body">
+            <p class="profile-card-name">${s.nome_artistico || '—'}</p>
+            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> ${[s.bairro, s.cidade].filter(Boolean).join(' · ') || '—'}</p>
+            <div class="profile-card-footer">
+              <span class="badge badge-gold">${s.categoria}</span>
+            </div>
+          </div>
+        </div>
+      `).join('');
+                }
+            }
+
+            // Esconde loading
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+
+        // ============================================================
+        // FAVORITAR
+        // ============================================================
+        function toggleFav() {
+            document.querySelectorAll('.perfil-fav-btn').forEach(b => b.classList.toggle('active'));
+            const profileId = getProfileId();
+            if (profileId) {
+                sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'favorite' });
+            }
+        }
+
+        // ============================================================
+        // START
+        // ============================================================
+        loadPerfil();
+    </script>
+</body>
+
+</html>
