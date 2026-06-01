@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,408 +8,806 @@
   <link rel="stylesheet" href="css/global.css" />
   <link rel="stylesheet" href="css/catalogo.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    /* ── SPINNER ── */
+    .grid-spinner {
+      grid-column: 1/-1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 16px;
+      color: var(--text-muted, #888);
+    }
+
+    .grid-spinner .spin {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(201, 168, 76, .15);
+      border-top-color: #C9A84C;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── GPS BUTTON ── */
+    .gps-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--gold-dim, rgba(201, 168, 76, .12));
+      border: 1px solid rgba(201, 168, 76, .3);
+      color: #C9A84C;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      width: 100%;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .gps-btn:hover {
+      background: rgba(201, 168, 76, .22);
+    }
+
+    .gps-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .gps-btn .spin-sm {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(201, 168, 76, .2);
+      border-top-color: #C9A84C;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    /* ── CEP INFO ── */
+    .filtro-cep-info {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: .8rem;
+      color: #4ADE80;
+      margin-top: 6px;
+      background: rgba(74, 222, 128, .08);
+      border: 1px solid rgba(74, 222, 128, .2);
+      padding: 6px 10px;
+      border-radius: 8px;
+    }
+
+    .cep-error {
+      display: none;
+      font-size: .8rem;
+      color: #F87171;
+      margin-top: 6px;
+    }
+
+    /* ── EMPTY STATE ── */
+    .grid-empty {
+      grid-column: 1/-1;
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted, #888);
+    }
+
+    .grid-empty .icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* ── CHIP ACTIVE ── */
+    .chip.active {
+      background: #C9A84C;
+      color: #000;
+      border-color: #C9A84C;
+    }
+
+    /* ── FOTO COVER ── */
+    .profile-card-img .cover-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- NAVBAR -->
-<nav class="navbar">
-  <a href="index.html" class="navbar-brand"><em>Vênus</em></a>
-  <div class="navbar-search">
-    <i class="ti ti-search search-icon"></i>
-    <input type="text" placeholder="Buscar por nome, cidade…" />
-  </div>
-  <nav class="navbar-nav">
-    <a href="catalogo.html" class="nav-link active">Catálogo</a>
-    <a href="cadastro.html" class="nav-link">Cadastre-se</a>
-    <a href="login.html" class="btn btn-outline btn-sm">Entrar</a>
-    <a href="cadastro.html" class="btn btn-gold btn-sm">Anuncie grátis</a>
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <a href="index.html" class="navbar-brand"><em>Vênus</em></a>
+    <div class="navbar-search">
+      <i class="ti ti-search search-icon"></i>
+      <input type="text" id="navSearch" placeholder="Buscar por nome, cidade…" oninput="debounceSearch()" />
+    </div>
+    <nav class="navbar-nav">
+      <a href="catalogo.html" class="nav-link active">Catálogo</a>
+      <a href="cadastro.html" class="nav-link">Cadastre-se</a>
+      <a href="login.html" class="btn btn-outline btn-sm">Entrar</a>
+      <a href="cadastro.html" class="btn btn-gold btn-sm">Anuncie grátis</a>
+    </nav>
   </nav>
-</nav>
 
-<main class="page">
-  <div class="catalogo-layout">
+  <main class="page">
+    <div class="catalogo-layout">
 
-    <!-- SIDEBAR FILTROS -->
-    <aside class="filtros-sidebar" id="filtrosSidebar">
-      <div class="filtros-header">
-        <h2>Filtros</h2>
-        <button class="filtros-clear">Limpar tudo</button>
-      </div>
+      <!-- SIDEBAR FILTROS -->
+      <aside class="filtros-sidebar" id="filtrosSidebar">
+        <div class="filtros-header">
+          <h2>Filtros</h2>
+          <button class="filtros-clear" onclick="limparFiltros()">Limpar tudo</button>
+        </div>
 
-      <!-- Localização -->
-      <div class="filtro-section">
-        <h3 class="filtro-title">Localização</h3>
-        <div class="filtro-cep-wrap">
-          <div class="form-group">
-            <label class="form-label">Seu CEP</label>
-            <div class="cep-input-wrap">
-              <i class="ti ti-map-pin"></i>
-              <input type="text" class="form-input" id="filtrosCep" placeholder="00000-000" maxlength="9" />
+        <!-- Localização -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Localização</h3>
+          <div class="filtro-cep-wrap">
+            <div class="form-group">
+              <label class="form-label">Seu CEP</label>
+              <div class="cep-input-wrap">
+                <i class="ti ti-map-pin"></i>
+                <input type="text" class="form-input" id="filtrosCep" placeholder="00000-000" maxlength="9"
+                  oninput="onCepInput()" />
+              </div>
+              <span class="cep-error" id="cepError">CEP não encontrado.</span>
             </div>
-          </div>
-          <div class="filtro-cep-info" id="cepiInfo" style="display:none">
-            <i class="ti ti-check"></i> <span id="cepInfoText">Pinheiros, SP</span>
-          </div>
-        </div>
-
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label">Distância máxima</label>
-          <div class="range-wrap">
-            <input type="range" id="distRange" min="1" max="100" value="20" />
-            <div class="range-labels">
-              <span>1 km</span>
-              <span class="range-val" id="distVal">20 km</span>
-              <span>100 km</span>
+            <div class="filtro-cep-info" id="cepiInfo">
+              <i class="ti ti-check"></i> <span id="cepInfoText"></span>
             </div>
+
+            <!-- BOTÃO GPS -->
+            <button class="gps-btn" id="gpsBtn" onclick="usarGPS()">
+              <i class="ti ti-current-location"></i> Usar minha localização
+            </button>
           </div>
-        </div>
 
-        <div class="form-group" style="margin-top: 1rem;">
-          <label class="form-label">Estado</label>
-          <select class="form-select">
-            <option value="">Todos os estados</option>
-            <option>São Paulo</option>
-            <option>Rio de Janeiro</option>
-            <option>Minas Gerais</option>
-            <option>Bahia</option>
-            <option>Paraná</option>
-            <option>Rio Grande do Sul</option>
-          </select>
-        </div>
-
-        <div class="form-group" style="margin-top: 0.75rem;">
-          <label class="form-label">Cidade</label>
-          <input type="text" class="form-input" placeholder="Digite a cidade" />
-        </div>
-
-        <div class="form-group" style="margin-top: 0.75rem;">
-          <label class="form-label">Bairro</label>
-          <input type="text" class="form-input" placeholder="Digite o bairro" />
-        </div>
-      </div>
-
-      <!-- Categoria -->
-      <div class="filtro-section">
-        <h3 class="filtro-title">Categoria</h3>
-        <div class="filtro-checks">
-          <label class="check-item">
-            <input type="checkbox" /> <span>GP Feminina</span>
-            <span class="check-count">1.420</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>GP Masculino</span>
-            <span class="check-count">380</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Trans & Travesti</span>
-            <span class="check-count">640</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Lésbica</span>
-            <span class="check-count">290</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Gay</span>
-            <span class="check-count">420</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Atendimento -->
-      <div class="filtro-section">
-        <h3 class="filtro-title">Local de atendimento</h3>
-        <div class="filtro-checks">
-          <label class="check-item">
-            <input type="checkbox" /> <span>Local próprio</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>A domicílio</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Motel / Hotel</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Online</span>
-          </label>
-        </div>
-      </div>
-
-      <!-- Preço -->
-      <div class="filtro-section">
-        <h3 class="filtro-title">Faixa de preço</h3>
-        <div class="price-range">
-          <div class="form-group">
-            <label class="form-label">De</label>
-            <input type="number" class="form-input" placeholder="R$ 0" min="0" />
-          </div>
-          <div class="price-sep">—</div>
-          <div class="form-group">
-            <label class="form-label">Até</label>
-            <input type="number" class="form-input" placeholder="R$ 999" min="0" />
-          </div>
-        </div>
-      </div>
-
-      <!-- Status -->
-      <div class="filtro-section">
-        <h3 class="filtro-title">Disponibilidade</h3>
-        <div class="filtro-checks">
-          <label class="check-item">
-            <input type="checkbox" /> <span>Online agora</span>
-            <span class="badge badge-green" style="font-size:0.625rem;">●</span>
-          </label>
-          <label class="check-item">
-            <input type="checkbox" /> <span>Verificados</span>
-            <span class="badge badge-gold" style="font-size:0.625rem;">✓</span>
-          </label>
-        </div>
-      </div>
-
-      <button class="btn btn-gold" style="width:100%; margin-top: 0.5rem;">
-        <i class="ti ti-filter"></i> Aplicar filtros
-      </button>
-    </aside>
-
-    <!-- CONTEÚDO PRINCIPAL -->
-    <div class="catalogo-main">
-
-      <!-- BARRA SUPERIOR -->
-      <div class="catalogo-topbar">
-        <div class="catalogo-topbar-left">
-          <button class="btn-filtros-mobile btn btn-ghost btn-sm" onclick="toggleFiltros()">
-            <i class="ti ti-adjustments-horizontal"></i> Filtros
-          </button>
-          <h1 class="catalogo-title">
-            Catálogo <span class="catalogo-count">3.200 perfis</span>
-          </h1>
-        </div>
-        <div class="catalogo-topbar-right">
-          <div class="chips" id="activeChips">
-            <button class="chip active" onclick="toggleChip(this)">Todos</button>
-            <button class="chip" onclick="toggleChip(this)">GP Feminina</button>
-            <button class="chip" onclick="toggleChip(this)">Trans</button>
-            <button class="chip" onclick="toggleChip(this)">Gay</button>
-            <button class="chip" onclick="toggleChip(this)">Lésbica</button>
-            <button class="chip" onclick="toggleChip(this)">Masculino</button>
-          </div>
-          <div class="catalogo-sort">
-            <select class="form-select sort-select">
-              <option>Mais próximas</option>
-              <option>Mais recentes</option>
-              <option>Menor preço</option>
-              <option>Maior preço</option>
-              <option>Em destaque</option>
+          <div class="form-group" style="margin-top:1rem">
+            <label class="form-label">Estado (UF)</label>
+            <select class="form-select" id="filtroUf" onchange="aplicarFiltros()">
+              <option value="">Todos os estados</option>
+              <option>AC</option>
+              <option>AL</option>
+              <option>AM</option>
+              <option>AP</option>
+              <option>BA</option>
+              <option>CE</option>
+              <option>DF</option>
+              <option>ES</option>
+              <option>GO</option>
+              <option>MA</option>
+              <option>MG</option>
+              <option>MS</option>
+              <option>MT</option>
+              <option>PA</option>
+              <option>PB</option>
+              <option>PE</option>
+              <option>PI</option>
+              <option>PR</option>
+              <option>RJ</option>
+              <option>RN</option>
+              <option>RO</option>
+              <option>RR</option>
+              <option>RS</option>
+              <option>SC</option>
+              <option>SE</option>
+              <option>SP</option>
+              <option>TO</option>
             </select>
           </div>
-        </div>
-      </div>
 
-      <!-- CEP BANNER (quando não tem localização) -->
-      <div class="cep-banner" id="cepBanner">
-        <i class="ti ti-map-pin"></i>
-        <div>
-          <strong>Veja quem está perto de você</strong>
-          <p>Informe seu CEP para ordenar por distância</p>
+          <div class="form-group" style="margin-top:.75rem">
+            <label class="form-label">Cidade</label>
+            <input type="text" class="form-input" id="filtroCidade" placeholder="Digite a cidade"
+              oninput="debounceSearch()" />
+          </div>
+
+          <div class="form-group" style="margin-top:.75rem">
+            <label class="form-label">Bairro</label>
+            <input type="text" class="form-input" id="filtroBairro" placeholder="Digite o bairro"
+              oninput="debounceSearch()" />
+          </div>
         </div>
-        <div class="cep-banner-input">
-          <input type="text" placeholder="00000-000" maxlength="9" id="bannerCep" />
-          <button class="btn btn-gold btn-sm">Buscar</button>
+
+        <!-- Categoria -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Categoria</h3>
+          <div class="filtro-checks" id="filtroCategoria">
+            <label class="check-item">
+              <input type="checkbox" value="GP Feminina" onchange="aplicarFiltros()" />
+              <span>GP Feminina</span>
+              <span class="check-count" id="cnt-GP Feminina">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="GP Masculino" onchange="aplicarFiltros()" />
+              <span>GP Masculino</span>
+              <span class="check-count" id="cnt-GP Masculino">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Trans" onchange="aplicarFiltros()" />
+              <span>Trans</span>
+              <span class="check-count" id="cnt-Trans">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Travesti" onchange="aplicarFiltros()" />
+              <span>Travesti</span>
+              <span class="check-count" id="cnt-Travesti">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Lésbica" onchange="aplicarFiltros()" />
+              <span>Lésbica</span>
+              <span class="check-count" id="cnt-Lésbica">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Gay" onchange="aplicarFiltros()" />
+              <span>Gay</span>
+              <span class="check-count" id="cnt-Gay">—</span>
+            </label>
+          </div>
         </div>
-        <button class="cep-banner-close" onclick="document.getElementById('cepBanner').style.display='none'">
-          <i class="ti ti-x"></i>
+
+        <!-- Atendimento -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Local de atendimento</h3>
+          <div class="filtro-checks">
+            <label class="check-item">
+              <input type="checkbox" value="Local próprio" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Local próprio</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="A domicílio" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>A domicílio</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Motel / Hotel" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Motel / Hotel</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Online" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Online</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Preço -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Faixa de preço</h3>
+          <div class="price-range">
+            <div class="form-group">
+              <label class="form-label">De</label>
+              <input type="number" class="form-input" id="filtroPrecoMin" placeholder="R$ 0" min="0"
+                oninput="debounceSearch()" />
+            </div>
+            <div class="price-sep">—</div>
+            <div class="form-group">
+              <label class="form-label">Até</label>
+              <input type="number" class="form-input" id="filtroPrecoMax" placeholder="Sem limite" min="0"
+                oninput="debounceSearch()" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Disponibilidade -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Disponibilidade</h3>
+          <div class="filtro-checks">
+            <label class="check-item">
+              <input type="checkbox" id="chkOnline" onchange="aplicarFiltros()" />
+              <span>Online agora</span>
+              <span class="badge badge-green" style="font-size:.625rem">●</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" id="chkVerif" onchange="aplicarFiltros()" />
+              <span>Verificados</span>
+              <span class="badge badge-gold" style="font-size:.625rem">✓</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-gold" style="width:100%;margin-top:.5rem" onclick="aplicarFiltros()">
+          <i class="ti ti-filter"></i> Aplicar filtros
+        </button>
+      </aside>
+
+      <!-- CONTEÚDO PRINCIPAL -->
+      <div class="catalogo-main">
+
+        <!-- BARRA SUPERIOR -->
+        <div class="catalogo-topbar">
+          <div class="catalogo-topbar-left">
+            <button class="btn-filtros-mobile btn btn-ghost btn-sm" onclick="toggleFiltros()">
+              <i class="ti ti-adjustments-horizontal"></i> Filtros
+            </button>
+            <h1 class="catalogo-title">
+              Catálogo <span class="catalogo-count" id="totalCount">…</span>
+            </h1>
+          </div>
+          <div class="catalogo-topbar-right">
+            <div class="chips" id="activeChips">
+              <button class="chip active" onclick="toggleChip(this,'')">Todos</button>
+              <button class="chip" onclick="toggleChip(this,'GP Feminina')">GP Feminina</button>
+              <button class="chip" onclick="toggleChip(this,'Trans')">Trans</button>
+              <button class="chip" onclick="toggleChip(this,'Gay')">Gay</button>
+              <button class="chip" onclick="toggleChip(this,'Lésbica')">Lésbica</button>
+              <button class="chip" onclick="toggleChip(this,'GP Masculino')">Masculino</button>
+            </div>
+            <div class="catalogo-sort">
+              <select class="form-select sort-select" id="sortSelect" onchange="aplicarFiltros()">
+                <option value="recent">Mais recentes</option>
+                <option value="online">Online agora</option>
+                <option value="price_asc">Menor preço</option>
+                <option value="price_desc">Maior preço</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- GRID DE PERFIS -->
+        <div class="grid-profiles" id="profilesGrid">
+          <div class="grid-spinner">
+            <div class="spin"></div>
+            <p>Carregando perfis…</p>
+          </div>
+        </div>
+
+        <!-- PAGINAÇÃO -->
+        <div class="pagination" id="paginacao" style="display:none"></div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ══════════════════════════════════════════════════
+    // CONFIG
+    // ══════════════════════════════════════════════════
+    const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const PAGE_SIZE = 12;
+
+    // ══════════════════════════════════════════════════
+    // STATE
+    // ══════════════════════════════════════════════════
+    let state = {
+      page: 0,
+      total: 0,
+      categoryChip: '',   // chip rápido
+      search: '',
+      categorias: [],     // checkboxes sidebar
+      atendimentos: [],
+      onlineOnly: false,
+      verificadoOnly: false,
+      uf: '',
+      cidade: '',
+      bairro: '',
+      precoMin: null,
+      precoMax: null,
+      sort: 'recent',
+      coverUrls: {}       // cache profile_id -> signedUrl
+    };
+
+    let debounceTimer = null;
+    function debounceSearch() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { state.page = 0; loadPerfis(); }, 450);
+    }
+
+    // ══════════════════════════════════════════════════
+    // CHIPS (seleção rápida de categoria)
+    // ══════════════════════════════════════════════════
+    function toggleChip(el, cat) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      state.categoryChip = cat;
+      // Desmarca checkboxes de categoria se chip selecionado
+      if (cat) {
+        document.querySelectorAll('#filtroCategoria input').forEach(cb => cb.checked = false);
+        state.categorias = [];
+      }
+      state.page = 0;
+      loadPerfis();
+    }
+
+    // ══════════════════════════════════════════════════
+    // COLETA FILTROS DA SIDEBAR
+    // ══════════════════════════════════════════════════
+    function coletarFiltros() {
+      state.search = document.getElementById('navSearch').value.trim();
+      state.uf = document.getElementById('filtroUf').value;
+      state.cidade = document.getElementById('filtroCidade').value.trim();
+      state.bairro = document.getElementById('filtroBairro').value.trim();
+      state.sort = document.getElementById('sortSelect').value;
+      state.onlineOnly = document.getElementById('chkOnline').checked;
+      state.verificadoOnly = document.getElementById('chkVerif').checked;
+
+      const pMin = parseFloat(document.getElementById('filtroPrecoMin').value);
+      const pMax = parseFloat(document.getElementById('filtroPrecoMax').value);
+      state.precoMin = isNaN(pMin) ? null : pMin;
+      state.precoMax = isNaN(pMax) ? null : pMax;
+
+      state.categorias = [...document.querySelectorAll('#filtroCategoria input:checked')]
+        .map(cb => cb.value);
+
+      state.atendimentos = [...document.querySelectorAll('.chk-atend:checked')]
+        .map(cb => cb.value);
+    }
+
+    function aplicarFiltros() {
+      state.page = 0;
+      coletarFiltros();
+      loadPerfis();
+    }
+
+    function limparFiltros() {
+      document.querySelectorAll('.filtros-sidebar input[type=checkbox]').forEach(cb => cb.checked = false);
+      document.querySelectorAll('.filtros-sidebar input[type=text]').forEach(i => i.value = '');
+      document.querySelectorAll('.filtros-sidebar input[type=number]').forEach(i => i.value = '');
+      document.getElementById('filtroUf').value = '';
+      document.getElementById('navSearch').value = '';
+      document.getElementById('cepiInfo').style.display = 'none';
+      document.getElementById('cepError').style.display = 'none';
+      // Reset chips
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      document.querySelector('.chip').classList.add('active');
+      state = {
+        ...state, page: 0, categoryChip: '', search: '', categorias: [], atendimentos: [],
+        onlineOnly: false, verificadoOnly: false, uf: '', cidade: '', bairro: '',
+        precoMin: null, precoMax: null, sort: 'recent'
+      };
+      loadPerfis();
+    }
+
+    // ══════════════════════════════════════════════════
+    // LOAD PERFIS DO SUPABASE
+    // ══════════════════════════════════════════════════
+    async function loadPerfis() {
+      coletarFiltros();
+      const grid = document.getElementById('profilesGrid');
+      grid.innerHTML = '<div class="grid-spinner"><div class="spin"></div><p>Carregando perfis…</p></div>';
+
+      // ─ Monta query base ─
+      let query = sb
+        .from('profiles')
+        .select(`
+      id, nome_artistico, categoria, cidade, bairro, uf,
+      online_now, verificado, plano, created_at,
+      services(preco, ativo),
+      attendance_locations(tipo),
+      profile_photos(storage_path, is_cover, status)
+    `, { count: 'exact' })
+        .eq('status', 'active');
+
+      // ─ Filtros ─
+      const cat = state.categorias.length ? state.categorias
+        : state.categoryChip ? [state.categoryChip] : null;
+      if (cat) query = query.in('categoria', cat);
+
+      if (state.onlineOnly) query = query.eq('online_now', true);
+      if (state.verificadoOnly) query = query.eq('verificado', true);
+      if (state.uf) query = query.eq('uf', state.uf);
+      if (state.cidade) query = query.ilike('cidade', `%${state.cidade}%`);
+      if (state.bairro) query = query.ilike('bairro', `%${state.bairro}%`);
+      if (state.search) query = query.ilike('nome_artistico', `%${state.search}%`);
+
+      // ─ Ordenação ─
+      if (state.sort === 'online') query = query.order('online_now', { ascending: false }).order('created_at', { ascending: false });
+      else if (state.sort === 'recent') query = query.order('created_at', { ascending: false });
+      else query = query.order('created_at', { ascending: false }); // preço tratado client-side
+
+      // ─ Paginação ─
+      const from = state.page * PAGE_SIZE;
+      query = query.range(from, from + PAGE_SIZE - 1);
+
+      const { data, count, error } = await query;
+
+      if (error) {
+        grid.innerHTML = `<div class="grid-empty"><div class="icon">⚠️</div><p>Erro ao carregar: ${error.message}</p></div>`;
+        return;
+      }
+
+      state.total = count || 0;
+      document.getElementById('totalCount').textContent =
+        state.total > 0 ? `${state.total.toLocaleString('pt-BR')} perfis` : '';
+
+      let perfis = data || [];
+
+      // ─ Filtro de preço client-side (precisa dos serviços) ─
+      if (state.precoMin !== null || state.precoMax !== null) {
+        perfis = perfis.filter(p => {
+          const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+          if (!precos.length) return false;
+          const min = Math.min(...precos);
+          if (state.precoMin !== null && min < state.precoMin) return false;
+          if (state.precoMax !== null && min > state.precoMax) return false;
+          return true;
+        });
+      }
+
+      // ─ Filtro de atendimento client-side ─
+      if (state.atendimentos.length) {
+        perfis = perfis.filter(p => {
+          const tipos = (p.attendance_locations || []).map(a => a.tipo);
+          return state.atendimentos.every(a => tipos.includes(a));
+        });
+      }
+
+      // ─ Ordenação por preço client-side ─
+      if (state.sort === 'price_asc' || state.sort === 'price_desc') {
+        perfis.sort((a, b) => {
+          const minA = minPreco(a), minB = minPreco(b);
+          return state.sort === 'price_asc' ? minA - minB : minB - minA;
+        });
+      }
+
+      // ─ Busca URLs assinadas para fotos de capa ─
+      const coverPaths = perfis.map(p => {
+        const fotos = (p.profile_photos || []).filter(f => f.status === 'approved');
+        const cover = fotos.find(f => f.is_cover) || fotos[0];
+        return cover ? cover.storage_path : null;
+      }).filter(Boolean);
+
+      if (coverPaths.length) {
+        const { data: signed } = await sb.storage.from('fotos').createSignedUrls(coverPaths, 3600);
+        (signed || []).forEach(s => { state.coverUrls[s.path] = s.signedUrl; });
+      }
+
+      renderPerfis(perfis);
+      renderPaginacao();
+      atualizarContadores();
+    }
+
+    function minPreco(p) {
+      const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+      return precos.length ? Math.min(...precos) : Infinity;
+    }
+
+    // ══════════════════════════════════════════════════
+    // RENDER CARDS
+    // ══════════════════════════════════════════════════
+    const catBadge = {
+      'GP Feminina': 'badge-gold',
+      'GP Masculino': 'badge-blue',
+      'Trans': 'badge-purple',
+      'Travesti': 'badge-purple',
+      'Lésbica': 'badge-rose',
+      'Gay': 'badge-blue',
+    };
+
+    function renderPerfis(perfis) {
+      const grid = document.getElementById('profilesGrid');
+
+      if (!perfis.length) {
+        grid.innerHTML = `<div class="grid-empty">
+      <div class="icon">🔍</div>
+      <p>Nenhum perfil encontrado com esses filtros.</p>
+    </div>`;
+        return;
+      }
+
+      grid.innerHTML = perfis.map(p => {
+        const fotos = (p.profile_photos || []).filter(f => f.status === 'approved');
+        const cover = fotos.find(f => f.is_cover) || fotos[0];
+        const url = cover ? state.coverUrls[cover.storage_path] : null;
+
+        const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+        const precMin = precos.length ? Math.min(...precos) : null;
+
+        const loc = [p.bairro, p.cidade].filter(Boolean).join(', ');
+        const badge = catBadge[p.categoria] || 'badge-gold';
+        const catLabel = p.categoria || '';
+
+        return `
+    <div class="profile-card" onclick="location.href='perfil.html?id=${p.id}'">
+      <div class="profile-card-img" style="position:relative">
+        ${url
+            ? `<img class="cover-img" src="${url}" alt="${p.nome_artistico}" loading="lazy" />`
+            : `<div class="placeholder-img-card" style="background:linear-gradient(135deg,#1e1820,#2a2232)"></div>`
+          }
+        <div class="card-overlay"></div>
+        <div class="card-badges">
+          ${p.online_now ? '<span class="badge badge-green">● Online</span>' : ''}
+          ${p.plano === 'premium' ? '<span class="badge badge-gold">★ Top</span>' : ''}
+          ${p.verificado ? '<span class="badge badge-blue">✓</span>' : ''}
+        </div>
+        <button class="card-fav" onclick="event.stopPropagation()">
+          <i class="ti ti-heart"></i>
         </button>
       </div>
-
-      <!-- GRID DE PERFIS -->
-      <div class="grid-profiles" id="profilesGrid">
-
-        <!-- Perfil 1 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1e1820,#2a2232);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-green">● Online</span></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Valentina Cruz</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Moema, SP · 2,4 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 200</strong></div>
-              <span class="badge badge-gold">GP</span>
-            </div>
-          </div>
+      <div class="profile-card-body">
+        <p class="profile-card-name">${p.nome_artistico || '—'}</p>
+        <p class="profile-card-meta">
+          <i class="ti ti-map-pin"></i> ${loc || p.uf || '—'}
+        </p>
+        <div class="profile-card-footer">
+          ${precMin !== null
+            ? `<div class="profile-card-price">De <strong>R$ ${precMin.toLocaleString('pt-BR')}</strong></div>`
+            : `<div class="profile-card-price" style="color:var(--text-muted,#888)">A combinar</div>`
+          }
+          <span class="badge ${badge}">${catLabel}</span>
         </div>
-
-        <!-- Perfil 2 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1a1e22,#222432);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-gold">★ Top</span></div>
-            <button class="card-fav active"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Ariana Fox</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Itaim Bibi, SP · 4,1 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 350</strong></div>
-              <span class="badge badge-purple">Trans</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 3 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1c1e1a,#242820);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-green">● Online</span></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Camille S.</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Jardins, SP · 3,8 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 280</strong></div>
-              <span class="badge badge-rose">Lésbica</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 4 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1f1a1e,#2a2028);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Theo Black</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Vila Madalena · 5,2 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 180</strong></div>
-              <span class="badge badge-blue">Gay</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 5 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1c1a22,#282032);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-green">● Online</span></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Luna Ferreira</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Brooklin, SP · 7,0 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 220</strong></div>
-              <span class="badge badge-gold">GP</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 6 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1a2022,#202a2c);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-gold">★ Top</span></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Mia Carvalho</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Pinheiros, SP · 1,9 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 400</strong></div>
-              <span class="badge badge-purple">Trans</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 7 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#221a1a,#322020);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Isabela Duarte</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Santo André · 12,3 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 150</strong></div>
-              <span class="badge badge-gold">GP</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Perfil 8 -->
-        <div class="profile-card" onclick="location.href='perfil.html'">
-          <div class="profile-card-img">
-            <div class="placeholder-img-card" style="background:linear-gradient(135deg,#1a1c1e,#22242a);"></div>
-            <div class="card-overlay"></div>
-            <div class="card-badges"><span class="badge badge-green">● Online</span></div>
-            <button class="card-fav"><i class="ti ti-heart"></i></button>
-          </div>
-          <div class="profile-card-body">
-            <p class="profile-card-name">Rafael Lima</p>
-            <p class="profile-card-meta"><i class="ti ti-map-pin"></i> Centro, SP · 8,5 km</p>
-            <div class="profile-card-footer">
-              <div class="profile-card-price">De <strong>R$ 200</strong></div>
-              <span class="badge badge-blue">Gay</span>
-            </div>
-          </div>
-        </div>
-
       </div>
-
-      <!-- PAGINAÇÃO -->
-      <div class="pagination">
-        <button class="page-btn page-btn-active">1</button>
-        <button class="page-btn">2</button>
-        <button class="page-btn">3</button>
-        <span class="page-dots">…</span>
-        <button class="page-btn">24</button>
-        <button class="page-btn page-next">Próxima <i class="ti ti-arrow-right"></i></button>
-      </div>
-
-    </div>
-  </div>
-</main>
-
-<script>
-function toggleChip(el) {
-  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-}
-
-function toggleFiltros() {
-  document.getElementById('filtrosSidebar').classList.toggle('open');
-}
-
-const distRange = document.getElementById('distRange');
-const distVal = document.getElementById('distVal');
-if(distRange) {
-  distRange.addEventListener('input', () => distVal.textContent = distRange.value + ' km');
-}
-
-const filtrosCep = document.getElementById('filtrosCep');
-if(filtrosCep) {
-  filtrosCep.addEventListener('input', function() {
-    let v = this.value.replace(/\D/g,'');
-    if(v.length > 5) v = v.slice(0,5)+'-'+v.slice(5,8);
-    this.value = v;
-    if(v.replace('-','').length === 8) {
-      document.getElementById('cepiInfo').style.display = 'flex';
+    </div>`;
+      }).join('');
     }
-  });
-}
-</script>
+
+    // ══════════════════════════════════════════════════
+    // PAGINAÇÃO
+    // ══════════════════════════════════════════════════
+    function renderPaginacao() {
+      const totalPages = Math.ceil(state.total / PAGE_SIZE);
+      const pag = document.getElementById('paginacao');
+      if (totalPages <= 1) { pag.style.display = 'none'; return; }
+      pag.style.display = 'flex';
+      const cur = state.page;
+
+      let html = '';
+      if (cur > 0) html += `<button class="page-btn" onclick="goPage(${cur - 1})"><i class="ti ti-arrow-left"></i> Anterior</button>`;
+
+      const range = Array.from({ length: totalPages }, (_, i) => i)
+        .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - cur) <= 2);
+
+      let prev = null;
+      range.forEach(i => {
+        if (prev !== null && i - prev > 1) html += `<span class="page-dots">…</span>`;
+        html += `<button class="page-btn ${i === cur ? 'page-btn-active' : ''}" onclick="goPage(${i})">${i + 1}</button>`;
+        prev = i;
+      });
+
+      if (cur < totalPages - 1) html += `<button class="page-btn page-next" onclick="goPage(${cur + 1})">Próxima <i class="ti ti-arrow-right"></i></button>`;
+      pag.innerHTML = html;
+    }
+
+    function goPage(n) {
+      state.page = n;
+      loadPerfis();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ══════════════════════════════════════════════════
+    // CONTADORES DE CATEGORIAS
+    // ══════════════════════════════════════════════════
+    async function atualizarContadores() {
+      const cats = ['GP Feminina', 'GP Masculino', 'Trans', 'Travesti', 'Lésbica', 'Gay'];
+      const { data } = await sb
+        .from('profiles')
+        .select('categoria')
+        .eq('status', 'active');
+
+      if (!data) return;
+      const counts = {};
+      data.forEach(p => { counts[p.categoria] = (counts[p.categoria] || 0) + 1; });
+      cats.forEach(c => {
+        const el = document.getElementById('cnt-' + c);
+        if (el) el.textContent = (counts[c] || 0).toLocaleString('pt-BR');
+      });
+    }
+
+    // ══════════════════════════════════════════════════
+    // GPS
+    // ══════════════════════════════════════════════════
+    async function usarGPS() {
+      if (!navigator.geolocation) { alert('Seu navegador não suporta GPS.'); return; }
+
+      const btn = document.getElementById('gpsBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spin-sm"></div> Obtendo localização…';
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords;
+            // Nominatim reverse geocoding (OpenStreetMap — gratuito)
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+              { headers: { 'Accept-Language': 'pt-BR' } }
+            );
+            const geo = await res.json();
+            const addr = geo.address || {};
+
+            const bairro = addr.suburb || addr.neighbourhood || addr.quarter || '';
+            const cidade = addr.city || addr.town || addr.village || '';
+            const uf = addr.state_code || addr.state || '';
+            const cep = (addr.postcode || '').replace(/\D/g, '');
+
+            // Preenche campos
+            if (bairro) document.getElementById('filtroBairro').value = bairro;
+            if (cidade) document.getElementById('filtroCidade').value = cidade;
+            if (uf) document.getElementById('filtroUf').value = uf.toUpperCase().slice(0, 2);
+            if (cep && cep.length === 8) {
+              document.getElementById('filtrosCep').value = cep.slice(0, 5) + '-' + cep.slice(5);
+              mostrarCepInfo(`${bairro || cidade}, ${uf.toUpperCase().slice(0, 2)}`);
+            }
+
+            aplicarFiltros();
+          } catch (e) {
+            alert('Não foi possível identificar o endereço. Tente digitar o CEP manualmente.');
+          }
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+        },
+        (err) => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+          if (err.code === 1) alert('Permissão de localização negada. Permita o acesso nas configurações do navegador.');
+          else alert('Não foi possível obter sua localização.');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // ══════════════════════════════════════════════════
+    // CEP via ViaCEP
+    // ══════════════════════════════════════════════════
+    let cepTimer = null;
+    function onCepInput() {
+      const el = document.getElementById('filtrosCep');
+      let v = el.value.replace(/\D/g, '');
+      if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5, 8);
+      el.value = v;
+
+      document.getElementById('cepiInfo').style.display = 'none';
+      document.getElementById('cepError').style.display = 'none';
+
+      if (v.replace('-', '').length === 8) {
+        clearTimeout(cepTimer);
+        cepTimer = setTimeout(() => buscarCep(v.replace('-', '')), 500);
+      }
+    }
+
+    async function buscarCep(cep) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          document.getElementById('cepError').style.display = 'block';
+          return;
+        }
+        document.getElementById('filtroCidade').value = data.localidade || '';
+        document.getElementById('filtroBairro').value = data.bairro || '';
+        document.getElementById('filtroUf').value = data.uf || '';
+        mostrarCepInfo(`${data.bairro ? data.bairro + ', ' : ''}${data.localidade} — ${data.uf}`);
+        aplicarFiltros();
+      } catch {
+        document.getElementById('cepError').style.display = 'block';
+      }
+    }
+
+    function mostrarCepInfo(texto) {
+      document.getElementById('cepInfoText').textContent = texto;
+      document.getElementById('cepiInfo').style.display = 'flex';
+      document.getElementById('cepError').style.display = 'none';
+    }
+
+    // ══════════════════════════════════════════════════
+    // MISC
+    // ══════════════════════════════════════════════════
+    function toggleFiltros() {
+      document.getElementById('filtrosSidebar').classList.toggle('open');
+    }
+
+    // ══════════════════════════════════════════════════
+    // INIT
+    // ══════════════════════════════════════════════════
+    loadPerfis();
+  </script>
 </body>
+
 </html>

@@ -1248,11 +1248,31 @@
     // ONLINE TOGGLE
     // ============================================================
     async function toggleOnline() {
-      const val = document.getElementById('onlineToggle').checked;
-      document.getElementById('onlineLabel').textContent = val ? 'Ativo' : 'Offline';
-      document.getElementById('onlineLabel').style.color = val ? 'var(--green)' : 'var(--text-muted)';
-      const { error } = await sb.from('profiles').update({ online_now: val }).eq('id', currentUser.id);
-      if (error) showToast('Erro ao atualizar status', 'error');
+      const tog = document.getElementById('onlineToggle');
+      const label = document.getElementById('onlineLabel');
+      const val = tog.checked;
+
+      // Atualiza UI imediatamente (otimista)
+      label.textContent = val ? 'Ativo' : 'Offline';
+      label.style.color = val ? 'var(--green)' : 'var(--text-muted)';
+      tog.disabled = true;
+
+      const { error } = await sb
+        .from('profiles')
+        .update({ online_now: val })
+        .eq('id', currentUser.id);
+
+      tog.disabled = false;
+
+      if (error) {
+        // Reverte se falhou
+        tog.checked = !val;
+        label.textContent = !val ? 'Ativo' : 'Offline';
+        label.style.color = !val ? 'var(--green)' : 'var(--text-muted)';
+        showToast('Erro ao atualizar status: ' + error.message, 'error');
+      } else {
+        showToast(val ? '● Você está Ativo no catálogo' : 'Você está Offline', val ? 'success' : 'info');
+      }
     }
 
     // ============================================================
