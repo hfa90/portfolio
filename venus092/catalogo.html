@@ -504,8 +504,15 @@
       if (state.verificadoOnly) query = query.eq('verificado', true);
       if (state.uf) query = query.eq('uf', state.uf);
       if (state.cidade) query = query.ilike('cidade', `%${state.cidade}%`);
-      if (state.bairro) query = query.ilike('bairro', `%${state.bairro}%`);
-      if (state.search) query = query.ilike('nome_artistico', `%${state.search}%`);
+      // bairro sozinho sem cidade pode ocultar perfis — só aplica junto com cidade
+      if (state.bairro && state.cidade)
+        query = query.ilike('bairro', `%${state.bairro}%`);
+      // Busca ampla: nome, cidade ou bairro
+      if (state.search) {
+        query = query.or(
+          `nome_artistico.ilike.%${state.search}%,cidade.ilike.%${state.search}%,bairro.ilike.%${state.search}%`
+        );
+      }
 
       // ─ Ordenação ─
       if (state.sort === 'online') query = query.order('online_now', { ascending: false }).order('created_at', { ascending: false });
@@ -519,9 +526,22 @@
       const { data, count, error } = await query;
 
       if (error) {
-        grid.innerHTML = `<div class="grid-empty"><div class="icon">⚠️</div><p>Erro ao carregar: ${error.message}</p></div>`;
+        // Erro 42501 = RLS bloqueando; array vazio sem erro também pode ser RLS
+        const isRls = error.code === '42501' || error.message?.includes('permission');
+        grid.innerHTML = `<div class="grid-empty">
+          <div class="icon">⚠️</div>
+          <p>${isRls
+            ? 'Sem permissão para ler perfis. Execute o SQL de policies no Supabase.'
+            : 'Erro ao carregar: ' + error.message}</p>
+        </div>`;
+        console.error('Supabase error:', error);
         return;
       }
+
+      // Se retornou 0 sem filtros, provavelmente é RLS bloqueando anônimos
+      const semFiltros = !state.search && !state.uf && !state.cidade && !state.bairro
+        && !state.categoryChip && !state.categorias.length
+        && !state.onlineOnly && !state.verificadoOnly;
 
       state.total = count || 0;
       document.getElementById('totalCount').textContent =
@@ -595,10 +615,13 @@
       const grid = document.getElementById('profilesGrid');
 
       if (!perfis.length) {
+        const semFiltros2 = !state.search && !state.uf && !state.cidade && !state.categoryChip && !state.categorias.length;
         grid.innerHTML = `<div class="grid-empty">
-      <div class="icon">🔍</div>
-      <p>Nenhum perfil encontrado com esses filtros.</p>
-    </div>`;
+          <div class="icon">🔍</div>
+          <p>${semFiltros2
+            ? 'Nenhum perfil ativo encontrado. Verifique as policies RLS no Supabase.'
+            : 'Nenhum perfil encontrado com esses filtros.'}</p>
+        </div>`;
         return;
       }
 
