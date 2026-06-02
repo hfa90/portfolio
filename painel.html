@@ -1,0 +1,1727 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vênus — Painel</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --gold: #C9A84C;
+      --gold-light: #E8C96A;
+      --gold-dim: rgba(201, 168, 76, 0.15);
+      --bg: #0E0E0F;
+      --surface: #18181B;
+      --surface2: #222226;
+      --surface3: #2A2A30;
+      --border: rgba(255, 255, 255, 0.07);
+      --text: #F0EDE8;
+      --text-muted: #888;
+      --green: #4ADE80;
+      --red: #F87171;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    aside {
+      width: 220px;
+      min-height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      padding: 22px 20px 16px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--gold);
+      font-style: italic;
+      letter-spacing: -0.5px;
+    }
+
+    nav {
+      flex: 1;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+
+    nav button:hover {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
+    nav button.active {
+      background: var(--gold-dim);
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .sidebar-bottom {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .plan-badge {
+      background: var(--gold-dim);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .plan-sub {
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 12px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      color: var(--red);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(248, 113, 113, 0.18);
+      border-color: var(--red);
+    }
+
+    /* HEADER */
+    header {
+      position: fixed;
+      top: 0;
+      left: 220px;
+      right: 0;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 24px;
+      gap: 16px;
+      z-index: 50;
+    }
+
+    .hdr-link {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .hdr-link:hover {
+      color: var(--gold);
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--gold);
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+
+    /* MAIN */
+    main {
+      margin-left: 220px;
+      margin-top: 56px;
+      flex: 1;
+      padding: 32px;
+      min-height: calc(100vh - 56px);
+    }
+
+    /* PAGE */
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .page-sub {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 28px;
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      font-size: 1.1rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-delta {
+      font-size: 0.75rem;
+      margin-top: 6px;
+    }
+
+    .up {
+      color: var(--green);
+    }
+
+    .down {
+      color: var(--red);
+    }
+
+    /* STATUS TOGGLE */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--surface3);
+      border-radius: 22px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .slider:before {
+      content: '';
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+
+    input:checked+.slider {
+      background: var(--green);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(18px);
+    }
+
+    /* FORM */
+    .form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .form-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    input,
+    select,
+    textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--gold);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    select option {
+      background: var(--surface2);
+    }
+
+    /* CHECKBOX GROUP */
+    .check-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .check-item:hover {
+      border-color: var(--gold);
+    }
+
+    .check-item input[type=checkbox] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+
+    .check-item.checked {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* MULTI-SELECT TAGS */
+    .multi-select {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tag:hover {
+      border-color: var(--gold);
+    }
+
+    .tag.selected {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+
+    .btn-gold {
+      background: var(--gold);
+      color: #000;
+    }
+
+    .btn-gold:hover {
+      background: var(--gold-light);
+    }
+
+    .btn-outline {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    .btn-danger {
+      background: rgba(248, 113, 113, 0.15);
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+
+    .save-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    /* PHOTOS */
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .photo-card {
+      position: relative;
+      aspect-ratio: 3/4;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    .photo-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s;
+    }
+
+    .photo-card:hover .photo-overlay {
+      opacity: 1;
+    }
+
+    .photo-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .badge-pending {
+      background: rgba(234, 179, 8, 0.3);
+      color: #EAB308;
+      border: 1px solid #EAB308;
+    }
+
+    .badge-approved {
+      background: rgba(74, 222, 128, 0.3);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+
+    .badge-rejected {
+      background: rgba(248, 113, 113, 0.3);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .upload-zone:hover {
+      border-color: var(--gold);
+      background: var(--gold-dim);
+    }
+
+    .upload-icon {
+      font-size: 2rem;
+      margin-bottom: 10px;
+    }
+
+    .upload-text {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    /* SERVICES */
+    .service-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .svc-name {
+      font-weight: 600;
+    }
+
+    .svc-price {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    /* AVAILABILITY */
+    .week-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .day-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+
+    .day-label {
+      width: 100px;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .day-toggle {
+      margin-left: auto;
+    }
+
+    /* LOCATION */
+    .loc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .loc-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .loc-item:hover {
+      border-color: var(--gold);
+    }
+
+    .loc-item.selected {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+    }
+
+    .loc-item input[type=checkbox] {
+      accent-color: var(--gold);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    /* TOAST */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 20px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      display: none;
+      z-index: 999;
+      max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    #toast.success {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    #toast.error {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* LOADER */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <aside>
+    <div class="logo">Vênus</div>
+    <nav>
+      <button class="active" onclick="goPage('dashboard')" data-page="dashboard">
+        <span>📊</span> Dashboard
+      </button>
+      <button onclick="goPage('perfil')" data-page="perfil">
+        <span>👤</span> Meu Perfil
+      </button>
+      <button onclick="goPage('fotos')" data-page="fotos">
+        <span>📷</span> Fotos
+      </button>
+      <button onclick="goPage('servicos')" data-page="servicos">
+        <span>☰</span> Serviços
+      </button>
+      <button onclick="goPage('localizacao')" data-page="localizacao">
+        <span>📍</span> Localização
+      </button>
+      <button onclick="goPage('disponibilidade')" data-page="disponibilidade">
+        <span>📅</span> Disponibilidade
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="plan-badge">PLANO GRATUITO</div>
+      <div class="plan-sub">Upgrade em breve</div>
+      <button class="btn-logout" onclick="logout()">🚪 Sair</button>
+    </div>
+  </aside>
+
+  <header>
+    <a class="hdr-link" href="perfil.html" target="_blank">🔗 Ver meu perfil</a>
+    <div class="avatar" id="avatarInitials">?</div>
+    <span id="headerName" style="font-size:0.875rem;color:var(--text-muted)"></span>
+  </header>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">
+        <div>
+          <h1 class="page-title" id="dashGreet">Olá! 👋</h1>
+          <p class="page-sub">Aqui está um resumo do seu perfil</p>
+        </div>
+        <div class="toggle-wrap">
+          <span style="font-size:0.85rem;color:var(--text-muted)">Status:</span>
+          <label class="toggle">
+            <input type="checkbox" id="onlineToggle" onchange="toggleOnline()">
+            <span class="slider"></span>
+          </label>
+          <span id="onlineLabel" style="font-size:0.85rem;font-weight:600;color:var(--text-muted)">Offline</span>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(99,102,241,0.15);color:#818CF8">👁</div>
+          <div class="stat-label">Visualizações (7 dias)</div>
+          <div class="stat-value" id="statViews">—</div>
+          <div class="stat-delta up" id="statViewsDelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(239,68,68,0.15);color:#F87171">♥</div>
+          <div class="stat-label">Favoritos</div>
+          <div class="stat-value" id="statFavs">—</div>
+          <div class="stat-delta up" id="statFavsDelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(34,197,94,0.15);color:#4ADE80">💬</div>
+          <div class="stat-label">Cliques no WhatsApp</div>
+          <div class="stat-value" id="statWA">—</div>
+          <div class="stat-delta up" id="statWADelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(201,168,76,0.15);color:var(--gold)">📈</div>
+          <div class="stat-label">Taxa de contato</div>
+          <div class="stat-value" id="statRate">—</div>
+          <div class="stat-delta" id="statRateDelta"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+          <span style="font-weight:600">Visualizações dos últimos 14 dias</span>
+          <span
+            style="font-size:0.78rem;background:var(--surface2);padding:4px 10px;border-radius:20px;color:var(--text-muted)">14
+            dias</span>
+        </div>
+        <canvas id="viewsChart" height="120"></canvas>
+      </div>
+    </div>
+
+    <!-- MEU PERFIL -->
+    <div class="page" id="page-perfil">
+      <h1 class="page-title">Meu Perfil</h1>
+      <p class="page-sub">Edite suas informações pessoais</p>
+
+      <!-- Informações principais -->
+      <div class="form-section">
+        <div class="form-section-title">Informações Principais</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nome Artístico</label>
+            <input id="p_nome_artistico" type="text" placeholder="Seu nome artístico">
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="p_categoria">
+              <option value="">Selecionar...</option>
+              <option value="GP Feminina">GP Feminina</option>
+              <option value="GP Masculino">GP Masculino</option>
+              <option value="Trans">Trans</option>
+              <option value="Travesti">Travesti</option>
+              <option value="Lésbica">Lésbica</option>
+              <option value="Gay">Gay</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <input id="p_whatsapp" type="tel" placeholder="Ex: 92999990000">
+          </div>
+          <div class="form-group">
+            <label>Idiomas</label>
+            <div class="multi-select" id="idiomasGroup">
+              <span class="tag" data-val="Português" onclick="toggleTag(this,'idiomas')">Português</span>
+              <span class="tag" data-val="Inglês" onclick="toggleTag(this,'idiomas')">Inglês</span>
+              <span class="tag" data-val="Espanhol" onclick="toggleTag(this,'idiomas')">Espanhol</span>
+              <span class="tag" data-val="Francês" onclick="toggleTag(this,'idiomas')">Francês</span>
+              <span class="tag" data-val="Italiano" onclick="toggleTag(this,'idiomas')">Italiano</span>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>Bio / Sobre mim <span style="color:var(--text-muted)">(mín. 50 caracteres)</span></label>
+            <textarea id="p_bio" placeholder="Fale sobre você..."></textarea>
+            <span id="bioCount" style="font-size:0.75rem;color:var(--text-muted);text-align:right">0 / mín 50</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Características físicas -->
+      <div class="form-section">
+        <div class="form-section-title">Características Físicas</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Idade</label>
+            <input id="p_idade" type="number" min="18" max="99" placeholder="Ex: 25">
+          </div>
+          <div class="form-group">
+            <label>Altura (m)</label>
+            <input id="p_altura" type="number" step="0.01" min="1.20" max="2.50" placeholder="Ex: 1.68">
+          </div>
+          <div class="form-group">
+            <label>Peso (kg)</label>
+            <input id="p_peso" type="number" min="30" max="300" placeholder="Ex: 58">
+          </div>
+          <div class="form-group">
+            <label>Etnia</label>
+            <select id="p_etnia">
+              <option value="">Selecionar...</option>
+              <option value="Branca">Branca</option>
+              <option value="Morena">Morena</option>
+              <option value="Negra">Negra</option>
+              <option value="Latina">Latina</option>
+              <option value="Asiática">Asiática</option>
+              <option value="Outra">Outra</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cabelo</label>
+            <select id="p_cabelo">
+              <option value="">Selecionar...</option>
+              <option>Liso curto</option>
+              <option>Liso médio</option>
+              <option>Liso longo</option>
+              <option>Ondulado curto</option>
+              <option>Ondulado médio</option>
+              <option>Ondulado longo</option>
+              <option>Cacheado curto</option>
+              <option>Cacheado médio</option>
+              <option>Cacheado longo</option>
+              <option>Crespo curto</option>
+              <option>Crespo médio</option>
+              <option>Crespo longo</option>
+              <option>Loiro</option>
+              <option>Castanho claro</option>
+              <option>Castanho escuro</option>
+              <option>Preto</option>
+              <option>Ruivo</option>
+              <option>Colorido</option>
+              <option>Careca / Raspado</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Olhos</label>
+            <select id="p_olhos">
+              <option value="">Selecionar...</option>
+              <option>Castanho</option>
+              <option>Preto</option>
+              <option>Azul</option>
+              <option>Verde</option>
+              <option>Mel / Âmbar</option>
+              <option>Cinza</option>
+              <option>Avelã</option>
+              <option>Heterocromia</option>
+            </select>
+          </div>
+        </div>
+        <!-- Silicone -->
+        <div style="margin-top:20px">
+          <label
+            style="font-size:0.8rem;color:var(--text-muted);font-weight:500;display:block;margin-bottom:10px">Silicone —
+            onde possui implante (marque todos que se aplicam)</label>
+          <div class="check-group" id="siliconeGroup">
+            <label class="check-item"><input type="checkbox" value="Seios"> Seios</label>
+            <label class="check-item"><input type="checkbox" value="Bumbum / Glúteos"> Bumbum / Glúteos</label>
+            <label class="check-item"><input type="checkbox" value="Lábios"> Lábios</label>
+            <label class="check-item"><input type="checkbox" value="Rosto / Maçãs"> Rosto / Maçãs</label>
+            <label class="check-item"><input type="checkbox" value="Braços"> Braços</label>
+            <label class="check-item"><input type="checkbox" value="Pernas"> Pernas</label>
+            <label class="check-item"><input type="checkbox" value="Quadril"> Quadril</label>
+            <label class="check-item"><input type="checkbox" value="Pênis"> Pênis</label>
+            <label class="check-item"><input type="checkbox" value="Outros"> Outros</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="savePerfil()">💾 Salvar Perfil</button>
+      </div>
+    </div>
+
+    <!-- FOTOS -->
+    <div class="page" id="page-fotos">
+      <h1 class="page-title">Fotos</h1>
+      <p class="page-sub">Gerencie suas fotos de perfil</p>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="uploadZone">
+          <div class="upload-icon">📤</div>
+          <div class="upload-text">Clique para selecionar fotos (JPG, PNG, WEBP — máx 10MB cada)</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="uploadFotos(this)">
+        <div id="uploadProgress" style="margin-top:14px;display:none">
+          <div style="background:var(--surface2);border-radius:20px;height:6px">
+            <div id="progressBar"
+              style="background:var(--gold);height:6px;border-radius:20px;width:0;transition:width 0.3s"></div>
+          </div>
+          <div id="progressText" style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;text-align:center">
+          </div>
+        </div>
+      </div>
+
+      <div class="photos-grid" id="photosGrid">
+        <div style="color:var(--text-muted);font-size:0.875rem;grid-column:1/-1;padding:20px 0">Carregando fotos...
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVIÇOS -->
+    <div class="page" id="page-servicos">
+      <h1 class="page-title">Serviços</h1>
+      <p class="page-sub">Gerencie os serviços que você oferece</p>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="form-section-title">Adicionar Serviço</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:end">
+          <div class="form-group">
+            <label>Nome do serviço</label>
+            <input id="svc_nome" placeholder="Ex: Acompanhamento jantar">
+          </div>
+          <div class="form-group">
+            <label>Preço (R$)</label>
+            <input id="svc_preco" type="number" min="0" step="0.01" placeholder="Ex: 300">
+          </div>
+          <div class="form-group">
+            <label>Local</label>
+            <select id="svc_local">
+              <option value="">A combinar</option>
+              <option value="Local próprio">Local próprio</option>
+              <option value="A domicílio">A domicílio</option>
+              <option value="Motel / Hotel">Motel / Hotel</option>
+              <option value="Online">Online</option>
+            </select>
+          </div>
+          <button class="btn btn-gold" onclick="addServico()" style="height:42px">+ Adicionar</button>
+        </div>
+      </div>
+
+      <div id="servicosList"></div>
+    </div>
+
+    <!-- LOCALIZAÇÃO -->
+    <div class="page" id="page-localizacao">
+      <h1 class="page-title">Localização</h1>
+      <p class="page-sub">Informe onde você atende</p>
+
+      <div class="form-section">
+        <div class="form-section-title">Endereço</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>CEP</label>
+            <input id="loc_cep" type="text" placeholder="Ex: 69000-000" maxlength="9" oninput="buscaCep(this)">
+          </div>
+          <div class="form-group">
+            <label>Bairro</label>
+            <input id="loc_bairro" type="text" placeholder="Ex: Centro">
+          </div>
+          <div class="form-group">
+            <label>Cidade</label>
+            <input id="loc_cidade" type="text" placeholder="Ex: Manaus">
+          </div>
+          <div class="form-group">
+            <label>Estado (UF)</label>
+            <select id="loc_uf">
+              <option value="">Selecionar...</option>
+              <option>AC</option>
+              <option>AL</option>
+              <option>AP</option>
+              <option>AM</option>
+              <option>BA</option>
+              <option>CE</option>
+              <option>DF</option>
+              <option>ES</option>
+              <option>GO</option>
+              <option>MA</option>
+              <option>MT</option>
+              <option>MS</option>
+              <option>MG</option>
+              <option>PA</option>
+              <option>PB</option>
+              <option>PR</option>
+              <option>PE</option>
+              <option>PI</option>
+              <option>RJ</option>
+              <option>RN</option>
+              <option>RS</option>
+              <option>RO</option>
+              <option>RR</option>
+              <option>SC</option>
+              <option>SP</option>
+              <option>SE</option>
+              <option>TO</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title">Locais de Atendimento</div>
+        <div class="loc-grid" id="locGrid">
+          <label class="loc-item"><input type="checkbox" value="Local próprio" onchange="updateLocItem(this)"> 🏠 Local
+            próprio</label>
+          <label class="loc-item"><input type="checkbox" value="A domicílio" onchange="updateLocItem(this)"> 🚗 A
+            domicílio</label>
+          <label class="loc-item"><input type="checkbox" value="Motel / Hotel" onchange="updateLocItem(this)"> 🏨 Motel
+            / Hotel</label>
+          <label class="loc-item"><input type="checkbox" value="Online" onchange="updateLocItem(this)"> 💻
+            Online</label>
+        </div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="saveLocalizacao()">💾 Salvar Localização</button>
+      </div>
+    </div>
+
+    <!-- DISPONIBILIDADE -->
+    <div class="page" id="page-disponibilidade">
+      <h1 class="page-title">Disponibilidade</h1>
+      <p class="page-sub">Configure seus horários de atendimento</p>
+
+      <div class="form-section">
+        <div class="form-section-title">Horários por dia da semana</div>
+        <div class="week-grid" id="weekGrid"></div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="saveDisponibilidade()">💾 Salvar Disponibilidade</button>
+      </div>
+    </div>
+
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    // ============================================================
+    // CONFIG — Substitua pelos seus dados do Supabase
+    // ============================================================
+    const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0'; // Substitua pela sua anon key
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storageKey: 'venus-user-session'
+      }
+    });
+
+    let currentUser = null;
+    let currentProfile = null;
+
+    // ============================================================
+    // LOGOUT
+    // ============================================================
+    async function logout() {
+      if (!confirm('Deseja sair do painel?')) return;
+      await sb.auth.signOut();
+      window.location.href = 'login.html';
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    async function init() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        window.location.href = '/login.html';
+        return;
+      }
+      currentUser = session.user;
+      await loadProfile();
+      buildWeekGrid();
+      loadPage('dashboard');
+    }
+
+    async function loadProfile() {
+      const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+      if (error || !data) { showToast('Erro ao carregar perfil', 'error'); return; }
+      currentProfile = data;
+      updateUIFromProfile();
+    }
+
+    function updateUIFromProfile() {
+      if (!currentProfile) return;
+      const p = currentProfile;
+      const name = p.nome_artistico || p.email || 'Usuário';
+      const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+      document.getElementById('avatarInitials').textContent = initials;
+      document.getElementById('headerName').textContent = name;
+      // CORRIGIDO: usar nome_artistico do perfil, não outro campo
+      document.getElementById('dashGreet').textContent = `Olá, ${p.nome_artistico}! 👋`;
+
+      // Online toggle
+      const tog = document.getElementById('onlineToggle');
+      tog.checked = p.online_now;
+      document.getElementById('onlineLabel').textContent = p.online_now ? 'Ativo' : 'Offline';
+      document.getElementById('onlineLabel').style.color = p.online_now ? 'var(--green)' : 'var(--text-muted)';
+
+      // Perfil form
+      setVal('p_nome_artistico', p.nome_artistico);
+      setVal('p_categoria', p.categoria);
+      setVal('p_whatsapp', p.whatsapp);
+      setVal('p_bio', p.bio);
+      setVal('p_idade', p.idade);
+      setVal('p_altura', p.altura);
+      setVal('p_peso', p.peso);
+      setVal('p_etnia', p.etnia);
+      setVal('p_cabelo', p.cabelo);
+      setVal('p_olhos', p.olhos);
+      updateBioCount();
+
+      // Idiomas tags
+      const idiomas = p.idiomas || [];
+      document.querySelectorAll('#idiomasGroup .tag').forEach(t => {
+        if (idiomas.includes(t.dataset.val)) t.classList.add('selected');
+        else t.classList.remove('selected');
+      });
+
+      // Localização
+      setVal('loc_cep', p.cep);
+      setVal('loc_bairro', p.bairro);
+      setVal('loc_cidade', p.cidade);
+      setVal('loc_uf', p.uf);
+    }
+
+    function setVal(id, val) {
+      const el = document.getElementById(id);
+      if (el && val !== null && val !== undefined) el.value = val;
+    }
+
+    // ============================================================
+    // NAVIGATION
+    // ============================================================
+    function goPage(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('page-' + page)?.classList.add('active');
+      document.querySelector(`nav button[data-page="${page}"]`)?.classList.add('active');
+      loadPage(page);
+    }
+
+    async function loadPage(page) {
+      if (page === 'dashboard') loadDashboard();
+      else if (page === 'fotos') loadFotos();
+      else if (page === 'servicos') loadServicos();
+      else if (page === 'localizacao') loadLocalizacao();
+      else if (page === 'disponibilidade') loadDisponibilidade();
+      else if (page === 'perfil') loadSilicone();
+    }
+
+    // ============================================================
+    // TOAST
+    // ============================================================
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = type === 'success' ? '✅ ' + msg : '❌ ' + msg;
+      t.className = type;
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 3500);
+    }
+
+    // ============================================================
+    // ONLINE TOGGLE
+    // ============================================================
+    async function toggleOnline() {
+      const tog = document.getElementById('onlineToggle');
+      const label = document.getElementById('onlineLabel');
+      const val = tog.checked;
+
+      // Atualiza UI imediatamente (otimista)
+      label.textContent = val ? 'Ativo' : 'Offline';
+      label.style.color = val ? 'var(--green)' : 'var(--text-muted)';
+      tog.disabled = true;
+
+      const { error } = await sb
+        .from('profiles')
+        .update({ online_now: val })
+        .eq('id', currentUser.id);
+
+      tog.disabled = false;
+
+      if (error) {
+        // Reverte se falhou
+        tog.checked = !val;
+        label.textContent = !val ? 'Ativo' : 'Offline';
+        label.style.color = !val ? 'var(--green)' : 'var(--text-muted)';
+        showToast('Erro ao atualizar status: ' + error.message, 'error');
+      } else {
+        showToast(val ? '● Você está Ativo no catálogo' : 'Você está Offline', val ? 'success' : 'info');
+      }
+    }
+
+    // ============================================================
+    // DASHBOARD
+    // ============================================================
+    async function loadDashboard() {
+      // Analytics
+      const since7 = new Date(Date.now() - 7 * 86400000).toISOString();
+      const since14 = new Date(Date.now() - 14 * 86400000).toISOString();
+      const sincePrev = new Date(Date.now() - 14 * 86400000).toISOString();
+
+      const { data: analytics } = await sb.from('profile_analytics')
+        .select('evento, created_at')
+        .eq('profile_id', currentUser.id)
+        .gte('created_at', since14);
+
+      const now = Date.now();
+      const week1 = (analytics || []).filter(r => new Date(r.created_at) >= new Date(since7));
+      const week2 = (analytics || []).filter(r => new Date(r.created_at) < new Date(since7));
+
+      const views7 = week1.filter(r => r.evento === 'view').length;
+      const viewsPrev = week2.filter(r => r.evento === 'view').length;
+      const favs7 = week1.filter(r => r.evento === 'favorite').length;
+      const favsPrev = week2.filter(r => r.evento === 'favorite').length;
+      const wa7 = week1.filter(r => r.evento === 'whatsapp_click').length;
+      const waPrev = week2.filter(r => r.evento === 'whatsapp_click').length;
+
+      document.getElementById('statViews').textContent = views7.toLocaleString('pt-BR');
+      document.getElementById('statFavs').textContent = favs7;
+      document.getElementById('statWA').textContent = wa7;
+
+      const rate = views7 > 0 ? ((wa7 / views7) * 100).toFixed(1) : '0.0';
+      document.getElementById('statRate').textContent = rate + '%';
+
+      const delta = (curr, prev) => {
+        if (prev === 0) return curr > 0 ? '+' + curr + ' novos' : '';
+        const pct = ((curr - prev) / prev * 100).toFixed(0);
+        return (pct >= 0 ? '+' : '') + pct + '% vs semana anterior';
+      };
+      const rateDelta = () => {
+        const prevRate = viewsPrev > 0 ? (waPrev / viewsPrev * 100) : 0;
+        const diff = (parseFloat(rate) - prevRate).toFixed(1);
+        return (diff >= 0 ? '+' : '') + diff + '% vs semana anterior';
+      };
+
+      const dv = document.getElementById('statViewsDelta');
+      dv.textContent = delta(views7, viewsPrev);
+      dv.className = 'stat-delta ' + (views7 >= viewsPrev ? 'up' : 'down');
+
+      document.getElementById('statFavsDelta').textContent = delta(favs7, favsPrev);
+      document.getElementById('statWADelta').textContent = delta(wa7, waPrev);
+
+      const rd = document.getElementById('statRateDelta');
+      rd.textContent = rateDelta();
+      rd.className = 'stat-delta ' + (parseFloat(rate) >= (viewsPrev > 0 ? waPrev / viewsPrev * 100 : 0) ? 'up' : 'down');
+
+      // Chart
+      const { data: chartData } = await sb.from('profile_analytics')
+        .select('created_at')
+        .eq('profile_id', currentUser.id)
+        .eq('evento', 'view')
+        .gte('created_at', since14);
+
+      const dayMap = {};
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const key = `${d.getDate()}/${d.getMonth() + 1}`;
+        dayMap[key] = 0;
+      }
+      (chartData || []).forEach(r => {
+        const d = new Date(r.created_at);
+        const key = `${d.getDate()}/${d.getMonth() + 1}`;
+        if (key in dayMap) dayMap[key]++;
+      });
+
+      const ctx = document.getElementById('viewsChart');
+      if (window._chart) window._chart.destroy();
+      window._chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(dayMap),
+          datasets: [{ data: Object.values(dayMap), backgroundColor: Object.keys(dayMap).map((_, i, a) => i === a.length - 1 || i === a.length - 7 ? '#C9A84C' : '#2A2A30'), borderRadius: 6, borderSkipped: false }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#666' } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#666' } } } }
+      });
+    }
+
+    // ============================================================
+    // PERFIL — SAVE
+    // ============================================================
+    function updateBioCount() {
+      const val = document.getElementById('p_bio')?.value || '';
+      const el = document.getElementById('bioCount');
+      if (el) { el.textContent = `${val.length} / mín 50`; el.style.color = val.length >= 50 ? 'var(--green)' : 'var(--text-muted)'; }
+    }
+    document.getElementById('p_bio')?.addEventListener('input', updateBioCount);
+
+    function toggleTag(el, group) {
+      el.classList.toggle('selected');
+    }
+
+    function getSelectedTags(groupId) {
+      return [...document.querySelectorAll(`#${groupId} .tag.selected`)].map(t => t.dataset.val);
+    }
+
+    async function savePerfil() {
+      const bio = document.getElementById('p_bio').value;
+      if (bio.length > 0 && bio.length < 50) { showToast('Bio deve ter no mínimo 50 caracteres', 'error'); return; }
+
+      const updates = {
+        nome_artistico: document.getElementById('p_nome_artistico').value,
+        categoria: document.getElementById('p_categoria').value,
+        whatsapp: document.getElementById('p_whatsapp').value,
+        bio: bio || null,
+        idade: parseInt(document.getElementById('p_idade').value) || null,
+        altura: parseFloat(document.getElementById('p_altura').value) || null,
+        peso: parseFloat(document.getElementById('p_peso').value) || null,
+        etnia: document.getElementById('p_etnia').value || null,
+        cabelo: document.getElementById('p_cabelo').value || null,
+        olhos: document.getElementById('p_olhos').value || null,
+        idiomas: getSelectedTags('idiomasGroup'),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+      // Salvar silicone
+      await saveSilicone();
+
+      currentProfile = { ...currentProfile, ...updates };
+      document.getElementById('dashGreet').textContent = `Olá, ${updates.nome_artistico}! 👋`;
+      document.getElementById('headerName').textContent = updates.nome_artistico;
+      const initials = updates.nome_artistico.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+      document.getElementById('avatarInitials').textContent = initials;
+
+      showToast('Perfil salvo com sucesso!');
+    }
+
+    // Silicone
+    async function loadSilicone() {
+      const { data } = await sb.from('profile_silicone').select('local').eq('profile_id', currentUser.id);
+      const selected = (data || []).map(r => r.local);
+      document.querySelectorAll('#siliconeGroup .check-item input').forEach(cb => {
+        cb.checked = selected.includes(cb.value);
+        cb.closest('.check-item').classList.toggle('checked', cb.checked);
+      });
+      document.querySelectorAll('#siliconeGroup .check-item input').forEach(cb => {
+        cb.addEventListener('change', () => cb.closest('.check-item').classList.toggle('checked', cb.checked));
+      });
+    }
+
+    async function saveSilicone() {
+      const checked = [...document.querySelectorAll('#siliconeGroup .check-item input:checked')].map(cb => cb.value);
+      // Delete existing and re-insert
+      await sb.from('profile_silicone').delete().eq('profile_id', currentUser.id);
+      if (checked.length > 0) {
+        const rows = checked.map(local => ({ profile_id: currentUser.id, local }));
+        await sb.from('profile_silicone').insert(rows);
+      }
+    }
+
+    // ============================================================
+    // FOTOS
+    // ============================================================
+    async function loadFotos() {
+      const { data, error } = await sb.from('profile_photos')
+        .select('*').eq('profile_id', currentUser.id).order('ordem');
+      const grid = document.getElementById('photosGrid');
+      if (error || !data || data.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.875rem;grid-column:1/-1;padding:20px 0;text-align:center">Nenhuma foto ainda. Faça upload acima!</div>';
+        return;
+      }
+      grid.innerHTML = data.map(p => `
+    <div class="photo-card">
+      <img src="${p.url || ''}" loading="lazy" onerror="this.style.display='none'">
+      <div class="photo-badge badge-${p.status}">${statusLabel(p.status)}</div>
+      <div class="photo-overlay">
+        ${p.status !== 'rejected' ? `<button class="btn btn-outline" style="font-size:0.75rem;padding:6px 12px" onclick="setFotoCover('${p.id}')">Capa</button>` : ''}
+        <button class="btn btn-danger" style="font-size:0.75rem;padding:6px 12px" onclick="deleteFoto('${p.id}','${p.storage_path}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+    }
+
+    function statusLabel(s) { return s === 'pending' ? '⏳ Análise' : s === 'approved' ? '✅ Aprovada' : '❌ Rejeitada'; }
+
+    async function uploadFotos(input) {
+      const files = [...input.files];
+      if (!files.length) return;
+      const prog = document.getElementById('uploadProgress');
+      const bar = document.getElementById('progressBar');
+      const txt = document.getElementById('progressText');
+      prog.style.display = 'block';
+      let done = 0, success = 0;
+
+      for (const file of files) {
+        txt.textContent = `Enviando ${done + 1} de ${files.length}...`;
+        const ext = file.name.split('.').pop();
+        const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await sb.storage.from('fotos').upload(path, file, { upsert: false });
+        if (upErr) {
+          console.error('Erro storage:', upErr);
+          done++;
+          bar.style.width = (done / files.length * 100) + '%';
+          txt.textContent = `Erro no storage: ${upErr.message}`;
+          continue;
+        }
+        const { data: urlData } = sb.storage.from('fotos').getPublicUrl(path);
+        const { error: dbErr } = await sb.from('profile_photos').insert({
+          profile_id: currentUser.id, storage_path: path, url: urlData.publicUrl,
+          is_cover: false, ordem: 0, status: 'pending',
+          mime_type: file.type, size_bytes: file.size
+        });
+        if (dbErr) {
+          console.error('Erro DB:', dbErr);
+          // Remove do storage se falhou no DB
+          await sb.storage.from('fotos').remove([path]);
+        } else {
+          success++;
+        }
+        done++;
+        bar.style.width = (done / files.length * 100) + '%';
+      }
+
+      txt.textContent = `${success} de ${files.length} foto(s) enviada(s) para aprovação!`;
+      setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0'; }, 3000);
+      input.value = '';
+      if (success > 0) showToast(`${success} foto(s) enviada(s) para aprovação!`);
+      else showToast('Nenhuma foto enviada. Verifique o console (F12) para o erro do storage.', 'error');
+      loadFotos();
+    }
+
+    async function deleteFoto(id, path) {
+      if (!confirm('Deseja remover esta foto?')) return;
+      await sb.storage.from('fotos').remove([path]);
+      const { error } = await sb.from('profile_photos').delete().eq('id', id);
+      if (error) { showToast('Erro ao remover foto', 'error'); return; }
+      showToast('Foto removida!');
+      loadFotos();
+    }
+
+    async function setFotoCover(id) {
+      await sb.from('profile_photos').update({ is_cover: false }).eq('profile_id', currentUser.id);
+      await sb.from('profile_photos').update({ is_cover: true }).eq('id', id);
+      showToast('Foto de capa definida!');
+      loadFotos();
+    }
+
+    // ============================================================
+    // SERVIÇOS
+    // ============================================================
+    let servicosList = [];
+
+    async function loadServicos() {
+      const { data, error } = await sb.from('services').select('*').eq('profile_id', currentUser.id).order('ordem');
+      servicosList = data || [];
+      renderServicos();
+    }
+
+    function renderServicos() {
+      const el = document.getElementById('servicosList');
+      if (!servicosList.length) {
+        el.innerHTML = '<div class="card" style="color:var(--text-muted);text-align:center;padding:30px">Nenhum serviço cadastrado. Adicione acima!</div>';
+        return;
+      }
+      el.innerHTML = servicosList.map((s, i) => `
+    <div class="service-item">
+      <div>
+        <div class="svc-name">${s.nome}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">${s.local || 'A combinar'}</div>
+      </div>
+      <div class="svc-price">${s.preco ? 'R$ ' + parseFloat(s.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'A combinar'}</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer">
+        <label class="toggle"><input type="checkbox" ${s.ativo ? 'checked' : ''} onchange="toggleServico('${s.id}',this.checked)"><span class="slider"></span></label>
+        ${s.ativo ? 'Ativo' : 'Inativo'}
+      </label>
+      <button class="btn btn-danger" style="padding:8px 14px" onclick="deleteServico('${s.id}')">🗑</button>
+    </div>
+  `).join('');
+    }
+
+    async function addServico() {
+      const nome = document.getElementById('svc_nome').value.trim();
+      const preco = document.getElementById('svc_preco').value;
+      const local = document.getElementById('svc_local').value;
+      if (!nome || nome.length < 2) { showToast('Nome do serviço muito curto', 'error'); return; }
+      const { data, error } = await sb.from('services').insert({
+        profile_id: currentUser.id, nome,
+        preco: preco ? parseFloat(preco) : null,
+        local: local || 'A combinar', ativo: true, ordem: servicosList.length
+      }).select().single();
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+      servicosList.push(data);
+      renderServicos();
+      document.getElementById('svc_nome').value = '';
+      document.getElementById('svc_preco').value = '';
+      showToast('Serviço adicionado!');
+    }
+
+    async function toggleServico(id, ativo) {
+      const { error } = await sb.from('services').update({ ativo }).eq('id', id);
+      if (error) { showToast('Erro ao atualizar serviço', 'error'); return; }
+      const idx = servicosList.findIndex(s => s.id === id);
+      if (idx >= 0) servicosList[idx].ativo = ativo;
+      showToast(ativo ? 'Serviço ativado!' : 'Serviço desativado!');
+    }
+
+    async function deleteServico(id) {
+      if (!confirm('Remover este serviço?')) return;
+      const { error } = await sb.from('services').delete().eq('id', id);
+      if (error) { showToast('Erro ao remover serviço', 'error'); return; }
+      servicosList = servicosList.filter(s => s.id !== id);
+      renderServicos();
+      showToast('Serviço removido!');
+    }
+
+    // ============================================================
+    // LOCALIZAÇÃO
+    // ============================================================
+    async function loadLocalizacao() {
+      // Profile fields já carregados via loadProfile / updateUIFromProfile
+      // Carregar locais de atendimento
+      const { data } = await sb.from('attendance_locations').select('tipo').eq('profile_id', currentUser.id);
+      const tipos = (data || []).map(r => r.tipo);
+      document.querySelectorAll('#locGrid input[type=checkbox]').forEach(cb => {
+        cb.checked = tipos.includes(cb.value);
+        cb.closest('.loc-item').classList.toggle('selected', cb.checked);
+      });
+    }
+
+    function updateLocItem(cb) {
+      cb.closest('.loc-item').classList.toggle('selected', cb.checked);
+    }
+
+    async function saveLocalizacao() {
+      const updates = {
+        cep: document.getElementById('loc_cep').value || null,
+        bairro: document.getElementById('loc_bairro').value || null,
+        cidade: document.getElementById('loc_cidade').value,
+        uf: document.getElementById('loc_uf').value,
+        updated_at: new Date().toISOString()
+      };
+      if (!updates.cidade || !updates.uf) { showToast('Cidade e UF são obrigatórios', 'error'); return; }
+
+      const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+      // Attendance locations
+      const checked = [...document.querySelectorAll('#locGrid input[type=checkbox]:checked')].map(cb => cb.value);
+      await sb.from('attendance_locations').delete().eq('profile_id', currentUser.id);
+      if (checked.length > 0) {
+        const rows = checked.map(tipo => ({ profile_id: currentUser.id, tipo }));
+        const { error: locErr } = await sb.from('attendance_locations').insert(rows);
+        if (locErr) { showToast('Erro ao salvar locais: ' + locErr.message, 'error'); return; }
+      }
+
+      currentProfile = { ...currentProfile, ...updates };
+      showToast('Localização salva com sucesso!');
+    }
+
+    async function buscaCep(input) {
+      const cep = input.value.replace(/\D/g, '');
+      if (cep.length === 8) {
+        try {
+          const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+          const d = await r.json();
+          if (!d.erro) {
+            document.getElementById('loc_bairro').value = d.bairro || '';
+            document.getElementById('loc_cidade').value = d.localidade || '';
+            document.getElementById('loc_uf').value = d.uf || '';
+          }
+        } catch (e) { }
+      }
+    }
+
+    // ============================================================
+    // DISPONIBILIDADE
+    // ============================================================
+    const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+    function buildWeekGrid() {
+      const grid = document.getElementById('weekGrid');
+      grid.innerHTML = DIAS.map((dia, i) => `
+    <div class="day-row" id="dayrow-${i}">
+      <span class="day-label">${dia}</span>
+      <label class="toggle">
+        <input type="checkbox" id="day-toggle-${i}" onchange="toggleDay(${i})">
+        <span class="slider"></span>
+      </label>
+      <div id="day-times-${i}" style="display:none;align-items:center;gap:8px;margin-left:8px">
+        <input type="time" id="day-start-${i}" value="09:00" style="width:110px">
+        <span style="color:var(--text-muted)">até</span>
+        <input type="time" id="day-end-${i}" value="22:00" style="width:110px">
+      </div>
+      <span id="day-label-${i}" style="font-size:0.8rem;color:var(--text-muted);margin-left:8px">Fechado</span>
+    </div>
+  `).join('');
+    }
+
+    function toggleDay(i) {
+      const on = document.getElementById('day-toggle-' + i).checked;
+      document.getElementById('day-times-' + i).style.display = on ? 'flex' : 'none';
+      document.getElementById('day-label-' + i).textContent = on ? 'Aberto' : 'Fechado';
+      document.getElementById('day-label-' + i).style.color = on ? 'var(--green)' : 'var(--text-muted)';
+    }
+
+    async function loadDisponibilidade() {
+      const { data } = await sb.from('availability').select('*').eq('profile_id', currentUser.id);
+      (data || []).forEach(row => {
+        const i = row.dia_semana;
+        document.getElementById('day-toggle-' + i).checked = true;
+        toggleDay(i);
+        document.getElementById('day-start-' + i).value = row.hora_inicio.slice(0, 5);
+        document.getElementById('day-end-' + i).value = row.hora_fim.slice(0, 5);
+      });
+    }
+
+    async function saveDisponibilidade() {
+      const rows = [];
+      for (let i = 0; i < 7; i++) {
+        if (document.getElementById('day-toggle-' + i).checked) {
+          rows.push({
+            profile_id: currentUser.id,
+            dia_semana: i,
+            hora_inicio: document.getElementById('day-start-' + i).value + ':00',
+            hora_fim: document.getElementById('day-end-' + i).value + ':00'
+          });
+        }
+      }
+      // Limpar e re-inserir
+      const { error: delErr } = await sb.from('availability').delete().eq('profile_id', currentUser.id);
+      if (delErr) { showToast('Erro ao salvar: ' + delErr.message, 'error'); return; }
+      if (rows.length > 0) {
+        const { error } = await sb.from('availability').insert(rows);
+        if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+      }
+      showToast('Disponibilidade salva com sucesso!');
+    }
+
+    // ============================================================
+    // START
+    // ============================================================
+    init();
+  </script>
+</body>
+
+</html>
