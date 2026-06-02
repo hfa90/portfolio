@@ -112,7 +112,7 @@
 
           <p class="login-signup">
             Ainda não tem conta?
-            <a href="cadastro.html">Cadastre-se grátis <i class="ti ti-arrow-right"></i></a>
+            <a href="cadastro-cliente.html">Cadastre-se grátis <i class="ti ti-arrow-right"></i></a>
           </p>
         </form>
 
@@ -146,10 +146,20 @@
       setTimeout(() => el.remove(), 4000);
     }
 
+    // ── Redireciona conforme o tipo de conta ─────────────────────
+    async function redirectByRole(userId) {
+      const { data: isCliente } = await _supabase
+        .from('customers')
+        .select('id')
+        .eq('id', userId)
+        .maybeSingle();
+      window.location.href = isCliente ? 'painel-cliente.html' : 'painel.html';
+    }
+
     // ── Redireciona se já está logado ─────────────────────────────
     (async () => {
       const { data: { session } } = await _supabase.auth.getSession();
-      if (session) window.location.href = 'painel.html';
+      if (session) redirectByRole(session.user.id);
     })();
 
     // ── Troca de abas ─────────────────────────────────────────────
@@ -177,7 +187,7 @@
       btn.disabled = true;
       btn.textContent = 'Entrando…';
 
-      const { error } = await _supabase.auth.signInWithPassword({ email, password: senha });
+      const { data, error } = await _supabase.auth.signInWithPassword({ email, password: senha });
 
       if (error) {
         toast(
@@ -191,7 +201,34 @@
         return;
       }
 
-      window.location.href = 'painel.html';
+      await redirectByRole(data.user.id);
+    });
+
+    // ── Login Cliente ─────────────────────────────────────────────
+    document.querySelector('#tab-cliente form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type=submit]');
+      const email = e.target.querySelector('input[type=email]').value.trim();
+      const senha = document.getElementById('pwInput2').value;
+
+      btn.disabled = true;
+      btn.textContent = 'Entrando…';
+
+      const { data, error } = await _supabase.auth.signInWithPassword({ email, password: senha });
+
+      if (error) {
+        toast(
+          error.message.includes('Invalid login') || error.message.includes('invalid_credentials')
+            ? 'E-mail ou senha incorretos.'
+            : error.message,
+          'erro'
+        );
+        btn.disabled = false;
+        btn.textContent = 'Entrar';
+        return;
+      }
+
+      await redirectByRole(data.user.id);
     });
 
     // ── Esqueci a senha ───────────────────────────────────────────

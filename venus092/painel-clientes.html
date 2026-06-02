@@ -1,0 +1,1512 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meu painel — Vênus</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0d0d14;
+            --surface: #13131c;
+            --surface2: #1a1a26;
+            --surface3: #22223a;
+            --border: #262636;
+            --border2: #2e2e45;
+            --gold: #c9a84c;
+            --gold-light: #e8c97a;
+            --gold-dim: rgba(201, 168, 76, .15);
+            --text: #e8e8f0;
+            --text-muted: #7a7a95;
+            --danger: #c0392b;
+            --success: #2ecc71;
+            --radius: 12px;
+            --sidebar-w: 260px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Georgia', serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ════════════════════════════════════════════════════
+       TOP NAVBAR
+    ════════════════════════════════════════════════════ */
+        .topbar {
+            height: 60px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+
+        .topbar-brand {
+            font-size: 1.35rem;
+            font-style: italic;
+            color: var(--gold);
+            text-decoration: none;
+            letter-spacing: .04em;
+            margin-right: auto;
+        }
+
+        .topbar-badge {
+            background: var(--gold-dim);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            font-size: .72rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            font-family: sans-serif;
+        }
+
+        .topbar-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--border2);
+            cursor: pointer;
+            background: var(--surface3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .topbar-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .topbar-avatar .avatar-placeholder {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* ════════════════════════════════════════════════════
+       LAYOUT: sidebar + main
+    ════════════════════════════════════════════════════ */
+        .layout {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ── Sidebar ────────────────────────────────────────── */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 0;
+            position: sticky;
+            top: 60px;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-profile {
+            padding: 0 20px 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .sidebar-cover-wrap {
+            position: relative;
+            width: 100%;
+            height: 72px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--surface3);
+            margin-bottom: -28px;
+            cursor: pointer;
+        }
+
+        .sidebar-cover-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sidebar-cover-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: .75rem;
+            gap: 6px;
+        }
+
+        .cover-edit-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: .75rem;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        .sidebar-cover-wrap:hover .cover-edit-overlay {
+            opacity: 1;
+        }
+
+        .sidebar-avatar-wrap {
+            position: relative;
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 10px;
+        }
+
+        .sidebar-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 3px solid var(--surface);
+            background: var(--surface3);
+            object-fit: cover;
+            display: block;
+        }
+
+        .sidebar-name {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-email {
+            font-size: .78rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+
+        /* Nav links */
+        .sidebar-nav {
+            flex: 1;
+        }
+
+        .nav-section {
+            padding: 0 12px;
+            margin-bottom: 4px;
+        }
+
+        .nav-section-label {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--text-muted);
+            padding: 8px 8px 6px;
+            font-family: sans-serif;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background .15s, color .15s;
+            font-size: .9rem;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            background: var(--gold-dim);
+            color: var(--gold);
+        }
+
+        .nav-item i {
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--surface3);
+            color: var(--text-muted);
+            font-size: .72rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-family: sans-serif;
+        }
+
+        .nav-item.active .nav-badge {
+            background: var(--gold);
+            color: #0d0d14;
+        }
+
+        .sidebar-logout {
+            padding: 16px 12px 0;
+            border-top: 1px solid var(--border);
+            margin: 0 0;
+        }
+
+        .btn-logout {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: .9rem;
+            transition: background .15s, color .15s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(192, 57, 43, .15);
+            color: #e74c3c;
+        }
+
+        /* ── Main content ────────────────────────────────────── */
+        .main {
+            flex: 1;
+            padding: 36px 40px;
+            overflow-y: auto;
+            min-width: 0;
+        }
+
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .panel-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .panel-subtitle {
+            color: var(--text-muted);
+            font-size: .9rem;
+            margin-bottom: 32px;
+        }
+
+        /* ── Cards / Grid ────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-card i {
+            font-size: 1.4rem;
+            color: var(--gold);
+        }
+
+        .stat-num {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: .8rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        /* ── Favorites grid ──────────────────────────────────── */
+        .profiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .profile-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: border-color .2s, transform .2s;
+            cursor: pointer;
+        }
+
+        .profile-card:hover {
+            border-color: var(--gold);
+            transform: translateY(-2px);
+        }
+
+        .profile-card-cover {
+            height: 140px;
+            background: var(--surface3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .profile-card-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-card-cover-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 2rem;
+        }
+
+        .badge-online {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--success);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--surface2);
+        }
+
+        .profile-card-body {
+            padding: 14px;
+        }
+
+        .profile-card-name {
+            font-size: .95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .profile-card-cat {
+            font-size: .78rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            font-family: sans-serif;
+        }
+
+        .profile-card-loc {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: .78rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        .profile-card-actions {
+            display: flex;
+            gap: 8px;
+            padding: 0 14px 14px;
+        }
+
+        .btn-card {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            font-size: .8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: opacity .2s;
+        }
+
+        .btn-card:hover {
+            opacity: .85;
+        }
+
+        .btn-card-primary {
+            background: var(--gold);
+            color: #0d0d14;
+            font-weight: 600;
+        }
+
+        .btn-card-ghost {
+            background: var(--surface3);
+            color: var(--text-muted);
+        }
+
+        /* ── History list ────────────────────────────────────── */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            transition: border-color .2s;
+            cursor: pointer;
+        }
+
+        .history-item:hover {
+            border-color: var(--border2);
+        }
+
+        .history-thumb {
+            width: 52px;
+            height: 52px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: var(--surface3);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            overflow: hidden;
+        }
+
+        .history-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .history-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .history-name {
+            font-size: .95rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-meta {
+            font-size: .8rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+            margin-top: 3px;
+        }
+
+        .history-time {
+            font-size: .78rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+            flex-shrink: 0;
+        }
+
+        /* ── Edit profile form ───────────────────────────────── */
+        .edit-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            max-width: 560px;
+        }
+
+        .edit-section {
+            margin-bottom: 28px;
+        }
+
+        .edit-section-title {
+            font-size: .8rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            font-family: sans-serif;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: .8rem;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-family: sans-serif;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: .95rem;
+            transition: border-color .2s, box-shadow .2s;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, .12);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-input[readonly] {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        .form-hint {
+            font-size: .78rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+            font-family: sans-serif;
+        }
+
+        /* Cover upload in edit */
+        .cover-upload-wrap {
+            position: relative;
+            width: 100%;
+            height: 120px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--bg);
+            border: 2px dashed var(--border);
+            cursor: pointer;
+            transition: border-color .2s;
+            margin-bottom: 12px;
+        }
+
+        .cover-upload-wrap:hover {
+            border-color: var(--gold);
+        }
+
+        .cover-upload-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .cover-upload-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: .85rem;
+            background: rgba(0, 0, 0, .4);
+        }
+
+        .cover-upload-overlay i {
+            font-size: 1.5rem;
+        }
+
+        #coverFileInput,
+        #avatarFileInput {
+            display: none;
+        }
+
+        .avatar-upload-wrap {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .avatar-preview {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--bg);
+            border: 2px solid var(--border);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 1.4rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .avatar-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: .9rem;
+            cursor: pointer;
+            transition: opacity .2s, transform .15s;
+            font-family: inherit;
+        }
+
+        .btn:hover {
+            opacity: .88;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-gold {
+            background: var(--gold);
+            color: #0d0d14;
+            font-weight: 700;
+        }
+
+        .btn-ghost {
+            background: var(--surface3);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger {
+            background: rgba(192, 57, 43, .18);
+            color: #e74c3c;
+            border: 1px solid rgba(192, 57, 43, .3);
+        }
+
+        /* ── Empty states ────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .empty-state h3 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: .9rem;
+        }
+
+        /* ── Loading ─────────────────────────────────────────── */
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            color: var(--text-muted);
+            gap: 12px;
+            font-size: .95rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        /* ── Toast ───────────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: .9rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+            z-index: 9999;
+            max-width: 320px;
+            animation: toastIn .3s ease;
+        }
+
+        .toast.ok {
+            border-color: var(--success);
+        }
+
+        .toast.erro {
+            border-color: var(--danger);
+        }
+
+        @keyframes toastIn {
+            from {
+                transform: translateX(40px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* ── Mobile sidebar ──────────────────────────────────── */
+        .mob-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        @media (max-width: 768px) {
+            .mob-menu-btn {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: -100%;
+                top: 60px;
+                height: calc(100vh - 60px);
+                z-index: 300;
+                transition: left .3s ease;
+                width: 280px;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, .6);
+                z-index: 299;
+                top: 60px;
+            }
+
+            .sidebar-overlay.visible {
+                display: block;
+            }
+
+            .main {
+                padding: 24px 20px;
+            }
+
+            .profiles-grid {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <button class="mob-menu-btn" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
+        <a href="index.html" class="topbar-brand"><em>Vênus</em></a>
+        <span class="topbar-badge"><i class="ti ti-user"></i> Cliente</span>
+        <div class="topbar-avatar" id="topAvatarWrap">
+            <span class="avatar-placeholder"><i class="ti ti-user"></i></span>
+        </div>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <div class="layout">
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Mini profile card -->
+            <div class="sidebar-profile">
+                <div class="sidebar-cover-wrap" id="sidebarCoverWrap" onclick="openPanel('perfil')">
+                    <div class="sidebar-cover-placeholder" id="sidebarCoverPlaceholder">
+                        <i class="ti ti-photo"></i> <span>Adicionar capa</span>
+                    </div>
+                    <img src="" id="sidebarCoverImg" style="display:none;" />
+                    <div class="cover-edit-overlay"><i class="ti ti-pencil"></i> Editar</div>
+                </div>
+                <div class="sidebar-avatar-wrap">
+                    <img src="" class="sidebar-avatar" id="sidebarAvatar" style="display:none;" />
+                    <div class="sidebar-avatar" id="sidebarAvatarPlaceholder"
+                        style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:1.2rem;">
+                        <i class="ti ti-user"></i>
+                    </div>
+                </div>
+                <div class="sidebar-name" id="sidebarName">Carregando…</div>
+                <div class="sidebar-email" id="sidebarEmail"></div>
+            </div>
+
+            <!-- Nav -->
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-label">Principal</div>
+                    <button class="nav-item active" data-panel="inicio" onclick="openPanel('inicio')">
+                        <i class="ti ti-home"></i> Início
+                    </button>
+                    <button class="nav-item" data-panel="favoritos" onclick="openPanel('favoritos')">
+                        <i class="ti ti-heart"></i> Favoritos
+                        <span class="nav-badge" id="favBadge">0</span>
+                    </button>
+                    <button class="nav-item" data-panel="historico" onclick="openPanel('historico')">
+                        <i class="ti ti-history"></i> Histórico
+                        <span class="nav-badge" id="histBadge">0</span>
+                    </button>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-label">Conta</div>
+                    <button class="nav-item" data-panel="perfil" onclick="openPanel('perfil')">
+                        <i class="ti ti-user-edit"></i> Editar perfil
+                    </button>
+                </div>
+            </nav>
+
+            <div class="sidebar-logout">
+                <button class="btn-logout" onclick="logout()">
+                    <i class="ti ti-logout"></i> Sair da conta
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+
+            <!-- ════ INÍCIO ════ -->
+            <div class="panel active" id="panel-inicio">
+                <h1 class="panel-title">Olá, <span id="welcomeName">…</span> 👋</h1>
+                <p class="panel-subtitle">Bem-vindo(a) ao seu painel. Aqui você gerencia tudo.</p>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="ti ti-heart"></i>
+                        <div class="stat-num" id="statFavs">–</div>
+                        <div class="stat-label">Favoritos salvos</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="ti ti-eye"></i>
+                        <div class="stat-num" id="statViews">–</div>
+                        <div class="stat-label">Perfis visitados</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="ti ti-calendar"></i>
+                        <div class="stat-num" id="statMember">–</div>
+                        <div class="stat-label">Dias como membro</div>
+                    </div>
+                </div>
+
+                <h2 style="font-size:1.1rem;margin-bottom:16px;">Vistos recentemente</h2>
+                <div id="recentList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════ FAVORITOS ════ -->
+            <div class="panel" id="panel-favoritos">
+                <h1 class="panel-title">Meus favoritos</h1>
+                <p class="panel-subtitle">Perfis que você salvou para acessar rapidamente.</p>
+                <div id="favGrid">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════ HISTÓRICO ════ -->
+            <div class="panel" id="panel-historico">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <h1 class="panel-title" style="margin-bottom:0;">Histórico de visitas</h1>
+                    <button class="btn btn-ghost" style="font-size:.8rem;padding:7px 14px;" onclick="clearHistory()">
+                        <i class="ti ti-trash"></i> Limpar
+                    </button>
+                </div>
+                <p class="panel-subtitle">Perfis que você visualizou.</p>
+                <div id="histList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════ EDITAR PERFIL ════ -->
+            <div class="panel" id="panel-perfil">
+                <h1 class="panel-title">Editar perfil</h1>
+                <p class="panel-subtitle">Personalize sua conta de cliente.</p>
+
+                <div class="edit-card">
+                    <!-- Foto de capa -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-photo"></i> Foto de capa</div>
+                        <div class="cover-upload-wrap" id="coverUploadWrap"
+                            onclick="document.getElementById('coverFileInput').click()">
+                            <img src="" id="coverPreviewImg" style="display:none;" />
+                            <div class="cover-upload-overlay" id="coverOverlay">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span>Clique para fazer upload da capa</span>
+                                <span style="font-size:.75rem;color:var(--text-muted);">Recomendado: 1200×400px</span>
+                            </div>
+                        </div>
+                        <input type="file" id="coverFileInput" accept="image/*" onchange="previewCover(event)" />
+                        <button class="btn btn-ghost" style="font-size:.8rem;"
+                            onclick="document.getElementById('coverFileInput').click()">
+                            <i class="ti ti-upload"></i> Selecionar imagem
+                        </button>
+                    </div>
+
+                    <!-- Avatar -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-user-circle"></i> Foto de perfil</div>
+                        <div class="avatar-upload-wrap">
+                            <div class="avatar-preview" id="avatarPreview"
+                                onclick="document.getElementById('avatarFileInput').click()">
+                                <i class="ti ti-user"></i>
+                            </div>
+                            <div>
+                                <button class="btn btn-ghost" style="font-size:.8rem;"
+                                    onclick="document.getElementById('avatarFileInput').click()">
+                                    <i class="ti ti-upload"></i> Alterar foto
+                                </button>
+                                <div class="form-hint" style="margin-top:6px;">JPG ou PNG, máx. 2 MB</div>
+                            </div>
+                        </div>
+                        <input type="file" id="avatarFileInput" accept="image/*" onchange="previewAvatar(event)" />
+                    </div>
+
+                    <!-- Dados pessoais -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-info-circle"></i> Dados pessoais</div>
+                        <div class="form-group">
+                            <label class="form-label">Nome *</label>
+                            <input type="text" class="form-input" id="editNome" placeholder="Seu nome" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-input" id="editEmail" readonly />
+                            <div class="form-hint">O e-mail não pode ser alterado por aqui.</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <button class="btn btn-gold" id="saveProfileBtn" onclick="saveProfile()">
+                            <i class="ti ti-device-floppy"></i> Salvar alterações
+                        </button>
+                        <button class="btn btn-ghost" onclick="loadProfileData()">
+                            <i class="ti ti-refresh"></i> Descartar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div><!-- .layout -->
+
+    <script>
+        /* ═══════════════════════════════════════════════════════════
+           CONFIG
+        ═══════════════════════════════════════════════════════════ */
+        const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let currentUser = null;
+        let customerData = null;
+        let pendingCoverFile = null;
+        let pendingAvatarFile = null;
+
+        /* ═══════════════════════════════════════════════════════════
+           INIT
+        ═══════════════════════════════════════════════════════════ */
+        async function init() {
+            const { data: { session } } = await sb.auth.getSession();
+            if (!session) {
+                window.location.href = 'login.html';
+                return;
+            }
+            currentUser = session.user;
+
+            // Verificar se é cliente (não profissional)
+            const { data: profile } = await sb.from('profiles').select('id').eq('id', currentUser.id).maybeSingle();
+            if (profile) {
+                // É profissional — redirecionar para painel de profissional
+                window.location.href = 'painel.html';
+                return;
+            }
+
+            await loadCustomerData();
+            await loadStats();
+            await loadFavorites();
+            await loadHistory();
+        }
+
+        async function loadCustomerData() {
+            const { data, error } = await sb.from('customers').select('*').eq('id', currentUser.id).single();
+            if (error || !data) {
+                toast('Erro ao carregar dados do perfil.', 'erro');
+                return;
+            }
+            customerData = data;
+            applyCustomerToUI(data);
+        }
+
+        function applyCustomerToUI(data) {
+            // Sidebar
+            document.getElementById('sidebarName').textContent = data.nome || 'Sem nome';
+            document.getElementById('sidebarEmail').textContent = data.email || '';
+            document.getElementById('welcomeName').textContent = data.nome?.split(' ')[0] || 'você';
+
+            // Edit form
+            document.getElementById('editNome').value = data.nome || '';
+            document.getElementById('editEmail').value = data.email || '';
+
+            // Avatar
+            if (data.avatar_url) {
+                updateAvatarUI(data.avatar_url);
+            }
+            // Cover
+            if (data.cover_url) {
+                updateCoverUI(data.cover_url);
+            }
+        }
+
+        function updateAvatarUI(url) {
+            // Sidebar avatar
+            const sidebarAvatar = document.getElementById('sidebarAvatar');
+            const sidebarAvatarPlaceholder = document.getElementById('sidebarAvatarPlaceholder');
+            sidebarAvatar.src = url;
+            sidebarAvatar.style.display = 'block';
+            sidebarAvatarPlaceholder.style.display = 'none';
+
+            // Topbar avatar
+            const topWrap = document.getElementById('topAvatarWrap');
+            topWrap.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;" />`;
+
+            // Edit form avatar
+            const avatarPreview = document.getElementById('avatarPreview');
+            avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;" />`;
+        }
+
+        function updateCoverUI(url) {
+            // Sidebar cover
+            const sidebarCoverImg = document.getElementById('sidebarCoverImg');
+            const sidebarCoverPlaceholder = document.getElementById('sidebarCoverPlaceholder');
+            sidebarCoverImg.src = url;
+            sidebarCoverImg.style.display = 'block';
+            sidebarCoverPlaceholder.style.display = 'none';
+
+            // Edit form cover
+            const coverPreviewImg = document.getElementById('coverPreviewImg');
+            const coverOverlay = document.getElementById('coverOverlay');
+            coverPreviewImg.src = url;
+            coverPreviewImg.style.display = 'block';
+            coverOverlay.style.background = 'rgba(0,0,0,.35)';
+            coverOverlay.innerHTML = `<i class="ti ti-pencil"></i><span>Trocar capa</span>`;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           STATS
+        ═══════════════════════════════════════════════════════════ */
+        async function loadStats() {
+            // Contagem de favoritos
+            const { count: favCount } = await sb
+                .from('favorites').select('*', { count: 'exact', head: true })
+                .eq('user_id', currentUser.id);
+
+            // Contagem de histórico
+            const { count: histCount } = await sb
+                .from('customer_history').select('*', { count: 'exact', head: true })
+                .eq('customer_id', currentUser.id);
+
+            document.getElementById('statFavs').textContent = favCount ?? 0;
+            document.getElementById('statViews').textContent = histCount ?? 0;
+            document.getElementById('favBadge').textContent = favCount ?? 0;
+            document.getElementById('histBadge').textContent = histCount ?? 0;
+
+            // Dias como membro
+            if (customerData?.created_at) {
+                const days = Math.floor((Date.now() - new Date(customerData.created_at)) / 86400000);
+                document.getElementById('statMember').textContent = days === 0 ? 'Hoje' : days;
+            }
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           FAVORITES
+        ═══════════════════════════════════════════════════════════ */
+        async function loadFavorites() {
+            const { data, error } = await sb
+                .from('customer_favorites_view')
+                .select('*')
+                .eq('customer_id', currentUser.id)
+                .order('favorited_at', { ascending: false });
+
+            renderFavorites(data || []);
+            renderRecentSection(data?.slice(0, 4) || []);
+        }
+
+        function renderFavorites(items) {
+            const grid = document.getElementById('favGrid');
+            if (!items.length) {
+                grid.innerHTML = `
+          <div class="empty-state">
+            <i class="ti ti-heart-off"></i>
+            <h3>Nenhum favorito ainda</h3>
+            <p>Explore o catálogo e salve os perfis que você curtir.</p>
+          </div>`;
+                return;
+            }
+            grid.innerHTML = '';
+            const profilesGrid = document.createElement('div');
+            profilesGrid.className = 'profiles-grid';
+            items.forEach(item => profilesGrid.appendChild(buildProfileCard(item)));
+            grid.appendChild(profilesGrid);
+        }
+
+        function renderRecentSection(items) {
+            const wrap = document.getElementById('recentList');
+            if (!items.length) {
+                wrap.innerHTML = `<p style="color:var(--text-muted);font-size:.9rem;">Você ainda não salvou nenhum favorito.</p>`;
+                return;
+            }
+            wrap.innerHTML = '';
+            const grid = document.createElement('div');
+            grid.className = 'profiles-grid';
+            items.forEach(item => grid.appendChild(buildProfileCard(item)));
+            wrap.appendChild(grid);
+        }
+
+        function buildProfileCard(item) {
+            const div = document.createElement('div');
+            div.className = 'profile-card';
+            div.innerHTML = `
+        <div class="profile-card-cover">
+          ${item.cover_photo_url
+                    ? `<img src="${item.cover_photo_url}" alt="${item.nome_artistico}" loading="lazy" />`
+                    : `<div class="profile-card-cover-placeholder"><i class="ti ti-user"></i></div>`}
+          ${item.online_now ? '<div class="badge-online"></div>' : ''}
+        </div>
+        <div class="profile-card-body">
+          <div class="profile-card-name">${item.nome_artistico}</div>
+          <div class="profile-card-cat">${item.categoria}</div>
+          <div class="profile-card-loc">
+            <i class="ti ti-map-pin" style="font-size:.85rem;"></i>
+            ${item.bairro ? item.bairro + ', ' : ''}${item.cidade} – ${item.uf}
+          </div>
+        </div>
+        <div class="profile-card-actions">
+          <button class="btn-card btn-card-primary" onclick="viewProfile('${item.profile_id}')">
+            <i class="ti ti-eye"></i> Ver
+          </button>
+          <button class="btn-card btn-card-ghost" onclick="removeFavorite('${item.profile_id}', this)" title="Remover favorito">
+            <i class="ti ti-heart-filled" style="color:#e74c3c;"></i>
+          </button>
+        </div>`;
+            return div;
+        }
+
+        async function removeFavorite(profileId, btn) {
+            btn.disabled = true;
+            const { error } = await sb.from('favorites')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('profile_id', profileId);
+            if (error) { toast('Erro ao remover favorito.', 'erro'); btn.disabled = false; return; }
+            toast('Removido dos favoritos.', 'ok');
+            await loadFavorites();
+            await loadStats();
+        }
+
+        function viewProfile(profileId) {
+            window.location.href = `perfil.html?id=${profileId}`;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           HISTORY
+        ═══════════════════════════════════════════════════════════ */
+        async function loadHistory() {
+            const { data, error } = await sb
+                .from('customer_history')
+                .select(`
+          id, viewed_at,
+          profiles:profile_id (
+            id, nome_artistico, categoria, cidade, uf, bairro,
+            profile_photos ( url, is_cover, status )
+          )
+        `)
+                .eq('customer_id', currentUser.id)
+                .order('viewed_at', { ascending: false })
+                .limit(50);
+
+            renderHistory(data || []);
+        }
+
+        function renderHistory(items) {
+            const list = document.getElementById('histList');
+            if (!items.length) {
+                list.innerHTML = `
+          <div class="empty-state">
+            <i class="ti ti-history"></i>
+            <h3>Histórico vazio</h3>
+            <p>Os perfis que você visitar aparecerão aqui.</p>
+          </div>`;
+                return;
+            }
+            list.innerHTML = '';
+            const ul = document.createElement('div');
+            ul.className = 'history-list';
+            items.forEach(item => {
+                const p = item.profiles;
+                if (!p) return;
+                const coverPhoto = p.profile_photos?.find(ph => ph.is_cover && ph.status === 'approved');
+                const when = timeAgo(item.viewed_at);
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.onclick = () => viewProfile(p.id);
+                div.innerHTML = `
+          <div class="history-thumb">
+            ${coverPhoto?.url
+                        ? `<img src="${coverPhoto.url}" alt="${p.nome_artistico}" loading="lazy" />`
+                        : `<i class="ti ti-user"></i>`}
+          </div>
+          <div class="history-info">
+            <div class="history-name">${p.nome_artistico}</div>
+            <div class="history-meta">${p.categoria} · ${p.bairro ? p.bairro + ', ' : ''}${p.cidade} – ${p.uf}</div>
+          </div>
+          <div class="history-time">${when}</div>`;
+                ul.appendChild(div);
+            });
+            list.appendChild(ul);
+        }
+
+        async function clearHistory() {
+            if (!confirm('Deseja limpar todo o histórico de visitas?')) return;
+            const { error } = await sb.from('customer_history').delete().eq('customer_id', currentUser.id);
+            if (error) { toast('Erro ao limpar histórico.', 'erro'); return; }
+            toast('Histórico apagado.', 'ok');
+            await loadHistory();
+            await loadStats();
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           EDIT PROFILE
+        ═══════════════════════════════════════════════════════════ */
+        function previewCover(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            pendingCoverFile = file;
+            const url = URL.createObjectURL(file);
+            updateCoverUI(url);
+        }
+
+        function previewAvatar(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            pendingAvatarFile = file;
+            const url = URL.createObjectURL(file);
+            updateAvatarUI(url);
+        }
+
+        async function saveProfile() {
+            const btn = document.getElementById('saveProfileBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ti ti-loader-2 spin"></i> Salvando…';
+
+            try {
+                const updates = {
+                    nome: document.getElementById('editNome').value.trim(),
+                    updated_at: new Date().toISOString(),
+                };
+
+                if (!updates.nome || updates.nome.length < 2) {
+                    throw new Error('Nome deve ter ao menos 2 caracteres.');
+                }
+
+                // Upload foto de capa
+                if (pendingCoverFile) {
+                    const ext = pendingCoverFile.name.split('.').pop();
+                    const path = `customers/${currentUser.id}/cover.${ext}`;
+                    const { error: upErr } = await sb.storage
+                        .from('customer-media')
+                        .upload(path, pendingCoverFile, { upsert: true });
+                    if (upErr) throw new Error('Falha ao fazer upload da capa: ' + upErr.message);
+                    const { data: urlData } = sb.storage.from('customer-media').getPublicUrl(path);
+                    updates.cover_url = urlData.publicUrl;
+                    pendingCoverFile = null;
+                }
+
+                // Upload avatar
+                if (pendingAvatarFile) {
+                    const ext = pendingAvatarFile.name.split('.').pop();
+                    const path = `customers/${currentUser.id}/avatar.${ext}`;
+                    const { error: upErr } = await sb.storage
+                        .from('customer-media')
+                        .upload(path, pendingAvatarFile, { upsert: true });
+                    if (upErr) throw new Error('Falha ao fazer upload do avatar: ' + upErr.message);
+                    const { data: urlData } = sb.storage.from('customer-media').getPublicUrl(path);
+                    updates.avatar_url = urlData.publicUrl;
+                    pendingAvatarFile = null;
+                }
+
+                const { error: dbErr } = await sb.from('customers').update(updates).eq('id', currentUser.id);
+                if (dbErr) throw new Error(dbErr.message);
+
+                // Atualiza estado local
+                customerData = { ...customerData, ...updates };
+                applyCustomerToUI(customerData);
+
+                toast('Perfil atualizado com sucesso!', 'ok');
+            } catch (err) {
+                toast(err.message, 'erro');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar alterações';
+            }
+        }
+
+        function loadProfileData() {
+            if (customerData) applyCustomerToUI(customerData);
+            pendingCoverFile = null;
+            pendingAvatarFile = null;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           NAVIGATION
+        ═══════════════════════════════════════════════════════════ */
+        function openPanel(name) {
+            // Desativa todos
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            // Ativa o alvo
+            document.getElementById('panel-' + name)?.classList.add('active');
+            document.querySelector(`.nav-item[data-panel="${name}"]`)?.classList.add('active');
+            // Mobile: fechar sidebar
+            closeSidebar();
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('visible');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('visible');
+        }
+
+        async function logout() {
+            await sb.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           UTILITIES
+        ═══════════════════════════════════════════════════════════ */
+        function timeAgo(dateStr) {
+            const diff = Date.now() - new Date(dateStr);
+            const mins = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            if (mins < 1) return 'Agora';
+            if (mins < 60) return `${mins}min atrás`;
+            if (hours < 24) return `${hours}h atrás`;
+            if (days < 7) return `${days}d atrás`;
+            return new Date(dateStr).toLocaleDateString('pt-BR');
+        }
+
+        function toast(msg, tipo = 'info') {
+            const el = document.createElement('div');
+            el.className = `toast ${tipo}`;
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 4500);
+        }
+
+        /* ── Boot ─────────────────────────────────────────────── */
+        init();
+    </script>
+</body>
+
+</html>
