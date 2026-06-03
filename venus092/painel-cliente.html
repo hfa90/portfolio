@@ -1105,19 +1105,45 @@
         async function init() {
             const { data: { session } } = await sb.auth.getSession();
             if (!session) {
-                window.location.href = 'login.html';
+                // Sem sessão → login (sem loop: login.html só redireciona se há sessão ativa)
+                window.location.replace('login.html');
                 return;
             }
             currentUser = session.user;
 
-            // Verificar se é cliente (não profissional)
+            // 1. Verificar se é profissional
             const { data: profile } = await sb.from('profiles').select('id').eq('id', currentUser.id).maybeSingle();
             if (profile) {
-                // É profissional — redirecionar para painel de profissional
-                window.location.href = 'painel.html';
+                window.location.replace('painel.html');
                 return;
             }
 
+            // 2. Verificar se existe registro em customers
+            //    (evita loop quando RLS bloqueia ou registro não foi criado)
+            const { data: customer, error: custErr } = await sb
+                .from('customers').select('id').eq('id', currentUser.id).maybeSingle();
+
+            if (custErr) {
+                // RLS ou erro de rede — mostrar aviso e aguardar, NÃO redirecionar
+                console.error('Erro ao verificar customers:', custErr.message);
+                document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0d0d14;color:#e8e8f0;flex-direction:column;gap:16px;font-family:Georgia,serif;">
+                    <i class="ti ti-alert-circle" style="font-size:2.5rem;color:#c9a84c;"></i>
+                    <p style="font-size:1.1rem;">Erro ao carregar seu perfil.</p>
+                    <p style="color:#7a7a95;font-size:.9rem;">${custErr.message}</p>
+                    <button onclick="location.reload()" style="padding:10px 24px;background:#c9a84c;color:#0d0d14;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;">Tentar novamente</button>
+                    <a href="login.html" onclick="supabase&&supabase.createClient&&void 0" style="color:#7a7a95;font-size:.85rem;">Sair e fazer login novamente</a>
+                </div>`;
+                return;
+            }
+
+            if (!customer) {
+                // Autenticado mas sem registro em customers → deslogar e ir para login limpo
+                await sb.auth.signOut();
+                window.location.replace('login.html');
+                return;
+            }
+
+            // Tudo OK — carregar dados do painel
             await loadCustomerData();
             await loadStats();
             await loadFavorites();
@@ -1125,9 +1151,18 @@
         }
 
         async function loadCustomerData() {
-            const { data, error } = await sb.from('customers').select('*').eq('id', currentUser.id).single();
-            if (error || !data) {
-                toast('Erro ao carregar dados do perfil.', 'erro');
+            const { data, error } = await sb.from('customers').select('*').eq('id', currentUser.id).maybeSingle();
+            if (error) {
+                // Erro real de banco (ex.: RLS bloqueando) — mostrar mensagem e NÃO redirecionar
+                console.error('Erro ao carregar customers:', error.message);
+                toast('Erro ao carregar dados do perfil: ' + error.message, 'erro');
+                return;
+            }
+            if (!data) {
+                // Registro não existe na tabela customers → não é cliente válido
+                // Redirecionar para login SEM disparar redirectByRole (evita loop)
+                await sb.auth.signOut();
+                window.location.replace('login.html');
                 return;
             }
             customerData = data;

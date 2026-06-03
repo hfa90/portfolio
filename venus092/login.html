@@ -148,18 +148,28 @@
 
     // ── Redireciona conforme o tipo de conta ─────────────────────
     async function redirectByRole(userId) {
-      const { data: isCliente } = await _supabase
+      const { data: isCliente, error } = await _supabase
         .from('customers')
         .select('id')
         .eq('id', userId)
         .maybeSingle();
-      window.location.href = isCliente ? 'painel-cliente.html' : 'painel.html';
+
+      // Se houver erro de RLS ou rede, não redirecionar em loop:
+      // o usuário fica na página atual e vê o toast de erro
+      if (error) {
+        console.error('redirectByRole error:', error.message);
+        toast('Erro ao identificar tipo de conta. Tente novamente.', 'erro');
+        return;
+      }
+
+      // replace() substitui a entrada no histórico, impedindo loop pelo botão "voltar"
+      window.location.replace(isCliente ? 'painel-cliente.html' : 'painel.html');
     }
 
     // ── Redireciona se já está logado ─────────────────────────────
     (async () => {
       const { data: { session } } = await _supabase.auth.getSession();
-      if (session) redirectByRole(session.user.id);
+      if (session) await redirectByRole(session.user.id);
     })();
 
     // ── Troca de abas ─────────────────────────────────────────────
