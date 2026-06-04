@@ -1807,6 +1807,7 @@
       else if (page === 'localizacao') loadLocalizacao();
       else if (page === 'disponibilidade') loadDisponibilidade();
       else if (page === 'perfil') loadSilicone();
+      else if (page === 'mensagens') cInit();
     }
 
     // ============================================================
@@ -2301,10 +2302,17 @@
     let cConvData = null;
     let cRtSub = null;
     let cTimerInterval = null;
+    let cInitialized = false;
     let cConvs = [];
     let cOtherProfiles = {};
 
     async function cInit() {
+      if (cInitialized) {
+        await cLoadConvs();
+        return;
+      }
+      cInitialized = true;
+      await cCleanupExpired();
       await cLoadConvs();
       // Realtime: notifica novas conversas
       sb.channel('prof-convs-watcher')
@@ -2312,6 +2320,14 @@
           event: 'INSERT', schema: 'public', table: 'chat_messages'
         }, () => { cLoadConvs(); })
         .subscribe();
+    }
+
+    async function cCleanupExpired() {
+      try {
+        await sb.rpc('delete_expired_chat_messages');
+      } catch (err) {
+        console.warn('Limpeza de mensagens indisponivel:', err);
+      }
     }
 
     async function cLoadConvs() {
