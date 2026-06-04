@@ -146,6 +146,18 @@
       setTimeout(() => el.remove(), 4000);
     }
 
+    function getSafeRedirect() {
+      const raw = new URLSearchParams(window.location.search).get('redirect');
+      if (!raw) return null;
+      try {
+        const url = new URL(raw, window.location.origin);
+        if (url.origin !== window.location.origin) return null;
+        return url.pathname.replace(/^\//, '') + url.search + url.hash;
+      } catch {
+        return null;
+      }
+    }
+
     // ── Redireciona conforme o tipo de conta ─────────────────────
     async function redirectByRole(userId) {
       // Checar as duas tabelas em paralelo para evitar ambiguidade de role
@@ -164,8 +176,10 @@
         return;
       }
 
+      const redirect = getSafeRedirect();
+
       if (cliente) {
-        window.location.replace('painel-cliente.html');
+        window.location.replace(redirect || 'painel-cliente.html');
       } else if (profissional) {
         window.location.replace('painel.html');
       } else {
