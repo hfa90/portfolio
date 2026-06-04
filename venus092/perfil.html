@@ -343,7 +343,7 @@
 
       if (!cliente) return;
 
-      ['navLinkCatalogo', 'navBtnEntrar', 'navBtnAnuncie'].forEach(id => {
+      ['navBtnEntrar', 'navBtnAnuncie'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -357,52 +357,21 @@
         nomeEl.textContent = primeiroNome;
       }
 
-      if (cliente.avatar_url) {
-        const avatarWrap = document.getElementById('navClienteAvatar');
-        if (avatarWrap) {
-          avatarWrap.innerHTML = `<img src="${cliente.avatar_url}" alt="Avatar" />`;
-        }
+      const avatarWrap = document.getElementById('navClienteAvatar');
+      if (avatarWrap && cliente.avatar_url && /^https?:\/\//i.test(cliente.avatar_url)) {
+        const img = document.createElement('img');
+        img.src = cliente.avatar_url;
+        img.alt = 'Avatar';
+        img.referrerPolicy = 'no-referrer';
+        img.onerror = () => {
+          const icon = document.createElement('i');
+          icon.className = 'ti ti-user';
+          avatarWrap.replaceChildren(icon);
+        };
+
+        avatarWrap.replaceChildren(img);
       }
     }
-
-    function removeInjectedUploadPopup() {
-      const popupMarkers = [
-        'Anexar foto de capa',
-        'DOCUMENTOS PARA DOWNLOAD',
-        'Anexar documento',
-        'Remover imagem'
-      ];
-
-      function findPopupRoot(el) {
-        let current = el;
-        while (current && current !== document.body) {
-          const style = getComputedStyle(current);
-          const rect = current.getBoundingClientRect();
-          const looksLikePopup =
-            ['fixed', 'absolute', 'sticky'].includes(style.position) ||
-            (rect.width >= 260 && rect.height >= 220 && rect.left > window.innerWidth * 0.45);
-
-          if (looksLikePopup) return current;
-          current = current.parentElement;
-        }
-        return null;
-      }
-
-      document.querySelectorAll('body *').forEach(el => {
-        const text = el.innerText || '';
-        const markerCount = popupMarkers.filter(marker => text.includes(marker)).length;
-        if (markerCount < 2) return;
-
-        const popup = findPopupRoot(el);
-        if (popup) popup.remove();
-      });
-    }
-
-    removeInjectedUploadPopup();
-    new MutationObserver(removeInjectedUploadPopup).observe(document.body, {
-      childList: true,
-      subtree: true
-    });
 
     // ============================================================
     // HELPERS
