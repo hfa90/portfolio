@@ -331,6 +331,43 @@
     let visitorSession = null;
     let visitorCanContact = false;
 
+    function removeCustomerUploadLeak() {
+      const markers = [
+        'Anexar foto de capa',
+        'Anexar documento',
+        'DOCUMENTOS PARA DOWNLOAD',
+        'Remover imagem',
+        'ou cole a URL'
+      ];
+
+      const hasMarker = el => {
+        const text = el?.innerText || '';
+        return markers.some(marker => text.includes(marker));
+      };
+
+      document.querySelectorAll('body *').forEach(el => {
+        if (!hasMarker(el)) return;
+
+        let root = el;
+        while (
+          root.parentElement &&
+          root.parentElement !== document.body &&
+          hasMarker(root.parentElement) &&
+          !root.parentElement.matches('.navbar, .navbar-nav, .nav-cliente, .nav-cliente-chip, .nav-cliente-avatar, .page, .container, .perfil-layout, .perfil-sticky')
+        ) {
+          root = root.parentElement;
+        }
+
+        root.remove();
+      });
+    }
+
+    removeCustomerUploadLeak();
+    new MutationObserver(removeCustomerUploadLeak).observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     async function initNavbar() {
       const { data: { session } } = await sb.auth.getSession();
       if (!session) return;
@@ -371,6 +408,8 @@
 
         avatarWrap.replaceChildren(img);
       }
+
+      removeCustomerUploadLeak();
     }
 
     // ============================================================
