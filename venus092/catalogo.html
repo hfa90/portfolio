@@ -124,6 +124,78 @@
       object-fit: cover;
       border-radius: inherit;
     }
+
+    /* ── Navbar: chip de cliente logado ───────────────────── */
+    .nav-cliente {
+      display: flex;
+      align-items: center;
+    }
+
+    .nav-cliente-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(201, 168, 76, .1);
+      border: 1px solid rgba(201, 168, 76, .3);
+      border-radius: 50px;
+      padding: 6px 14px 6px 6px;
+      color: #c9a84c;
+      text-decoration: none;
+      font-size: .85rem;
+      font-family: sans-serif;
+      transition: background .2s, box-shadow .2s;
+      white-space: nowrap;
+      max-width: 220px;
+    }
+
+    .nav-cliente-chip:hover {
+      background: rgba(201, 168, 76, .18);
+      box-shadow: 0 2px 12px rgba(201, 168, 76, .2);
+    }
+
+    .nav-cliente-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(201, 168, 76, .2);
+      border: 1.5px solid rgba(201, 168, 76, .4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      font-size: .9rem;
+    }
+
+    .nav-cliente-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .nav-cliente-nome {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 130px;
+      font-weight: 600;
+    }
+
+    .nav-cliente-arrow {
+      font-size: .8rem;
+      opacity: .6;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+      .nav-cliente-nome {
+        display: none;
+      }
+
+      .nav-cliente-chip {
+        padding: 6px;
+      }
+    }
   </style>
 </head>
 
@@ -136,11 +208,22 @@
       <i class="ti ti-search search-icon"></i>
       <input type="text" id="navSearch" placeholder="Buscar por nome, cidade…" oninput="debounceSearch()" />
     </div>
-    <nav class="navbar-nav">
-      <a href="catalogo.html" class="nav-link active">Catálogo</a>
-      <a href="cadastro.html" class="nav-link">Cadastre-se</a>
-      <a href="login.html" class="btn btn-outline btn-sm">Entrar</a>
-      <a href="cadastro.html" class="btn btn-gold btn-sm">Anuncie grátis</a>
+    <nav class="navbar-nav" id="navbarNav">
+      <a href="catalogo.html" class="nav-link active" id="navLinkCatalogo">Catálogo</a>
+      <!-- Grupo anônimo: visível quando não logado -->
+      <a href="cadastro.html" class="nav-link" id="navLinkCadastro">Cadastre-se</a>
+      <a href="login.html" class="btn btn-outline btn-sm" id="navBtnEntrar">Entrar</a>
+      <a href="cadastro.html" class="btn btn-gold btn-sm" id="navBtnAnuncie">Anuncie grátis</a>
+      <!-- Grupo cliente: visível quando logado como cliente -->
+      <div class="nav-cliente" id="navCliente" style="display:none;">
+        <a href="painel-cliente.html" class="nav-cliente-chip" id="navClienteChip">
+          <span class="nav-cliente-avatar" id="navClienteAvatar">
+            <i class="ti ti-user"></i>
+          </span>
+          <span class="nav-cliente-nome" id="navClienteNome">Meu perfil</span>
+          <i class="ti ti-chevron-right nav-cliente-arrow"></i>
+        </a>
+      </div>
     </nav>
   </nav>
 
@@ -379,7 +462,54 @@
     const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { storageKey: 'venus-user-session' }
+    });
+
+    // ══════════════════════════════════════════════════
+    // NAVBAR: detectar cliente logado
+    // ══════════════════════════════════════════════════
+    async function initNavbar() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return; // anônimo → navbar padrão
+
+      // Checar se é cliente (tem registro em customers)
+      const { data: cliente } = await sb
+        .from('customers')
+        .select('nome, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!cliente) return; // profissional → navbar padrão
+
+      // ── Ocultar itens anônimos ──
+      const hide = ['navLinkCadastro', 'navBtnEntrar', 'navBtnAnuncie'];
+      hide.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+
+      // ── Mostrar chip do cliente ──
+      const chip = document.getElementById('navCliente');
+      if (chip) chip.style.display = 'flex';
+
+      // Nome (primeiro nome apenas, para caber)
+      const nomeEl = document.getElementById('navClienteNome');
+      if (nomeEl) {
+        const primeiroNome = (cliente.nome || session.user.email).split(' ')[0];
+        nomeEl.textContent = primeiroNome;
+      }
+
+      // Avatar (se existir)
+      if (cliente.avatar_url) {
+        const avatarWrap = document.getElementById('navClienteAvatar');
+        if (avatarWrap) {
+          avatarWrap.innerHTML = `<img src="${cliente.avatar_url}" alt="Avatar" />`;
+        }
+      }
+    }
+
+
 
     const PAGE_SIZE = 12;
 
@@ -829,6 +959,7 @@
     // ══════════════════════════════════════════════════
     // INIT
     // ══════════════════════════════════════════════════
+    initNavbar();
     loadPerfis();
   </script>
 </body>
