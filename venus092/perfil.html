@@ -331,6 +331,40 @@
     let visitorSession = null;
     let visitorCanContact = false;
 
+    async function initNavbar() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return;
+
+      const { data: cliente } = await sb
+        .from('customers')
+        .select('nome, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!cliente) return;
+
+      ['navLinkCatalogo', 'navBtnEntrar', 'navBtnAnuncie'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+
+      const chip = document.getElementById('navCliente');
+      if (chip) chip.style.display = 'flex';
+
+      const nomeEl = document.getElementById('navClienteNome');
+      if (nomeEl) {
+        const primeiroNome = (cliente.nome || session.user.email || 'Meu perfil').split(' ')[0];
+        nomeEl.textContent = primeiroNome;
+      }
+
+      if (cliente.avatar_url) {
+        const avatarWrap = document.getElementById('navClienteAvatar');
+        if (avatarWrap) {
+          avatarWrap.innerHTML = `<img src="${cliente.avatar_url}" alt="Avatar" />`;
+        }
+      }
+    }
+
     // ============================================================
     // HELPERS
     // ============================================================
@@ -633,6 +667,7 @@
     // ============================================================
     // START
     // ============================================================
+    initNavbar();
     loadPerfil();
   </script>
 </body>
