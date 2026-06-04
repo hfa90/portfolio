@@ -148,22 +148,32 @@
 
     // ── Redireciona conforme o tipo de conta ─────────────────────
     async function redirectByRole(userId) {
-      const { data: isCliente, error } = await _supabase
-        .from('customers')
-        .select('id')
-        .eq('id', userId)
-        .maybeSingle();
+      // Checar as duas tabelas em paralelo para evitar ambiguidade de role
+      const [
+        { data: cliente, error: errCliente },
+        { data: profissional, error: errProfissional }
+      ] = await Promise.all([
+        _supabase.from('customers').select('id').eq('id', userId).maybeSingle(),
+        _supabase.from('profiles').select('id').eq('id', userId).maybeSingle(),
+      ]);
 
-      // Se houver erro de RLS ou rede, não redirecionar em loop:
-      // o usuário fica na página atual e vê o toast de erro
-      if (error) {
-        console.error('redirectByRole error:', error.message);
+      // Erro em ambas — provavelmente rede ou RLS quebrada
+      if (errCliente && errProfissional) {
+        console.error('redirectByRole errors:', errCliente.message, errProfissional.message);
         toast('Erro ao identificar tipo de conta. Tente novamente.', 'erro');
         return;
       }
 
-      // replace() substitui a entrada no histórico, impedindo loop pelo botão "voltar"
-      window.location.replace(isCliente ? 'painel-cliente.html' : 'painel.html');
+      if (cliente) {
+        window.location.replace('painel-cliente.html');
+      } else if (profissional) {
+        window.location.replace('painel.html');
+      } else {
+        // Nenhum registro encontrado — deslogar para não entrar em loop
+        console.warn('redirectByRole: nenhum registro encontrado para', userId);
+        toast('Conta nao encontrada. Verifique seus dados ou cadastre-se.', 'erro');
+        await _supabase.auth.signOut();
+      }
     }
 
     // ── Redireciona se já está logado ─────────────────────────────
