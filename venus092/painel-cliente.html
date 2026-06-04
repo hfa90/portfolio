@@ -2178,8 +2178,26 @@
             const ids = [...new Set(vcConvs.map(c => c.professional_id).filter(Boolean))];
             vcProfiles = {};
             if (ids.length) {
-                const { data: profs } = await sb.from('users').select('id,name,avatar_url').in('id', ids);
-                (profs || []).forEach(p => vcProfiles[p.id] = p);
+                // Busca nome artístico em profiles (fonte principal)
+                const { data: profs } = await sb.from('profiles').select('id,nome_artistico,avatar_url').in('id', ids);
+                (profs || []).forEach(p => {
+                    vcProfiles[p.id] = {
+                        id: p.id,
+                        name: p.nome_artistico || null,
+                        avatar_url: p.avatar_url || null
+                    };
+                });
+
+                // Fallback: para IDs que não vieram em profiles, tenta users.name
+                const missingIds = ids.filter(id => !vcProfiles[id]?.name);
+                if (missingIds.length) {
+                    const { data: users } = await sb.from('users').select('id,name,avatar_url').in('id', missingIds);
+                    (users || []).forEach(u => {
+                        if (!vcProfiles[u.id]) vcProfiles[u.id] = {};
+                        if (!vcProfiles[u.id].name) vcProfiles[u.id].name = u.name || null;
+                        if (!vcProfiles[u.id].avatar_url) vcProfiles[u.id].avatar_url = u.avatar_url || null;
+                    });
+                }
             }
 
             vcRenderConversations();
@@ -2321,7 +2339,7 @@
                     <span class="vc-msg-wrap">
                         <span class="vc-bubble">${vcEsc(msg.content)}</span>
                         <span class="vc-foot">
-                            <span class="vc-auth">Auth</span>
+                            <span class="vc-auth">${sent ? 'Você' : vcEsc(name)}</span>
                             <span>${vcFmt(msg.created_at)}</span>
                             ${status}
                         </span>
