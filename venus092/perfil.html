@@ -262,13 +262,65 @@
   </a>
 
   <script>
+    function loginRedirectUrl() {
+      const redirect = window.location.pathname + window.location.search;
+      return `login.html?redirect=${encodeURIComponent(redirect)}`;
+    }
+
+    async function loadVisitorAccess() {
+      const { data: { session } } = await sb.auth.getSession();
+      visitorSession = session;
+
+      if (!session) {
+        visitorCanContact = false;
+        return;
+      }
+
+      const { data: cliente } = await sb
+        .from('customers')
+        .select('id')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      visitorCanContact = Boolean(cliente);
+    }
+
+    function protectContactButton(el, targetUrl, profileId, evento, options = {}) {
+      if (!el) return;
+
+      el.style.pointerEvents = '';
+      el.style.opacity = '';
+      el.classList.toggle('is-locked', !visitorCanContact);
+
+      if (!visitorCanContact) {
+        el.href = loginRedirectUrl();
+        el.removeAttribute('target');
+        el.title = 'Cadastre-se ou entre para falar com a profissional';
+        el.addEventListener('click', () => {
+          sb.from('profile_analytics').insert({ profile_id: profileId, evento: `${evento}_blocked` });
+        }, { once: true });
+        return;
+      }
+
+      el.href = targetUrl;
+      if (options.target) el.target = options.target;
+      el.title = '';
+      el.addEventListener('click', () => {
+        sb.from('profile_analytics').insert({ profile_id: profileId, evento });
+      });
+    }
+
     // ============================================================
     // CONFIG SUPABASE
     // ============================================================
     const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
     const { createClient } = supabase;
-    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { storageKey: 'venus-user-session' }
+    });
+    let visitorSession = null;
+    let visitorCanContact = false;
 
     // ============================================================
     // HELPERS
@@ -354,12 +406,12 @@
     // CARREGAR PERFIL
     // ============================================================
     async function loadPerfil() {
+      await loadVisitorAccess();
       let profileId = getProfileId();
 
       // Se não veio ?id= na URL, tenta usar o usuário logado
       if (!profileId) {
-        const { data: { session } } = await sb.auth.getSession();
-        if (session) profileId = session.user.id;
+        if (visitorSession) profileId = visitorSession.user.id;
       }
 
       if (!profileId) {
@@ -375,7 +427,7 @@
         { data: locais },
         { data: disponib }
       ] = await Promise.all([
-        sb.from('profiles').select('*').eq('id', profileId).single(),
+        sb.from('profiles').select('id,nome_artistico,categoria,online_now,verificado,bio,idade,altura,peso,etnia,cabelo,olhos,idiomas,created_at,bairro,cidade,uf').eq('id', profileId).single(),
         sb.from('profile_silicone').select('local').eq('profile_id', profileId),
         sb.from('services').select('*').eq('profile_id', profileId).eq('ativo', true).order('ordem'),
         sb.from('attendance_locations').select('tipo').eq('profile_id', profileId),
@@ -408,14 +460,7 @@
 
       const chatUrl = `chat-cliente.html?profissional=${encodeURIComponent(profileId)}&nome=${encodeURIComponent(nome)}`;
       ['chatBtn', 'floatingChatBtn'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.href = chatUrl;
-        el.style.pointerEvents = '';
-        el.style.opacity = '';
-        el.addEventListener('click', () => {
-          sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'chat_click' });
-        });
+        protectContactButton(document.getElementById(id), chatUrl, profileId, 'chat_click');
       });
 
       ['mobileNome', 'desktopNome'].forEach(id => document.getElementById(id).textContent = nome);
@@ -424,7 +469,7 @@
       if (p.online_now) {
         ['mobileOnline', 'desktopOnline'].forEach(id => document.getElementById(id).style.display = '');
       }
-      if (p.verificada) {
+      if (p.verificado) {
         document.getElementById('mobileVerif').style.display = '';
       }
 
@@ -474,15 +519,19 @@
       }
 
       // WhatsApp
-      if (p.whatsapp) {
-        const wa = document.getElementById('whatsappBtn');
-        const num = p.whatsapp.replace(/\D/g, '');
-        wa.href = `https://wa.me/55${num}`;
-        wa.style.pointerEvents = '';
-        wa.style.opacity = '';
-        wa.addEventListener('click', () => {
-          sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'whatsapp_click' });
-        });
+      const wa = document.getElementById('whatsappBtn');
+      if (visitorCanContact) {
+        const { data: contato } = await sb
+          .from('profiles')
+          .select('whatsapp')
+          .eq('id', profileId)
+          .single();
+        if (contato?.whatsapp) {
+          const num = contato.whatsapp.replace(/\D/g, '');
+          protectContactButton(wa, `https://wa.me/55${num}`, profileId, 'whatsapp_click', { target: '_blank' });
+        }
+      } else {
+        protectContactButton(wa, loginRedirectUrl(), profileId, 'whatsapp_click');
       }
 
       // Stats
