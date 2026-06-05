@@ -2342,24 +2342,14 @@
       const ids = [...new Set(cConvs.map(c => c.client_id).filter(Boolean))];
       cOtherProfiles = {};
       if (ids.length) {
-        const { data: customers } = await sb.from('customers').select('id,nome,avatar_url').in('id', ids);
+        const { data: customers } = await sb.from('customers').select('id,nome,email,avatar_url').in('id', ids);
         (customers || []).forEach(customer => {
           cOtherProfiles[customer.id] = {
             id: customer.id,
-            name: customer.nome || null,
+            name: customer.nome || customer.email || null,
             avatar_url: customer.avatar_url || null
           };
         });
-
-        const missingIds = ids.filter(id => !cOtherProfiles[id]?.name);
-        if (missingIds.length) {
-          const { data: users } = await sb.from('users').select('id,name,avatar_url').in('id', missingIds);
-          (users || []).forEach(user => {
-            if (!cOtherProfiles[user.id]) cOtherProfiles[user.id] = { id: user.id };
-            if (!cOtherProfiles[user.id].name) cOtherProfiles[user.id].name = user.name || null;
-            if (!cOtherProfiles[user.id].avatar_url) cOtherProfiles[user.id].avatar_url = user.avatar_url || null;
-          });
-        }
       }
 
       cRenderList();
@@ -2388,7 +2378,7 @@
         const last = msgs[msgs.length - 1];
         const unread = msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
         const exp = new Date(c.expires_at) < new Date();
-        const otherName = other.name || 'Nome nao informado';
+        const otherName = other.name || 'Usuário sem nome';
         const ini = cInitials(otherName);
         return `
           <div class="ci ${c.id === cConvId ? 'active' : ''}" onclick="cOpenConv('${c.id}')">
@@ -2421,7 +2411,7 @@
 
       // Header
       const other = cOtherProfiles[cConvData.client_id] || {};
-      const oName = other.name || 'Nome nao informado';
+      const oName = other.name || 'Usuário sem nome';
       const oIni = cInitials(oName);
       document.getElementById('cHeadName').textContent = oName;
       const headAva = document.getElementById('cHeadAva');
@@ -2479,7 +2469,7 @@
         else statusHTML = `<span class="seal seal-sent" title="Enviado">${cSgl()}</span>`;
       }
       const other = cConvData ? cOtherProfiles[cConvData.client_id] || {} : {};
-      const oName = other.name || 'Nome nao informado';
+      const oName = other.name || 'Usuário sem nome';
       const oIni = cInitials(oName);
       return `
         <div class="cmsg-row ${sent ? 'sent' : 'received'}" id="cm-${m.id}">

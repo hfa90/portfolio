@@ -1625,7 +1625,7 @@
                             <div class="vc-chat-head">
                                 <div class="vc-head-ava" id="vcHeadAva">?</div>
                                 <div class="vc-head-info">
-                                    <div class="vc-head-name" id="vcHeadName">Nome nao informado</div>
+                                    <div class="vc-head-name" id="vcHeadName">Carregando...</div>
                                     <div class="vc-head-sub">Conversa autenticada</div>
                                 </div>
                                 <span class="vc-chip" id="vcTimer">24h</span>
@@ -2179,23 +2179,22 @@
             vcProfiles = {};
             if (ids.length) {
                 // Busca nome artístico em profiles (fonte principal)
-                const { data: profs } = await sb.from('profiles').select('id,nome_artistico,avatar_url').in('id', ids);
+                const { data: profs } = await sb.from('profiles').select('id,nome_artistico,email,avatar_url').in('id', ids);
                 (profs || []).forEach(p => {
                     vcProfiles[p.id] = {
                         id: p.id,
-                        name: p.nome_artistico || null,
+                        name: p.nome_artistico || p.email || null,
                         avatar_url: p.avatar_url || null
                     };
                 });
 
-                // Fallback: para IDs que não vieram em profiles, tenta users.name
+                // Fallback para IDs sem nome: re-tenta buscando email direto do profiles
                 const missingIds = ids.filter(id => !vcProfiles[id]?.name);
                 if (missingIds.length) {
-                    const { data: users } = await sb.from('users').select('id,name,avatar_url').in('id', missingIds);
-                    (users || []).forEach(u => {
-                        if (!vcProfiles[u.id]) vcProfiles[u.id] = {};
-                        if (!vcProfiles[u.id].name) vcProfiles[u.id].name = u.name || null;
-                        if (!vcProfiles[u.id].avatar_url) vcProfiles[u.id].avatar_url = u.avatar_url || null;
+                    const { data: missingProfs } = await sb.from('profiles').select('id,email').in('id', missingIds);
+                    (missingProfs || []).forEach(p => {
+                        if (!vcProfiles[p.id]) vcProfiles[p.id] = { id: p.id };
+                        if (!vcProfiles[p.id].name) vcProfiles[p.id].name = p.email || null;
                     });
                 }
             }
@@ -2219,7 +2218,7 @@
                 const last = msgs[msgs.length - 1];
                 const unread = msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
                 const expired = new Date(conv.expires_at) < new Date();
-                const name = prof.name || 'Nome nao informado';
+                const name = prof.name || 'Usuário sem nome';
                 const initials = vcInitials(name);
 
                 return `
@@ -2273,7 +2272,7 @@
             document.getElementById('vcChatBox').style.display = 'flex';
 
             const prof = vcProfiles[vcActiveConv.professional_id] || {};
-            const name = prof.name || 'Nome nao informado';
+            const name = prof.name || 'Usuário sem nome';
             document.getElementById('vcHeadName').textContent = name;
             document.getElementById('vcHeadAva').innerHTML = prof.avatar_url
                 ? `<img src="${vcEscAttr(prof.avatar_url)}" alt="">`
@@ -2328,7 +2327,7 @@
         function vcBubble(msg) {
             const sent = msg.sender_id === currentUser.id;
             const prof = vcActiveConv ? vcProfiles[vcActiveConv.professional_id] || {} : {};
-            const name = prof.name || 'Nome nao informado';
+            const name = prof.name || 'Usuário sem nome';
             const status = sent
                 ? `<span class="vc-check ${msg.read_at ? 'read' : ''}" title="${msg.read_at ? 'Lido' : 'Enviado'}">${msg.read_at || msg.delivered_at ? vcDoubleCheck() : vcSingleCheck()}</span>`
                 : '';
