@@ -810,6 +810,7 @@
         let realtimeSub = null;
         let timerInterval = null;
         let conversations = [];
+        let currentOther = null;
 
         // ── INIT ──
         async function init() {
@@ -843,17 +844,10 @@
                 return;
             }
 
-            // Busca dados dos outros participantes
             const otherIds = conversations.map(c =>
                 c.professional_id === currentUser.id ? c.client_id : c.professional_id
             );
-            const { data: profiles } = await sb
-                .from('users')
-                .select('id, name, avatar_url')
-                .in('id', [...new Set(otherIds)]);
-
-            const profileMap = {};
-            (profiles || []).forEach(p => profileMap[p.id] = p);
+            const profileMap = await loadParticipants(otherIds);
 
             list.innerHTML = conversations.map(conv => {
                 const otherId = conv.professional_id === currentUser.id ? conv.client_id : conv.professional_id;
@@ -873,7 +867,7 @@
                         : initials}
         </div>
         <div class="conv-info">
-          <div class="conv-name">${other.name || 'Cliente'}</div>
+          <div class="conv-name">${escHTML(other.name || 'Cliente')}</div>
           <div class="conv-preview">${lastMsg ? lastMsg.content.slice(0, 40) : 'Nenhuma mensagem'}</div>
         </div>
         <div class="conv-meta">
@@ -908,7 +902,8 @@
                 ? currentConvData.client_id
                 : currentConvData.professional_id;
 
-            const { data: other } = await sb.from('users').select('id, name, avatar_url').eq('id', otherId).single();
+            const other = (await loadParticipants([otherId]))[otherId] || {};
+            currentOther = other;
             const otherName = other?.name || 'Usuário';
             const initials = otherName.slice(0, 2).toUpperCase();
 
@@ -1036,8 +1031,44 @@
         }
 
         function getInitials(conv) {
-            // iniciais do outro na conversa — simplificado
-            return '?';
+            const name = currentOther?.name || '?';
+            return name.slice(0, 2).toUpperCase();
+        }
+
+        async function loadParticipants(ids) {
+            const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+            if (!uniqueIds.length) return {};
+
+            const { data: participants } = await sb.rpc('get_chat_participants', { p_ids: uniqueIds });
+            if (participants?.length) {
+                const participantMap = {};
+                participants.forEach(p => {
+                    participantMap[p.id] = { name: p.name, avatar_url: p.avatar_url };
+                });
+                return participantMap;
+            }
+
+            const [{ data: customers }, { data: profiles }, { data: legacyUsers }] = await Promise.all([
+                sb.from('customers').select('id,nome,avatar_url').in('id', uniqueIds),
+                sb.from('profiles').select('id,nome_artistico').in('id', uniqueIds),
+                sb.from('users').select('id,name,avatar_url').in('id', uniqueIds)
+            ]);
+
+            const map = {};
+            (legacyUsers || []).forEach(u => {
+                map[u.id] = { name: u.name, avatar_url: u.avatar_url };
+            });
+            (profiles || []).forEach(p => {
+                map[p.id] = { ...(map[p.id] || {}), name: p.nome_artistico || map[p.id]?.name };
+            });
+            (customers || []).forEach(c => {
+                map[c.id] = {
+                    ...(map[c.id] || {}),
+                    name: c.nome || map[c.id]?.name,
+                    avatar_url: c.avatar_url || map[c.id]?.avatar_url
+                };
+            });
+            return map;
         }
 
         // ── ENVIAR MENSAGEM ──

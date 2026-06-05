@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
   }
 
   // ══════════════════════════════════════════════════════════
-  // POST: registrar evento de analytics (view, whatsapp_click)
+  // POST: registrar evento de analytics
   // ══════════════════════════════════════════════════════════
   if (req.method === "POST") {
     let body: Record<string, unknown>;
@@ -117,7 +117,15 @@ Deno.serve(async (req) => {
     }
 
     const { profile_id, evento } = body;
-    const EVENTOS_VALIDOS = ["view", "whatsapp_click", "favorite", "unfavorite"];
+    const EVENTOS_VALIDOS = [
+      "view",
+      "whatsapp_click",
+      "whatsapp_click_blocked",
+      "chat_click",
+      "chat_click_blocked",
+      "favorite",
+      "unfavorite",
+    ];
 
     if (!profile_id || typeof profile_id !== "string") {
       return erro(cors, 400, "profile_id obrigatório");

@@ -839,9 +839,7 @@
             }
 
             const profIds = convs.map(c => c.professional_id);
-            const { data: profs } = await sb.from('users').select('id,name,avatar_url').in('id', profIds);
-            const pm = {};
-            (profs || []).forEach(p => pm[p.id] = p);
+            const pm = await loadProfessionals(profIds);
 
             list.innerHTML = convs.map(c => {
                 const prof = pm[c.professional_id] || {};
@@ -858,7 +856,7 @@
           ${prof.avatar_url ? `<img src="${prof.avatar_url}">` : ini}
         </div>
         <div class="conv-info">
-          <div class="conv-name">${prof.name || 'Profissional'}</div>
+          <div class="conv-name">${esc(prof.name || 'Profissional')}</div>
           <div class="conv-preview">${last ? esc(last.content).slice(0, 38) : 'Sem mensagens'}</div>
         </div>
         <div class="conv-side">
@@ -902,7 +900,7 @@
             box.style.flex = '1';
 
             // Header do profissional
-            const { data: prof } = await sb.from('users').select('id,name,avatar_url').eq('id', activeConv.professional_id).single();
+            const prof = (await loadProfessionals([activeConv.professional_id]))[activeConv.professional_id] || {};
             const profName = prof?.name || 'Profissional';
             const ini = profName.slice(0, 2).toUpperCase();
 
@@ -929,6 +927,37 @@
         }
 
         // ── MENSAGENS ──
+        async function loadProfessionals(ids) {
+            const uniqueIds = [...new Set((ids || []).filter(Boolean))];
+            if (!uniqueIds.length) return {};
+
+            const { data: participants } = await sb.rpc('get_chat_participants', { p_ids: uniqueIds });
+            if (participants?.length) {
+                const participantMap = {};
+                participants.forEach(p => {
+                    participantMap[p.id] = { name: p.name, avatar_url: p.avatar_url };
+                });
+                return participantMap;
+            }
+
+            const [{ data: profiles }, { data: legacyUsers }] = await Promise.all([
+                sb.from('profiles').select('id,nome_artistico').in('id', uniqueIds),
+                sb.from('users').select('id,name,avatar_url').in('id', uniqueIds)
+            ]);
+
+            const map = {};
+            (legacyUsers || []).forEach(u => {
+                map[u.id] = { name: u.name, avatar_url: u.avatar_url };
+            });
+            (profiles || []).forEach(p => {
+                map[p.id] = {
+                    ...(map[p.id] || {}),
+                    name: p.nome_artistico || map[p.id]?.name
+                };
+            });
+            return map;
+        }
+
         async function fetchMessages() {
             const { data } = await sb
                 .from('chat_messages')

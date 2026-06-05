@@ -369,6 +369,27 @@
       visitorCanContact = Boolean(cliente);
     }
 
+    function getVisitorHash() {
+      let hash = localStorage.getItem('venus_visitor_hash');
+      if (!hash) {
+        const bytes = new Uint8Array(16);
+        crypto.getRandomValues(bytes);
+        hash = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+        localStorage.setItem('venus_visitor_hash', hash);
+      }
+      return hash;
+    }
+
+    async function recordProfileEvent(profileId, evento) {
+      if (!profileId) return;
+      const { error } = await sb.rpc('record_profile_visit', {
+        p_profile_id: profileId,
+        p_evento: evento,
+        p_visitor_hash: getVisitorHash()
+      });
+      if (error) console.warn('Erro ao registrar evento do perfil:', error.message);
+    }
+
     function protectContactButton(el, targetUrl, profileId, evento, options = {}) {
       if (!el) return;
 
@@ -381,7 +402,7 @@
         el.removeAttribute('target');
         el.title = 'Cadastre-se ou entre para falar com a profissional';
         el.addEventListener('click', () => {
-          sb.from('profile_analytics').insert({ profile_id: profileId, evento: `${evento}_blocked` });
+          recordProfileEvent(profileId, `${evento}_blocked`);
         }, { once: true });
         return;
       }
@@ -390,7 +411,7 @@
       if (options.target) el.target = options.target;
       el.title = '';
       el.addEventListener('click', () => {
-        sb.from('profile_analytics').insert({ profile_id: profileId, evento });
+        recordProfileEvent(profileId, evento);
       });
     }
 
@@ -605,15 +626,21 @@
       await loadFotos(profileId);
 
       // Registra visualização assíncrona (não bloqueia o render)
-      sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'view' });
+      recordProfileEvent(profileId, 'view');
 
       // Stats
-      const { count: views } = await sb.from('profile_analytics')
-        .select('*', { count: 'exact', head: true })
-        .eq('profile_id', profileId).eq('evento', 'view');
-      const { count: favs } = await sb.from('profile_analytics')
-        .select('*', { count: 'exact', head: true })
-        .eq('profile_id', profileId).eq('evento', 'favorite');
+      const { data: publicStats } = await sb.rpc('get_profile_public_stats', { p_profile_id: profileId }).maybeSingle();
+      const views = publicStats?.views_count || 0;
+      const favs = publicStats?.favorites_count || 0;
+
+      if (visitorSession?.user?.id) {
+        const { data: favoriteRow } = await sb.from('favorites')
+          .select('profile_id')
+          .eq('user_id', visitorSession.user.id)
+          .eq('profile_id', profileId)
+          .maybeSingle();
+        document.querySelectorAll('.perfil-fav-btn').forEach(b => b.classList.toggle('active', Boolean(favoriteRow)));
+      }
 
       // ---- Preenche a UI ----
 
@@ -778,12 +805,35 @@
     // ============================================================
     // FAVORITAR
     // ============================================================
-    function toggleFav() {
-      document.querySelectorAll('.perfil-fav-btn').forEach(b => b.classList.toggle('active'));
+    async function toggleFav() {
       const profileId = getProfileId();
-      if (profileId) {
-        sb.from('profile_analytics').insert({ profile_id: profileId, evento: 'favorite' });
+      if (!profileId) return;
+
+      if (!visitorCanContact || !visitorSession?.user?.id) {
+        window.location.href = loginRedirectUrl();
+        return;
       }
+
+      if (document.querySelector('.perfil-fav-btn.active')) return;
+
+      const buttons = document.querySelectorAll('.perfil-fav-btn');
+      buttons.forEach(b => b.disabled = true);
+
+      const { error } = await sb.from('favorites').upsert({
+        user_id: visitorSession.user.id,
+        profile_id: profileId
+      }, { onConflict: 'user_id,profile_id' });
+
+      buttons.forEach(b => b.disabled = false);
+      if (error) {
+        console.warn('Erro ao favoritar perfil:', error.message);
+        return;
+      }
+
+      buttons.forEach(b => b.classList.add('active'));
+      await recordProfileEvent(profileId, 'favorite');
+      const favStat = document.getElementById('statFavs');
+      if (favStat) favStat.textContent = ((parseInt(favStat.textContent, 10) || 0) + 1).toLocaleString('pt-BR');
     }
 
     // ============================================================

@@ -1339,6 +1339,14 @@
         </div>
         <canvas id="viewsChart" height="120"></canvas>
       </div>
+
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <span style="font-weight:600">Notificacoes recentes</span>
+          <span style="font-size:0.78rem;color:var(--text-muted)">Visitas e favoritos</span>
+        </div>
+        <div id="activityList" style="display:flex;flex-direction:column;gap:10px"></div>
+      </div>
     </div>
 
     <!-- MEU PERFIL -->
@@ -1729,6 +1737,7 @@
       }
       currentUser = session.user;
       await loadProfile();
+      subscribeProfileActivity();
       buildWeekGrid();
       loadPage('dashboard');
     }
@@ -1935,6 +1944,73 @@
         },
         options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#666' } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#666' } } } }
       });
+
+      await loadRecentActivity();
+    }
+
+    async function loadRecentActivity() {
+      const list = document.getElementById('activityList');
+      if (!list) return;
+
+      const { data, error } = await sb.from('profile_analytics')
+        .select('evento, created_at')
+        .eq('profile_id', currentUser.id)
+        .in('evento', ['view', 'favorite'])
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (error || !data?.length) {
+        list.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;padding:8px 0">Nenhuma visita ou favorito registrado ainda.</div>';
+        return;
+      }
+
+      list.innerHTML = data.map(activityHTML).join('');
+    }
+
+    function activityHTML(item) {
+      const isFav = item.evento === 'favorite';
+      const label = isFav ? 'Seu perfil foi favoritado' : 'Seu perfil foi visualizado';
+      const sub = isFav ? 'Um cliente salvou seu perfil nos favoritos.' : 'Um visitante abriu seu perfil profissional.';
+      const icon = isFav ? 'ti-heart-filled' : 'ti-eye';
+      const color = isFav ? '#F87171' : '#818CF8';
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+          <span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.05);display:inline-flex;align-items:center;justify-content:center;color:${color}">
+            <i class="ti ${icon}"></i>
+          </span>
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <strong style="font-size:.9rem">${label}</strong>
+            <small style="color:var(--text-muted);font-size:.78rem">${sub} ${timeAgo(item.created_at)}</small>
+          </span>
+        </div>`;
+    }
+
+    function subscribeProfileActivity() {
+      sb.channel('profile-activity-' + currentUser.id)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'profile_analytics',
+          filter: `profile_id=eq.${currentUser.id}`
+        }, payload => {
+          if (!['view', 'favorite'].includes(payload.new?.evento)) return;
+          showToast(payload.new.evento === 'favorite'
+            ? 'Seu perfil foi favoritado.'
+            : 'Seu perfil esta recebendo uma visita.');
+          loadDashboard();
+        })
+        .subscribe();
+    }
+
+    function timeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1) return 'agora';
+      if (minutes < 60) return `ha ${minutes} min`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `ha ${hours} h`;
+      const days = Math.floor(hours / 24);
+      return `ha ${days} d`;
     }
 
     // ============================================================
@@ -2342,12 +2418,12 @@
       const ids = [...new Set(cConvs.map(c => c.client_id).filter(Boolean))];
       cOtherProfiles = {};
       if (ids.length) {
-        const { data: customers } = await sb.from('customers').select('id,nome,email,avatar_url').in('id', ids);
-        (customers || []).forEach(customer => {
-          cOtherProfiles[customer.id] = {
-            id: customer.id,
-            name: customer.nome || customer.email || null,
-            avatar_url: customer.avatar_url || null
+        const { data: participants } = await sb.rpc('get_chat_participants', { p_ids: ids });
+        (participants || []).forEach(participant => {
+          cOtherProfiles[participant.id] = {
+            id: participant.id,
+            name: participant.name || null,
+            avatar_url: participant.avatar_url || null
           };
         });
       }
