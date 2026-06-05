@@ -1660,7 +1660,7 @@
               <div class="chead-ava" id="cHeadAva">?</div>
               <div class="chead-info">
                 <div class="chead-name" id="cHeadName">–</div>
-                <div class="chead-sub">👤 Cliente</div>
+                <div class="chead-sub">Conversa autenticada</div>
               </div>
               <div class="chead-chips">
                 <span class="cchip cchip-gold">✓ Autenticado</span>
@@ -2338,11 +2338,28 @@
         .order('created_at', { ascending: false });
       cConvs = data || [];
 
-      // Busca perfis dos clientes
-      const ids = [...new Set(cConvs.map(c => c.client_id))];
+      // Busca dados reais dos clientes da conversa.
+      const ids = [...new Set(cConvs.map(c => c.client_id).filter(Boolean))];
+      cOtherProfiles = {};
       if (ids.length) {
-        const { data: profs } = await sb.from('users').select('id,name,avatar_url').in('id', ids);
-        (profs || []).forEach(p => cOtherProfiles[p.id] = p);
+        const { data: customers } = await sb.from('customers').select('id,nome,avatar_url').in('id', ids);
+        (customers || []).forEach(customer => {
+          cOtherProfiles[customer.id] = {
+            id: customer.id,
+            name: customer.nome || null,
+            avatar_url: customer.avatar_url || null
+          };
+        });
+
+        const missingIds = ids.filter(id => !cOtherProfiles[id]?.name);
+        if (missingIds.length) {
+          const { data: users } = await sb.from('users').select('id,name,avatar_url').in('id', missingIds);
+          (users || []).forEach(user => {
+            if (!cOtherProfiles[user.id]) cOtherProfiles[user.id] = { id: user.id };
+            if (!cOtherProfiles[user.id].name) cOtherProfiles[user.id].name = user.name || null;
+            if (!cOtherProfiles[user.id].avatar_url) cOtherProfiles[user.id].avatar_url = user.avatar_url || null;
+          });
+        }
       }
 
       cRenderList();
@@ -2371,12 +2388,13 @@
         const last = msgs[msgs.length - 1];
         const unread = msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
         const exp = new Date(c.expires_at) < new Date();
-        const ini = (other.name || '?').slice(0, 2).toUpperCase();
+        const otherName = other.name || 'Nome nao informado';
+        const ini = cInitials(otherName);
         return `
           <div class="ci ${c.id === cConvId ? 'active' : ''}" onclick="cOpenConv('${c.id}')">
-            <div class="ci-ava">${other.avatar_url ? `<img src="${other.avatar_url}">` : ini}</div>
+            <div class="ci-ava">${other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : ini}</div>
             <div class="ci-info">
-              <div class="ci-name">${other.name || 'Cliente'}</div>
+              <div class="ci-name">${cEsc(otherName)}</div>
               <div class="ci-prev">${last ? cEsc(last.content).slice(0, 36) : 'Sem mensagens'}</div>
             </div>
             <div class="ci-side">
@@ -2403,11 +2421,11 @@
 
       // Header
       const other = cOtherProfiles[cConvData.client_id] || {};
-      const oName = other.name || 'Cliente';
-      const oIni = oName.slice(0, 2).toUpperCase();
+      const oName = other.name || 'Nome nao informado';
+      const oIni = cInitials(oName);
       document.getElementById('cHeadName').textContent = oName;
       const headAva = document.getElementById('cHeadAva');
-      headAva.innerHTML = other.avatar_url ? `<img src="${other.avatar_url}">` : oIni;
+      headAva.innerHTML = other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : oIni;
 
       // Timer
       cStartTimer(cConvData.expires_at);
@@ -2461,10 +2479,11 @@
         else statusHTML = `<span class="seal seal-sent" title="Enviado">${cSgl()}</span>`;
       }
       const other = cConvData ? cOtherProfiles[cConvData.client_id] || {} : {};
-      const oIni = (other.name || '?').slice(0, 2).toUpperCase();
+      const oName = other.name || 'Nome nao informado';
+      const oIni = cInitials(oName);
       return `
         <div class="cmsg-row ${sent ? 'sent' : 'received'}" id="cm-${m.id}">
-          ${!sent ? `<div class="cmsg-mini-ava">${other.avatar_url ? `<img src="${other.avatar_url}">` : oIni}</div>` : ''}
+          ${!sent ? `<div class="cmsg-mini-ava">${other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : oIni}</div>` : ''}
           <div class="cmsg-wrap">
             <div class="cmsg-bub">${cEsc(m.content)}</div>
             <div class="cmsg-foot">
@@ -2548,7 +2567,9 @@
     function cHandleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); cSend(); } }
     function cResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
     function cFmt(iso) { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
-    function cEsc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+    function cInitials(name) { return (name || '?').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(); }
+    function cEsc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+    function cEscAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
   </script>
 </body>
 
