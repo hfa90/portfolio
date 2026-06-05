@@ -274,17 +274,20 @@
         if (error) throw error;
         if (!data.user) throw new Error('Nao foi possivel criar o usuario.');
 
-        const { error: customerErr } = await sb.from('customers').upsert({
-          id: data.user.id,
-          nome,
-          email,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
+        if (data.session) {
+          const { error: customerErr } = await sb.from('customers').upsert({
+            id: data.user.id,
+            nome,
+            email,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' });
 
-        if (customerErr) throw customerErr;
+          if (customerErr) throw customerErr;
+          await sb.auth.signOut();
+        }
 
-        toast('Conta criada com sucesso!', 'ok');
-        window.location.replace('painel-cliente.html');
+        toast('Cadastro criado! Confira seu e-mail para confirmar a conta.', 'ok');
+        setTimeout(() => window.location.replace('login.html?tipo=cliente'), 1800);
       } catch (err) {
         const msg = err.message || 'Erro ao criar conta.';
         toast(msg.includes('already registered') ? 'Este e-mail ja esta cadastrado.' : msg, 'erro');
