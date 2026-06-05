@@ -1505,6 +1505,9 @@
                         <i class="ti ti-message-circle"></i> Mensagens
                         <span class="vc-nav-badge" id="chatBadge" style="display:none;">0</span>
                     </button>
+                    <button class="nav-item" data-panel="packs" onclick="openPanel('packs')">
+                        <i class="ti ti-gift"></i> Meus packs
+                    </button>
                 </div>
                 <div class="nav-section">
                     <div class="nav-section-label">Conta</div>
@@ -1596,6 +1599,17 @@
                 <div id="histList">
                     <div class="loading-spinner">
                         <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- PACKS -->
+            <div class="panel" id="panel-packs">
+                <h1 class="panel-title">Meus packs</h1>
+                <p class="panel-subtitle">Acompanhe comprovantes enviados e acessos liberados pelas profissionais.</p>
+                <div id="clientPacksList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando...
                     </div>
                 </div>
             </div>
@@ -1790,6 +1804,7 @@
             await loadStats();
             await loadFavorites();
             await loadHistory();
+            await loadClientPacks();
             await vcInit();
         }
 
@@ -1980,6 +1995,39 @@
 
         function viewProfile(profileId) {
             window.location.href = `perfil.html?id=${profileId}`;
+        }
+
+        async function loadClientPacks() {
+            const list = document.getElementById('clientPacksList');
+            if (!list || !currentUser) return;
+            const { data, error } = await sb
+                .from('profile_pack_orders')
+                .select('*, profile_packs(title,description), profiles(nome_artistico,cidade,uf)')
+                .eq('customer_id', currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                list.innerHTML = '<div class="empty-state"><i class="ti ti-alert-circle"></i><h3>Erro ao carregar packs</h3><p>' + vcEsc(error.message) + '</p></div>';
+                return;
+            }
+
+            if (!data?.length) {
+                list.innerHTML = '<div class="empty-state"><i class="ti ti-gift"></i><h3>Nenhum pack comprado</h3><p>Quando voce enviar um comprovante Pix, o pedido aparecera aqui.</p></div>';
+                return;
+            }
+
+            const statusText = { pending: 'Aguardando aprovacao', approved: 'Acesso liberado', rejected: 'Comprovante rejeitado' };
+            list.innerHTML = data.map(order => {
+                const status = statusText[order.status] || order.status;
+                const date = new Date(order.updated_at || order.created_at).toLocaleDateString('pt-BR');
+                const profileName = order.profiles?.nome_artistico || 'Profissional';
+                const packTitle = order.profile_packs?.title || 'Pack';
+                const profileArg = JSON.stringify(order.profile_id);
+                const action = order.status === 'approved'
+                    ? '<button class="btn btn-primary" onclick="viewProfile(' + profileArg + ')"><i class="ti ti-lock-open"></i> Ver pack</button>'
+                    : '<button class="btn btn-ghost" onclick="viewProfile(' + profileArg + ')"><i class="ti ti-eye"></i> Abrir perfil</button>';
+                return '<div class="history-item" style="align-items:flex-start;cursor:default;"><div class="history-thumb" style="display:flex;align-items:center;justify-content:center;"><i class="ti ti-gift" style="font-size:1.7rem;color:var(--gold);"></i></div><div class="history-info"><div class="history-name">' + vcEsc(packTitle) + '</div><div class="history-meta">' + vcEsc(profileName) + ' - R$ ' + Number(order.amount).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</div><div class="history-date">' + vcEsc(status) + ' - atualizado em ' + date + '</div></div><div style="display:flex;align-items:center;gap:8px;">' + action + '</div></div>';
+            }).join('');
         }
 
         /* ═══════════════════════════════════════════════════════════
@@ -2521,6 +2569,7 @@
             document.getElementById('panel-' + name)?.classList.add('active');
             document.querySelector(`.nav-item[data-panel="${name}"]`)?.classList.add('active');
             if (name === 'mensagens') vcInit();
+            if (name === 'packs') loadClientPacks();
             // Mobile: fechar sidebar
             closeSidebar();
         }

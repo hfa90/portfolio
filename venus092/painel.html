@@ -1260,6 +1260,9 @@
       <button onclick="goPage('servicos')" data-page="servicos">
         <span>☰</span> Serviços
       </button>
+      <button onclick="goPage('packs')" data-page="packs">
+        <span>🎁</span> Packs
+      </button>
       <button onclick="goPage('localizacao')" data-page="localizacao">
         <span>📍</span> Localização
       </button>
@@ -1577,6 +1580,35 @@
       <div id="servicosList"></div>
     </div>
 
+
+    <!-- PACKS -->
+    <div class="page" id="page-packs">
+      <h1 class="page-title">Packs</h1>
+      <p class="page-sub">Venda packs por Pix direto para voce. A liberacao acontece apos aprovar o comprovante.</p>
+      <div class="card" style="margin-bottom:20px">
+        <div class="form-section-title">Dados Pix</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+          <div class="form-group"><label>Chave Pix</label><input id="pix_key" placeholder="CPF, e-mail, telefone ou chave aleatoria"></div>
+          <div class="form-group"><label>Tipo</label><select id="pix_key_type"><option value="aleatoria">Aleatoria</option><option value="cpf">CPF</option><option value="cnpj">CNPJ</option><option value="email">E-mail</option><option value="telefone">Telefone</option></select></div>
+          <div class="form-group"><label>Nome recebedor</label><input id="pix_receiver_name" maxlength="25" placeholder="Nome no Pix"></div>
+          <div class="form-group"><label>Cidade</label><input id="pix_receiver_city" maxlength="15" placeholder="SAO PAULO"></div>
+          <button class="btn btn-gold" onclick="savePixSettings()" style="height:42px">Salvar Pix</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:20px">
+        <div class="form-section-title">Criar pack</div>
+        <div style="display:grid;grid-template-columns:1fr 130px;gap:12px;align-items:end">
+          <div class="form-group"><label>Titulo</label><input id="pack_title" placeholder="Ex: Pack especial"></div>
+          <div class="form-group"><label>Preco (R$)</label><input id="pack_price" type="number" min="1" step="0.01"></div>
+          <div class="form-group full" style="grid-column:1/-1"><label>Descricao</label><textarea id="pack_description" placeholder="Descreva o conteudo do pack"></textarea></div>
+          <div class="form-group full" style="grid-column:1/-1"><label>Fotos e videos do pack</label><input id="pack_files" type="file" accept="image/*,video/*" multiple></div>
+          <button class="btn btn-gold" onclick="createPack()" style="grid-column:1/-1">Criar pack e enviar midias</button>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:20px"><div class="form-section-title">Pedidos aguardando aprovacao</div><div id="packOrdersList"></div></div>
+      <div id="packsList"></div>
+    </div>
+
     <!-- LOCALIZAÇÃO -->
     <div class="page" id="page-localizacao">
       <h1 class="page-title">Localização</h1>
@@ -1843,6 +1875,7 @@
       if (page === 'dashboard') loadDashboard();
       else if (page === 'fotos') loadFotos();
       else if (page === 'servicos') loadServicos();
+      else if (page === 'packs') loadPacks();
       else if (page === 'localizacao') loadLocalizacao();
       else if (page === 'disponibilidade') loadDisponibilidade();
       else if (page === 'perfil') loadSilicone();
@@ -2305,6 +2338,62 @@
     // ============================================================
     // LOCALIZAÇÃO
     // ============================================================
+
+    async function loadPacks() {
+      await Promise.all([loadPixSettings(), loadProfilePacks(), loadPackOrders()]);
+    }
+    async function loadPixSettings() {
+      const { data } = await sb.from('profile_pix_settings').select('*').eq('profile_id', currentUser.id).maybeSingle();
+      if (!data) return;
+      document.getElementById('pix_key').value = data.pix_key || '';
+      document.getElementById('pix_key_type').value = data.pix_key_type || 'aleatoria';
+      document.getElementById('pix_receiver_name').value = data.receiver_name || '';
+      document.getElementById('pix_receiver_city').value = data.receiver_city || '';
+    }
+    async function savePixSettings() {
+      const payload = { profile_id: currentUser.id, pix_key: document.getElementById('pix_key').value.trim(), pix_key_type: document.getElementById('pix_key_type').value, receiver_name: document.getElementById('pix_receiver_name').value.trim().toUpperCase(), receiver_city: (document.getElementById('pix_receiver_city').value.trim() || 'SAO PAULO').toUpperCase(), updated_at: new Date().toISOString() };
+      if (!payload.pix_key || !payload.receiver_name) { showToast('Preencha chave Pix e nome recebedor.', 'error'); return; }
+      const { error } = await sb.from('profile_pix_settings').upsert(payload);
+      if (error) { showToast('Erro ao salvar Pix: ' + error.message, 'error'); return; }
+      showToast('Dados Pix salvos!');
+    }
+    async function createPack() {
+      const title = document.getElementById('pack_title').value.trim();
+      const description = document.getElementById('pack_description').value.trim();
+      const price = parseFloat(document.getElementById('pack_price').value);
+      const files = [...document.getElementById('pack_files').files];
+      if (title.length < 3 || !price || price <= 0 || !files.length) { showToast('Informe titulo, preco e ao menos uma midia.', 'error'); return; }
+      const { data: pack, error } = await sb.from('profile_packs').insert({ profile_id: currentUser.id, title, description, price }).select().single();
+      if (error) { showToast('Erro ao criar pack: ' + error.message, 'error'); return; }
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]; const ext = (f.name.split('.').pop() || 'bin').toLowerCase(); const path = currentUser.id + '/' + pack.id + '/' + Date.now() + '_' + i + '.' + ext;
+        const { error: upErr } = await sb.storage.from('pack-media').upload(path, f, { upsert: false });
+        if (upErr) { showToast('Falha ao enviar midia: ' + upErr.message, 'error'); continue; }
+        await sb.from('profile_pack_media').insert({ pack_id: pack.id, profile_id: currentUser.id, storage_path: path, media_type: f.type.startsWith('video/') ? 'video' : 'image', file_name: f.name, sort_order: i });
+      }
+      ['pack_title','pack_description','pack_price'].forEach(id => document.getElementById(id).value = ''); document.getElementById('pack_files').value = '';
+      showToast('Pack criado!'); loadPacks();
+    }
+    async function loadProfilePacks() {
+      const { data } = await sb.from('profile_packs').select('*, profile_pack_media(id)').eq('profile_id', currentUser.id).order('created_at', { ascending: false });
+      document.getElementById('packsList').innerHTML = (data || []).map(p => {
+        const idArg = JSON.stringify(p.id);
+        return '<div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;gap:12px;align-items:center"><div><strong>' + cEsc(p.title) + '</strong><div style="color:var(--text-muted);font-size:.85rem">R$ ' + Number(p.price).toLocaleString('pt-BR',{minimumFractionDigits:2}) + ' - ' + ((p.profile_pack_media||[]).length) + ' midia(s) - ' + (p.active ? 'ativo' : 'inativo') + '</div><p style="color:var(--text-muted);font-size:.86rem;margin-top:4px">' + cEsc(p.description || '') + '</p></div><button class="btn btn-outline btn-sm" onclick="togglePack(' + idArg + ',' + (!p.active) + ')">' + (p.active ? 'Desativar' : 'Ativar') + '</button></div>';
+      }).join('') || '<div class="card" style="color:var(--text-muted)">Nenhum pack cadastrado.</div>';
+    }
+    async function togglePack(id, active) { const { error } = await sb.from('profile_packs').update({ active, updated_at: new Date().toISOString() }).eq('id', id); if (error) { showToast('Erro ao atualizar pack.', 'error'); return; } loadProfilePacks(); }
+    async function loadPackOrders() {
+      const { data } = await sb.from('profile_pack_orders').select('*, profile_packs(title), customers(nome,email)').eq('profile_id', currentUser.id).order('created_at', { ascending: false });
+      document.getElementById('packOrdersList').innerHTML = (data || []).map(o => {
+        const idArg = JSON.stringify(o.id);
+        const proofArg = JSON.stringify(o.proof_storage_path || '');
+        const customerName = o.customers?.nome || o.customers?.email || o.customer_id;
+        return '<div style="padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:8px;margin-bottom:10px"><strong>' + cEsc(o.profile_packs?.title || 'Pack') + '</strong> <span style="color:var(--gold)">R$ ' + Number(o.amount).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</span><div style="font-size:.82rem;color:var(--text-muted);margin:4px 0">Status: ' + cEsc(o.status) + ' - Cliente: ' + cEsc(customerName) + '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + (o.proof_storage_path ? '<button class="btn btn-outline btn-sm" onclick="openProof(' + proofArg + ')">Ver comprovante</button>' : '<span style="color:var(--text-muted);font-size:.82rem">Sem comprovante</span>') + (o.status !== 'approved' ? '<button class="btn btn-gold btn-sm" onclick="setPackOrderStatus(' + idArg + ',\'approved\')">Aprovar acesso</button>' : '') + (o.status !== 'rejected' ? '<button class="btn btn-outline btn-sm" onclick="setPackOrderStatus(' + idArg + ',\'rejected\')">Rejeitar</button>' : '') + '</div></div>';
+      }).join('') || '<p style="color:var(--text-muted)">Nenhum pedido de pack ainda.</p>';
+    }
+    async function openProof(path) { const { data, error } = await sb.storage.from('pack-proofs').createSignedUrl(path, 300); if (error) { showToast('Erro ao abrir comprovante.', 'error'); return; } window.open(data.signedUrl, '_blank'); }
+    async function setPackOrderStatus(id, status) { const payload = { status, updated_at: new Date().toISOString(), approved_at: null, rejected_at: null }; if (status === 'approved') payload.approved_at = new Date().toISOString(); if (status === 'rejected') payload.rejected_at = new Date().toISOString(); const { error } = await sb.from('profile_pack_orders').update(payload).eq('id', id); if (error) { showToast('Erro ao atualizar pedido: ' + error.message, 'error'); return; } showToast(status === 'approved' ? 'Acesso liberado para o cliente.' : 'Pedido rejeitado.'); loadPackOrders(); }
+
     async function loadLocalizacao() {
       // Profile fields já carregados via loadProfile / updateUIFromProfile
       // Carregar locais de atendimento
