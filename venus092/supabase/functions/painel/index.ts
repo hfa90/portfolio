@@ -51,6 +51,10 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authErr } = await userClient.auth.getUser();
   if (authErr || !user) return erro(cors, 401, "Token inválido");
 
+  if (!user.email_confirmed_at) {
+    return erro(cors, 403, "Confirme seu e-mail antes de acessar o painel profissional");
+  }
+
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   });

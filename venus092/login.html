@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
@@ -159,7 +159,8 @@
     }
 
     // ── Redireciona conforme o tipo de conta ─────────────────────
-    async function redirectByRole(userId) {
+    async function redirectByRole(user) {
+      const userId = user?.id || user;
       // Checar as duas tabelas em paralelo para evitar ambiguidade de role
       const [
         { data: cliente, error: errCliente },
@@ -181,6 +182,11 @@
       if (cliente) {
         window.location.replace(redirect || 'painel-cliente.html');
       } else if (profissional) {
+        if (!user?.email_confirmed_at) {
+          toast('Confirme seu e-mail antes de entrar no painel profissional.', 'erro');
+          await _supabase.auth.signOut();
+          return;
+        }
         window.location.replace('painel.html');
       } else {
         // Nenhum registro encontrado — deslogar para não entrar em loop
@@ -193,7 +199,7 @@
     // ── Redireciona se já está logado ─────────────────────────────
     (async () => {
       const { data: { session } } = await _supabase.auth.getSession();
-      if (session) await redirectByRole(session.user.id);
+      if (session) await redirectByRole(session.user);
     })();
 
     // ── Troca de abas ─────────────────────────────────────────────
@@ -240,7 +246,7 @@
         return;
       }
 
-      await redirectByRole(data.user.id);
+      await redirectByRole(data.user);
     });
 
     // ── Login Cliente ─────────────────────────────────────────────
@@ -267,7 +273,7 @@
         return;
       }
 
-      await redirectByRole(data.user.id);
+      await redirectByRole(data.user);
     });
 
     // ── Esqueci a senha ───────────────────────────────────────────
@@ -284,6 +290,7 @@
       toast(error ? error.message : 'E-mail de recuperação enviado!', error ? 'erro' : 'ok');
     });
   </script>
+  <script src="js/mobile-nav.js" defer></script>
 </body>
 
 </html>

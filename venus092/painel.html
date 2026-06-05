@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
@@ -6,7 +6,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vênus — Painel</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/safety-tools.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
@@ -1240,10 +1239,74 @@
       stroke-linecap: round;
       stroke-linejoin: round;
     }
-  </style>
+    .panel-menu-btn,
+    .panel-scrim {
+      display: none;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        display: block;
+      }
+
+      aside {
+        width: min(86vw, 320px);
+        transform: translateX(-104%);
+        transition: transform .24s ease;
+        box-shadow: 18px 0 52px rgba(0, 0, 0, .45);
+      }
+
+      aside.open {
+        transform: translateX(0);
+      }
+
+      header {
+        left: 0;
+        padding-left: 64px;
+      }
+
+      main {
+        margin-left: 0;
+        padding: 84px 16px 32px;
+      }
+
+      .panel-menu-btn {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        z-index: 180;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: var(--surface2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        font-size: 1.2rem;
+      }
+
+      .panel-scrim.open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        background: rgba(0, 0, 0, .56);
+        backdrop-filter: blur(4px);
+      }
+
+      .cards-grid,
+      .form-grid,
+      .photo-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }  </style>
 </head>
 
 <body>
+  <button class="panel-menu-btn" type="button" onclick="togglePanelMenu()" aria-label="Abrir menu">☰</button>
+  <button class="panel-scrim" id="panelScrim" type="button" onclick="closePanelMenu()" aria-label="Fechar menu"></button>
 
   <aside>
     <div class="logo">Vênus</div>
@@ -1259,9 +1322,6 @@
       </button>
       <button onclick="goPage('servicos')" data-page="servicos">
         <span>☰</span> Serviços
-      </button>
-      <button onclick="goPage('packs')" data-page="packs">
-        <span>🎁</span> Packs
       </button>
       <button onclick="goPage('localizacao')" data-page="localizacao">
         <span>📍</span> Localização
@@ -1346,36 +1406,8 @@
 
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <span style="font-weight:600">Funil dos ultimos 7 dias</span>
-          <span style="font-size:0.78rem;color:var(--text-muted)">Do perfil ao contato</span>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
-          <div style="background:var(--surface2);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:14px">
-            <div style="font-size:.76rem;color:var(--text-muted);margin-bottom:6px">Visualizacoes</div>
-            <strong id="funnelViews" style="font-size:1.4rem">-</strong>
-          </div>
-          <div style="background:var(--surface2);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:14px">
-            <div style="font-size:.76rem;color:var(--text-muted);margin-bottom:6px">Aberturas de chat</div>
-            <strong id="funnelChat" style="font-size:1.4rem">-</strong>
-          </div>
-          <div style="background:var(--surface2);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:14px">
-            <div style="font-size:.76rem;color:var(--text-muted);margin-bottom:6px">Cliques WhatsApp</div>
-            <strong id="funnelWA" style="font-size:1.4rem">-</strong>
-          </div>
-          <div style="background:var(--surface2);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:14px">
-            <div style="font-size:.76rem;color:var(--text-muted);margin-bottom:6px">Conversao</div>
-            <strong id="funnelRate" style="font-size:1.4rem">-</strong>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-weight:600">Central de notificacoes</span>
-            <span id="notifUnreadBadge" style="display:none;background:#C9A84C;color:#111113;border-radius:999px;padding:2px 8px;font-size:.72rem;font-weight:700">0</span>
-          </div>
-          <button class="btn btn-outline btn-sm" id="markNotificationsBtn" onclick="markNotificationsRead()" style="display:none">Marcar como lidas</button>
+          <span style="font-weight:600">Notificacoes recentes</span>
+          <span style="font-size:0.78rem;color:var(--text-muted)">Visitas e favoritos</span>
         </div>
         <div id="activityList" style="display:flex;flex-direction:column;gap:10px"></div>
       </div>
@@ -1580,35 +1612,6 @@
       <div id="servicosList"></div>
     </div>
 
-
-    <!-- PACKS -->
-    <div class="page" id="page-packs">
-      <h1 class="page-title">Packs</h1>
-      <p class="page-sub">Venda packs por Pix direto para voce. A liberacao acontece apos aprovar o comprovante.</p>
-      <div class="card" style="margin-bottom:20px">
-        <div class="form-section-title">Dados Pix</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
-          <div class="form-group"><label>Chave Pix</label><input id="pix_key" placeholder="CPF, e-mail, telefone ou chave aleatoria"></div>
-          <div class="form-group"><label>Tipo</label><select id="pix_key_type"><option value="aleatoria">Aleatoria</option><option value="cpf">CPF</option><option value="cnpj">CNPJ</option><option value="email">E-mail</option><option value="telefone">Telefone</option></select></div>
-          <div class="form-group"><label>Nome recebedor</label><input id="pix_receiver_name" maxlength="25" placeholder="Nome no Pix"></div>
-          <div class="form-group"><label>Cidade</label><input id="pix_receiver_city" maxlength="15" placeholder="SAO PAULO"></div>
-          <button class="btn btn-gold" onclick="savePixSettings()" style="height:42px">Salvar Pix</button>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:20px">
-        <div class="form-section-title">Criar pack</div>
-        <div style="display:grid;grid-template-columns:1fr 130px;gap:12px;align-items:end">
-          <div class="form-group"><label>Titulo</label><input id="pack_title" placeholder="Ex: Pack especial"></div>
-          <div class="form-group"><label>Preco (R$)</label><input id="pack_price" type="number" min="1" step="0.01"></div>
-          <div class="form-group full" style="grid-column:1/-1"><label>Descricao</label><textarea id="pack_description" placeholder="Descreva o conteudo do pack"></textarea></div>
-          <div class="form-group full" style="grid-column:1/-1"><label>Fotos e videos do pack</label><input id="pack_files" type="file" accept="image/*,video/*" multiple></div>
-          <button class="btn btn-gold" onclick="createPack()" style="grid-column:1/-1">Criar pack e enviar midias</button>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:20px"><div class="form-section-title">Pedidos aguardando aprovacao</div><div id="packOrdersList"></div></div>
-      <div id="packsList"></div>
-    </div>
-
     <!-- LOCALIZAÇÃO -->
     <div class="page" id="page-localizacao">
       <h1 class="page-title">Localização</h1>
@@ -1735,7 +1738,6 @@
                 <span class="cchip cchip-gold">✓ Autenticado</span>
                 <span class="cchip cchip-green">● Conectado</span>
                 <span class="cchip cchip-timer" id="cTimer"></span>
-              <button class="csend-btn" style="width:auto;height:36px;padding:0 11px;gap:6px;background:#2a2020;color:#ffb4a8;border:1px solid rgba(248,113,113,.35)" title="Denunciar ou bloquear" onclick="cReportSafety()"><i class="ti ti-shield-exclamation"></i><span style="font-size:.75rem;font-weight:800">Seguranca</span></button>
               </div>
             </div>
 
@@ -1783,9 +1785,19 @@
     // LOGOUT
     // ============================================================
     async function logout() {
-      if (!await VenusSafety.confirmAction('Deseja sair do painel?', 'Confirmar saida', 'Sair')) return;
+      if (!confirm('Deseja sair do painel?')) return;
       await sb.auth.signOut();
       window.location.href = 'login.html';
+    }
+
+    function togglePanelMenu() {
+      document.querySelector('aside')?.classList.toggle('open');
+      document.getElementById('panelScrim')?.classList.toggle('open');
+    }
+
+    function closePanelMenu() {
+      document.querySelector('aside')?.classList.remove('open');
+      document.getElementById('panelScrim')?.classList.remove('open');
     }
 
     // ============================================================
@@ -1795,6 +1807,12 @@
       const { data: { session } } = await sb.auth.getSession();
       if (!session) {
         window.location.href = 'login.html';
+        return;
+      }
+      if (!session.user.email_confirmed_at) {
+        showToast('Confirme seu e-mail antes de acessar o painel profissional.', 'error');
+        await sb.auth.signOut();
+        setTimeout(() => window.location.href = 'login.html?confirmacao=pendente', 1200);
         return;
       }
       currentUser = session.user;
@@ -1864,6 +1882,7 @@
     // NAVIGATION
     // ============================================================
     function goPage(page) {
+      closePanelMenu();
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
       document.getElementById('page-' + page)?.classList.add('active');
@@ -1875,7 +1894,6 @@
       if (page === 'dashboard') loadDashboard();
       else if (page === 'fotos') loadFotos();
       else if (page === 'servicos') loadServicos();
-      else if (page === 'packs') loadPacks();
       else if (page === 'localizacao') loadLocalizacao();
       else if (page === 'disponibilidade') loadDisponibilidade();
       else if (page === 'perfil') loadSilicone();
@@ -1948,16 +1966,12 @@
       const favsPrev = week2.filter(r => r.evento === 'favorite').length;
       const wa7 = week1.filter(r => r.evento === 'whatsapp_click').length;
       const waPrev = week2.filter(r => r.evento === 'whatsapp_click').length;
-      const chat7 = week1.filter(r => r.evento === 'chat_click').length;
-      const chatPrev = week2.filter(r => r.evento === 'chat_click').length;
-      const contacts7 = wa7 + chat7;
-      const contactsPrev = waPrev + chatPrev;
 
       document.getElementById('statViews').textContent = views7.toLocaleString('pt-BR');
       document.getElementById('statFavs').textContent = favs7;
       document.getElementById('statWA').textContent = wa7;
 
-      const rate = views7 > 0 ? ((contacts7 / views7) * 100).toFixed(1) : '0.0';
+      const rate = views7 > 0 ? ((wa7 / views7) * 100).toFixed(1) : '0.0';
       document.getElementById('statRate').textContent = rate + '%';
 
       const delta = (curr, prev) => {
@@ -1966,7 +1980,7 @@
         return (pct >= 0 ? '+' : '') + pct + '% vs semana anterior';
       };
       const rateDelta = () => {
-        const prevRate = viewsPrev > 0 ? (contactsPrev / viewsPrev * 100) : 0;
+        const prevRate = viewsPrev > 0 ? (waPrev / viewsPrev * 100) : 0;
         const diff = (parseFloat(rate) - prevRate).toFixed(1);
         return (diff >= 0 ? '+' : '') + diff + '% vs semana anterior';
       };
@@ -1980,12 +1994,7 @@
 
       const rd = document.getElementById('statRateDelta');
       rd.textContent = rateDelta();
-      rd.className = 'stat-delta ' + (parseFloat(rate) >= (viewsPrev > 0 ? contactsPrev / viewsPrev * 100 : 0) ? 'up' : 'down');
-
-      document.getElementById('funnelViews').textContent = views7.toLocaleString('pt-BR');
-      document.getElementById('funnelChat').textContent = chat7.toLocaleString('pt-BR');
-      document.getElementById('funnelWA').textContent = wa7.toLocaleString('pt-BR');
-      document.getElementById('funnelRate').textContent = rate + '%';
+      rd.className = 'stat-delta ' + (parseFloat(rate) >= (viewsPrev > 0 ? waPrev / viewsPrev * 100 : 0) ? 'up' : 'down');
 
       // Chart
       const { data: chartData } = await sb.from('profile_analytics')
@@ -2024,60 +2033,37 @@
       const list = document.getElementById('activityList');
       if (!list) return;
 
-      const { data, error } = await sb.from('profile_notifications')
-        .select('id, evento, title, body, read_at, created_at')
+      const { data, error } = await sb.from('profile_analytics')
+        .select('evento, created_at')
         .eq('profile_id', currentUser.id)
+        .in('evento', ['view', 'favorite'])
         .order('created_at', { ascending: false })
-        .limit(12);
+        .limit(8);
 
       if (error || !data?.length) {
-        updateNotificationBadge(0);
-        list.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;padding:8px 0">Nenhuma notificacao registrada ainda.</div>';
+        list.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;padding:8px 0">Nenhuma visita ou favorito registrado ainda.</div>';
         return;
       }
 
-      updateNotificationBadge(data.filter(n => !n.read_at).length);
       list.innerHTML = data.map(activityHTML).join('');
     }
 
     function activityHTML(item) {
-      const iconMap = {
-        favorite: ['ti-heart-filled', '#F87171'],
-        whatsapp_click: ['ti-brand-whatsapp', '#4ADE80'],
-        chat_click: ['ti-message-heart', '#C9A84C'],
-        view: ['ti-eye', '#818CF8']
-      };
-      const [icon, color] = iconMap[item.evento] || iconMap.view;
-      const unreadStyle = item.read_at ? '' : 'background:rgba(201,168,76,.06);';
+      const isFav = item.evento === 'favorite';
+      const label = isFav ? 'Seu perfil foi favoritado' : 'Seu perfil foi visualizado';
+      const sub = isFav ? 'Um cliente salvou seu perfil nos favoritos.' : 'Um visitante abriu seu perfil profissional.';
+      const icon = isFav ? 'ti-heart-filled' : 'ti-eye';
+      const color = isFav ? '#F87171' : '#818CF8';
       return `
-        <div style="display:flex;align-items:center;gap:12px;padding:10px;border-bottom:1px solid rgba(255,255,255,.05);border-radius:8px;${unreadStyle}">
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)">
           <span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.05);display:inline-flex;align-items:center;justify-content:center;color:${color}">
             <i class="ti ${icon}"></i>
           </span>
           <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
-            <strong style="font-size:.9rem">${item.title}</strong>
-            <small style="color:var(--text-muted);font-size:.78rem">${item.body} ${timeAgo(item.created_at)}</small>
+            <strong style="font-size:.9rem">${label}</strong>
+            <small style="color:var(--text-muted);font-size:.78rem">${sub} ${timeAgo(item.created_at)}</small>
           </span>
         </div>`;
-    }
-
-    function updateNotificationBadge(count) {
-      const badge = document.getElementById('notifUnreadBadge');
-      const btn = document.getElementById('markNotificationsBtn');
-      if (!badge || !btn) return;
-      badge.style.display = count > 0 ? '' : 'none';
-      btn.style.display = count > 0 ? '' : 'none';
-      badge.textContent = count;
-    }
-
-    async function markNotificationsRead() {
-      const { error } = await sb.from('profile_notifications')
-        .update({ read_at: new Date().toISOString() })
-        .eq('profile_id', currentUser.id)
-        .is('read_at', null);
-      if (error) { showToast('Erro ao marcar notificacoes.', 'error'); return; }
-      await loadRecentActivity();
-      showToast('Notificacoes marcadas como lidas.');
     }
 
     function subscribeProfileActivity() {
@@ -2085,10 +2071,13 @@
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
-          table: 'profile_notifications',
+          table: 'profile_analytics',
           filter: `profile_id=eq.${currentUser.id}`
         }, payload => {
-          showToast(payload.new?.title || 'Nova atividade no seu perfil.');
+          if (!['view', 'favorite'].includes(payload.new?.evento)) return;
+          showToast(payload.new.evento === 'favorite'
+            ? 'Seu perfil foi favoritado.'
+            : 'Seu perfil esta recebendo uma visita.');
           loadDashboard();
         })
         .subscribe();
@@ -2252,7 +2241,7 @@
     }
 
     async function deleteFoto(id, path) {
-      if (!await VenusSafety.confirmAction('Deseja remover esta foto?', 'Remover foto', 'Remover')) return;
+      if (!confirm('Deseja remover esta foto?')) return;
       await sb.storage.from('fotos').remove([path]);
       const { error } = await sb.from('profile_photos').delete().eq('id', id);
       if (error) { showToast('Erro ao remover foto', 'error'); return; }
@@ -2327,7 +2316,7 @@
     }
 
     async function deleteServico(id) {
-      if (!await VenusSafety.confirmAction('Remover este servico?', 'Remover servico', 'Remover')) return;
+      if (!confirm('Remover este serviço?')) return;
       const { error } = await sb.from('services').delete().eq('id', id);
       if (error) { showToast('Erro ao remover serviço', 'error'); return; }
       servicosList = servicosList.filter(s => s.id !== id);
@@ -2338,62 +2327,6 @@
     // ============================================================
     // LOCALIZAÇÃO
     // ============================================================
-
-    async function loadPacks() {
-      await Promise.all([loadPixSettings(), loadProfilePacks(), loadPackOrders()]);
-    }
-    async function loadPixSettings() {
-      const { data } = await sb.from('profile_pix_settings').select('*').eq('profile_id', currentUser.id).maybeSingle();
-      if (!data) return;
-      document.getElementById('pix_key').value = data.pix_key || '';
-      document.getElementById('pix_key_type').value = data.pix_key_type || 'aleatoria';
-      document.getElementById('pix_receiver_name').value = data.receiver_name || '';
-      document.getElementById('pix_receiver_city').value = data.receiver_city || '';
-    }
-    async function savePixSettings() {
-      const payload = { profile_id: currentUser.id, pix_key: document.getElementById('pix_key').value.trim(), pix_key_type: document.getElementById('pix_key_type').value, receiver_name: document.getElementById('pix_receiver_name').value.trim().toUpperCase(), receiver_city: (document.getElementById('pix_receiver_city').value.trim() || 'SAO PAULO').toUpperCase(), updated_at: new Date().toISOString() };
-      if (!payload.pix_key || !payload.receiver_name) { showToast('Preencha chave Pix e nome recebedor.', 'error'); return; }
-      const { error } = await sb.from('profile_pix_settings').upsert(payload);
-      if (error) { showToast('Erro ao salvar Pix: ' + error.message, 'error'); return; }
-      showToast('Dados Pix salvos!');
-    }
-    async function createPack() {
-      const title = document.getElementById('pack_title').value.trim();
-      const description = document.getElementById('pack_description').value.trim();
-      const price = parseFloat(document.getElementById('pack_price').value);
-      const files = [...document.getElementById('pack_files').files];
-      if (title.length < 3 || !price || price <= 0 || !files.length) { showToast('Informe titulo, preco e ao menos uma midia.', 'error'); return; }
-      const { data: pack, error } = await sb.from('profile_packs').insert({ profile_id: currentUser.id, title, description, price }).select().single();
-      if (error) { showToast('Erro ao criar pack: ' + error.message, 'error'); return; }
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i]; const ext = (f.name.split('.').pop() || 'bin').toLowerCase(); const path = currentUser.id + '/' + pack.id + '/' + Date.now() + '_' + i + '.' + ext;
-        const { error: upErr } = await sb.storage.from('pack-media').upload(path, f, { upsert: false });
-        if (upErr) { showToast('Falha ao enviar midia: ' + upErr.message, 'error'); continue; }
-        await sb.from('profile_pack_media').insert({ pack_id: pack.id, profile_id: currentUser.id, storage_path: path, media_type: f.type.startsWith('video/') ? 'video' : 'image', file_name: f.name, sort_order: i });
-      }
-      ['pack_title','pack_description','pack_price'].forEach(id => document.getElementById(id).value = ''); document.getElementById('pack_files').value = '';
-      showToast('Pack criado!'); loadPacks();
-    }
-    async function loadProfilePacks() {
-      const { data } = await sb.from('profile_packs').select('*, profile_pack_media(id)').eq('profile_id', currentUser.id).order('created_at', { ascending: false });
-      document.getElementById('packsList').innerHTML = (data || []).map(p => {
-        const idArg = JSON.stringify(p.id);
-        return '<div class="card" style="margin-bottom:12px;display:flex;justify-content:space-between;gap:12px;align-items:center"><div><strong>' + cEsc(p.title) + '</strong><div style="color:var(--text-muted);font-size:.85rem">R$ ' + Number(p.price).toLocaleString('pt-BR',{minimumFractionDigits:2}) + ' - ' + ((p.profile_pack_media||[]).length) + ' midia(s) - ' + (p.active ? 'ativo' : 'inativo') + '</div><p style="color:var(--text-muted);font-size:.86rem;margin-top:4px">' + cEsc(p.description || '') + '</p></div><button class="btn btn-outline btn-sm" onclick="togglePack(' + idArg + ',' + (!p.active) + ')">' + (p.active ? 'Desativar' : 'Ativar') + '</button></div>';
-      }).join('') || '<div class="card" style="color:var(--text-muted)">Nenhum pack cadastrado.</div>';
-    }
-    async function togglePack(id, active) { const { error } = await sb.from('profile_packs').update({ active, updated_at: new Date().toISOString() }).eq('id', id); if (error) { showToast('Erro ao atualizar pack.', 'error'); return; } loadProfilePacks(); }
-    async function loadPackOrders() {
-      const { data } = await sb.from('profile_pack_orders').select('*, profile_packs(title), customers(nome,email)').eq('profile_id', currentUser.id).order('created_at', { ascending: false });
-      document.getElementById('packOrdersList').innerHTML = (data || []).map(o => {
-        const idArg = JSON.stringify(o.id);
-        const proofArg = JSON.stringify(o.proof_storage_path || '');
-        const customerName = o.customers?.nome || o.customers?.email || o.customer_id;
-        return '<div style="padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:8px;margin-bottom:10px"><strong>' + cEsc(o.profile_packs?.title || 'Pack') + '</strong> <span style="color:var(--gold)">R$ ' + Number(o.amount).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</span><div style="font-size:.82rem;color:var(--text-muted);margin:4px 0">Status: ' + cEsc(o.status) + ' - Cliente: ' + cEsc(customerName) + '</div><div style="display:flex;gap:8px;flex-wrap:wrap">' + (o.proof_storage_path ? '<button class="btn btn-outline btn-sm" onclick="openProof(' + proofArg + ')">Ver comprovante</button>' : '<span style="color:var(--text-muted);font-size:.82rem">Sem comprovante</span>') + (o.status !== 'approved' ? '<button class="btn btn-gold btn-sm" onclick="setPackOrderStatus(' + idArg + ',\'approved\')">Aprovar acesso</button>' : '') + (o.status !== 'rejected' ? '<button class="btn btn-outline btn-sm" onclick="setPackOrderStatus(' + idArg + ',\'rejected\')">Rejeitar</button>' : '') + '</div></div>';
-      }).join('') || '<p style="color:var(--text-muted)">Nenhum pedido de pack ainda.</p>';
-    }
-    async function openProof(path) { const { data, error } = await sb.storage.from('pack-proofs').createSignedUrl(path, 300); if (error) { showToast('Erro ao abrir comprovante.', 'error'); return; } window.open(data.signedUrl, '_blank'); }
-    async function setPackOrderStatus(id, status) { const payload = { status, updated_at: new Date().toISOString(), approved_at: null, rejected_at: null }; if (status === 'approved') payload.approved_at = new Date().toISOString(); if (status === 'rejected') payload.rejected_at = new Date().toISOString(); const { error } = await sb.from('profile_pack_orders').update(payload).eq('id', id); if (error) { showToast('Erro ao atualizar pedido: ' + error.message, 'error'); return; } showToast(status === 'approved' ? 'Acesso liberado para o cliente.' : 'Pedido rejeitado.'); loadPackOrders(); }
-
     async function loadLocalizacao() {
       // Profile fields já carregados via loadProfile / updateUIFromProfile
       // Carregar locais de atendimento
@@ -2711,35 +2644,6 @@
 
     function cSgl() { return `<svg viewBox="0 0 14 10"><polyline points="1,5 5,9 13,1"/></svg>`; }
     function cDbl() { return `<svg viewBox="0 0 18 10"><polyline points="1,5 5,9 13,1"/><polyline points="5,5 9,9 17,1"/></svg>`; }
-
-    async function cReportSafety() {
-      if (!cConvData) return;
-      const report = await VenusSafety.openReport({
-        title: 'Seguranca da conversa',
-        subtitle: 'Sua denuncia sera enviada ao administrador. Se bloquear, o chat trava para os dois lados.'
-      });
-      if (!report) return;
-      const { error } = await sb.rpc('submit_safety_report', {
-        p_reported_user_id: cConvData.client_id,
-        p_reason: report.reason,
-        p_details: report.details,
-        p_profile_id: currentUser.id,
-        p_conversation_id: cConvId,
-        p_block_user: report.blockUser
-      });
-      if (error) { await VenusSafety.notice('Erro ao enviar denuncia: ' + error.message, 'Erro', 'error'); return; }
-      showToast(report.blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
-      if (report.blockUser) {
-        document.getElementById('cInputBar').classList.add('locked');
-        cConvs = cConvs.filter(c => c.id !== cConvId);
-        cConvId = null;
-        cConvData = null;
-        cRenderList();
-        document.getElementById('cBox').style.display = 'none';
-        document.getElementById('cNoConv').style.display = 'flex';
-      }
-      await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada para analise.', 'Denuncia enviada');
-    }
 
     async function cSend() {
       const input = document.getElementById('cInput');

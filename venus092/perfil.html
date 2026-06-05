@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
@@ -9,8 +9,6 @@
   <link rel="stylesheet" href="css/perfil.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
-  <script src="js/safety-tools.js"></script>
   <style>
     .nav-cliente {
       display: flex;
@@ -209,37 +207,13 @@
             </div>
           </div>
 
-
           <div class="perfil-card" id="cardPacks" style="display:none">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
-              <h2 class="perfil-section-title" style="margin:0">Packs exclusivos</h2>
-              <span style="color:var(--text-dim);font-size:.86rem">Pix direto para a profissional</span>
+            <div class="perfil-card-head">
+              <h2 class="perfil-section-title">Packs exclusivos</h2>
+              <span class="pack-safe-badge"><i class="ti ti-lock"></i> Liberacao manual</span>
             </div>
-            <div id="packsList" style="display:flex;flex-direction:column;gap:12px"></div>
+            <div class="packs-list" id="packsList"></div>
           </div>
-
-          <div class="perfil-card" id="cardReviews">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
-              <h2 class="perfil-section-title" style="margin:0">Avaliacoes</h2>
-              <span id="reviewSummary" style="color:var(--gold);font-weight:700;font-size:.95rem">-</span>
-            </div>
-            <div id="reviewForm" style="display:none;margin-bottom:18px;padding:14px;border:1px solid rgba(201,168,76,.24);border-radius:8px;background:rgba(201,168,76,.06)">
-              <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start">
-                <select id="reviewRating" style="height:40px;border-radius:8px;background:#151518;color:#f5f0e8;border:1px solid rgba(255,255,255,.12);padding:0 10px">
-                  <option value="5">5 estrelas</option>
-                  <option value="4">4 estrelas</option>
-                  <option value="3">3 estrelas</option>
-                  <option value="2">2 estrelas</option>
-                  <option value="1">1 estrela</option>
-                </select>
-                <textarea id="reviewComment" rows="3" maxlength="1200" placeholder="Conte como foi sua experiencia com respeito e objetividade." style="resize:vertical;border-radius:8px;background:#151518;color:#f5f0e8;border:1px solid rgba(255,255,255,.12);padding:10px;font-family:inherit"></textarea>
-              </div>
-              <button class="btn btn-gold btn-sm" style="margin-top:10px" onclick="submitReview()">Publicar avaliacao</button>
-            </div>
-            <div id="reviewLoginHint" style="display:none;color:var(--text-dim);font-size:.86rem;margin-bottom:14px">Entre como cliente para publicar uma avaliacao.</div>
-            <div id="reviewsList" style="display:flex;flex-direction:column;gap:12px"></div>
-          </div>
-
           <!-- LOCALIZAÇÃO -->
           <div class="perfil-card">
             <h2 class="perfil-section-title">Localização</h2>
@@ -297,11 +271,6 @@
               <i class="ti ti-arrow-right"></i>
             </a>
 
-            <button class="btn btn-outline btn-lg perfil-safety-btn" onclick="reportProfileSafety()">
-              <i class="ti ti-shield-exclamation"></i>
-              Denunciar ou bloquear
-            </button>
-
             <!-- STATS -->
             <div class="perfil-stats">
               <div class="perfil-stat">
@@ -323,16 +292,6 @@
                 <div>
                   <strong id="statMembro">—</strong>
                   <span>Membro desde</span>
-                </div>
-              </div>
-
-
-
-              <div class="perfil-stat">
-                <i class="ti ti-star"></i>
-                <div>
-                  <strong id="statRating">-</strong>
-                  <span>Avaliacoes</span>
                 </div>
               </div>
             </div>
@@ -359,6 +318,12 @@
                 <i class="ti ti-clock"></i> <span id="disponibHorarioTxt"></span>
               </p>
             </div>
+
+            <div class="divider"></div>
+
+            <button class="btn-reportar">
+              <i class="ti ti-flag"></i> Reportar anúncio
+            </button>
 
           </div>
         </div>
@@ -387,6 +352,38 @@
     <span>Conversar</span>
   </a>
 
+  <div class="pix-modal" id="pixModal" aria-hidden="true">
+    <div class="pix-dialog" role="dialog" aria-modal="true" aria-labelledby="pixModalTitle">
+      <button class="pix-close" type="button" onclick="closePixModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      <div class="pix-dialog-head">
+        <span class="pix-icon"><i class="ti ti-qrcode"></i></span>
+        <div>
+          <h2 id="pixModalTitle">Pagamento Pix</h2>
+          <p id="pixPackTitle">Pague e anexe o comprovante para liberar o pack.</p>
+        </div>
+      </div>
+      <div class="pix-grid">
+        <div class="pix-qr-wrap">
+          <img id="pixQrImg" alt="QR Code Pix" />
+          <span id="pixQrFallback">Use o Pix copia e cola abaixo.</span>
+        </div>
+        <div class="pix-payment-box">
+          <span>Total</span>
+          <strong id="pixAmount">R$ 0,00</strong>
+          <small id="pixReceiver">Recebedor Pix</small>
+        </div>
+      </div>
+      <label class="pix-label" for="pixCopyCode">Pix copia e cola</label>
+      <textarea class="pix-code" id="pixCopyCode" readonly></textarea>
+      <button class="btn btn-gold pix-copy-btn" type="button" onclick="copyPixCode()"><i class="ti ti-copy"></i> Copiar Pix</button>
+      <label class="pix-label" for="pixProofInput">Comprovante</label>
+      <input class="pix-file" id="pixProofInput" type="file" accept="image/*,.pdf" />
+      <div class="pix-actions">
+        <button class="btn btn-outline" type="button" onclick="closePixModal()">Cancelar</button>
+        <button class="btn btn-gold" type="button" id="pixSubmitBtn" onclick="submitPixProof()"><i class="ti ti-upload"></i> Enviar comprovante</button>
+      </div>
+    </div>
+  </div>
   <script>
     function loginRedirectUrl() {
       const redirect = window.location.pathname + window.location.search;
@@ -468,6 +465,9 @@
     });
     let visitorSession = null;
     let visitorCanContact = false;
+    let activePix = null;
+    let activePack = null;
+    let activePixCode = '';
 
     function removeCustomerUploadLeak() {
       const markers = [
@@ -752,6 +752,8 @@
     `).join('');
       }
 
+      await loadPacks(profileId);
+
       // WhatsApp
       const wa = document.getElementById('whatsappBtn');
       if (visitorCanContact) {
@@ -775,8 +777,6 @@
         ? new Date(p.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
         : '—';
       document.getElementById('statMembro').textContent = membro;
-      await loadReviews(profileId);
-      await loadProfilePacks(profileId);
 
       // Atendimento
       const todosLocais = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
@@ -846,232 +846,145 @@
       document.getElementById('loadingOverlay').style.display = 'none';
     }
 
-
-    async function loadProfilePacks(profileId) {
-      const [{ data: packs }, { data: pix }, { data: orders }] = await Promise.all([
-        sb.from('profile_packs').select('*').eq('profile_id', profileId).eq('active', true).order('created_at', { ascending: false }),
-        sb.from('profile_pix_settings').select('*').eq('profile_id', profileId).maybeSingle(),
-        visitorSession?.user?.id ? sb.from('profile_pack_orders').select('*').eq('profile_id', profileId).eq('customer_id', visitorSession.user.id) : Promise.resolve({ data: [] })
+    async function loadPacks(profileId) {
+      const [{ data: packs }, { data: pix }] = await Promise.all([
+        sb.from('profile_packs').select('id,title,description,price').eq('profile_id', profileId).eq('active', true).order('created_at', { ascending: false }),
+        sb.from('profile_pix_settings').select('pix_key,pix_key_type,receiver_name,receiver_city').eq('profile_id', profileId).maybeSingle()
       ]);
+
+      activePix = pix || null;
       const card = document.getElementById('cardPacks');
-      if (!packs?.length) { card.style.display = 'none'; return; }
+      const list = document.getElementById('packsList');
+      if (!packs?.length || !activePix?.pix_key) {
+        card.style.display = 'none';
+        return;
+      }
+
       card.style.display = '';
-      const orderMap = {}; (orders || []).forEach(o => orderMap[o.pack_id] = o);
-      document.getElementById('packsList').innerHTML = packs.map(p => {
-        const order = orderMap[p.id];
-        const status = order ? order.status : null;
-        return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:14px;background:rgba(255,255,255,.025)"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><strong style="font-size:1rem">' + htmlSafe(p.title) + '</strong><p style="margin:5px 0 0;color:var(--text-dim);font-size:.9rem;line-height:1.45">' + htmlSafe(p.description || 'Pack de fotos e videos') + '</p></div><strong style="color:var(--gold);white-space:nowrap">R$ ' + Number(p.price).toLocaleString('pt-BR',{minimumFractionDigits:2}) + '</strong></div><div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">' + (status === 'approved' ? '<button class="btn btn-gold btn-sm" onclick="openPackMedia(\'' + p.id + '\')">Ver pack liberado</button>' : status === 'pending' ? '<span style="color:var(--gold);font-size:.86rem">Comprovante enviado. Aguardando aprovacao.</span>' : status === 'rejected' ? '<button class="btn btn-outline btn-sm" onclick="buyPack(\'' + p.id + '\')">Enviar novo comprovante</button>' : '<button class="btn btn-gold btn-sm" onclick="buyPack(\'' + p.id + '\')">Comprar com Pix</button>') + '</div></div>';
-      }).join('');
-      window.currentPackPix = pix || null;
-      window.currentProfilePacks = packs;
+      list.innerHTML = packs.map(pack => `
+        <div class="pack-item">
+          <div>
+            <div class="pack-title">${esc(pack.title)}</div>
+            ${pack.description ? `<div class="pack-desc">${esc(pack.description)}</div>` : ''}
+          </div>
+          <div class="pack-price">R$ ${Number(pack.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <button class="btn btn-gold btn-sm pack-buy" onclick="openPixModal('${pack.id}')">
+            <i class="ti ti-shopping-bag"></i> Comprar com Pix
+          </button>
+        </div>
+      `).join('');
+      window.__venusPacks = packs;
     }
 
-    async function buyPack(packId) {
-      if (!visitorSession?.user?.id) { window.location.href = loginRedirectUrl(); return; }
-      const pack = (window.currentProfilePacks || []).find(p => p.id === packId);
-      const pix = window.currentPackPix;
-      if (!pack || !pix?.pix_key) { await VenusSafety.notice('A profissional ainda nao configurou a chave Pix.', 'Pix indisponivel', 'error'); return; }
-      const code = buildPixPayload(pix.pix_key, pix.receiver_name, pix.receiver_city, Number(pack.price), 'PACK' + pack.id.slice(0, 6));
-      openPixModal(pack, code);
+    function tlv(id, value) {
+      const v = String(value || '');
+      return id + String(v.length).padStart(2, '0') + v;
     }
 
-    function openPixModal(pack, pixCode) {
-      let modal = document.getElementById('packPixModal');
-      if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'packPixModal';
-        modal.className = 'venus-modal-backdrop';
-        document.body.appendChild(modal);
-      }
-      modal.innerHTML = '<div class="venus-modal"><div class="venus-modal-head"><div class="venus-modal-icon"><i class="ti ti-qrcode"></i></div><div><h2 class="venus-modal-title">Pagamento Pix</h2><p class="venus-modal-sub">Pague direto para a profissional e anexe o comprovante para liberar o pack.</p></div></div><div class="venus-modal-body"><div style="text-align:center;background:#fff;border-radius:10px;padding:12px;margin-bottom:12px"><canvas id="packPixQr"></canvas></div><textarea id="packPixCode" readonly style="width:100%;min-height:86px;border-radius:10px;background:#121217;color:#f4efe7;border:1px solid rgba(255,255,255,.12);padding:10px">' + pixCode + '</textarea><button class="venus-btn venus-btn-primary" style="width:100%;margin:10px 0" onclick="copyPackPix()">Copiar Pix</button><div class="venus-field"><label>Comprovante</label><input id="packProofFile" type="file" accept="image/*,.pdf" style="color:#fff"></div></div><div class="venus-modal-actions"><button class="venus-btn" onclick="document.getElementById(\'packPixModal\').remove()">Cancelar</button><button class="venus-btn venus-btn-primary" onclick="submitPackProof(\'' + pack.id + '\')">Enviar comprovante</button></div></div>';
-      if (window.QRCode) {
-        QRCode.toCanvas(document.getElementById('packPixQr'), pixCode, { width: 220, margin: 1 });
-      } else {
-        document.getElementById('packPixQr').replaceWith(document.createTextNode('QR Code indisponivel. Use o botao Copiar Pix.'));
-      }
-    }
-
-    async function copyPackPix() {
-      await navigator.clipboard.writeText(document.getElementById('packPixCode').value);
-      await VenusSafety.notice('Codigo Pix copiado.', 'Pix');
-    }
-
-    async function submitPackProof(packId) {
-      const file = document.getElementById('packProofFile').files[0];
-      if (!file) { await VenusSafety.notice('Anexe o comprovante do Pix.', 'Comprovante obrigatorio', 'error'); return; }
-      const pack = (window.currentProfilePacks || []).find(p => p.id === packId);
-      const { data: order, error } = await sb.from('profile_pack_orders').upsert({ pack_id: packId, profile_id: pack.profile_id, customer_id: visitorSession.user.id, amount: pack.price, status: 'pending', updated_at: new Date().toISOString() }, { onConflict: 'pack_id,customer_id' }).select().single();
-      if (error) { await VenusSafety.notice('Erro ao criar pedido: ' + error.message, 'Erro', 'error'); return; }
-      const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-      const path = visitorSession.user.id + '/' + order.id + '/comprovante.' + ext;
-      const { error: upErr } = await sb.storage.from('pack-proofs').upload(path, file, { upsert: true });
-      if (upErr) { await VenusSafety.notice('Erro ao enviar comprovante: ' + upErr.message, 'Erro', 'error'); return; }
-      await sb.from('profile_pack_orders').update({ proof_storage_path: path, proof_file_name: file.name, status: 'pending', updated_at: new Date().toISOString() }).eq('id', order.id);
-      document.getElementById('packPixModal')?.remove();
-      await loadProfilePacks(getProfileId());
-      await VenusSafety.notice('Comprovante enviado. A profissional vai validar e liberar o acesso.', 'Comprovante enviado');
-    }
-
-    async function openPackMedia(packId) {
-      const { data: media, error } = await sb.from('profile_pack_media').select('*').eq('pack_id', packId).order('sort_order');
-      if (error || !media?.length) { await VenusSafety.notice('Nenhuma midia liberada ainda.', 'Pack', 'error'); return; }
-      const { data: signed } = await sb.storage.from('pack-media').createSignedUrls(media.map(m => m.storage_path), 600);
-      const urls = {}; (signed || []).forEach(s => urls[s.path] = s.signedUrl);
-      const wrap = document.createElement('div');
-      wrap.className = 'venus-modal-backdrop';
-      wrap.innerHTML = '<div class="venus-modal" style="width:min(760px,100%)"><div class="venus-modal-head"><div class="venus-modal-icon"><i class="ti ti-lock-open"></i></div><div><h2 class="venus-modal-title">Pack liberado</h2><p class="venus-modal-sub">Acesso exclusivo aprovado para voce.</p></div></div><div class="venus-modal-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">' + media.map(m => m.media_type === 'video' ? '<video src="' + urls[m.storage_path] + '" controls style="width:100%;border-radius:10px;background:#000"></video>' : '<img src="' + urls[m.storage_path] + '" style="width:100%;border-radius:10px;display:block">').join('') + '</div><div class="venus-modal-actions"><button class="venus-btn venus-btn-primary" onclick="this.closest(\'.venus-modal-backdrop\').remove()">Fechar</button></div></div>';
-      document.body.appendChild(wrap);
-    }
-
-    function pixField(id, value) { const size = String(value.length).padStart(2, '0'); return id + size + value; }
-    function buildPixPayload(key, name, city, amount, txid) {
-      const cleanName = normalizePixText(name || 'VENUS', 25);
-      const cleanCity = normalizePixText(city || 'SAO PAULO', 15);
-      const cleanTxid = normalizePixText(txid || 'VENUS', 25).replace(/[^A-Z0-9]/g, '') || 'VENUS';
-      const gui = pixField('00', 'br.gov.bcb.pix') + pixField('01', String(key || '').trim());
-      const merchant = pixField('26', gui);
-      const payloadNoCrc = pixField('00', '01') + merchant + pixField('52', '0000') + pixField('53', '986') + pixField('54', amount.toFixed(2)) + pixField('58', 'BR') + pixField('59', cleanName) + pixField('60', cleanCity) + pixField('62', pixField('05', cleanTxid)) + '6304';
-      return payloadNoCrc + pixCrc16(payloadNoCrc);
-    }
-    function normalizePixText(value, max) {
-      return String(value || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Za-z0-9 .-]/g, '')
+    function normalizePixText(value, fallback = '') {
+      return String(value || fallback)
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^A-Za-z0-9 ]/g, '')
         .trim()
         .toUpperCase()
-        .slice(0, max);
-    }
-    function pixCrc16(str) { let crc = 0xFFFF; for (let i = 0; i < str.length; i++) { crc ^= str.charCodeAt(i) << 8; for (let j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF; } return crc.toString(16).toUpperCase().padStart(4, '0'); }
-
-    async function loadReviews(profileId) {
-      const [{ data: summary }, { data: reviews }] = await Promise.all([
-        sb.rpc('get_profile_review_summary', { p_profile_id: profileId }).maybeSingle(),
-        sb.from('profile_reviews')
-          .select('reviewer_name,rating,comment,created_at')
-          .eq('profile_id', profileId)
-          .eq('status', 'published')
-          .order('created_at', { ascending: false })
-          .limit(20)
-      ]);
-
-      const total = Number(summary?.total_reviews || 0);
-      const avg = summary?.average_rating ? Number(summary.average_rating).toFixed(1) : null;
-      const label = total ? `${avg} de 5 (${total})` : 'Sem avaliacoes';
-      document.getElementById('reviewSummary').textContent = label;
-      const statRating = document.getElementById('statRating');
-      if (statRating) statRating.textContent = total ? `${avg} / 5` : '-';
-
-      const list = document.getElementById('reviewsList');
-      if (!reviews?.length) {
-        list.innerHTML = '<p style="color:var(--text-dim);font-size:.9rem;margin:0">Ainda nao ha avaliacoes publicadas.</p>';
-      } else {
-        list.innerHTML = reviews.map(r => {
-          const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
-          return `
-          <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,.06)">
-            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px">
-              <strong style="font-size:.92rem">${htmlSafe(r.reviewer_name || 'Cliente')}</strong>
-              <span style="color:var(--gold);font-weight:700;font-size:.86rem">${stars}</span>
-            </div>
-            <p style="margin:0 0 6px;color:var(--text);line-height:1.55;font-size:.92rem">${htmlSafe(r.comment)}</p>
-            <small style="color:var(--text-dim)">${new Date(r.created_at).toLocaleDateString('pt-BR')}</small>
-          </div>`;
-        }).join('');
-      }
-
-      const form = document.getElementById('reviewForm');
-      const hint = document.getElementById('reviewLoginHint');
-      if (visitorCanContact && visitorSession?.user?.id && visitorSession.user.id !== profileId) {
-        form.style.display = '';
-        hint.style.display = 'none';
-      } else if (!visitorSession) {
-        form.style.display = 'none';
-        hint.style.display = '';
-      } else {
-        form.style.display = 'none';
-        hint.style.display = 'none';
-      }
+        .slice(0, 25);
     }
 
-    async function submitReview() {
-      const profileId = getProfileId();
+    function crc16(payload) {
+      let crc = 0xffff;
+      for (let i = 0; i < payload.length; i++) {
+        crc ^= payload.charCodeAt(i) << 8;
+        for (let j = 0; j < 8; j++) crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : crc << 1;
+      }
+      return (crc & 0xffff).toString(16).toUpperCase().padStart(4, '0');
+    }
+
+    function buildPixCode(pack) {
+      const amount = Number(pack.price).toFixed(2);
+      const merchantAccount = tlv('00', 'br.gov.bcb.pix') + tlv('01', activePix.pix_key);
+      const payload =
+        tlv('00', '01') +
+        tlv('26', merchantAccount) +
+        tlv('52', '0000') +
+        tlv('53', '986') +
+        tlv('54', amount) +
+        tlv('58', 'BR') +
+        tlv('59', normalizePixText(activePix.receiver_name, 'VENUS')) +
+        tlv('60', normalizePixText(activePix.receiver_city, 'SAO PAULO')) +
+        tlv('62', tlv('05', `PACK${pack.id.slice(0, 8)}`));
+      const withCrc = payload + '6304';
+      return withCrc + crc16(withCrc);
+    }
+
+    async function openPixModal(packId) {
       if (!visitorCanContact || !visitorSession?.user?.id) {
         window.location.href = loginRedirectUrl();
         return;
       }
+      activePack = (window.__venusPacks || []).find(p => p.id === packId);
+      if (!activePack || !activePix) return;
 
-      const rating = parseInt(document.getElementById('reviewRating').value, 10);
-      const comment = document.getElementById('reviewComment').value.trim();
-      if (comment.length < 10) {
-        await VenusSafety.notice('Escreva pelo menos 10 caracteres na avaliacao.', 'Avaliacao incompleta', 'error');
-        return;
-      }
-
-      const { error } = await sb.rpc('submit_profile_review', {
-        p_profile_id: profileId,
-        p_rating: rating,
-        p_comment: comment
-      });
-
-      if (error) {
-        await VenusSafety.notice('Nao foi possivel publicar a avaliacao: ' + error.message, 'Erro ao avaliar', 'error');
-        return;
-      }
-
-      document.getElementById('reviewComment').value = '';
-      await loadReviews(profileId);
-      await VenusSafety.notice('Avaliacao publicada. Obrigado por contribuir com a seguranca da comunidade.', 'Avaliacao enviada');
+      activePixCode = buildPixCode(activePack);
+      document.getElementById('pixPackTitle').textContent = activePack.title;
+      document.getElementById('pixAmount').textContent = 'R$ ' + Number(activePack.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+      document.getElementById('pixReceiver').textContent = activePix.receiver_name || 'Recebedor Pix';
+      document.getElementById('pixCopyCode').value = activePixCode;
+      document.getElementById('pixProofInput').value = '';
+      const qr = document.getElementById('pixQrImg');
+      qr.style.display = '';
+      qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(activePixCode)}`;
+      qr.onerror = () => { qr.style.display = 'none'; };
+      document.getElementById('pixModal').classList.add('open');
+      document.getElementById('pixModal').setAttribute('aria-hidden', 'false');
     }
 
-    async function reportProfileSafety() {
-      const profileId = getProfileId();
-      if (!visitorSession?.user?.id) {
-        window.location.href = loginRedirectUrl();
-        return;
-      }
-
-      const report = await VenusSafety.openReport({
-        title: 'Denunciar ou bloquear perfil',
-        subtitle: 'Sua denuncia sera enviada para o administrador. Se bloquear, o chat fica travado e este perfil sai do seu catalogo.'
-      });
-      if (!report) return;
-
-      const { error } = await sb.rpc('submit_safety_report', {
-        p_reported_user_id: profileId,
-        p_reason: report.reason,
-        p_details: report.details,
-        p_profile_id: profileId,
-        p_conversation_id: null,
-        p_block_user: report.blockUser
-      });
-
-      if (error) {
-        await VenusSafety.notice('Nao foi possivel enviar a denuncia: ' + error.message, 'Erro ao denunciar', 'error');
-        return;
-      }
-
-      if (report.blockUser) markProfileBlocked();
-      await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e perfil bloqueado. Ele nao aparecera mais no seu catalogo.' : 'Denuncia enviada para analise do administrador.', 'Denuncia enviada');
+    function closePixModal() {
+      document.getElementById('pixModal').classList.remove('open');
+      document.getElementById('pixModal').setAttribute('aria-hidden', 'true');
     }
 
-    function markProfileBlocked() {
-      ['whatsappBtn', 'chatBtn', 'floatingChatBtn'].forEach(id => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.classList.add('is-locked');
-        el.style.pointerEvents = 'none';
-        el.style.opacity = '0.55';
-      });
+    async function copyPixCode() {
+      await navigator.clipboard.writeText(activePixCode);
+      alert('Pix copiado.');
     }
 
-    function htmlSafe(value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
+    async function submitPixProof() {
+      if (!activePack || !visitorSession?.user?.id) return;
+      const btn = document.getElementById('pixSubmitBtn');
+      const file = document.getElementById('pixProofInput').files[0];
+      btn.disabled = true;
+      btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando...';
+
+      try {
+        let proofPath = null;
+        if (file) {
+          proofPath = `${visitorSession.user.id}/${activePack.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const { error: uploadError } = await sb.storage.from('pack-proofs').upload(proofPath, file, { upsert: false });
+          if (uploadError) throw uploadError;
+        }
+
+        const { error } = await sb.from('profile_pack_orders').insert({
+          pack_id: activePack.id,
+          profile_id: getProfileId(),
+          customer_id: visitorSession.user.id,
+          amount: Number(activePack.price),
+          status: 'pending',
+          proof_storage_path: proofPath,
+          proof_file_name: file?.name || null
+        });
+        if (error) throw error;
+        alert('Comprovante enviado. A profissional fara a liberacao do pack apos conferir o Pix.');
+        closePixModal();
+      } catch (err) {
+        alert('Erro ao enviar comprovante: ' + (err.message || err));
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="ti ti-upload"></i> Enviar comprovante';
+      }
+    }
+
+    function esc(value) {
+      return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     // ============================================================
@@ -1114,6 +1027,7 @@
     initNavbar();
     loadPerfil();
   </script>
+  <script src="js/mobile-nav.js" defer></script>
 </body>
 
 </html>

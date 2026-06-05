@@ -7,6 +7,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 const ALLOWED_ORIGINS = [
   "https://venus.app",
@@ -160,18 +161,38 @@ Deno.serve(async (req) => {
     return erro(cors, 422, "Dados inválidos", { campos: erros });
   }
 
-  // ── Criar conta no Supabase Auth ─────────────────────────
+  const siteOrigin = origin && ALLOWED_ORIGINS.includes(origin)
+    ? origin
+    : "https://haydenfernandes.com.br";
+  const emailRedirectTo = `${siteOrigin}/login.html?confirmed=1`;
+
+  // ── Criar conta no Supabase Auth e disparar confirmação ───
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   });
 
-  const { data: authData, error: authErr } = await admin.auth.admin.createUser({
-    email: String(email).toLowerCase().trim(),
+  const normalizedEmail = String(email).toLowerCase().trim();
+
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+  if (existingProfile) return erro(cors, 409, "E-mail já cadastrado");
+
+  const signupClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    auth: { persistSession: false },
+  });
+
+  const { data: authData, error: authErr } = await signupClient.auth.signUp({
+    email: normalizedEmail,
     password: String(senha),
-    email_confirm: false,  // envia email de confirmação
-    user_metadata: {
-      nome_artistico: sanitize(nome_artistico as string),
-      role: "anunciante",
+    options: {
+      emailRedirectTo,
+      data: {
+        nome_artistico: sanitize(nome_artistico as string),
+        role: "anunciante",
+      },
     },
   });
 
@@ -187,7 +208,7 @@ Deno.serve(async (req) => {
   // ── Inserir profile ───────────────────────────────────────
   const { error: profileErr } = await admin.from("profiles").insert({
     id: userId,
-    email: String(email).toLowerCase().trim(),
+    email: normalizedEmail,
     whatsapp: String(whatsapp).replace(/\D/g, ""),
     nome_artistico: sanitize(nome_artistico as string),
     categoria: String(categoria),
