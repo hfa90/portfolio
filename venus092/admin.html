@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin — Vênus</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/safety-tools.js"></script>
     <style>
         :root {
             --gold: #C9A84C;
@@ -796,6 +797,99 @@
             border-color: var(--red);
             color: var(--red)
         }
+
+        .moderation-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(0, .9fr);
+            gap: 18px
+        }
+
+        .moderation-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden
+        }
+
+        .moderation-panel h2 {
+            padding: 16px 18px;
+            font-size: .98rem;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .moderation-list {
+            display: flex;
+            flex-direction: column
+        }
+
+        .moderation-item {
+            padding: 15px 18px;
+            border-bottom: 1px solid var(--border)
+        }
+
+        .moderation-item:last-child {
+            border-bottom: none
+        }
+
+        .moderation-top {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            align-items: flex-start;
+            margin-bottom: 8px
+        }
+
+        .moderation-title {
+            font-weight: 700;
+            font-size: .92rem
+        }
+
+        .moderation-meta {
+            color: var(--muted);
+            font-size: .76rem;
+            margin-top: 3px
+        }
+
+        .moderation-text {
+            color: #d7d2cc;
+            font-size: .86rem;
+            line-height: 1.55;
+            white-space: pre-wrap
+        }
+
+        .moderation-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px
+        }
+
+        .mod-btn {
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: .76rem;
+            font-weight: 700;
+            cursor: pointer
+        }
+
+        .mod-btn.ok {
+            color: var(--green);
+            border-color: rgba(74,222,128,.35);
+            background: var(--green-dim)
+        }
+
+        .mod-btn.err {
+            color: var(--red);
+            border-color: rgba(248,113,113,.35);
+            background: var(--red-dim)
+        }
+
+        @media (max-width: 980px) {
+            .moderation-grid { grid-template-columns: 1fr }
+        }
     </style>
 </head>
 
@@ -825,6 +919,7 @@
                 </button>
                 <button onclick="goPage('usuarios')" data-page="usuarios">👥 Usuários <span class="nav-badge"
                         id="navBadgeUsers" style="display:none">0</span></button>
+                <button onclick="goPage('seguranca')" data-page="seguranca">Seguranca <span class="nav-badge" id="navBadgeSafety" style="display:none">0</span></button>
                 <button onclick="goPage('dashboard')" data-page="dashboard">📊 Dashboard</button>
             </nav>
             <div class="sidebar-bottom">
@@ -909,6 +1004,26 @@
                     </div>
                 </div>
             </div>
+
+            <!-- SEGURANCA -->
+            <div class="page" id="page-seguranca">
+                <h1 class="page-title">SeguranÃ§a</h1>
+                <p class="page-sub">DenÃºncias, reclamaÃ§Ãµes, avaliaÃ§Ãµes e comentÃ¡rios enviados pela comunidade</p>
+                <div class="moderation-grid">
+                    <section class="moderation-panel">
+                        <h2>DenÃºncias e reclamaÃ§Ãµes</h2>
+                        <div class="moderation-list" id="reportsList">
+                            <div class="empty-state"><div class="spin"></div><p style="margin-top:12px">Carregandoâ€¦</p></div>
+                        </div>
+                    </section>
+                    <section class="moderation-panel">
+                        <h2>AvaliaÃ§Ãµes e comentÃ¡rios</h2>
+                        <div class="moderation-list" id="reviewsAdminList">
+                            <div class="empty-state"><div class="spin"></div><p style="margin-top:12px">Carregandoâ€¦</p></div>
+                        </div>
+                    </section>
+                </div>
+            </div>
         </main>
     </div>
 
@@ -934,7 +1049,7 @@
             }
         });
 
-        let allFotos = [], allUsers = [], currentFilter = 'pending';
+        let allFotos = [], allUsers = [], allReports = [], allReviews = [], currentFilter = 'pending';
 
         // AUTH
         async function init() {
@@ -959,7 +1074,7 @@
         }
 
         async function doLogout() {
-            if (!confirm('Sair do painel admin?')) return;
+            if (!await VenusSafety.confirmAction('Sair do painel admin?', 'Confirmar saida', 'Sair')) return;
             await sb.auth.signOut(); location.reload();
         }
 
@@ -969,10 +1084,11 @@
             document.getElementById('adminEmail').textContent = user.email;
             loadFotos();
             loadUsers(); // carrega em background para mostrar badge de pendentes
+            loadModeration();
         }
 
         // NAV
-        const pageTitles = { fotos: 'Aprovação de Fotos', usuarios: 'Usuários', dashboard: 'Dashboard' };
+        const pageTitles = { fotos: 'AprovaÃ§Ã£o de Fotos', usuarios: 'UsuÃ¡rios', seguranca: 'SeguranÃ§a', dashboard: 'Dashboard' };
         function goPage(page) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('nav button[data-page]').forEach(b => b.classList.remove('active'));
@@ -980,6 +1096,7 @@
             document.querySelector(`nav button[data-page="${page}"]`).classList.add('active');
             document.getElementById('headerTitle').textContent = pageTitles[page];
             if (page === 'usuarios') { if (!allUsers.length) loadUsers(); else renderUsers(); }
+            if (page === 'seguranca') loadModeration();
             if (page === 'dashboard') loadDashboard();
         }
 
@@ -1265,8 +1382,8 @@
         }
 
         async function suspenderPerfil(id) {
-            const motivo = prompt('Motivo da suspensão/rejeição (opcional):');
-            if (motivo === null) return; // cancelou
+            if (!await VenusSafety.confirmAction('Suspender este perfil e remover do catalogo?', 'Suspender perfil', 'Suspender')) return;
+
             const { error } = await sb.from('profiles').update({ status: 'suspended' }).eq('id', id);
             if (error) { toast('Erro: ' + error.message, 'err'); return; }
             const u = allUsers.find(u => u.id === id);
@@ -1279,6 +1396,122 @@
             goPage('fotos');
             document.getElementById('searchInput').value = nome;
             setFilter('all');
+        }
+
+        // SEGURANCA
+        async function loadModeration() {
+            const reportsEl = document.getElementById('reportsList');
+            const reviewsEl = document.getElementById('reviewsAdminList');
+            if (!reportsEl || !reviewsEl) return;
+
+            reportsEl.innerHTML = '<div class="empty-state"><div class="spin"></div><p style="margin-top:12px">Carregando denuncias...</p></div>';
+            reviewsEl.innerHTML = '<div class="empty-state"><div class="spin"></div><p style="margin-top:12px">Carregando avaliacoes...</p></div>';
+
+            const [{ data: reports, error: reportsError }, { data: reviews, error: reviewsError }] = await Promise.all([
+                sb.from('safety_reports').select('*').order('created_at', { ascending: false }).limit(60),
+                sb.from('profile_reviews').select('*').order('created_at', { ascending: false }).limit(60)
+            ]);
+
+            if (reportsError) reportsEl.innerHTML = `<div class="empty-state"><p>Erro: ${safeAdmin(reportsError.message)}</p></div>`;
+            if (reviewsError) reviewsEl.innerHTML = `<div class="empty-state"><p>Erro: ${safeAdmin(reviewsError.message)}</p></div>`;
+
+            allReports = reports || [];
+            allReviews = reviews || [];
+            renderModeration();
+            updateSafetyBadge();
+        }
+
+        function updateSafetyBadge() {
+            const openReports = allReports.filter(r => ['open', 'reviewing'].includes(r.status)).length;
+            const badge = document.getElementById('navBadgeSafety');
+            if (!badge) return;
+            if (openReports > 0) { badge.textContent = openReports; badge.style.display = ''; }
+            else badge.style.display = 'none';
+        }
+
+        function renderModeration() {
+            const reportsEl = document.getElementById('reportsList');
+            const reviewsEl = document.getElementById('reviewsAdminList');
+            if (!reportsEl || !reviewsEl) return;
+
+            reportsEl.innerHTML = allReports.length ? allReports.map(r => `
+                <article class="moderation-item">
+                    <div class="moderation-top">
+                        <div>
+                            <div class="moderation-title">${safeAdmin(reasonLabel(r.reason))}</div>
+                            <div class="moderation-meta">Status: ${safeAdmin(r.status)} · ${formatDateTime(r.created_at)}</div>
+                        </div>
+                        <span class="pill ${r.status === 'resolved' ? 'pill-green' : 'pill-yellow'}">${safeAdmin(r.status)}</span>
+                    </div>
+                    <div class="moderation-meta">Denunciante: ${safeAdmin(r.reporter_id)}<br>Denunciado: ${safeAdmin(r.reported_user_id)}${r.profile_id ? `<br>Perfil: ${safeAdmin(r.profile_id)}` : ''}</div>
+                    <p class="moderation-text">${safeAdmin(r.details)}</p>
+                    <div class="moderation-actions">
+                        ${r.status !== 'resolved' ? `<button class="mod-btn ok" onclick="setReportStatus('${r.id}','resolved')">Marcar resolvida</button>` : ''}
+                        ${r.status !== 'reviewing' ? `<button class="mod-btn" onclick="setReportStatus('${r.id}','reviewing')">Em analise</button>` : ''}
+                        ${r.status !== 'dismissed' ? `<button class="mod-btn err" onclick="setReportStatus('${r.id}','dismissed')">Descartar</button>` : ''}
+                    </div>
+                </article>`).join('') : '<div class="empty-state"><p>Nenhuma denuncia ou reclamacao enviada.</p></div>';
+
+            reviewsEl.innerHTML = allReviews.length ? allReviews.map(r => `
+                <article class="moderation-item">
+                    <div class="moderation-top">
+                        <div>
+                            <div class="moderation-title">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)} · ${safeAdmin(r.reviewer_name || 'Cliente')}</div>
+                            <div class="moderation-meta">${formatDateTime(r.created_at)} · Status: ${safeAdmin(r.status)}</div>
+                        </div>
+                        <span class="pill ${r.status === 'published' ? 'pill-green' : 'pill-red'}">${safeAdmin(r.status)}</span>
+                    </div>
+                    <div class="moderation-meta">Perfil avaliado: ${safeAdmin(r.profile_id)}<br>Cliente: ${safeAdmin(r.customer_id)}</div>
+                    <p class="moderation-text">${safeAdmin(r.comment)}</p>
+                    <div class="moderation-actions">
+                        ${r.status !== 'published' ? `<button class="mod-btn ok" onclick="setReviewStatus('${r.id}','published')">Publicar</button>` : ''}
+                        ${r.status !== 'hidden' ? `<button class="mod-btn err" onclick="setReviewStatus('${r.id}','hidden')">Ocultar</button>` : ''}
+                    </div>
+                </article>`).join('') : '<div class="empty-state"><p>Nenhuma avaliacao ou comentario enviado.</p></div>';
+        }
+
+        async function setReportStatus(id, status) {
+            const { error } = await sb.from('safety_reports').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            const item = allReports.find(r => r.id === id);
+            if (item) item.status = status;
+            renderModeration();
+            updateSafetyBadge();
+            toast('Denuncia atualizada.');
+        }
+
+        async function setReviewStatus(id, status) {
+            const { error } = await sb.from('profile_reviews').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            const item = allReviews.find(r => r.id === id);
+            if (item) item.status = status;
+            renderModeration();
+            toast('Avaliacao atualizada.');
+        }
+
+        function reasonLabel(reason) {
+            return ({
+                golpe: 'Golpe ou fraude',
+                violencia: 'Violencia ou ameaca',
+                sem_consentimento: 'Sem consentimento',
+                ofensa: 'Ofensa ou baixo calao',
+                assedio: 'Assedio',
+                spam: 'Spam',
+                outro: 'Outro'
+            })[reason] || reason || 'Denuncia';
+        }
+
+        function formatDateTime(value) {
+            return value ? new Date(value).toLocaleString('pt-BR') : '-';
+        }
+
+        function safeAdmin(value) {
+            return String(value || '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
         }
 
         // DASHBOARD

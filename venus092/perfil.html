@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/perfil.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/safety-tools.js"></script>
   <style>
     .nav-cliente {
       display: flex;
@@ -286,7 +287,7 @@
               <i class="ti ti-arrow-right"></i>
             </a>
 
-            <button class="btn btn-outline btn-lg" style="width:100%;margin-top:12px;justify-content:center" onclick="reportProfileSafety()">
+            <button class="btn btn-outline btn-lg perfil-safety-btn" onclick="reportProfileSafety()">
               <i class="ti ti-shield-exclamation"></i>
               Denunciar ou bloquear
             </button>
@@ -348,12 +349,6 @@
                 <i class="ti ti-clock"></i> <span id="disponibHorarioTxt"></span>
               </p>
             </div>
-
-            <div class="divider"></div>
-
-            <button class="btn-reportar">
-              <i class="ti ti-flag"></i> Reportar anúncio
-            </button>
 
           </div>
         </div>
@@ -900,7 +895,7 @@
       const rating = parseInt(document.getElementById('reviewRating').value, 10);
       const comment = document.getElementById('reviewComment').value.trim();
       if (comment.length < 10) {
-        alert('Escreva pelo menos 10 caracteres na avaliacao.');
+        await VenusSafety.notice('Escreva pelo menos 10 caracteres na avaliacao.', 'Avaliacao incompleta', 'error');
         return;
       }
 
@@ -911,13 +906,13 @@
       });
 
       if (error) {
-        alert('Nao foi possivel publicar a avaliacao: ' + error.message);
+        await VenusSafety.notice('Nao foi possivel publicar a avaliacao: ' + error.message, 'Erro ao avaliar', 'error');
         return;
       }
 
       document.getElementById('reviewComment').value = '';
       await loadReviews(profileId);
-      alert('Avaliacao publicada. Obrigado por contribuir com a seguranca da comunidade.');
+      await VenusSafety.notice('Avaliacao publicada. Obrigado por contribuir com a seguranca da comunidade.', 'Avaliacao enviada');
     }
 
     async function reportProfileSafety() {
@@ -927,28 +922,38 @@
         return;
       }
 
-      const reason = prompt('Motivo da denuncia: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
-      if (!reason) return;
-      const normalized = reason.trim().toLowerCase();
-      const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
-      if (!details) return;
-      const blockUser = confirm('Deseja bloquear esta conta para impedir novas conversas?');
+      const report = await VenusSafety.openReport({
+        title: 'Denunciar ou bloquear perfil',
+        subtitle: 'Sua denuncia sera enviada para o administrador. Se bloquear, o chat fica travado e este perfil sai do seu catalogo.'
+      });
+      if (!report) return;
 
       const { error } = await sb.rpc('submit_safety_report', {
         p_reported_user_id: profileId,
-        p_reason: normalized,
-        p_details: details.trim(),
+        p_reason: report.reason,
+        p_details: report.details,
         p_profile_id: profileId,
         p_conversation_id: null,
-        p_block_user: blockUser
+        p_block_user: report.blockUser
       });
 
       if (error) {
-        alert('Nao foi possivel enviar a denuncia: ' + error.message);
+        await VenusSafety.notice('Nao foi possivel enviar a denuncia: ' + error.message, 'Erro ao denunciar', 'error');
         return;
       }
 
-      alert(blockUser ? 'Denuncia enviada e conta bloqueada.' : 'Denuncia enviada para analise.');
+      if (report.blockUser) markProfileBlocked();
+      await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e perfil bloqueado. Ele nao aparecera mais no seu catalogo.' : 'Denuncia enviada para analise do administrador.', 'Denuncia enviada');
+    }
+
+    function markProfileBlocked() {
+      ['whatsappBtn', 'chatBtn', 'floatingChatBtn'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.add('is-locked');
+        el.style.pointerEvents = 'none';
+        el.style.opacity = '0.55';
+      });
     }
 
     function htmlSafe(value) {

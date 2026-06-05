@@ -80,7 +80,7 @@ drop policy if exists "safety reports reporter select" on public.safety_reports;
 create policy "safety reports reporter select"
 on public.safety_reports for select
 to authenticated
-using (reporter_id = (select auth.uid()) or ((select auth.jwt() ->> 'email') = 'admin@venus092.com.br'));
+using (reporter_id = (select auth.uid()) or (((select auth.jwt()) ->> 'email') = 'admin@venus092.com.br'));
 
 drop policy if exists "safety reports reporter insert" on public.safety_reports;
 create policy "safety reports reporter insert"

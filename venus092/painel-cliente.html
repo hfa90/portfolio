@@ -7,6 +7,7 @@
     <title>Meu painel — Vênus</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/safety-tools.js"></script>
     <style>
         *,
         *::before,
@@ -1629,7 +1630,7 @@
                                     <div class="vc-head-sub">Conversa autenticada</div>
                                 </div>
                                 <span class="vc-chip" id="vcTimer">24h</span>
-                                <button class="vc-send" style="width:36px;height:36px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="vcReportSafety()"><i class="ti ti-shield-exclamation"></i></button>
+                                <button class="vc-send" style="width:auto;height:36px;padding:0 11px;gap:6px;background:#2a2020;color:#ffb4a8;border:1px solid rgba(248,113,113,.35)" title="Denunciar ou bloquear" onclick="vcReportSafety()"><i class="ti ti-shield-exclamation"></i><span style="font-size:.75rem;font-weight:800">Seguranca</span></button>
                             </div>
 
                             <div class="vc-messages" id="vcMessages"></div>
@@ -2040,7 +2041,7 @@
         }
 
         async function clearHistory() {
-            if (!confirm('Deseja limpar todo o histórico de visitas?')) return;
+            if (!await VenusSafety.confirmAction('Deseja limpar todo o historico de visitas?', 'Limpar historico', 'Limpar')) return;
             const { error } = await sb.from('customer_history').delete().eq('customer_id', currentUser.id);
             if (error) { toast('Erro ao limpar histórico.', 'erro'); return; }
             toast('Histórico apagado.', 'ok');
@@ -2349,22 +2350,31 @@
 
         async function vcReportSafety() {
             if (!vcActiveConv) return;
-            const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
-            if (!reason) return;
-            const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
-            if (!details) return;
-            const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+            const report = await VenusSafety.openReport({
+                title: 'Seguranca da conversa',
+                subtitle: 'Sua denuncia sera enviada ao administrador. Se bloquear, o chat trava e o perfil sai do seu catalogo.'
+            });
+            if (!report) return;
             const { error } = await sb.rpc('submit_safety_report', {
                 p_reported_user_id: vcActiveConv.professional_id,
-                p_reason: reason.trim().toLowerCase(),
-                p_details: details.trim(),
+                p_reason: report.reason,
+                p_details: report.details,
                 p_profile_id: vcActiveConv.professional_id,
                 p_conversation_id: vcActiveId,
-                p_block_user: blockUser
+                p_block_user: report.blockUser
             });
-            if (error) { toast('Erro ao enviar denuncia.', 'erro'); return; }
-            toast(blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada.', 'ok');
-            if (blockUser) document.getElementById('vcInputBar').classList.add('locked');
+            if (error) { await VenusSafety.notice('Erro ao enviar denuncia: ' + error.message, 'Erro', 'error'); return; }
+            toast(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada.', 'ok');
+            if (report.blockUser) {
+                document.getElementById('vcInputBar').classList.add('locked');
+                vcConvs = vcConvs.filter(c => c.id !== vcActiveId);
+                vcActiveId = null;
+                vcActiveConv = null;
+                vcRenderConversations();
+                document.getElementById('vcChatBox').style.display = 'none';
+                document.getElementById('vcNoChat').style.display = 'flex';
+            }
+            await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada para analise.', 'Denuncia enviada');
         }
 
         async function vcSend() {

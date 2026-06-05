@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/catalogo.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/safety-tools.js"></script>
   <style>
     /* ── SPINNER ── */
     .grid-spinner {
@@ -469,9 +470,18 @@
     // ══════════════════════════════════════════════════
     // NAVBAR: detectar cliente logado
     // ══════════════════════════════════════════════════
+    let currentSession = null;
+
     async function initNavbar() {
       const { data: { session } } = await sb.auth.getSession();
+      currentSession = session;
       if (!session) return; // anônimo → navbar padrão
+
+      const { data: blocks } = await sb
+        .from('user_blocks')
+        .select('blocked_id')
+        .eq('blocker_id', session.user.id);
+      state.blockedProfileIds = (blocks || []).map(b => b.blocked_id);
 
       // Checar se é cliente (tem registro em customers)
       const { data: cliente } = await sb
@@ -531,6 +541,7 @@
       precoMin: null,
       precoMax: null,
       sort: 'recent',
+      blockedProfileIds: [],
       coverUrls: {}       // cache profile_id -> signedUrl
     };
 
@@ -678,6 +689,10 @@
         state.total > 0 ? `${state.total.toLocaleString('pt-BR')} perfis` : '';
 
       let perfis = data || [];
+      if (state.blockedProfileIds?.length) {
+        const blocked = new Set(state.blockedProfileIds);
+        perfis = perfis.filter(p => !blocked.has(p.id));
+      }
 
       // ─ Filtro de preço client-side (precisa dos serviços) ─
       if (state.precoMin !== null || state.precoMax !== null) {
@@ -857,7 +872,7 @@
     // GPS
     // ══════════════════════════════════════════════════
     async function usarGPS() {
-      if (!navigator.geolocation) { alert('Seu navegador não suporta GPS.'); return; }
+      if (!navigator.geolocation) { VenusSafety.notice('Seu navegador nao suporta GPS.', 'Localizacao', 'error'); return; }
 
       const btn = document.getElementById('gpsBtn');
       btn.disabled = true;
@@ -891,7 +906,7 @@
 
             aplicarFiltros();
           } catch (e) {
-            alert('Não foi possível identificar o endereço. Tente digitar o CEP manualmente.');
+            await VenusSafety.notice('Nao foi possivel identificar o endereco. Tente digitar o CEP manualmente.', 'Localizacao', 'error');
           }
           btn.disabled = false;
           btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
@@ -899,8 +914,8 @@
         (err) => {
           btn.disabled = false;
           btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
-          if (err.code === 1) alert('Permissão de localização negada. Permita o acesso nas configurações do navegador.');
-          else alert('Não foi possível obter sua localização.');
+          if (err.code === 1) VenusSafety.notice('Permissao de localizacao negada. Permita o acesso nas configuracoes do navegador.', 'Localizacao', 'error');
+          else VenusSafety.notice('Nao foi possivel obter sua localizacao.', 'Localizacao', 'error');
         },
         { enableHighAccuracy: true, timeout: 10000 }
       );
@@ -959,8 +974,12 @@
     // ══════════════════════════════════════════════════
     // INIT
     // ══════════════════════════════════════════════════
-    initNavbar();
-    loadPerfis();
+    async function initCatalogo() {
+      await initNavbar();
+      await loadPerfis();
+    }
+
+    initCatalogo();
   </script>
 </body>
 

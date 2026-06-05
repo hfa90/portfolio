@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vênus — Painel</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/safety-tools.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
@@ -1702,7 +1703,7 @@
                 <span class="cchip cchip-gold">✓ Autenticado</span>
                 <span class="cchip cchip-green">● Conectado</span>
                 <span class="cchip cchip-timer" id="cTimer"></span>
-              <button class="csend-btn" style="width:36px;height:36px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="cReportSafety()"><i class="ti ti-shield-exclamation"></i></button>
+              <button class="csend-btn" style="width:auto;height:36px;padding:0 11px;gap:6px;background:#2a2020;color:#ffb4a8;border:1px solid rgba(248,113,113,.35)" title="Denunciar ou bloquear" onclick="cReportSafety()"><i class="ti ti-shield-exclamation"></i><span style="font-size:.75rem;font-weight:800">Seguranca</span></button>
               </div>
             </div>
 
@@ -1750,7 +1751,7 @@
     // LOGOUT
     // ============================================================
     async function logout() {
-      if (!confirm('Deseja sair do painel?')) return;
+      if (!await VenusSafety.confirmAction('Deseja sair do painel?', 'Confirmar saida', 'Sair')) return;
       await sb.auth.signOut();
       window.location.href = 'login.html';
     }
@@ -2218,7 +2219,7 @@
     }
 
     async function deleteFoto(id, path) {
-      if (!confirm('Deseja remover esta foto?')) return;
+      if (!await VenusSafety.confirmAction('Deseja remover esta foto?', 'Remover foto', 'Remover')) return;
       await sb.storage.from('fotos').remove([path]);
       const { error } = await sb.from('profile_photos').delete().eq('id', id);
       if (error) { showToast('Erro ao remover foto', 'error'); return; }
@@ -2293,7 +2294,7 @@
     }
 
     async function deleteServico(id) {
-      if (!confirm('Remover este serviço?')) return;
+      if (!await VenusSafety.confirmAction('Remover este servico?', 'Remover servico', 'Remover')) return;
       const { error } = await sb.from('services').delete().eq('id', id);
       if (error) { showToast('Erro ao remover serviço', 'error'); return; }
       servicosList = servicosList.filter(s => s.id !== id);
@@ -2624,22 +2625,31 @@
 
     async function cReportSafety() {
       if (!cConvData) return;
-      const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
-      if (!reason) return;
-      const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
-      if (!details) return;
-      const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+      const report = await VenusSafety.openReport({
+        title: 'Seguranca da conversa',
+        subtitle: 'Sua denuncia sera enviada ao administrador. Se bloquear, o chat trava para os dois lados.'
+      });
+      if (!report) return;
       const { error } = await sb.rpc('submit_safety_report', {
         p_reported_user_id: cConvData.client_id,
-        p_reason: reason.trim().toLowerCase(),
-        p_details: details.trim(),
+        p_reason: report.reason,
+        p_details: report.details,
         p_profile_id: currentUser.id,
         p_conversation_id: cConvId,
-        p_block_user: blockUser
+        p_block_user: report.blockUser
       });
-      if (error) { showToast('Erro ao enviar denuncia', 'error'); return; }
-      showToast(blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
-      if (blockUser) document.getElementById('cInputBar').classList.add('locked');
+      if (error) { await VenusSafety.notice('Erro ao enviar denuncia: ' + error.message, 'Erro', 'error'); return; }
+      showToast(report.blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
+      if (report.blockUser) {
+        document.getElementById('cInputBar').classList.add('locked');
+        cConvs = cConvs.filter(c => c.id !== cConvId);
+        cConvId = null;
+        cConvData = null;
+        cRenderList();
+        document.getElementById('cBox').style.display = 'none';
+        document.getElementById('cNoConv').style.display = 'flex';
+      }
+      await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada para analise.', 'Denuncia enviada');
     }
 
     async function cSend() {

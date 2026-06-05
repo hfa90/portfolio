@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Mensagens — Vênus</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/safety-tools.js"></script>
     <style>
         :root {
             --gold: #C9A84C;
@@ -768,7 +769,7 @@
                             <path d="M2 6l3 3 5-5" />
                         </svg>
                         Autenticado
-                    <button class="send-btn" style="width:38px;height:38px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="reportChatSafety()"><i class="ti ti-shield-exclamation"></i></button>
+                    <button class="send-btn" style="width:auto;height:38px;padding:0 12px;gap:6px;background:#2a2020;color:#ffb4a8;border:1px solid rgba(248,113,113,.35)" title="Denunciar ou bloquear" onclick="reportChatSafety()"><i class="ti ti-shield-exclamation"></i><span style="font-size:.78rem;font-weight:800">Seguranca</span></button>
                     </div>
                 </div>
 
@@ -1162,22 +1163,31 @@
         async function reportChatSafety() {
             if (!currentConvData) return;
             const otherId = currentConvData.professional_id === currentUser.id ? currentConvData.client_id : currentConvData.professional_id;
-            const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
-            if (!reason) return;
-            const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
-            if (!details) return;
-            const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+            const report = await VenusSafety.openReport({
+                title: 'Seguranca da conversa',
+                subtitle: 'Sua denuncia sera enviada ao administrador. Se bloquear, o chat trava para os dois lados.'
+            });
+            if (!report) return;
             const { error } = await sb.rpc('submit_safety_report', {
                 p_reported_user_id: otherId,
-                p_reason: reason.trim().toLowerCase(),
-                p_details: details.trim(),
+                p_reason: report.reason,
+                p_details: report.details,
                 p_profile_id: currentConvData.professional_id,
                 p_conversation_id: currentConvId,
-                p_block_user: blockUser
+                p_block_user: report.blockUser
             });
-            if (error) { showToast('Erro ao enviar denuncia'); return; }
-            showToast(blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
-            if (blockUser) document.getElementById('inputArea').classList.add('disabled');
+            if (error) { await VenusSafety.notice('Erro ao enviar denuncia: ' + error.message, 'Erro', 'error'); return; }
+            showToast(report.blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
+            if (report.blockUser) {
+                document.getElementById('inputArea').classList.add('disabled');
+                conversations = conversations.filter(c => c.id !== currentConvId);
+                currentConvId = null;
+                currentConvData = null;
+                await renderConvList();
+                document.getElementById('chatActive').style.display = 'none';
+                document.getElementById('noConvState').style.display = 'flex';
+            }
+            await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada para analise.', 'Denuncia enviada');
         }
 
         function startExpiryTimer(expiresAt) {
