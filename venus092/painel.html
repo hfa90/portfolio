@@ -1702,6 +1702,7 @@
                 <span class="cchip cchip-gold">✓ Autenticado</span>
                 <span class="cchip cchip-green">● Conectado</span>
                 <span class="cchip cchip-timer" id="cTimer"></span>
+              <button class="csend-btn" style="width:36px;height:36px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="cReportSafety()"><i class="ti ti-shield-exclamation"></i></button>
               </div>
             </div>
 
@@ -2620,6 +2621,26 @@
 
     function cSgl() { return `<svg viewBox="0 0 14 10"><polyline points="1,5 5,9 13,1"/></svg>`; }
     function cDbl() { return `<svg viewBox="0 0 18 10"><polyline points="1,5 5,9 13,1"/><polyline points="5,5 9,9 17,1"/></svg>`; }
+
+    async function cReportSafety() {
+      if (!cConvData) return;
+      const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
+      if (!reason) return;
+      const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
+      if (!details) return;
+      const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+      const { error } = await sb.rpc('submit_safety_report', {
+        p_reported_user_id: cConvData.client_id,
+        p_reason: reason.trim().toLowerCase(),
+        p_details: details.trim(),
+        p_profile_id: currentUser.id,
+        p_conversation_id: cConvId,
+        p_block_user: blockUser
+      });
+      if (error) { showToast('Erro ao enviar denuncia', 'error'); return; }
+      showToast(blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
+      if (blockUser) document.getElementById('cInputBar').classList.add('locked');
+    }
 
     async function cSend() {
       const input = document.getElementById('cInput');

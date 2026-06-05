@@ -768,6 +768,7 @@
                             <path d="M2 6l3 3 5-5" />
                         </svg>
                         Autenticado
+                    <button class="send-btn" style="width:38px;height:38px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="reportChatSafety()"><i class="ti ti-shield-exclamation"></i></button>
                     </div>
                 </div>
 
@@ -1158,6 +1159,27 @@
         }
 
         // ── TIMER DE EXPIRAÇÃO ──
+        async function reportChatSafety() {
+            if (!currentConvData) return;
+            const otherId = currentConvData.professional_id === currentUser.id ? currentConvData.client_id : currentConvData.professional_id;
+            const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
+            if (!reason) return;
+            const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
+            if (!details) return;
+            const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+            const { error } = await sb.rpc('submit_safety_report', {
+                p_reported_user_id: otherId,
+                p_reason: reason.trim().toLowerCase(),
+                p_details: details.trim(),
+                p_profile_id: currentConvData.professional_id,
+                p_conversation_id: currentConvId,
+                p_block_user: blockUser
+            });
+            if (error) { showToast('Erro ao enviar denuncia'); return; }
+            showToast(blockUser ? 'Denuncia enviada e contato bloqueado' : 'Denuncia enviada');
+            if (blockUser) document.getElementById('inputArea').classList.add('disabled');
+        }
+
         function startExpiryTimer(expiresAt) {
             clearInterval(timerInterval);
             const timerEl = document.getElementById('convTimer');

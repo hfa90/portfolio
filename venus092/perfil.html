@@ -207,6 +207,28 @@
             </div>
           </div>
 
+          <div class="perfil-card" id="cardReviews">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+              <h2 class="perfil-section-title" style="margin:0">Avaliacoes</h2>
+              <span id="reviewSummary" style="color:var(--gold);font-weight:700;font-size:.95rem">-</span>
+            </div>
+            <div id="reviewForm" style="display:none;margin-bottom:18px;padding:14px;border:1px solid rgba(201,168,76,.24);border-radius:8px;background:rgba(201,168,76,.06)">
+              <div style="display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:start">
+                <select id="reviewRating" style="height:40px;border-radius:8px;background:#151518;color:#f5f0e8;border:1px solid rgba(255,255,255,.12);padding:0 10px">
+                  <option value="5">5 estrelas</option>
+                  <option value="4">4 estrelas</option>
+                  <option value="3">3 estrelas</option>
+                  <option value="2">2 estrelas</option>
+                  <option value="1">1 estrela</option>
+                </select>
+                <textarea id="reviewComment" rows="3" maxlength="1200" placeholder="Conte como foi sua experiencia com respeito e objetividade." style="resize:vertical;border-radius:8px;background:#151518;color:#f5f0e8;border:1px solid rgba(255,255,255,.12);padding:10px;font-family:inherit"></textarea>
+              </div>
+              <button class="btn btn-gold btn-sm" style="margin-top:10px" onclick="submitReview()">Publicar avaliacao</button>
+            </div>
+            <div id="reviewLoginHint" style="display:none;color:var(--text-dim);font-size:.86rem;margin-bottom:14px">Entre como cliente para publicar uma avaliacao.</div>
+            <div id="reviewsList" style="display:flex;flex-direction:column;gap:12px"></div>
+          </div>
+
           <!-- LOCALIZAÇÃO -->
           <div class="perfil-card">
             <h2 class="perfil-section-title">Localização</h2>
@@ -264,6 +286,11 @@
               <i class="ti ti-arrow-right"></i>
             </a>
 
+            <button class="btn btn-outline btn-lg" style="width:100%;margin-top:12px;justify-content:center" onclick="reportProfileSafety()">
+              <i class="ti ti-shield-exclamation"></i>
+              Denunciar ou bloquear
+            </button>
+
             <!-- STATS -->
             <div class="perfil-stats">
               <div class="perfil-stat">
@@ -285,6 +312,16 @@
                 <div>
                   <strong id="statMembro">—</strong>
                   <span>Membro desde</span>
+                </div>
+              </div>
+
+
+
+              <div class="perfil-stat">
+                <i class="ti ti-star"></i>
+                <div>
+                  <strong id="statRating">-</strong>
+                  <span>Avaliacoes</span>
                 </div>
               </div>
             </div>
@@ -733,6 +770,7 @@
         ? new Date(p.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
         : '—';
       document.getElementById('statMembro').textContent = membro;
+      await loadReviews(profileId);
 
       // Atendimento
       const todosLocais = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
@@ -800,6 +838,126 @@
 
       // Esconde loading
       document.getElementById('loadingOverlay').style.display = 'none';
+    }
+
+    async function loadReviews(profileId) {
+      const [{ data: summary }, { data: reviews }] = await Promise.all([
+        sb.rpc('get_profile_review_summary', { p_profile_id: profileId }).maybeSingle(),
+        sb.from('profile_reviews')
+          .select('reviewer_name,rating,comment,created_at')
+          .eq('profile_id', profileId)
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
+          .limit(20)
+      ]);
+
+      const total = Number(summary?.total_reviews || 0);
+      const avg = summary?.average_rating ? Number(summary.average_rating).toFixed(1) : null;
+      const label = total ? `${avg} de 5 (${total})` : 'Sem avaliacoes';
+      document.getElementById('reviewSummary').textContent = label;
+      const statRating = document.getElementById('statRating');
+      if (statRating) statRating.textContent = total ? `${avg} / 5` : '-';
+
+      const list = document.getElementById('reviewsList');
+      if (!reviews?.length) {
+        list.innerHTML = '<p style="color:var(--text-dim);font-size:.9rem;margin:0">Ainda nao ha avaliacoes publicadas.</p>';
+      } else {
+        list.innerHTML = reviews.map(r => {
+          const stars = '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating);
+          return `
+          <div style="padding:12px 0;border-top:1px solid rgba(255,255,255,.06)">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:6px">
+              <strong style="font-size:.92rem">${htmlSafe(r.reviewer_name || 'Cliente')}</strong>
+              <span style="color:var(--gold);font-weight:700;font-size:.86rem">${stars}</span>
+            </div>
+            <p style="margin:0 0 6px;color:var(--text);line-height:1.55;font-size:.92rem">${htmlSafe(r.comment)}</p>
+            <small style="color:var(--text-dim)">${new Date(r.created_at).toLocaleDateString('pt-BR')}</small>
+          </div>`;
+        }).join('');
+      }
+
+      const form = document.getElementById('reviewForm');
+      const hint = document.getElementById('reviewLoginHint');
+      if (visitorCanContact && visitorSession?.user?.id && visitorSession.user.id !== profileId) {
+        form.style.display = '';
+        hint.style.display = 'none';
+      } else if (!visitorSession) {
+        form.style.display = 'none';
+        hint.style.display = '';
+      } else {
+        form.style.display = 'none';
+        hint.style.display = 'none';
+      }
+    }
+
+    async function submitReview() {
+      const profileId = getProfileId();
+      if (!visitorCanContact || !visitorSession?.user?.id) {
+        window.location.href = loginRedirectUrl();
+        return;
+      }
+
+      const rating = parseInt(document.getElementById('reviewRating').value, 10);
+      const comment = document.getElementById('reviewComment').value.trim();
+      if (comment.length < 10) {
+        alert('Escreva pelo menos 10 caracteres na avaliacao.');
+        return;
+      }
+
+      const { error } = await sb.rpc('submit_profile_review', {
+        p_profile_id: profileId,
+        p_rating: rating,
+        p_comment: comment
+      });
+
+      if (error) {
+        alert('Nao foi possivel publicar a avaliacao: ' + error.message);
+        return;
+      }
+
+      document.getElementById('reviewComment').value = '';
+      await loadReviews(profileId);
+      alert('Avaliacao publicada. Obrigado por contribuir com a seguranca da comunidade.');
+    }
+
+    async function reportProfileSafety() {
+      const profileId = getProfileId();
+      if (!visitorSession?.user?.id) {
+        window.location.href = loginRedirectUrl();
+        return;
+      }
+
+      const reason = prompt('Motivo da denuncia: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
+      if (!reason) return;
+      const normalized = reason.trim().toLowerCase();
+      const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
+      if (!details) return;
+      const blockUser = confirm('Deseja bloquear esta conta para impedir novas conversas?');
+
+      const { error } = await sb.rpc('submit_safety_report', {
+        p_reported_user_id: profileId,
+        p_reason: normalized,
+        p_details: details.trim(),
+        p_profile_id: profileId,
+        p_conversation_id: null,
+        p_block_user: blockUser
+      });
+
+      if (error) {
+        alert('Nao foi possivel enviar a denuncia: ' + error.message);
+        return;
+      }
+
+      alert(blockUser ? 'Denuncia enviada e conta bloqueada.' : 'Denuncia enviada para analise.');
+    }
+
+    function htmlSafe(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
     }
 
     // ============================================================

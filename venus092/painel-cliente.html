@@ -1629,6 +1629,7 @@
                                     <div class="vc-head-sub">Conversa autenticada</div>
                                 </div>
                                 <span class="vc-chip" id="vcTimer">24h</span>
+                                <button class="vc-send" style="width:36px;height:36px;background:#2a2020;color:#ffb4a8" title="Denunciar ou bloquear" onclick="vcReportSafety()"><i class="ti ti-shield-exclamation"></i></button>
                             </div>
 
                             <div class="vc-messages" id="vcMessages"></div>
@@ -2344,6 +2345,26 @@
                         </span>
                     </span>
                 </div>`;
+        }
+
+        async function vcReportSafety() {
+            if (!vcActiveConv) return;
+            const reason = prompt('Motivo: golpe, violencia, sem_consentimento, ofensa, assedio, spam ou outro');
+            if (!reason) return;
+            const details = prompt('Descreva o ocorrido com detalhes. Se houver risco imediato, procure ajuda local antes de continuar.');
+            if (!details) return;
+            const blockUser = confirm('Deseja bloquear esta pessoa e impedir novas conversas?');
+            const { error } = await sb.rpc('submit_safety_report', {
+                p_reported_user_id: vcActiveConv.professional_id,
+                p_reason: reason.trim().toLowerCase(),
+                p_details: details.trim(),
+                p_profile_id: vcActiveConv.professional_id,
+                p_conversation_id: vcActiveId,
+                p_block_user: blockUser
+            });
+            if (error) { toast('Erro ao enviar denuncia.', 'erro'); return; }
+            toast(blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada.', 'ok');
+            if (blockUser) document.getElementById('vcInputBar').classList.add('locked');
         }
 
         async function vcSend() {
