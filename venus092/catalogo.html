@@ -441,6 +441,21 @@
           </div>
         </div>
 
+        <div class="catalogo-smartbar">
+          <div>
+            <span class="catalogo-smartbar-label"><i class="ti ti-current-location"></i> Busca por região</span>
+            <strong data-location-label>Detectando sua localização...</strong>
+          </div>
+          <div class="catalogo-smartbar-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="usarGPS()">
+              <i class="ti ti-radar"></i> Atualizar localização
+            </button>
+            <button class="btn btn-gold btn-sm" type="button" onclick="toggleFiltros()">
+              <i class="ti ti-adjustments-horizontal"></i> Filtro avançado
+            </button>
+          </div>
+        </div>
+
         <!-- GRID DE PERFIS -->
         <div class="grid-profiles" id="profilesGrid">
           <div class="grid-spinner">
@@ -544,6 +559,88 @@
       blockedProfileIds: [],
       coverUrls: {}       // cache profile_id -> signedUrl
     };
+
+    const CAT_ALIASES = {
+      feminina: 'GP Feminina',
+      mulher: 'GP Feminina',
+      masculino: 'GP Masculino',
+      homem: 'GP Masculino',
+      trans: 'Trans',
+      travesti: 'Travesti',
+      lesbica: 'Lésbica',
+      'lésbica': 'Lésbica',
+      gay: 'Gay'
+    };
+
+    function normalizeCategoria(value) {
+      if (!value) return '';
+      const raw = String(value).trim();
+      const key = raw.toLowerCase();
+      return CAT_ALIASES[key] || raw;
+    }
+
+    function setCategoriaRapida(cat) {
+      document.querySelectorAll('#activeChips .chip').forEach(c => c.classList.remove('active'));
+      const chips = [...document.querySelectorAll('#activeChips .chip')];
+      const match = chips.find(chip => chip.textContent.trim().toLowerCase() === cat.toLowerCase());
+      (match || chips[0])?.classList.add('active');
+      state.categoryChip = match ? cat : '';
+      if (!match && cat) {
+        document.querySelectorAll('#filtroCategoria input').forEach(cb => {
+          cb.checked = cb.value === cat;
+        });
+      }
+    }
+
+    function initCatalogoFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('q') || params.get('busca') || '';
+      const cat = normalizeCategoria(params.get('cat') || params.get('categoria') || '');
+
+      if (q) document.getElementById('navSearch').value = q;
+      if (params.get('uf')) document.getElementById('filtroUf').value = params.get('uf').toUpperCase().slice(0, 2);
+      if (params.get('cidade')) document.getElementById('filtroCidade').value = params.get('cidade');
+      if (params.get('bairro')) document.getElementById('filtroBairro').value = params.get('bairro');
+      if (params.get('cep')) {
+        const cep = params.get('cep').replace(/\D/g, '');
+        if (cep.length === 8) document.getElementById('filtrosCep').value = cep.slice(0, 5) + '-' + cep.slice(5);
+      }
+      if (params.get('precoMin')) document.getElementById('filtroPrecoMin').value = params.get('precoMin');
+      if (params.get('precoMax')) document.getElementById('filtroPrecoMax').value = params.get('precoMax');
+      if (params.get('online') === '1') document.getElementById('chkOnline').checked = true;
+      if (params.get('verificado') === '1') document.getElementById('chkVerif').checked = true;
+      if (params.get('sort')) document.getElementById('sortSelect').value = params.get('sort');
+      if (params.get('atendimento')) {
+        document.querySelectorAll('.chk-atend').forEach(cb => {
+          cb.checked = cb.value === params.get('atendimento');
+        });
+      }
+      if (cat) setCategoriaRapida(cat);
+
+      const loc = [params.get('bairro'), params.get('cidade'), params.get('uf')].filter(Boolean).join(', ');
+      if (loc) mostrarCepInfo(loc);
+    }
+
+    function applyLocationToFilters(location, auto = false) {
+      if (!location) return;
+      const hasLocationFilter = document.getElementById('filtroCidade').value
+        || document.getElementById('filtroBairro').value
+        || document.getElementById('filtroUf').value
+        || document.getElementById('navSearch').value;
+      if (auto && hasLocationFilter) return;
+
+      if (location.bairro) document.getElementById('filtroBairro').value = location.bairro;
+      if (location.cidade) document.getElementById('filtroCidade').value = location.cidade;
+      if (location.uf) document.getElementById('filtroUf').value = location.uf;
+      if (location.cep?.length === 8) {
+        document.getElementById('filtrosCep').value = location.cep.slice(0, 5) + '-' + location.cep.slice(5);
+      }
+
+      const label = [location.bairro, location.cidade, location.uf].filter(Boolean).join(', ');
+      if (label) mostrarCepInfo(label);
+      state.page = 0;
+      aplicarFiltros();
+    }
 
     let debounceTimer = null;
     function debounceSearch() {
@@ -878,6 +975,19 @@
       btn.disabled = true;
       btn.innerHTML = '<div class="spin-sm"></div> Obtendo localização…';
 
+      if (window.VenusSite?.captureLocation) {
+        try {
+          const location = await window.VenusSite.captureLocation({ force: true });
+          applyLocationToFilters(location);
+        } catch {
+          VenusSafety.notice('Não foi possível obter sua localização.', 'Localização', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+        }
+        return;
+      }
+
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           try {
@@ -975,12 +1085,16 @@
     // INIT
     // ══════════════════════════════════════════════════
     async function initCatalogo() {
+      initCatalogoFromUrl();
+      window.addEventListener('venus:location', event => applyLocationToFilters(event.detail, true));
       await initNavbar();
       await loadPerfis();
     }
 
     initCatalogo();
   </script>
+  <script src="js/site.js" defer></script>
+  <script src="js/mobile-nav.js" defer></script>
 </body>
 
 </html>
