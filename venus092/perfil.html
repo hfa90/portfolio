@@ -107,6 +107,7 @@
           <i class="ti ti-chevron-right nav-cliente-arrow"></i>
         </a>
       </div>
+      <div class="perfil-menu-details" id="perfilMenuDetails" style="display:none"></div>
     </nav>
   </nav>
 
@@ -177,6 +178,22 @@
                   <span class="badge badge-gold" id="mobileCategoria">—</span>
                   <span class="badge badge-green" id="mobileOnline" style="display:none">● Online agora</span>
                   <span class="badge badge-blue" id="mobileVerif" style="display:none">Verificada ✓</span>
+                </div>
+                <div class="perfil-mobile-actions">
+                  <div class="perfil-mobile-price" id="mobilePriceBox" style="display:none">
+                    <span>A partir de</span>
+                    <strong id="mobilePriceValue">—</strong>
+                  </div>
+                  <div class="perfil-mobile-cta-row">
+                    <a id="mobileWhatsappBtn" href="#" target="_blank" class="perfil-mobile-cta whatsapp"
+                      style="pointer-events:none;opacity:0.5" aria-label="Chamar no WhatsApp">
+                      <i class="ti ti-brand-whatsapp"></i>
+                    </a>
+                    <a id="mobileChatBtn" href="#" class="perfil-mobile-cta chat" style="pointer-events:none;opacity:0.55"
+                      aria-label="Iniciar chat">
+                      <i class="ti ti-message-heart"></i>
+                    </a>
+                  </div>
                 </div>
               </div>
               <button class="perfil-fav-btn" id="favBtn" onclick="toggleFav()">
@@ -574,6 +591,79 @@
       return map[local] || 'ti-map-pin';
     }
 
+    function renderProfileMenuDetails(locais, disponib) {
+      const box = document.getElementById('perfilMenuDetails');
+      if (!box) return;
+
+      const todosLocais = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
+      const tiposAtivos = (locais || []).map(l => l.tipo);
+      const dias = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+      const diasAtivos = (disponib || []).map(d => d.dia_semana);
+
+      box.style.display = 'block';
+      box.innerHTML = `
+        <div class="perfil-menu-block">
+          <div class="perfil-menu-title"><i class="ti ti-map-pin-heart"></i> Atendimento</div>
+          <div class="perfil-menu-pills">
+            ${todosLocais.map(tipo => `
+              <span class="perfil-menu-pill ${tiposAtivos.includes(tipo) ? 'active' : ''}">
+                <i class="ti ${tiposAtivos.includes(tipo) ? 'ti-check' : 'ti-x'}"></i>${tipo}
+              </span>
+            `).join('')}
+          </div>
+        </div>
+        <div class="perfil-menu-block">
+          <div class="perfil-menu-title"><i class="ti ti-calendar-heart"></i> Disponibilidade</div>
+          <div class="perfil-menu-pills">
+            ${dias.map((dia, i) => `
+              <span class="perfil-menu-pill ${diasAtivos.includes(i) ? 'active' : ''}">${dia}</span>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function setupMobileExpandable(el, lines) {
+      if (!el) return;
+      let btn = el.nextElementSibling?.classList?.contains('perfil-expand-toggle')
+        ? el.nextElementSibling
+        : null;
+
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'perfil-expand-toggle';
+        el.insertAdjacentElement('afterend', btn);
+      }
+
+      el.classList.remove('is-collapsed', 'lines-4', 'lines-5');
+      btn.classList.remove('is-visible');
+      btn.textContent = 'Ver mais';
+
+      if (!window.matchMedia('(max-width: 600px)').matches) return;
+
+      const lineHeight = parseFloat(getComputedStyle(el).lineHeight) || 22;
+      const needsClamp = el.scrollHeight > (lineHeight * lines + 3);
+      if (!needsClamp) return;
+
+      el.classList.add('mobile-clamp', `lines-${lines}`, 'is-collapsed');
+      btn.classList.add('is-visible');
+      btn.onclick = () => {
+        const collapsed = el.classList.toggle('is-collapsed');
+        btn.textContent = collapsed ? 'Ver mais' : 'Ver menos';
+      };
+    }
+
+    function refreshExpandableText() {
+      setupMobileExpandable(document.getElementById('bioParagraph'), 5);
+      document.querySelectorAll('.pack-desc').forEach(el => setupMobileExpandable(el, 4));
+    }
+
+    window.addEventListener('resize', () => {
+      clearTimeout(window.__venusClampTimer);
+      window.__venusClampTimer = setTimeout(refreshExpandableText, 160);
+    });
+
     // ============================================================
     // GALERIA (fotos aprovadas via URL assinada — bucket privado)
     // ============================================================
@@ -693,7 +783,7 @@
       document.getElementById('breadcrumbCategoria').textContent = p.categoria || 'Catálogo';
 
       const chatUrl = `chat-cliente.html?profissional=${encodeURIComponent(profileId)}&nome=${encodeURIComponent(nome)}`;
-      ['chatBtn', 'floatingChatBtn'].forEach(id => {
+      ['chatBtn', 'floatingChatBtn', 'mobileChatBtn'].forEach(id => {
         protectContactButton(document.getElementById(id), chatUrl, profileId, 'chat_click');
       });
 
@@ -711,6 +801,7 @@
       if (p.bio) {
         document.getElementById('cardBio').style.display = '';
         document.getElementById('bioParagraph').textContent = p.bio;
+        requestAnimationFrame(refreshExpandableText);
       }
 
       // Características
@@ -740,6 +831,8 @@
         if (isFinite(minPreco)) {
           document.getElementById('priceBox').style.display = '';
           document.getElementById('priceValue').textContent = 'R$ ' + minPreco.toLocaleString('pt-BR');
+          document.getElementById('mobilePriceBox').style.display = '';
+          document.getElementById('mobilePriceValue').textContent = 'R$ ' + minPreco.toLocaleString('pt-BR');
         }
         document.getElementById('servicosList').innerHTML = servicos.map(s => `
       <div class="servico-item">
@@ -755,7 +848,9 @@
       await loadPacks(profileId);
 
       // WhatsApp
-      const wa = document.getElementById('whatsappBtn');
+      const waButtons = ['whatsappBtn', 'mobileWhatsappBtn']
+        .map(id => document.getElementById(id))
+        .filter(Boolean);
       if (visitorCanContact) {
         const { data: contato } = await sb
           .from('profiles')
@@ -764,10 +859,14 @@
           .single();
         if (contato?.whatsapp) {
           const num = contato.whatsapp.replace(/\D/g, '');
-          protectContactButton(wa, `https://wa.me/55${num}`, profileId, 'whatsapp_click', { target: '_blank' });
+          waButtons.forEach(wa => {
+            protectContactButton(wa, `https://wa.me/55${num}`, profileId, 'whatsapp_click', { target: '_blank' });
+          });
         }
       } else {
-        protectContactButton(wa, loginRedirectUrl(), profileId, 'whatsapp_click');
+        waButtons.forEach(wa => {
+          protectContactButton(wa, loginRedirectUrl(), profileId, 'whatsapp_click');
+        });
       }
 
       // Stats
@@ -801,6 +900,8 @@
         document.getElementById('disponibHorario').style.display = '';
         document.getElementById('disponibHorarioTxt').textContent = `${ini} às ${fim}`;
       }
+
+      renderProfileMenuDetails(locais, disponib);
 
       // Localização
       const locParts = [p.bairro, p.cidade, p.uf].filter(Boolean);
@@ -865,7 +966,7 @@
         <div class="pack-item">
           <div>
             <div class="pack-title">${esc(pack.title)}</div>
-            ${pack.description ? `<div class="pack-desc">${esc(pack.description)}</div>` : ''}
+            ${pack.description ? `<div class="pack-desc mobile-clamp">${esc(pack.description)}</div>` : ''}
           </div>
           <div class="pack-price">R$ ${Number(pack.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
           <button class="btn btn-gold btn-sm pack-buy" onclick="openPixModal('${pack.id}')">
@@ -874,6 +975,7 @@
         </div>
       `).join('');
       window.__venusPacks = packs;
+      requestAnimationFrame(refreshExpandableText);
     }
 
     function tlv(id, value) {
