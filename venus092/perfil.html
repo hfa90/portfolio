@@ -193,6 +193,11 @@
                       aria-label="Iniciar chat">
                       <i class="ti ti-message-heart"></i>
                     </a>
+                    <div class="perfil-mobile-stat-strip" aria-label="Estatísticas do perfil">
+                      <span><i class="ti ti-eye"></i><strong id="mobileStatViews">—</strong></span>
+                      <span><i class="ti ti-heart"></i><strong id="mobileStatFavs">—</strong></span>
+                      <span><i class="ti ti-calendar"></i><strong id="mobileStatMembro">—</strong></span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -209,7 +214,7 @@
           </div>
 
           <!-- CARACTERÍSTICAS -->
-          <div class="perfil-card">
+          <div class="perfil-card perfil-mobile-accordion" id="cardCaracteristicas">
             <h2 class="perfil-section-title">Características</h2>
             <div class="caract-grid" id="caractGrid">
               <!-- preenchido pelo JS -->
@@ -217,7 +222,7 @@
           </div>
 
           <!-- SERVIÇOS -->
-          <div class="perfil-card" id="cardServicos" style="display:none">
+          <div class="perfil-card perfil-mobile-accordion" id="cardServicos" style="display:none">
             <h2 class="perfil-section-title">Serviços e preços</h2>
             <div class="servicos-list" id="servicosList">
               <!-- preenchido pelo JS -->
@@ -232,7 +237,7 @@
             <div class="packs-list" id="packsList"></div>
           </div>
           <!-- LOCALIZAÇÃO -->
-          <div class="perfil-card">
+          <div class="perfil-card perfil-mobile-accordion" id="cardLocalizacao">
             <h2 class="perfil-section-title">Localização</h2>
             <div class="perfil-localizacao" id="localizacaoInfo">
               <!-- preenchido pelo JS -->
@@ -659,9 +664,53 @@
       document.querySelectorAll('.pack-desc').forEach(el => setupMobileExpandable(el, 4));
     }
 
+    function compactNumber(value) {
+      const n = Number(value) || 0;
+      if (n >= 1000000) return (n / 1000000).toFixed(n >= 10000000 ? 0 : 1).replace('.', ',') + 'M';
+      if (n >= 1000) return (n / 1000).toFixed(n >= 10000 ? 0 : 1).replace('.', ',') + 'k';
+      return n.toLocaleString('pt-BR');
+    }
+
+    function compactMemberDate(value) {
+      if (!value) return '—';
+      const date = new Date(value);
+      const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+      return `${month}/${String(date.getFullYear()).slice(-2)}`;
+    }
+
+    function initMobileAccordions() {
+      const cards = [...document.querySelectorAll('.perfil-mobile-accordion')];
+      if (!cards.length) return;
+
+      cards.forEach(card => {
+        if (card.dataset.mobileAccordionReady) return;
+        card.dataset.mobileAccordionReady = '1';
+        card.addEventListener('click', event => {
+          if (!window.matchMedia('(max-width: 600px)').matches) return;
+          if (event.target.closest('a,button,input,textarea,select')) return;
+          event.stopPropagation();
+          const willOpen = !card.classList.contains('is-open');
+          cards.forEach(item => item.classList.remove('is-open'));
+          card.classList.toggle('is-open', willOpen);
+        });
+      });
+
+      if (!document.body.dataset.profileAccordionCloseReady) {
+        document.body.dataset.profileAccordionCloseReady = '1';
+        document.addEventListener('click', event => {
+          if (!window.matchMedia('(max-width: 600px)').matches) return;
+          if (event.target.closest('.perfil-mobile-accordion')) return;
+          cards.forEach(item => item.classList.remove('is-open'));
+        });
+      }
+    }
+
     window.addEventListener('resize', () => {
       clearTimeout(window.__venusClampTimer);
       window.__venusClampTimer = setTimeout(refreshExpandableText, 160);
+      if (!window.matchMedia('(max-width: 600px)').matches) {
+        document.querySelectorAll('.perfil-mobile-accordion').forEach(card => card.classList.remove('is-open'));
+      }
     });
 
     // ============================================================
@@ -872,10 +921,13 @@
       // Stats
       document.getElementById('statViews').textContent = (views || 0).toLocaleString('pt-BR');
       document.getElementById('statFavs').textContent = favs || 0;
+      document.getElementById('mobileStatViews').textContent = compactNumber(views);
+      document.getElementById('mobileStatFavs').textContent = compactNumber(favs);
       const membro = p.created_at
         ? new Date(p.created_at).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
         : '—';
       document.getElementById('statMembro').textContent = membro;
+      document.getElementById('mobileStatMembro').textContent = compactMemberDate(p.created_at);
 
       // Atendimento
       const todosLocais = ['Local próprio', 'A domicílio', 'Motel / Hotel', 'Online'];
@@ -944,6 +996,8 @@
       }
 
       // Esconde loading
+      initMobileAccordions();
+      refreshExpandableText();
       document.getElementById('loadingOverlay').style.display = 'none';
     }
 
