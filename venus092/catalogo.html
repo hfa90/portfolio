@@ -235,7 +235,12 @@
       <aside class="filtros-sidebar" id="filtrosSidebar">
         <div class="filtros-header">
           <h2>Filtros</h2>
-          <button class="filtros-clear" onclick="limparFiltros()">Limpar tudo</button>
+          <div class="filtros-header-actions">
+            <button class="filtros-clear" onclick="limparFiltros()">Limpar tudo</button>
+            <button class="filtros-close" type="button" onclick="closeFiltros()" aria-label="Fechar filtros">
+              <i class="ti ti-x"></i>
+            </button>
+          </div>
         </div>
 
         <!-- Localização -->
@@ -407,6 +412,7 @@
           <i class="ti ti-filter"></i> Aplicar filtros
         </button>
       </aside>
+      <button class="filtros-overlay" id="filtrosOverlay" type="button" onclick="closeFiltros()" aria-label="Fechar painel de filtros tocando fora"></button>
 
       <!-- CONTEÚDO PRINCIPAL -->
       <div class="catalogo-main">
@@ -446,6 +452,11 @@
             <span class="catalogo-smartbar-label"><i class="ti ti-current-location"></i> Busca por região</span>
             <strong data-location-label>Detectando sua localização...</strong>
           </div>
+          <label class="catalogo-bairro-quick">
+            <i class="ti ti-map-pin-search"></i>
+            <span>Bairro</span>
+            <input type="text" id="quickBairro" placeholder="Digite o bairro" oninput="syncQuickBairro()" />
+          </label>
           <div class="catalogo-smartbar-actions">
             <button class="btn btn-outline btn-sm" type="button" onclick="usarGPS()">
               <i class="ti ti-radar"></i> Atualizar localização
@@ -619,6 +630,7 @@
 
       const loc = [params.get('bairro'), params.get('cidade'), params.get('uf')].filter(Boolean).join(', ');
       if (loc) mostrarCepInfo(loc);
+      syncBairroFields();
     }
 
     function applyLocationToFilters(location, auto = false) {
@@ -638,6 +650,7 @@
 
       const label = [location.bairro, location.cidade, location.uf].filter(Boolean).join(', ');
       if (label) mostrarCepInfo(label);
+      syncBairroFields();
       state.page = 0;
       aplicarFiltros();
     }
@@ -668,6 +681,7 @@
     // COLETA FILTROS DA SIDEBAR
     // ══════════════════════════════════════════════════
     function coletarFiltros() {
+      syncBairroFields();
       state.search = document.getElementById('navSearch').value.trim();
       state.uf = document.getElementById('filtroUf').value;
       state.cidade = document.getElementById('filtroCidade').value.trim();
@@ -700,8 +714,11 @@
       document.querySelectorAll('.filtros-sidebar input[type=number]').forEach(i => i.value = '');
       document.getElementById('filtroUf').value = '';
       document.getElementById('navSearch').value = '';
+      const quickBairro = document.getElementById('quickBairro');
+      if (quickBairro) quickBairro.value = '';
       document.getElementById('cepiInfo').style.display = 'none';
       document.getElementById('cepError').style.display = 'none';
+      syncBairroFields();
       // Reset chips
       document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
       document.querySelector('.chip').classList.add('active');
@@ -1009,6 +1026,7 @@
             if (bairro) document.getElementById('filtroBairro').value = bairro;
             if (cidade) document.getElementById('filtroCidade').value = cidade;
             if (uf) document.getElementById('filtroUf').value = uf.toUpperCase().slice(0, 2);
+            syncBairroFields();
             if (cep && cep.length === 8) {
               document.getElementById('filtrosCep').value = cep.slice(0, 5) + '-' + cep.slice(5);
               mostrarCepInfo(`${bairro || cidade}, ${uf.toUpperCase().slice(0, 2)}`);
@@ -1061,6 +1079,7 @@
         document.getElementById('filtroCidade').value = data.localidade || '';
         document.getElementById('filtroBairro').value = data.bairro || '';
         document.getElementById('filtroUf').value = data.uf || '';
+        syncBairroFields();
         mostrarCepInfo(`${data.bairro ? data.bairro + ', ' : ''}${data.localidade} — ${data.uf}`);
         aplicarFiltros();
       } catch {
@@ -1074,11 +1093,36 @@
       document.getElementById('cepError').style.display = 'none';
     }
 
+    function syncQuickBairro() {
+      const quick = document.getElementById('quickBairro');
+      const bairro = document.getElementById('filtroBairro');
+      if (!quick || !bairro) return;
+      bairro.value = quick.value;
+      debounceSearch();
+    }
+
+    function syncBairroFields() {
+      const quick = document.getElementById('quickBairro');
+      const bairro = document.getElementById('filtroBairro');
+      if (quick && bairro && quick.value !== bairro.value) quick.value = bairro.value;
+    }
+
     // ══════════════════════════════════════════════════
     // MISC
     // ══════════════════════════════════════════════════
     function toggleFiltros() {
-      document.getElementById('filtrosSidebar').classList.toggle('open');
+      const sidebar = document.getElementById('filtrosSidebar');
+      const overlay = document.getElementById('filtrosOverlay');
+      const willOpen = !sidebar.classList.contains('open');
+      sidebar.classList.toggle('open', willOpen);
+      overlay?.classList.toggle('open', willOpen);
+      document.body.classList.toggle('filtros-open', willOpen);
+    }
+
+    function closeFiltros() {
+      document.getElementById('filtrosSidebar')?.classList.remove('open');
+      document.getElementById('filtrosOverlay')?.classList.remove('open');
+      document.body.classList.remove('filtros-open');
     }
 
     // ══════════════════════════════════════════════════
