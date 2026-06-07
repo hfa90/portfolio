@@ -29,6 +29,14 @@
     return String(value || '').replace(/\D/g, '');
   }
 
+  function formatPhone(value) {
+    const digits = normalizeInput(value).slice(0, 11);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  }
+
   async function call(payload) {
     const res = await fetch(EDGE_URL, {
       method: 'POST',
@@ -60,16 +68,20 @@
     const role = box.dataset.role === 'profissional' ? 'profissional' : 'cliente';
     const purpose = box.dataset.purpose || 'login';
     const allowPassword = box.dataset.allowPassword === 'true';
+    const compact = box.dataset.compact === 'true';
 
     box.classList.add('telegram-code-flow');
     box.innerHTML = `
-      <div>
+      ${compact ? '' : `<div>
         <div class="telegram-quick-title"><i class="ti ti-brand-telegram"></i> ${titleFor(role, purpose)}</div>
         <p>${descFor(purpose)}</p>
-      </div>
+      </div>`}
       <div class="telegram-code-fields">
         <div class="telegram-code-row">
-          <input class="form-input" type="tel" inputmode="tel" autocomplete="tel" data-code-phone placeholder="Telefone com DDD" />
+          <div class="telegram-phone-wrap">
+            <i class="ti ti-device-mobile"></i>
+            <input class="form-input" type="tel" inputmode="numeric" autocomplete="tel" data-code-phone maxlength="15" placeholder="(92) 99525-8724" aria-label="Telefone com DDD" />
+          </div>
           <button type="button" class="btn btn-gold" data-code-send><i class="ti ti-send"></i> Enviar codigo</button>
         </div>
         <div class="telegram-code-bot" data-code-bot>
@@ -92,6 +104,16 @@
     const verifyBtn = box.querySelector('[data-code-verify]');
     const botBox = box.querySelector('[data-code-bot]');
     const botLink = box.querySelector('[data-code-bot-link]');
+
+    phoneEl.addEventListener('input', () => {
+      phoneEl.value = formatPhone(phoneEl.value);
+    });
+
+    phoneEl.addEventListener('paste', () => {
+      requestAnimationFrame(() => {
+        phoneEl.value = formatPhone(phoneEl.value);
+      });
+    });
 
     sendBtn.addEventListener('click', async () => {
       const phone = normalizeInput(phoneEl.value);
