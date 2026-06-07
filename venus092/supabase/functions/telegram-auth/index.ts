@@ -9,6 +9,7 @@ const ALLOWED_ORIGINS = [
   "https://haydenfernandes.com.br",
   "https://www.haydenfernandes.com.br",
   "http://127.0.0.1:8020",
+  "http://127.0.0.1:8021",
   "http://localhost:3000",
   "http://localhost:5173",
 ];
@@ -259,7 +260,7 @@ Deno.serve(async (req) => {
           ok: true,
           needs_professional_signup: true,
           redirect_to: `${settings.site_base_url}/cadastro.html?telegram=1`,
-          message: "Para profissional, crie o perfil completo primeiro e vincule o Telegram no painel.",
+          message: "Telegram verificado. Agora preencha o cadastro rapido para salvar o vinculo de seguranca.",
         });
       }
       userId = await createCustomerFromTelegram(admin, telegram);

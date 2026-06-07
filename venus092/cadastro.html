@@ -84,17 +84,35 @@
         <div class="cadastro-form-wrap">
           <div class="cadastro-form-header">
             <h2>Criar conta gratuita</h2>
-            <p>Preencha os dados abaixo para começar</p>
+            <p>Cadastre pelo telefone. O perfil completo vem depois, dentro do painel.</p>
           </div>
 
-          <div class="telegram-quick">
-            <div class="telegram-quick-title"><i class="ti ti-brand-telegram"></i> Acesso rapido depois do cadastro</div>
-            <p>Profissionais precisam completar o perfil primeiro. Depois, vincule o Telegram no painel para entrar em um toque.</p>
-            <a class="telegram-fallback-link" href="https://t.me/venus092_bot?start=profissional" target="_blank" rel="noopener">
-              <i class="ti ti-brand-telegram"></i> Abrir bot da Venus
-            </a>
+          <div class="telegram-security" id="telegramSignupBox">
+            <div class="telegram-security-head">
+              <div class="telegram-security-icon"><i class="ti ti-brand-telegram"></i></div>
+              <div>
+                <h3>Cadastro rapido por telefone</h3>
+                <p id="telegramSignupStatus">Digite seu telefone, receba o codigo no Telegram e entre no painel para completar o perfil depois.</p>
+              </div>
+            </div>
+            <div class="telegram-security-grid">
+              <div>
+                <span class="telegram-security-timer"><i class="ti ti-clock-bolt"></i> codigo no Telegram</span>
+                <div data-telegram-code data-role="profissional" data-purpose="signup"></div>
+              </div>
+              <div class="telegram-security-steps">
+                <div class="security-step"><i class="ti ti-shield-check"></i><span><strong>Seguranca:</strong> o telefone fica vinculado ao Telegram.</span></div>
+                <div class="security-step"><i class="ti ti-lock"></i><span><strong>Rapido:</strong> cadastro sem preencher perfil agora.</span></div>
+                <div class="security-step"><i class="ti ti-sparkles"></i><span><strong>Depois:</strong> o painel mostra como completar o perfil.</span></div>
+              </div>
+            </div>
           </div>
 
+          <div class="quick-form-note">
+            O formulario completo foi movido para depois do cadastro. Assim a profissional cria a conta primeiro e preenche fotos, bio, servicos e localizacao com calma no painel.
+          </div>
+
+          <div class="legacy-profile-form" hidden>
           <!-- STEPS INDICATOR -->
           <div class="steps-indicator">
             <div class="step active" id="step-ind-1">
@@ -109,12 +127,12 @@
             <div class="step-line"></div>
             <div class="step" id="step-ind-3">
               <div class="step-num">3</div>
-              <span>Fotos</span>
+              <span>Fotos depois</span>
             </div>
             <div class="step-line"></div>
             <div class="step" id="step-ind-4">
               <div class="step-num">4</div>
-              <span>Serviços</span>
+              <span>Extras</span>
             </div>
           </div>
 
@@ -278,8 +296,14 @@
                 <button type="button" class="btn btn-ghost" onclick="goStep(1)">
                   <i class="ti ti-arrow-left"></i> Voltar
                 </button>
-                <button type="button" class="btn btn-gold" onclick="goStep(3)">
-                  Continuar <i class="ti ti-arrow-right"></i>
+                <button type="submit" class="btn btn-gold btn-lg">
+                  <i class="ti ti-check"></i> Criar perfil agora
+                </button>
+              </div>
+              <div class="quick-form-note">
+                Fotos, servicos, locais e disponibilidade podem ser preenchidos em seguida no painel com um tutorial rapido.
+                <button type="button" class="telegram-fallback-link" style="margin-left:.25rem;" onclick="goStep(3)">
+                  adicionar detalhes agora
                 </button>
               </div>
             </div>
@@ -404,6 +428,7 @@
             </div>
 
           </form>
+          </div>
         </div>
       </div>
     </div>
@@ -416,6 +441,7 @@
     const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
     // Sempre cria _supabase inline — não depende de supabase.js externo
     const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const TELEGRAM_SIGNUP_KEY = 'venus:telegramSignup';
 
     function toast(msg, tipo = 'info') {
       const el = document.createElement('div');
@@ -432,6 +458,40 @@
     // ── Variáveis globais ─────────────────────────────────────────
     let currentStep = 1;
     let uploadedFiles = [];
+
+    function getTelegramSignup() {
+      try {
+        const raw = sessionStorage.getItem(TELEGRAM_SIGNUP_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        const ageMs = Date.now() - Number(parsed.saved_at || 0);
+        if (parsed.role !== 'profissional' || !parsed.user || ageMs > 15 * 60 * 1000) {
+          sessionStorage.removeItem(TELEGRAM_SIGNUP_KEY);
+          return null;
+        }
+        return parsed;
+      } catch {
+        return null;
+      }
+    }
+
+    function updateTelegramSignupUI() {
+      const pending = getTelegramSignup();
+      const box = document.getElementById('telegramSignupBox');
+      const status = document.getElementById('telegramSignupStatus');
+      if (!box || !status) return;
+      if (!pending) {
+        box.classList.remove('verified');
+        status.textContent = 'Digite seu telefone, receba o codigo no Telegram e entre no painel para completar o perfil depois.';
+        return;
+      }
+      const name = [pending.user.first_name, pending.user.last_name].filter(Boolean).join(' ') || pending.user.username || 'Telegram verificado';
+      box.classList.add('verified');
+      status.textContent = `${name}: Telegram verificado. Agora preencha os campos essenciais; o vinculo sera salvo junto com seu cadastro.`;
+    }
+
+    document.addEventListener('venus:telegram-signup-verified', updateTelegramSignupUI);
+    updateTelegramSignupUI();
 
     // ── Navegação entre steps ─────────────────────────────────────
     function goStep(n) {
@@ -551,7 +611,7 @@
     document.getElementById('cadastroForm').addEventListener('submit', async (e) => {
       e.preventDefault();
 
-      const btn = e.target.querySelector('button[type=submit]');
+      const btn = e.submitter || e.target.querySelector('.form-step.active button[type=submit]') || e.target.querySelector('button[type=submit]');
       btn.disabled = true;
       btn.innerHTML = '<i class="ti ti-loader-2"></i> Enviando…';
 
@@ -580,6 +640,7 @@
         whatsapp: tel.replace(/\D/g, ''),
         termos_aceitos: termos,
         conteudo_adulto_aceito: adulto,
+        telegram: getTelegramSignup()?.user || null,
 
         // step2 — usa placeholder exato do HTML
         nome_artistico: document.querySelector('#step2 input[placeholder="Como você quer ser chamada(o)"]')?.value?.trim() || '',
@@ -610,7 +671,6 @@
           body: JSON.stringify(payload),
         });
         const json = await res.json();
-        console.log('RESPOSTA SERVIDOR:', json); // debug
         if (!json.ok) {
           const msg = json.campos
             ? 'Campos inválidos: ' + json.campos.join(' | ')
@@ -626,6 +686,10 @@
 
       // 2. Login automático
       toast('Cadastro criado! Confirme o e-mail enviado para liberar seu painel profissional.', 'ok');
+      try {
+        sessionStorage.removeItem(TELEGRAM_SIGNUP_KEY);
+        localStorage.setItem('venus:onboarding:profissional', '1');
+      } catch {}
       btn.innerHTML = '<i class="ti ti-mail-check"></i> Verifique seu e-mail';
       setTimeout(() => window.location.href = 'login.html?confirmacao=pendente', 2400);
       return;
@@ -658,7 +722,7 @@
       setTimeout(() => window.location.href = 'painel.html', 1500);
     });
   </script>
-  <script src="js/telegram-login.js" defer></script>
+  <script src="js/telegram-code.js" defer></script>
   <script src="js/site.js" defer></script>
   <script src="js/mobile-nav.js" defer></script>
 </body>

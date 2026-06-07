@@ -13,6 +13,8 @@ const ALLOWED_ORIGINS = [
   "https://venus.app",
   "https://haydenfernandes.com.br",
   "https://www.haydenfernandes.com.br",
+  "http://127.0.0.1:8020",
+  "http://127.0.0.1:8021",
   "http://localhost:3000",
   "http://localhost:5173",
 ];
@@ -50,6 +52,109 @@ function sanitize(s: unknown): string {
 }
 
 // ── Handler principal ─────────────────────────────────────────
+type TelegramPayload = {
+  id: number | string;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date: number | string;
+  hash: string;
+};
+
+function cleanText(value: unknown, max = 160) {
+  return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function bytesToHex(bytes: Uint8Array) {
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacHex(secret: Uint8Array, data: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secret,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signed = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(data));
+  return bytesToHex(new Uint8Array(signed));
+}
+
+async function sha256(value: string) {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+}
+
+function timingSafeEqual(a: string, b: string) {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i += 1) result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return result === 0;
+}
+
+async function getTelegramBotToken(admin: ReturnType<typeof createClient>) {
+  const { data, error } = await admin
+    .from("telegram_settings")
+    .select("value")
+    .eq("key", "bot_token")
+    .maybeSingle();
+
+  if (error || !data?.value) throw new Error("Configuracao do Telegram indisponivel");
+  return String(data.value);
+}
+
+async function verifyTelegramAuth(payload: TelegramPayload, botToken: string) {
+  if (!payload?.id || !payload?.auth_date || !payload?.hash) return false;
+
+  const authDate = Number(payload.auth_date);
+  if (!Number.isFinite(authDate)) return false;
+  const ageSeconds = Math.floor(Date.now() / 1000) - authDate;
+  if (ageSeconds < 0 || ageSeconds > 86400) return false;
+
+  const entries = Object.entries(payload)
+    .filter(([key, value]) => key !== "hash" && value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => [key, String(value)] as const)
+    .sort(([a], [b]) => a.localeCompare(b));
+
+  const dataCheckString = entries.map(([key, value]) => `${key}=${value}`).join("\n");
+  const secret = await sha256(botToken);
+  const expected = await hmacHex(secret, dataCheckString);
+  return timingSafeEqual(expected, String(payload.hash));
+}
+
+async function linkTelegramAccount(
+  admin: ReturnType<typeof createClient>,
+  userId: string,
+  telegram: TelegramPayload,
+) {
+  const telegramId = Number(telegram.id);
+  const { data: existing, error: existingErr } = await admin
+    .from("telegram_accounts")
+    .select("user_id")
+    .eq("telegram_id", telegramId)
+    .maybeSingle();
+
+  if (existingErr) throw new Error(existingErr.message);
+  if (existing?.user_id && existing.user_id !== userId) {
+    throw new Error("Este Telegram ja esta vinculado a outra conta.");
+  }
+
+  const { error } = await admin.from("telegram_accounts").upsert({
+    user_id: userId,
+    telegram_id: telegramId,
+    role: "profissional",
+    username: cleanText(telegram.username, 80) || null,
+    first_name: cleanText(telegram.first_name, 80) || null,
+    last_name: cleanText(telegram.last_name, 80) || null,
+    photo_url: cleanText(telegram.photo_url, 500) || null,
+    auth_date: new Date(Number(telegram.auth_date) * 1000).toISOString(),
+    last_login_at: new Date().toISOString(),
+  }, { onConflict: "user_id" });
+
+  if (error) throw new Error(error.message);
+}
+
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
   const cors = corsHeaders(origin);
@@ -104,6 +209,7 @@ Deno.serve(async (req) => {
     servicos,          // [{ nome, preco, local }]
     locais_atendimento, // ["Local próprio", "Online", ...]
     disponibilidade,   // [{ dia_semana (0-6), hora_inicio, hora_fim }]
+    telegram,
   } = body as Record<string, unknown>;
 
   // Validações obrigatórias
@@ -170,6 +276,21 @@ Deno.serve(async (req) => {
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false },
   });
+
+  const telegramPayload = telegram && typeof telegram === "object"
+    ? telegram as TelegramPayload
+    : null;
+
+  if (telegramPayload) {
+    try {
+      const botToken = await getTelegramBotToken(admin);
+      const validTelegram = await verifyTelegramAuth(telegramPayload, botToken);
+      if (!validTelegram) return erro(cors, 422, "Verificacao do Telegram invalida ou expirada");
+    } catch (telegramErr) {
+      const detail = telegramErr instanceof Error ? telegramErr.message : "Erro ao verificar Telegram";
+      return erro(cors, 422, "Nao foi possivel validar o Telegram", { detail });
+    }
+  }
 
   const normalizedEmail = String(email).toLowerCase().trim();
 
@@ -246,6 +367,16 @@ Deno.serve(async (req) => {
     // Rollback: remove o usuário criado
     await admin.auth.admin.deleteUser(userId);
     return erro(cors, 500, "Erro ao salvar perfil", { detail: profileErr.message });
+  }
+
+  if (telegramPayload) {
+    try {
+      await linkTelegramAccount(admin, userId, telegramPayload);
+    } catch (telegramErr) {
+      await admin.auth.admin.deleteUser(userId);
+      const detail = telegramErr instanceof Error ? telegramErr.message : "Erro ao vincular Telegram";
+      return erro(cors, 500, "Erro ao vincular Telegram", { detail });
+    }
   }
 
   // ── Inserir serviços ──────────────────────────────────────
