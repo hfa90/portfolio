@@ -358,6 +358,129 @@
             color: var(--gold);
         }
 
+        .client-guide {
+            background: var(--surface2);
+            border: 1px solid rgba(201, 168, 76, .22);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 28px;
+        }
+
+        .client-guide-head {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .client-guide-title {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+            font-family: sans-serif;
+        }
+
+        .client-guide-sub {
+            color: var(--text-muted);
+            font-size: .86rem;
+            line-height: 1.45;
+            font-family: sans-serif;
+        }
+
+        .client-guide-score {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: var(--surface);
+            border: 1px solid rgba(201, 168, 76, .34);
+            color: var(--gold-light);
+            font-weight: 900;
+            font-family: sans-serif;
+        }
+
+        .client-guide-bar {
+            height: 8px;
+            border-radius: 99px;
+            background: var(--surface);
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+
+        .client-guide-bar span {
+            display: block;
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--gold), var(--success));
+            transition: width .2s ease;
+        }
+
+        .client-guide-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .client-guide-item {
+            display: grid;
+            grid-template-columns: 32px 1fr;
+            gap: 10px;
+            align-items: start;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid var(--border);
+            min-width: 0;
+        }
+
+        .client-guide-item.done {
+            background: rgba(46, 204, 113, .08);
+            border-color: rgba(46, 204, 113, .22);
+        }
+
+        .client-guide-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: var(--surface);
+            color: var(--gold);
+            font-size: .72rem;
+            font-weight: 900;
+            font-family: sans-serif;
+        }
+
+        .client-guide-item.done .client-guide-icon {
+            color: var(--success);
+        }
+
+        .client-guide-name {
+            font-size: .9rem;
+            font-weight: 800;
+            font-family: sans-serif;
+            margin-bottom: 3px;
+        }
+
+        .client-guide-detail {
+            color: var(--text-muted);
+            font-size: .78rem;
+            line-height: 1.35;
+            font-family: sans-serif;
+            margin-bottom: 10px;
+        }
+
+        .client-guide-action {
+            min-height: 40px;
+            width: 100%;
+            justify-content: center;
+            font-size: .78rem;
+            padding: 8px 12px;
+        }
+
         .stat-num {
             font-size: 1.8rem;
             font-weight: 700;
@@ -1445,15 +1568,28 @@
             }
 
             .stats-grid,
-            .profiles-grid {
+            .profiles-grid,
+            .client-guide-head,
+            .client-guide-list {
                 grid-template-columns: 1fr;
                 gap: 12px;
             }
 
             .panel-card,
             .profile-card,
-            .stat-card {
+            .stat-card,
+            .client-guide {
                 border-radius: 14px;
+            }
+
+            .client-guide {
+                padding: 16px;
+                margin-bottom: 22px;
+            }
+
+            .client-guide-score {
+                width: 68px;
+                height: 68px;
             }
 
             .vc-chat-panel {
@@ -1615,6 +1751,20 @@
                 <div class="telegram-quick">
                     <div class="telegram-quick-title"><i class="ti ti-brand-telegram"></i> Acesso rapido pelo Telegram</div>
                     <p>Agora o acesso rapido usa telefone + codigo enviado no Telegram. Use a tela de login quando quiser entrar sem senha.</p>
+                </div>
+
+                <div class="client-guide" id="clientGuide">
+                    <div class="client-guide-head">
+                        <div>
+                            <div class="client-guide-title">Comece em poucos toques</div>
+                            <div class="client-guide-sub">Sua conta ja esta pronta. Use estes atalhos para deixar o painel util sem preencher cadastro longo.</div>
+                        </div>
+                        <div class="client-guide-score" id="clientGuideScore">0%</div>
+                    </div>
+                    <div class="client-guide-bar"><span id="clientGuideBar"></span></div>
+                    <div class="client-guide-list" id="clientGuideList">
+                        <div class="client-guide-detail">Carregando atalhos...</div>
+                    </div>
                 </div>
 
                 <a href="catalogo.html" class="catalog-banner" id="catalogBanner">
@@ -1891,6 +2041,7 @@
             await loadHistory();
             await loadClientPacks();
             await vcInit();
+            await loadClientGuide();
         }
 
         async function loadCustomerData() {
@@ -1930,6 +2081,95 @@
             if (data.cover_url) {
                 updateCoverUI(data.cover_url);
             }
+        }
+
+        async function loadClientGuide() {
+            const list = document.getElementById('clientGuideList');
+            if (!list || !currentUser || !customerData) return;
+
+            const [fav, hist, chats, packs] = await Promise.all([
+                sb.from('favorites').select('id', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+                sb.from('customer_history').select('id', { count: 'exact', head: true }).eq('customer_id', currentUser.id),
+                sb.from('chat_conversations').select('id', { count: 'exact', head: true }).eq('client_id', currentUser.id),
+                sb.from('profile_pack_orders').select('id', { count: 'exact', head: true }).eq('customer_id', currentUser.id)
+            ]);
+
+            const steps = [
+                {
+                    label: 'Conta pronta',
+                    detail: 'Nome salvo e acesso por Telegram disponivel.',
+                    done: Boolean((customerData.nome || '').trim()),
+                    action: 'Editar conta',
+                    panel: 'perfil'
+                },
+                {
+                    label: 'Foto do cliente',
+                    detail: 'Adicione avatar ou capa para reconhecer sua conta.',
+                    done: Boolean(customerData.avatar_url || customerData.cover_url),
+                    action: 'Adicionar foto',
+                    panel: 'perfil'
+                },
+                {
+                    label: 'Abrir catalogo',
+                    detail: 'Veja profissionais perto de voce.',
+                    done: (hist.count || 0) > 0,
+                    action: 'Ver catalogo',
+                    href: 'catalogo.html'
+                },
+                {
+                    label: 'Salvar favoritos',
+                    detail: 'Guarde perfis para voltar rapido depois.',
+                    done: (fav.count || 0) > 0,
+                    action: 'Favoritos',
+                    panel: 'favoritos'
+                },
+                {
+                    label: 'Enviar mensagem',
+                    detail: 'Converse com uma profissional pelo perfil dela.',
+                    done: (chats.count || 0) > 0,
+                    action: 'Mensagens',
+                    panel: 'mensagens'
+                },
+                {
+                    label: 'Acompanhar packs',
+                    detail: 'Pedidos e comprovantes aparecem nesta area.',
+                    done: (packs.count || 0) > 0,
+                    action: 'Meus packs',
+                    panel: 'packs'
+                }
+            ];
+
+            renderClientGuide(steps);
+        }
+
+        function renderClientGuide(steps) {
+            const list = document.getElementById('clientGuideList');
+            const score = document.getElementById('clientGuideScore');
+            const bar = document.getElementById('clientGuideBar');
+            if (!list || !score || !bar) return;
+
+            const completed = steps.filter(step => step.done).length;
+            const pct = Math.round((completed / steps.length) * 100);
+            score.textContent = pct + '%';
+            bar.style.width = pct + '%';
+
+            list.innerHTML = steps.map((step) => {
+                const target = step.href
+                    ? `window.location.href='${step.href}'`
+                    : `openPanel('${step.panel}')`;
+                return `
+                    <div class="client-guide-item ${step.done ? 'done' : ''}">
+                        <div class="client-guide-icon">${step.done ? 'OK' : '...'}</div>
+                        <div>
+                            <div class="client-guide-name">${vcEsc(step.label)}</div>
+                            <div class="client-guide-detail">${vcEsc(step.detail)}</div>
+                            <button class="btn btn-ghost client-guide-action" type="button" onclick="${target}">
+                                <i class="ti ti-arrow-right"></i> ${step.done ? 'Abrir' : vcEsc(step.action)}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
 
         function updateAvatarUI(url) {
@@ -2076,6 +2316,7 @@
             toast('Removido dos favoritos.', 'ok');
             await loadFavorites();
             await loadStats();
+            await loadClientGuide();
         }
 
         function viewProfile(profileId) {
@@ -2180,6 +2421,7 @@
             toast('Histórico apagado.', 'ok');
             await loadHistory();
             await loadStats();
+            await loadClientGuide();
         }
 
         /* ═══════════════════════════════════════════════════════════
@@ -2248,6 +2490,7 @@
                 // Atualiza estado local
                 customerData = { ...customerData, ...updates };
                 applyCustomerToUI(customerData);
+                await loadClientGuide();
 
                 toast('Perfil atualizado com sucesso!', 'ok');
             } catch (err) {

@@ -224,6 +224,128 @@
       padding: 20px;
     }
 
+    .profile-guide {
+      margin-bottom: 24px;
+      border-color: rgba(201, 168, 76, 0.24);
+      background: linear-gradient(180deg, rgba(201, 168, 76, 0.08), rgba(24, 24, 27, 0.96));
+    }
+
+    .profile-guide-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .profile-guide-title {
+      font-weight: 800;
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+
+    .profile-guide-sub {
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .profile-guide-score {
+      min-width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--surface2);
+      border: 1px solid rgba(201, 168, 76, 0.35);
+      color: var(--gold-light);
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+
+    .profile-guide-bar {
+      width: 100%;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--surface2);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .profile-guide-bar span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--gold), var(--green));
+      transition: width 0.2s ease;
+    }
+
+    .profile-guide-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .profile-guide-item {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+    }
+
+    .profile-guide-item.done {
+      background: rgba(74, 222, 128, 0.07);
+      border-color: rgba(74, 222, 128, 0.2);
+    }
+
+    .profile-guide-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--surface2);
+      color: var(--gold);
+      font-weight: 800;
+    }
+
+    .profile-guide-item.done .profile-guide-icon {
+      color: var(--green);
+    }
+
+    .profile-guide-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .profile-guide-detail {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .profile-guide-action {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid rgba(201, 168, 76, 0.26);
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .profile-guide-action:hover {
+      border-color: var(--gold);
+      color: var(--gold-light);
+    }
+
     .stat-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -1298,8 +1420,21 @@
 
       .cards-grid,
       .form-grid,
-      .photo-grid {
+      .photo-grid,
+      .profile-guide-head,
+      .profile-guide-item {
         grid-template-columns: 1fr !important;
+      }
+
+      .profile-guide-score {
+        width: 72px;
+        min-width: 72px;
+        height: 72px;
+      }
+
+      .profile-guide-action {
+        width: 100%;
+        min-height: 44px;
       }
     }
 
@@ -1352,7 +1487,8 @@
       .stat-grid,
       .cards-grid,
       .form-grid,
-      .photo-grid {
+      .photo-grid,
+      .profile-guide-list {
         gap: 12px;
       }
 
@@ -1511,6 +1647,20 @@
       <div class="card telegram-quick">
         <div class="telegram-quick-title"><i class="ti ti-brand-telegram"></i> Acesso rapido pelo Telegram</div>
         <p>Agora o acesso rapido usa telefone + codigo enviado no Telegram. Use a tela de login quando quiser entrar sem senha.</p>
+      </div>
+
+      <div class="card profile-guide" id="profileGuide">
+        <div class="profile-guide-head">
+          <div>
+            <div class="profile-guide-title">Complete seu perfil no seu ritmo</div>
+            <div class="profile-guide-sub">Seu cadastro ja esta criado. Agora finalize os itens que fazem o perfil aparecer melhor no catalogo.</div>
+          </div>
+          <div class="profile-guide-score" id="profileGuideScore">0%</div>
+        </div>
+        <div class="profile-guide-bar"><span id="profileGuideBar"></span></div>
+        <div class="profile-guide-list" id="profileGuideList">
+          <div class="profile-guide-detail">Carregando proximos passos...</div>
+        </div>
       </div>
 
       <div class="card">
@@ -1990,6 +2140,94 @@
       setVal('loc_bairro', p.bairro);
       setVal('loc_cidade', p.cidade);
       setVal('loc_uf', p.uf);
+
+      loadProfileGuide();
+    }
+
+    async function loadProfileGuide() {
+      const list = document.getElementById('profileGuideList');
+      if (!list || !currentUser || !currentProfile) return;
+
+      const [photos, services, locations, availability] = await Promise.all([
+        sb.from('profile_photos').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id),
+        sb.from('services').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id),
+        sb.from('attendance_locations').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id),
+        sb.from('availability').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id)
+      ]);
+
+      const p = currentProfile;
+      const phoneDigits = String(p.whatsapp || '').replace(/\D/g, '');
+      const steps = [
+        {
+          label: 'Dados principais',
+          detail: 'Nome artistico, categoria e WhatsApp.',
+          done: Boolean((p.nome_artistico || '').trim()) && Boolean(p.categoria) && phoneDigits.length >= 10,
+          action: 'Completar',
+          page: 'perfil'
+        },
+        {
+          label: 'Bio curta e clara',
+          detail: 'Um texto com pelo menos 50 caracteres.',
+          done: (p.bio || '').trim().length >= 50,
+          action: 'Escrever bio',
+          page: 'perfil'
+        },
+        {
+          label: 'Fotos do perfil',
+          detail: 'Envie fotos para aprovacao e escolha uma capa.',
+          done: (photos.count || 0) > 0,
+          action: 'Enviar fotos',
+          page: 'fotos'
+        },
+        {
+          label: 'Servicos e valores',
+          detail: 'Cadastre pelo menos um servico ativo.',
+          done: (services.count || 0) > 0,
+          action: 'Adicionar',
+          page: 'servicos'
+        },
+        {
+          label: 'Local de atendimento',
+          detail: 'Cidade, UF e onde voce atende.',
+          done: Boolean(p.cidade && p.uf) && (locations.count || 0) > 0,
+          action: 'Definir local',
+          page: 'localizacao'
+        },
+        {
+          label: 'Disponibilidade',
+          detail: 'Marque os dias e horarios de atendimento.',
+          done: (availability.count || 0) > 0,
+          action: 'Marcar agenda',
+          page: 'disponibilidade'
+        }
+      ];
+
+      renderProfileGuide(steps);
+    }
+
+    function renderProfileGuide(steps) {
+      const list = document.getElementById('profileGuideList');
+      const score = document.getElementById('profileGuideScore');
+      const bar = document.getElementById('profileGuideBar');
+      if (!list || !score || !bar) return;
+
+      const completed = steps.filter(step => step.done).length;
+      const pct = Math.round((completed / steps.length) * 100);
+      score.textContent = pct + '%';
+      bar.style.width = pct + '%';
+
+      list.innerHTML = steps.map(step => `
+        <div class="profile-guide-item ${step.done ? 'done' : ''}">
+          <div class="profile-guide-icon">${step.done ? 'OK' : '...'}</div>
+          <div>
+            <div class="profile-guide-name">${cEsc(step.label)}</div>
+            <div class="profile-guide-detail">${cEsc(step.detail)}</div>
+          </div>
+          <button class="profile-guide-action" type="button" onclick="goPage('${step.page}')">
+            ${step.done ? 'Revisar' : cEsc(step.action)}
+          </button>
+        </div>
+      `).join('');
     }
 
     function setVal(id, val) {
@@ -2262,6 +2500,7 @@
       const initials = updates.nome_artistico.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
       document.getElementById('avatarInitials').textContent = initials;
 
+      loadProfileGuide();
       showToast('Perfil salvo com sucesso!');
     }
 
@@ -2357,6 +2596,7 @@
       if (success > 0) showToast(`${success} foto(s) enviada(s) para aprovação!`);
       else showToast('Nenhuma foto enviada. Verifique o console (F12) para o erro do storage.', 'error');
       loadFotos();
+      loadProfileGuide();
     }
 
     async function deleteFoto(id, path) {
@@ -2366,6 +2606,7 @@
       if (error) { showToast('Erro ao remover foto', 'error'); return; }
       showToast('Foto removida!');
       loadFotos();
+      loadProfileGuide();
     }
 
     async function setFotoCover(id) {
@@ -2423,6 +2664,7 @@
       renderServicos();
       document.getElementById('svc_nome').value = '';
       document.getElementById('svc_preco').value = '';
+      loadProfileGuide();
       showToast('Serviço adicionado!');
     }
 
@@ -2440,6 +2682,7 @@
       if (error) { showToast('Erro ao remover serviço', 'error'); return; }
       servicosList = servicosList.filter(s => s.id !== id);
       renderServicos();
+      loadProfileGuide();
       showToast('Serviço removido!');
     }
 
@@ -2484,6 +2727,7 @@
       }
 
       currentProfile = { ...currentProfile, ...updates };
+      loadProfileGuide();
       showToast('Localização salva com sucesso!');
     }
 
@@ -2563,6 +2807,7 @@
         const { error } = await sb.from('availability').insert(rows);
         if (error) { showToast('Erro: ' + error.message, 'error'); return; }
       }
+      loadProfileGuide();
       showToast('Disponibilidade salva com sucesso!');
     }
 
