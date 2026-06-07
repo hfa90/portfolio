@@ -70,6 +70,38 @@ async function sendPendingCodes(
   return true;
 }
 
+async function saveTelegramContact(
+  admin: ReturnType<typeof createClient>,
+  phone: string,
+  chatId: number | string,
+  telegramId: number | string | undefined,
+  firstName?: string,
+  username?: string,
+) {
+  const row = {
+    phone,
+    telegram_id: Number(telegramId || chatId),
+    chat_id: Number(chatId),
+    first_name: firstName || null,
+    username: username || null,
+    verified_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await admin
+    .from("telegram_contacts")
+    .upsert(row, { onConflict: "phone" });
+
+  if (!error) return;
+
+  const { error: updateErr } = await admin
+    .from("telegram_contacts")
+    .update(row)
+    .eq("telegram_id", row.telegram_id);
+
+  if (updateErr) throw updateErr;
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("ok");
 
@@ -108,15 +140,14 @@ Deno.serve(async (req) => {
       return Response.json({ ok: true });
     }
 
-    await admin.from("telegram_contacts").upsert({
+    await saveTelegramContact(
+      admin,
       phone,
-      telegram_id: Number(update.message.contact.user_id || fromId || chatId),
-      chat_id: Number(chatId),
-      first_name: update.message.contact.first_name || update.message.from?.first_name || null,
-      username: update.message.from?.username || null,
-      verified_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: "phone" });
+      chatId,
+      update.message.contact.user_id || fromId,
+      update.message.contact.first_name || update.message.from?.first_name,
+      update.message.from?.username,
+    );
 
     const sent = await sendPendingCodes(admin, cfg.bot_token, phone, chatId);
     await telegram("sendMessage", cfg.bot_token, {
@@ -124,6 +155,28 @@ Deno.serve(async (req) => {
       text: sent
         ? "Telefone confirmado. Enviei o codigo acima para continuar no site."
         : "Telefone confirmado. Volte ao site e clique em enviar codigo.",
+      reply_markup: { remove_keyboard: true },
+    });
+    return Response.json({ ok: true });
+  }
+
+  const typedPhone = normalizePhone(text);
+  if (typedPhone) {
+    await saveTelegramContact(
+      admin,
+      typedPhone,
+      chatId,
+      fromId,
+      update.message.from?.first_name,
+      update.message.from?.username,
+    );
+
+    const sent = await sendPendingCodes(admin, cfg.bot_token, typedPhone, chatId);
+    await telegram("sendMessage", cfg.bot_token, {
+      chat_id: chatId,
+      text: sent
+        ? "Telefone confirmado. Enviei o codigo acima para continuar no site."
+        : "Telefone confirmado, mas nao encontrei codigo pendente. Volte ao site e clique em enviar codigo.",
       reply_markup: { remove_keyboard: true },
     });
     return Response.json({ ok: true });
@@ -158,7 +211,7 @@ Deno.serve(async (req) => {
 
     await telegram("sendMessage", cfg.bot_token, {
       chat_id: chatId,
-      text: `Ola, ${firstName}! Para receber o codigo, compartilhe o mesmo telefone informado no site.`,
+      text: `Ola, ${firstName}! Para receber o codigo, compartilhe ou digite o mesmo telefone informado no site.`,
       reply_markup: {
         keyboard: [[{ text: "Compartilhar telefone", request_contact: true }]],
         resize_keyboard: true,

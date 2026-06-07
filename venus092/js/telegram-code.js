@@ -73,7 +73,7 @@
           <button type="button" class="btn btn-gold" data-code-send><i class="ti ti-send"></i> Enviar codigo</button>
         </div>
         <div class="telegram-code-bot" data-code-bot>
-          <p>Primeira vez usando Telegram aqui? Abra o bot, toque em compartilhar telefone e volte para digitar o codigo.</p>
+          <p>Primeira vez usando Telegram aqui? Abra o bot e compartilhe ou digite o mesmo telefone informado no site.</p>
           <a class="telegram-fallback-link" target="_blank" rel="noopener" data-code-bot-link>
             <i class="ti ti-brand-telegram"></i> Abrir bot da Venus
           </a>
