@@ -61,7 +61,7 @@
   function descFor(purpose) {
     if (purpose === 'signup') return 'Informe seu telefone. O codigo chega no Telegram e o cadastro abre o painel para completar o perfil depois.';
     if (purpose === 'reset') return 'Receba um codigo no Telegram. Voce pode entrar sem mudar a senha ou criar uma nova senha.';
-    return 'Informe seu telefone e use o codigo enviado no Telegram para entrar sem senha.';
+    return 'Informe seu telefone e use o codigo enviado no Telegram para entrar em poucos segundos.';
   }
 
   function render(box) {
@@ -90,7 +90,7 @@
             <i class="ti ti-brand-telegram"></i> Abrir bot da Venus
           </a>
         </div>
-        <input class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code" data-code-value maxlength="6" placeholder="Codigo de 6 digitos" style="display:none;" />
+        <input class="form-input telegram-code-input" type="text" inputmode="numeric" autocomplete="one-time-code" data-code-value maxlength="6" placeholder="Codigo de 6 digitos" aria-label="Codigo de 6 digitos recebido no Telegram" style="display:none;" />
         ${allowPassword ? '<input class="form-input" type="password" data-code-password minlength="8" placeholder="Nova senha (opcional)" style="display:none;" />' : ''}
         <button type="button" class="btn btn-outline" data-code-verify style="display:none;"><i class="ti ti-key"></i> Confirmar codigo</button>
         <div class="telegram-code-status" data-code-status></div>
@@ -104,6 +104,30 @@
     const verifyBtn = box.querySelector('[data-code-verify]');
     const botBox = box.querySelector('[data-code-bot]');
     const botLink = box.querySelector('[data-code-bot-link]');
+    let resendTimer = null;
+    let isVerifying = false;
+
+    function setSendButtonIdle() {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '<i class="ti ti-send"></i> Enviar codigo';
+    }
+
+    function startResendCooldown(seconds = 30) {
+      clearInterval(resendTimer);
+      let remaining = seconds;
+      sendBtn.disabled = true;
+      const tick = () => {
+        sendBtn.innerHTML = `<i class="ti ti-clock"></i> Reenviar em ${remaining}s`;
+        remaining -= 1;
+        if (remaining < 0) {
+          clearInterval(resendTimer);
+          resendTimer = null;
+          setSendButtonIdle();
+        }
+      };
+      tick();
+      resendTimer = setInterval(tick, 1000);
+    }
 
     phoneEl.addEventListener('input', () => {
       phoneEl.value = formatPhone(phoneEl.value);
@@ -113,6 +137,32 @@
       requestAnimationFrame(() => {
         phoneEl.value = formatPhone(phoneEl.value);
       });
+    });
+
+    phoneEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        sendBtn.click();
+      }
+    });
+
+    codeEl.addEventListener('input', () => {
+      codeEl.value = normalizeInput(codeEl.value).slice(0, 6);
+      if (codeEl.value.length === 6 && !isVerifying) verifyBtn.click();
+    });
+
+    codeEl.addEventListener('paste', () => {
+      requestAnimationFrame(() => {
+        codeEl.value = normalizeInput(codeEl.value).slice(0, 6);
+        if (codeEl.value.length === 6 && !isVerifying) verifyBtn.click();
+      });
+    });
+
+    codeEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        verifyBtn.click();
+      }
     });
 
     sendBtn.addEventListener('click', async () => {
@@ -138,11 +188,13 @@
         }
 
         setStatus(box, json.message || 'Codigo enviado no Telegram.', json.sent ? 'ok' : 'info');
+        codeEl.focus();
+        startResendCooldown(30);
       } catch (error) {
         setStatus(box, error.message || 'Erro ao enviar codigo.', 'error');
+        setSendButtonIdle();
       } finally {
-        sendBtn.disabled = false;
-        sendBtn.innerHTML = '<i class="ti ti-send"></i> Enviar codigo';
+        if (!resendTimer) setSendButtonIdle();
       }
     });
 
@@ -158,6 +210,7 @@
 
       verifyBtn.disabled = true;
       verifyBtn.innerHTML = '<i class="ti ti-loader-2"></i> Confirmando...';
+      isVerifying = true;
 
       try {
         const json = await call({
@@ -184,6 +237,7 @@
       } finally {
         verifyBtn.disabled = false;
         verifyBtn.innerHTML = '<i class="ti ti-key"></i> Confirmar codigo';
+        isVerifying = false;
       }
     });
   }
