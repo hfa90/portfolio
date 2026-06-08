@@ -29,8 +29,14 @@
     return String(value || '').replace(/\D/g, '');
   }
 
+  function displayPhoneDigits(value) {
+    let digits = normalizeInput(value);
+    if (/^55\d{10,11}$/.test(digits)) digits = digits.slice(2);
+    return digits.slice(0, 11);
+  }
+
   function formatPhone(value) {
-    const digits = normalizeInput(value).slice(0, 11);
+    const digits = displayPhoneDigits(value);
     if (digits.length <= 2) return digits;
     if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
     if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
@@ -43,9 +49,96 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
-    const json = await res.json();
-    if (!res.ok || !json.ok) throw new Error(json.error || 'Erro no Telegram');
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.ok) {
+      const error = new Error(json.error || 'Erro no Telegram');
+      error.status = res.status;
+      error.error_code = json.error_code || '';
+      error.payload = json;
+      throw error;
+    }
     return json;
+  }
+
+  function signupUrl(role, phone) {
+    const page = role === 'profissional' ? 'cadastro.html' : 'cadastro-cliente.html';
+    const params = new URLSearchParams({ telefone: normalizeInput(phone) });
+    return `${page}?${params.toString()}`;
+  }
+
+  function closeSignupModal() {
+    document.querySelector('[data-telegram-signup-modal]')?.remove();
+  }
+
+  function showSignupModal(phone, currentRole) {
+    closeSignupModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'telegram-signup-modal';
+    overlay.setAttribute('data-telegram-signup-modal', 'true');
+    overlay.innerHTML = `
+      <div class="telegram-signup-dialog" role="dialog" aria-modal="true" aria-labelledby="telegramSignupTitle">
+        <button class="telegram-signup-close" type="button" aria-label="Fechar" data-modal-close>
+          <i class="ti ti-x"></i>
+        </button>
+        <div class="telegram-signup-icon"><i class="ti ti-user-plus"></i></div>
+        <h2 id="telegramSignupTitle">Telefone sem cadastro</h2>
+        <p data-modal-text>Este telefone ainda nao tem uma conta na Venus. Quer criar seu cadastro agora?</p>
+        <div class="telegram-signup-actions" data-modal-actions>
+          <button class="btn btn-gold" type="button" data-modal-next>Sim, cadastrar</button>
+          <button class="btn btn-outline" type="button" data-modal-close>Agora nao</button>
+        </div>
+      </div>
+    `;
+
+    const actions = overlay.querySelector('[data-modal-actions]');
+    const text = overlay.querySelector('[data-modal-text]');
+    const next = overlay.querySelector('[data-modal-next]');
+
+    next.addEventListener('click', () => {
+      text.textContent = 'Como voce quer criar essa conta? O telefone vai junto para agilizar o cadastro.';
+      actions.innerHTML = `
+        <a class="btn btn-gold" href="${signupUrl('cliente', phone)}"><i class="ti ti-user"></i> Cliente</a>
+        <a class="btn btn-outline" href="${signupUrl('profissional', phone)}"><i class="ti ti-briefcase"></i> Profissional</a>
+      `;
+      const preferred = actions.querySelector(currentRole === 'profissional' ? 'a[href^="cadastro.html"]' : 'a[href^="cadastro-cliente.html"]');
+      preferred?.focus();
+    });
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay || event.target.closest('[data-modal-close]')) closeSignupModal();
+    });
+
+    document.body.appendChild(overlay);
+    next.focus();
+  }
+
+  function showOtherRoleModal(phone, registeredRole) {
+    closeSignupModal();
+    const label = registeredRole === 'profissional' ? 'profissional' : 'cliente';
+    const overlay = document.createElement('div');
+    overlay.className = 'telegram-signup-modal';
+    overlay.setAttribute('data-telegram-signup-modal', 'true');
+    overlay.innerHTML = `
+      <div class="telegram-signup-dialog" role="dialog" aria-modal="true" aria-labelledby="telegramOtherRoleTitle">
+        <button class="telegram-signup-close" type="button" aria-label="Fechar" data-modal-close>
+          <i class="ti ti-x"></i>
+        </button>
+        <div class="telegram-signup-icon"><i class="ti ti-user-check"></i></div>
+        <h2 id="telegramOtherRoleTitle">Telefone ja cadastrado</h2>
+        <p>Este telefone esta cadastrado como ${label}. Entre pelo tipo correto para receber o codigo.</p>
+        <div class="telegram-signup-actions">
+          <a class="btn btn-gold" href="login.html?tipo=${registeredRole}&telefone=${normalizeInput(phone)}">
+            Entrar como ${label}
+          </a>
+          <button class="btn btn-outline" type="button" data-modal-close>Agora nao</button>
+        </div>
+      </div>
+    `;
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay || event.target.closest('[data-modal-close]')) closeSignupModal();
+    });
+    document.body.appendChild(overlay);
+    overlay.querySelector('a')?.focus();
   }
 
   function titleFor(role, purpose) {
@@ -106,6 +199,10 @@
     const botLink = box.querySelector('[data-code-bot-link]');
     let resendTimer = null;
     let isVerifying = false;
+
+    const params = new URLSearchParams(window.location.search);
+    const initialPhone = params.get('telefone') || params.get('phone') || params.get('tel');
+    if (initialPhone) phoneEl.value = formatPhone(initialPhone);
 
     function setSendButtonIdle() {
       sendBtn.disabled = false;
@@ -191,6 +288,17 @@
         codeEl.focus();
         startResendCooldown(30);
       } catch (error) {
+        if ((purpose === 'login' || purpose === 'reset') && error.error_code === 'phone_not_registered') {
+          setStatus(box, 'Este telefone ainda nao tem cadastro.', 'error');
+          showSignupModal(phone, role);
+          return;
+        }
+        if ((purpose === 'login' || purpose === 'reset') && error.error_code === 'phone_registered_other_role') {
+          const registeredRole = error.payload?.registered_role || (role === 'cliente' ? 'profissional' : 'cliente');
+          setStatus(box, `Este telefone esta cadastrado como ${registeredRole}.`, 'error');
+          showOtherRoleModal(phone, registeredRole);
+          return;
+        }
         setStatus(box, error.message || 'Erro ao enviar codigo.', 'error');
         setSendButtonIdle();
       } finally {

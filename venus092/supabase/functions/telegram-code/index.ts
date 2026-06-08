@@ -39,6 +39,12 @@ function normalizePhone(value: unknown) {
   return digits;
 }
 
+function phoneLookupValues(phone: string) {
+  const values = new Set([phone]);
+  if (/^55\d{10,11}$/.test(phone)) values.add(phone.slice(2));
+  return [...values];
+}
+
 function roleOf(value: unknown): Role {
   return value === "profissional" ? "profissional" : "cliente";
 }
@@ -110,6 +116,33 @@ async function requestCode(admin: ReturnType<typeof createClient>, cors: Record<
 
   const role = roleOf(body.role);
   const purpose = purposeOf(body.purpose);
+
+  if (purpose !== "signup") {
+    const account = await findUser(admin, phone, role);
+    if (!account?.id) {
+      const alternateRole: Role = role === "cliente" ? "profissional" : "cliente";
+      const alternateAccount = await findUser(admin, phone, alternateRole);
+      if (alternateAccount?.id) {
+        return json(cors, 409, {
+          ok: false,
+          error_code: "phone_registered_other_role",
+          role,
+          registered_role: alternateRole,
+          phone,
+          error: `Este telefone esta cadastrado como ${alternateRole}.`,
+        });
+      }
+
+      return json(cors, 404, {
+        ok: false,
+        error_code: "phone_not_registered",
+        role,
+        phone,
+        error: "Este telefone ainda nao tem cadastro.",
+      });
+    }
+  }
+
   const cfg = await settings(admin);
   if (!cfg.bot_token) return json(cors, 500, { ok: false, error: "Bot do Telegram nao configurado." });
 
@@ -140,11 +173,12 @@ async function requestCode(admin: ReturnType<typeof createClient>, cors: Record<
 }
 
 async function findUser(admin: ReturnType<typeof createClient>, phone: string, role: Role) {
+  const phones = phoneLookupValues(phone);
   if (role === "cliente") {
-    const { data } = await admin.from("customers").select("id,email").eq("telefone", phone).maybeSingle();
+    const { data } = await admin.from("customers").select("id,email").in("telefone", phones).limit(1).maybeSingle();
     return data;
   }
-  const { data } = await admin.from("profiles").select("id,email").eq("whatsapp", phone).maybeSingle();
+  const { data } = await admin.from("profiles").select("id,email").in("whatsapp", phones).limit(1).maybeSingle();
   return data;
 }
 
