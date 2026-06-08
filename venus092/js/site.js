@@ -158,6 +158,8 @@
     const isCustomer = Boolean(customer);
     const displayName = customer?.nome || professional?.nome_artistico || user.email || 'Meu perfil';
     const panelUrl = isCustomer ? 'painel-cliente.html' : 'painel.html';
+    const messagesUrl = isCustomer ? 'painel-cliente.html#mensagens' : 'painel.html#mensagens';
+    const favoritesUrl = isCustomer ? 'painel-cliente.html#favoritos' : 'catalogo.html';
     const avatarUrl = customer?.avatar_url || '';
 
     ['navLinkCadastro', 'navBtnEntrar', 'navBtnAnuncie'].forEach(id => {
@@ -174,6 +176,7 @@
 
     const account = document.createElement('div');
     account.className = 'nav-account';
+    const roleLabel = isCustomer ? 'Cliente' : 'Profissional';
     account.innerHTML = `
       <button class="nav-account-btn" type="button" aria-expanded="false" aria-label="Abrir perfil">
         <span class="nav-account-avatar">
@@ -182,15 +185,19 @@
       </button>
       <div class="nav-account-menu" role="menu">
         <div class="nav-account-head">
+          <span>Nome</span>
           <strong>${displayName.split(' ')[0]}</strong>
-          <span>${isCustomer ? 'Cliente' : 'Profissional'}</span>
+          <span>${roleLabel}</span>
         </div>
-        <a href="${panelUrl}" role="menuitem"><i class="ti ti-user-circle"></i> Meu perfil</a>
-        <a href="catalogo.html" role="menuitem"><i class="ti ti-search"></i> Catalogo</a>
+        <a href="${panelUrl}" role="menuitem"><i class="ti ti-user-circle"></i> Perfil</a>
+        <a href="${messagesUrl}" role="menuitem"><i class="ti ti-message-circle"></i> Mensagens</a>
+        ${isCustomer ? `<a href="${favoritesUrl}" role="menuitem"><i class="ti ti-heart"></i> Favoritos</a>` : ''}
         <button type="button" role="menuitem" data-nav-logout><i class="ti ti-logout"></i> Sair</button>
       </div>
     `;
     nav.appendChild(account);
+    document.body.classList.add('venus-has-session');
+    window.dispatchEvent(new CustomEvent('venus:auth-menu-ready'));
 
     const button = account.querySelector('.nav-account-btn');
     const setOpen = open => {

@@ -12,20 +12,45 @@
       btn.className = 'navbar-menu-btn';
       btn.setAttribute('aria-controls', id);
       btn.setAttribute('aria-expanded', 'false');
-      btn.setAttribute('aria-label', 'Abrir menu');
-      btn.innerHTML = '<i class="ti ti-menu-2"></i>';
+      btn.setAttribute('aria-label', 'Entrar');
+      btn.innerHTML = '<i class="ti ti-login-2"></i>';
 
       const scrim = document.createElement('button');
       scrim.type = 'button';
       scrim.className = 'navbar-scrim';
       scrim.setAttribute('aria-label', 'Fechar menu');
 
+      function hasAccountMenu() {
+        return Boolean(nav.querySelector('.nav-account'));
+      }
+
+      function hasLoginAction() {
+        return Boolean(nav.querySelector('a[href*="login.html"]'));
+      }
+
+      function syncButton() {
+        const hasAccount = hasAccountMenu();
+        const loginAction = hasLoginAction();
+        btn.classList.toggle('navbar-login-mobile', !hasAccount && loginAction);
+        btn.classList.toggle('navbar-account-mobile', hasAccount);
+        btn.setAttribute('aria-label', hasAccount ? 'Abrir conta' : loginAction ? 'Entrar' : 'Abrir menu');
+        if (!nav.classList.contains('open')) {
+          btn.innerHTML = hasAccount
+            ? '<i class="ti ti-user-circle"></i>'
+            : loginAction ? '<i class="ti ti-login-2"></i>' : '<i class="ti ti-menu-2"></i>';
+        }
+      }
+
       function setOpen(open) {
+        if (!hasAccountMenu() && hasLoginAction()) {
+          window.location.href = 'login.html';
+          return;
+        }
         nav.classList.toggle('open', open);
         scrim.classList.toggle('open', open);
         document.body.classList.toggle('nav-menu-open', open);
         btn.setAttribute('aria-expanded', String(open));
-        btn.innerHTML = open ? '<i class="ti ti-x"></i>' : '<i class="ti ti-menu-2"></i>';
+        btn.innerHTML = open ? '<i class="ti ti-x"></i>' : hasAccountMenu() ? '<i class="ti ti-user-circle"></i>' : '<i class="ti ti-menu-2"></i>';
       }
 
       btn.addEventListener('click', () => setOpen(!nav.classList.contains('open')));
@@ -36,6 +61,8 @@
 
       navbar.appendChild(btn);
       document.body.appendChild(scrim);
+      syncButton();
+      window.addEventListener('venus:auth-menu-ready', syncButton);
     });
   }
 
