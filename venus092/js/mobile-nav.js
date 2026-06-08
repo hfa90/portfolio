@@ -2,7 +2,7 @@
   function initMobileNav() {
     document.querySelectorAll('.navbar').forEach((navbar, index) => {
       const nav = navbar.querySelector('.navbar-nav');
-      if (!nav || navbar.querySelector('.navbar-menu-btn')) return;
+      if (navbar.dataset.noMobileNav === 'true' || !nav || navbar.querySelector('.navbar-menu-btn')) return;
 
       const id = nav.id || `navbarNavMobile${index}`;
       nav.id = id;

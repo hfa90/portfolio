@@ -16,12 +16,35 @@ const ALLOWED_ORIGINS = [
 type Role = "cliente" | "profissional";
 type Purpose = "login" | "signup" | "reset";
 
+function isAllowedOrigin(origin: string | null) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+
+  try {
+    const url = new URL(origin);
+    const isHttpLocal = url.protocol === "http:" || url.protocol === "https:";
+
+    if (isHttpLocal && (url.hostname === "localhost" || url.hostname === "127.0.0.1")) return true;
+    if (url.protocol === "https:" && url.hostname.endsWith(".github.io")) return true;
+    if (
+      url.protocol === "https:" &&
+      (url.hostname === "haydenfernandes.com.br" || url.hostname === "www.haydenfernandes.com.br")
+    ) return true;
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 function corsHeaders(origin: string | null) {
-  const allowed = origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const allowed = isAllowedOrigin(origin) ? (origin || ALLOWED_ORIGINS[0]) : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allowed,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 }
 

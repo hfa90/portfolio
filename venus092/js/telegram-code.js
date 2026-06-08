@@ -44,11 +44,22 @@
   }
 
   async function call(payload) {
-    const res = await fetch(EDGE_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    let res;
+    try {
+      res = await fetch(EDGE_URL, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (networkError) {
+      const error = new Error('Nao foi possivel conectar ao Telegram agora. Verifique sua internet e tente novamente.');
+      error.error_code = 'network_failed';
+      error.original_message = networkError?.message || '';
+      throw error;
+    }
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.ok) {
       const error = new Error(json.error || 'Erro no Telegram');
