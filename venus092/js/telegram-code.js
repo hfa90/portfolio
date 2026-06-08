@@ -51,11 +51,10 @@
         mode: 'cors',
         credentials: 'omit',
         cache: 'no-store',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
     } catch (networkError) {
-      const error = new Error('Nao foi possivel conectar ao Telegram agora. Verifique sua internet e tente novamente.');
+      const error = new Error('O navegador bloqueou a conexao com o Telegram. Recarregue a pagina e tente novamente.');
       error.error_code = 'network_failed';
       error.original_message = networkError?.message || '';
       throw error;
