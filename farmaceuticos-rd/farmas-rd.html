@@ -1322,12 +1322,11 @@
                             </div>
                             <div id="docx-preview-area"></div>
                             <div class="toolbar" style="margin-top:10px">
-                                <button class="btn btn-primary" onclick="printDocxAsPdf()">⎙ Imprimir / Salvar
-                                    PDF</button>
-                                <button class="btn" onclick="downloadDocxHtml()">⬇ Baixar .html</button>
+                                <button class="btn btn-primary" onclick="printDocxAsPdf()">⎙ Converter para PDF</button>
                             </div>
-                            <div class="info-box">💡 Clique em "Imprimir / Salvar PDF", selecione <b>Salvar como PDF</b>
-                                no diálogo de impressão para converter com fidelidade total.</div>
+                            <div class="info-box">💡 Clique em "Converter para PDF" → na janela que abrir, use
+                                <b>Ctrl+P</b> ou <b>Cmd+P</b> → selecione <b>Salvar como PDF</b> como impressora →
+                                clique em Salvar.</div>
                         </div>
                         <div id="docx-progress" class="progress-wrap">
                             <div class="progress-label">Renderizando documento...</div>
@@ -1359,7 +1358,6 @@
                             </div>
                             <div class="toolbar" style="margin-top:10px">
                                 <button class="btn btn-primary" onclick="convertPdfToDocx()">⬇ Exportar .docx</button>
-                                <button class="btn" onclick="convertPdfToText()">⬇ Exportar .txt</button>
                             </div>
                         </div>
                         <div id="pdf-conv-progress" class="progress-wrap">
@@ -1603,7 +1601,8 @@
         async function setSplitFile(file) {
             splitFile = file;
             const ab = await file.arrayBuffer();
-            splitPdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+            splitFile._bytes = new Uint8Array(ab);
+            splitPdfDoc = await pdfjsLib.getDocument({ data: splitFile._bytes.slice() }).promise;
             document.getElementById('split-filename').textContent = file.name;
             document.getElementById('split-pages-badge').textContent = splitPdfDoc.numPages + 'p';
             document.getElementById('split-loaded').style.display = 'block';
@@ -1639,45 +1638,46 @@
             prog.style.display = 'block'; bar.style.width = '5%';
             const { PDFDocument } = PDFLib;
             try {
-                const srcBytes = await splitFile.arrayBuffer();
                 let done = 0;
                 for (const r of splitRanges) {
-                    const srcDoc = await PDFDocument.load(srcBytes);
+                    // fresh copy each time from cached Uint8Array
+                    const srcDoc = await PDFDocument.load(splitFile._bytes.slice());
                     const out = await PDFDocument.create();
                     for (let p = r.from - 1; p <= Math.min(r.to - 1, srcDoc.getPageCount() - 1); p++) {
                         const [cp] = await out.copyPages(srcDoc, [p]); out.addPage(cp);
                     }
                     const bytes = await out.save();
-                    const name = r.label || (splitFile.name.replace('.pdf', '') + `_parte${splitRanges.indexOf(r) + 1}`);
+                    const name = r.label || (splitFile.name.replace(/\.pdf$/i, '') + `_parte${splitRanges.indexOf(r) + 1}`);
                     dlBytes(bytes, name + '.pdf', 'application/pdf');
                     done++; bar.style.width = (done / splitRanges.length * 100) + '%';
                     await new Promise(r => setTimeout(r, 200));
                 }
                 prog.style.display = 'none';
                 toast(`${splitRanges.length} partes exportadas!`, 'success');
-            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error') }
+            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error'); }
         }
         async function splitEachPage() {
-            if (!splitFile) { return }
+            if (!splitFile || !splitFile._bytes) { toast('Carregue um arquivo primeiro.', 'error'); return; }
             const { PDFDocument } = PDFLib;
             const prog = document.getElementById('split-progress');
             const bar = document.getElementById('split-bar');
             prog.style.display = 'block';
             try {
-                const srcBytes = await splitFile.arrayBuffer();
-                const srcDoc = await PDFDocument.load(srcBytes);
-                const n = srcDoc.getPageCount();
+                // Load once for page count, then fresh copy per page
+                const refDoc = await PDFDocument.load(splitFile._bytes.slice());
+                const n = refDoc.getPageCount();
                 for (let i = 0; i < n; i++) {
+                    const srcDoc = await PDFDocument.load(splitFile._bytes.slice());
                     const out = await PDFDocument.create();
                     const [cp] = await out.copyPages(srcDoc, [i]); out.addPage(cp);
                     const bytes = await out.save();
-                    dlBytes(bytes, splitFile.name.replace('.pdf', `_pg${i + 1}.pdf`), 'application/pdf');
+                    dlBytes(bytes, splitFile.name.replace(/\.pdf$/i, `_pg${i + 1}.pdf`), 'application/pdf');
                     bar.style.width = ((i + 1) / n * 100) + '%';
-                    await new Promise(r => setTimeout(r, 80));
+                    await new Promise(r => setTimeout(r, 60));
                 }
                 prog.style.display = 'none';
                 toast(`${n} arquivos exportados!`, 'success');
-            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error') }
+            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error'); }
         }
 
         // ═══════════════════════════════════════════════
@@ -1685,11 +1685,21 @@
         // ═══════════════════════════════════════════════
         async function addPrintFiles(fileList) {
             const arr = [...fileList].filter(f => f.name.match(/\.pdf$/i));
+            if (!arr.length) { toast('Nenhum PDF encontrado.', 'error'); return; }
             for (const file of arr) {
-                const ab = await file.arrayBuffer();
-                const pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
-                const pdfLibDoc = await PDFLib.PDFDocument.load(ab);
-                printQueue.push({ id: 'pq_' + Date.now() + '_' + Math.random().toString(36).slice(2), name: file.name, file, pdfDoc, pdfLibDoc, pages: pdfDoc.numPages, copies: 1 });
+                try {
+                    // Read once into Uint8Array — reusable without detach issues
+                    const ab = await file.arrayBuffer();
+                    const bytes = new Uint8Array(ab);
+                    const pdfDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+                    printQueue.push({
+                        id: 'pq_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+                        name: file.name,
+                        bytes,          // Uint8Array cached — never consumed
+                        pages: pdfDoc.numPages,
+                        copies: 1
+                    });
+                } catch (err) { toast('Erro ao carregar ' + file.name + ': ' + err.message, 'error'); }
             }
             renderPrintQueue();
             document.getElementById('print-loaded').style.display = 'block';
@@ -1762,51 +1772,53 @@
             try {
                 for (const item of printQueue) {
                     for (let c = 0; c < item.copies; c++) {
-                        const bytes = await item.file.arrayBuffer();
-                        const srcDoc = await PDFDocument.load(bytes);
+                        // .slice() creates a fresh copy of the Uint8Array — safe to pass to pdf-lib
+                        const srcDoc = await PDFDocument.load(item.bytes.slice());
                         const pageIdxs = srcDoc.getPageIndices();
                         const copied = await merged.copyPages(srcDoc, pageIdxs);
                         copied.forEach(p => merged.addPage(p));
-                        if (addBlank && (c < item.copies - 1 || printQueue.indexOf(item) < printQueue.length - 1)) {
-                            merged.addPage(merged.addPage([595, 842]));// A4 blank — fix: use insertPage
+                        if (addBlank) {
+                            const blankPage = merged.addPage([595.28, 841.89]);
                         }
-                        done++; bar.style.width = (done / total * 95) + '%';
+                        done++; bar.style.width = (done / total * 90) + '%';
                         label.textContent = `${item.name} — cópia ${c + 1}/${item.copies}`;
-                        await new Promise(r => setTimeout(r, 30));
+                        await new Promise(r => setTimeout(r, 20));
                     }
                 }
-                const bytes = await merged.save();
-                const blob = new Blob([bytes], { type: 'application/pdf' });
+                bar.style.width = '95%'; label.textContent = 'Gerando PDF final…';
+                const outBytes = await merged.save();
+                const blob = new Blob([outBytes], { type: 'application/pdf' });
                 const url = URL.createObjectURL(blob);
                 bar.style.width = '100%';
                 prog.style.display = 'none';
-                // Open in new tab and trigger print
+                // Try to open and print; fallback to download
                 const win = window.open(url, '_blank');
                 if (win) {
-                    win.onload = () => { try { win.print() } catch (e) { } }
+                    win.addEventListener('load', () => { try { win.print() } catch (e) { } });
                 } else {
-                    dlBytes(bytes, 'fila-impressao.pdf', 'application/pdf');
-                    toast('Pop-up bloqueado. PDF baixado para imprimir manualmente.', 'info');
+                    dlBytes(outBytes, 'fila-impressao.pdf', 'application/pdf');
+                    toast('Pop-up bloqueado — PDF baixado. Abra e imprima manualmente.', 'info');
                 }
-                toast('PDF de impressão pronto!', 'success');
-            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error') }
+                toast(`PDF de impressão pronto! ${printQueue.reduce((s, x) => s + x.copies, 0)} cópias.`, 'success');
+            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error'); console.error(err); }
         }
 
         async function exportPrintQueue() {
             if (!printQueue.length) { toast('Fila vazia.', 'error'); return }
             const { PDFDocument } = PDFLib;
             const merged = await PDFDocument.create();
-            for (const item of printQueue) {
-                for (let c = 0; c < item.copies; c++) {
-                    const bytes = await item.file.arrayBuffer();
-                    const srcDoc = await PDFDocument.load(bytes);
-                    const copied = await merged.copyPages(srcDoc, srcDoc.getPageIndices());
-                    copied.forEach(p => merged.addPage(p));
+            try {
+                for (const item of printQueue) {
+                    for (let c = 0; c < item.copies; c++) {
+                        const srcDoc = await PDFDocument.load(item.bytes.slice());
+                        const copied = await merged.copyPages(srcDoc, srcDoc.getPageIndices());
+                        copied.forEach(p => merged.addPage(p));
+                    }
                 }
-            }
-            const bytes = await merged.save();
-            dlBytes(bytes, 'fila-impressao.pdf', 'application/pdf');
-            toast('PDF unificado exportado!', 'success');
+                const outBytes = await merged.save();
+                dlBytes(outBytes, 'fila-impressao.pdf', 'application/pdf');
+                toast('PDF unificado exportado!', 'success');
+            } catch (err) { toast('Erro: ' + err.message, 'error'); console.error(err); }
         }
 
         // ═══════════════════════════════════════════════
@@ -1824,43 +1836,38 @@
             const prog = document.getElementById('wm-progress');
             const bar = document.getElementById('wm-bar');
             prog.style.display = 'block'; bar.style.width = '10%';
-            const text = document.getElementById('wm-text').value || 'MARCA D\'ÁGUA';
+            const text = document.getElementById('wm-text').value || "CONFIDENCIAL";
             const fontSize = parseInt(document.getElementById('wm-size').value) || 60;
             const opacity = parseInt(document.getElementById('wm-opacity').value) / 100 || 0.2;
             const colorHex = document.getElementById('wm-color').value || '#cc0000';
             const pos = document.getElementById('wm-pos').value || 'center';
-            const r = parseInt(colorHex.slice(1, 3), 16) / 255;
-            const g = parseInt(colorHex.slice(3, 5), 16) / 255;
-            const b = parseInt(colorHex.slice(5, 7), 16) / 255;
-
+            const cr = parseInt(colorHex.slice(1, 3), 16) / 255;
+            const cg = parseInt(colorHex.slice(3, 5), 16) / 255;
+            const cb = parseInt(colorHex.slice(5, 7), 16) / 255;
             try {
                 const { PDFDocument, rgb, degrees } = PDFLib;
-                const srcBytes = await wmFile.arrayBuffer();
-                const pdfDoc = await PDFDocument.load(srcBytes);
-                const pages = pdfDoc.getPages();
-                const fontBytes = await fetch('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js').then(() => null).catch(() => null);
-
-                for (let i = 0; i < pages.length; i++) {
-                    const page = pages[i];
+                if (!wmFile._bytes) {
+                    const ab = await wmFile.arrayBuffer();
+                    wmFile._bytes = new Uint8Array(ab);
+                }
+                const pdfDoc = await PDFDocument.load(wmFile._bytes.slice());
+                const wmPages = pdfDoc.getPages();
+                for (let i = 0; i < wmPages.length; i++) {
+                    const page = wmPages[i];
                     const { width, height } = page.getSize();
-                    const textLen = text.length * fontSize * 0.5;
+                    const approxLen = text.length * fontSize * 0.52;
                     let x, y, rot = 0;
-                    if (pos === 'center') { x = width / 2 - textLen / 2; y = height / 2; rot = 35 }
-                    else if (pos === 'top') { x = 20; y = height - fontSize - 10; rot = 0 }
-                    else { x = 20; y = 20; rot = 0 }
-                    page.drawText(text, {
-                        x, y, size: fontSize,
-                        color: rgb(r, g, b),
-                        opacity,
-                        rotate: degrees(rot),
-                    });
-                    bar.style.width = (10 + (i / pages.length * 85)) + '%';
+                    if (pos === 'center') { x = (width - approxLen) / 2; y = height / 2; rot = 35; }
+                    else if (pos === 'top') { x = 20; y = height - fontSize - 10; }
+                    else { x = 20; y = 20; }
+                    page.drawText(text, { x, y, size: fontSize, color: rgb(cr, cg, cb), opacity, rotate: degrees(rot) });
+                    bar.style.width = (10 + (i / wmPages.length * 85)) + '%';
                 }
                 const outBytes = await pdfDoc.save();
-                dlBytes(outBytes, wmFile.name.replace('.pdf', '_watermark.pdf'), 'application/pdf');
+                dlBytes(outBytes, wmFile.name.replace(/\.pdf$/i, '_watermark.pdf'), 'application/pdf');
                 prog.style.display = 'none';
-                toast('Marca d\'água aplicada!', 'success');
-            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error') }
+                toast("Marca d'água aplicada!", 'success');
+            } catch (err) { prog.style.display = 'none'; toast('Erro: ' + err.message, 'error'); }
         }
 
         // ═══════════════════════════════════════════════
@@ -1872,39 +1879,53 @@
             document.getElementById('docx-file-info').style.display = 'block';
             const prog = document.getElementById('docx-progress');
             const bar = document.getElementById('docx-bar');
-            prog.style.display = 'block'; bar.style.width = '20%';
+            prog.style.display = 'block'; bar.style.width = '15%';
             const area = document.getElementById('docx-preview-area');
-            area.style.display = 'block'; area.innerHTML = '';
+            area.style.display = 'block'; area.innerHTML = '<div style="color:var(--text-3);padding:20px;text-align:center">Renderizando documento…</div>';
+
             try {
-                const ab = await file.arrayBuffer();
-                bar.style.width = '60%';
-                await docx.renderAsync(ab, area, null, {
-                    className: 'docx-preview',
-                    inWrapper: true,
-                    ignoreWidth: false,
-                    ignoreHeight: false,
-                    ignoreFonts: false,
-                    breakPages: true,
-                    useBase64URL: true,
-                });
-                bar.style.width = '100%'; prog.style.display = 'none';
-                // Also generate HTML for download
-                const res = await mammoth.convertToHtml({ arrayBuffer: ab });
-                const htmlFull = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-      body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;margin:2.5cm 2cm;color:#111;max-width:800px}
-      h1,h2,h3,h4,h5,h6{margin-top:.8em;margin-bottom:.3em}
-      p{margin-bottom:.5em}
-      table{border-collapse:collapse;width:100%;margin-bottom:1em}
-      td,th{border:1px solid #bbb;padding:5px 9px}
-      ul,ol{margin-left:1.5em;margin-bottom:.5em}
-      @media print{body{margin:1cm}}
-    </style></head><body>${res.value}</body></html>`;
+                // Read ONCE into Uint8Array — then .slice() gives a fresh ArrayBuffer each time
+                const rawAb = await file.arrayBuffer();
+                const bytes = new Uint8Array(rawAb);
+                bar.style.width = '30%';
+
+                // 1) Render preview with docx-preview (needs a fresh ArrayBuffer)
+                try {
+                    await docx.renderAsync(bytes.slice().buffer, area, null, {
+                        className: 'docx-preview', inWrapper: true, ignoreWidth: false,
+                        ignoreHeight: false, ignoreFonts: false, breakPages: true, useBase64URL: true,
+                    });
+                } catch (previewErr) {
+                    area.innerHTML = '<div style="color:var(--warn);padding:16px;font-size:13px">⚠ Pré-visualização indisponível — o documento ainda pode ser convertido.</div>';
+                }
+                bar.style.width = '70%';
+
+                // 2) Generate print-ready HTML with mammoth (needs a separate fresh ArrayBuffer)
+                const mamRes = await mammoth.convertToHtml({ arrayBuffer: bytes.slice().buffer });
+                const htmlFull = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>
+  body{font-family:Arial,sans-serif;font-size:12pt;line-height:1.6;margin:2cm;color:#111}
+  h1{font-size:22pt;margin-top:.8em}h2{font-size:18pt}h3{font-size:14pt}
+  h1,h2,h3,h4,h5,h6{margin-bottom:.3em}
+  p{margin-bottom:.5em}
+  table{border-collapse:collapse;width:100%;margin-bottom:1em}
+  td,th{border:1px solid #bbb;padding:5px 9px}
+  ul,ol{margin-left:1.5em;margin-bottom:.5em}
+  img{max-width:100%}
+  @media print{
+    body{margin:1.5cm}
+    h1,h2,h3{page-break-after:avoid}
+    table,figure{page-break-inside:avoid}
+  }
+</style>
+</head><body>${mamRes.value}</body></html>`;
                 docxHtmlUrl = URL.createObjectURL(new Blob([htmlFull], { type: 'text/html' }));
-                toast('Documento renderizado!', 'success');
+                bar.style.width = '100%'; prog.style.display = 'none';
+                toast('Documento pronto! Clique em "Converter para PDF".', 'success');
             } catch (err) {
                 prog.style.display = 'none';
-                toast('Erro ao renderizar: ' + err.message, 'error');
-                area.innerHTML = `<div style="color:red;padding:20px">Erro: ${err.message}</div>`;
+                toast('Erro ao processar: ' + err.message, 'error');
+                area.innerHTML = `<div style="color:var(--danger);padding:20px">Erro: ${err.message}</div>`;
             }
         }
         function clearDocx() {
@@ -1914,15 +1935,24 @@
             document.getElementById('docx-preview-area').innerHTML = '';
         }
         function printDocxAsPdf() {
-            if (!docxHtmlUrl) { toast('Carregue um documento primeiro.', 'error'); return }
+            if (!docxHtmlUrl) { toast('Carregue um documento Word primeiro.', 'error'); return; }
             const win = window.open(docxHtmlUrl, '_blank');
-            if (win) win.onload = () => { try { win.print() } catch (e) { } }
-            else toast('Abra a pré-visualização e use Ctrl+P para salvar como PDF.', 'info');
-        }
-        function downloadDocxHtml() {
-            if (!docxHtmlUrl) { toast('Carregue um documento primeiro.', 'error'); return }
-            const a = document.createElement('a'); a.href = docxHtmlUrl; a.download = (docxFile.name.replace(/\.docx?$/i, '')) + '.html'; a.click();
-            toast('HTML baixado. Abra no navegador e Ctrl+P → Salvar como PDF.', 'info');
+            if (win) {
+                win.addEventListener('load', () => {
+                    try {
+                        // Small delay ensures styles are applied before print dialog opens
+                        setTimeout(() => win.print(), 400);
+                    } catch (e) { }
+                });
+                toast('Diálogo de impressão aberto. Selecione "Salvar como PDF" na impressora.', 'info');
+            } else {
+                // Fallback: download HTML
+                const a = document.createElement('a');
+                a.href = docxHtmlUrl;
+                a.download = (docxFile.name.replace(/\.docx?$/i, '')) + '.html';
+                a.click();
+                toast('Pop-up bloqueado. Arquivo HTML baixado — abra e use Ctrl+P → Salvar como PDF.', 'info');
+            }
         }
 
         // ═══════════════════════════════════════════════
@@ -1947,8 +1977,12 @@
             const lbl = document.getElementById('pdf-conv-label');
             prog.style.display = 'block'; bar.style.width = '5%'; lbl.textContent = 'Carregando PDF…';
             try {
-                const ab = await pdfConvFile.arrayBuffer();
-                const pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+                // Use cached bytes if already loaded; otherwise read and cache
+                if (!pdfConvFile._bytes) {
+                    const ab = await pdfConvFile.arrayBuffer();
+                    pdfConvFile._bytes = new Uint8Array(ab);
+                }
+                const pdfDoc = await pdfjsLib.getDocument({ data: pdfConvFile._bytes.slice() }).promise;
                 bar.style.width = '15%'; lbl.textContent = 'Extraindo texto estruturado…';
                 const structured = [];
                 for (let i = 1; i <= pdfDoc.numPages; i++) {
@@ -1956,10 +1990,9 @@
                     const tc = await page.getTextContent();
                     const vp = page.getViewport({ scale: 1 });
                     const pageH = vp.height;
-                    // Group items into lines by y position
                     const lines = {};
                     for (const item of tc.items) {
-                        if (!item.str.trim()) continue;
+                        if (!item.str || !item.str.trim()) continue;
                         const y = Math.round(item.transform[5]);
                         if (!lines[y]) lines[y] = { y, items: [], height: item.height || 12 };
                         lines[y].items.push(item);
@@ -1967,11 +2000,10 @@
                     const sortedLines = Object.values(lines).sort((a, b) => b.y - a.y);
                     structured.push({
                         page: i, lines: sortedLines.map(l => ({
-                            text: l.items.map(x => x.str).join(' ').trim(),
-                            fontSize: l.height,
-                            y: l.y,
-                            pageH
-                        }))
+                            text: l.items.map(x => x.str).join(' ').replace(/\s+/g, ' ').trim(),
+                            fontSize: Math.round(l.height * 10) / 10,
+                            y: l.y, pageH
+                        })).filter(l => l.text)
                     });
                     bar.style.width = (15 + (i / pdfDoc.numPages * 75)) + '%';
                 }
@@ -1979,7 +2011,7 @@
                 return structured;
             } catch (err) {
                 prog.style.display = 'none';
-                toast('Erro: ' + err.message, 'error');
+                toast('Erro ao extrair: ' + err.message, 'error');
                 return null;
             }
         }
@@ -1990,55 +2022,92 @@
             const lbl = document.getElementById('pdf-conv-label');
             const prog = document.getElementById('pdf-conv-progress');
             const bar = document.getElementById('pdf-conv-bar');
-            prog.style.display = 'block'; bar.style.width = '10%'; lbl.textContent = 'Gerando .docx…';
+            prog.style.display = 'block'; bar.style.width = '5%'; lbl.textContent = 'Gerando .docx…';
 
             try {
-                const { Document, Paragraph, TextRun, HeadingLevel, AlignmentType, PageBreak } = window.docx;
+                // Access docx classes — CDN build exposes them on window.docx
+                const D = window.docx;
+                if (!D || !D.Document) {
+                    throw new Error('Biblioteca docx.js não carregada. Verifique sua conexão e recarregue a página.');
+                }
+                const { Document, Paragraph, TextRun, Packer, PageBreak,
+                    AlignmentType, HeadingLevel } = D;
+
                 const docChildren = [];
                 let hasText = false;
 
                 for (let pi = 0; pi < structured.length; pi++) {
                     const pageData = structured[pi];
-                    if (pi > 0) docChildren.push(new Paragraph({ children: [new PageBreak()] }));
+                    if (pi > 0) {
+                        // Page break between pages
+                        docChildren.push(new Paragraph({
+                            children: [new PageBreak()]
+                        }));
+                    }
                     for (const line of pageData.lines) {
                         const t = line.text.trim();
                         if (!t) continue;
                         hasText = true;
                         const fs = line.fontSize || 12;
-                        let heading = null;
-                        if (fs >= 20) heading = HeadingLevel.HEADING_1;
-                        else if (fs >= 16) heading = HeadingLevel.HEADING_2;
-                        else if (fs >= 14) heading = HeadingLevel.HEADING_3;
-                        if (heading) {
-                            docChildren.push(new Paragraph({ heading, children: [new TextRun({ text: t, bold: true })] }));
+
+                        // Detect heading by font size relative to page
+                        // HeadingLevel values in docx.js: "Heading1","Heading2","Heading3" or numeric
+                        let headingVal = null;
+                        if (fs >= 20) headingVal = 'Heading1';
+                        else if (fs >= 16) headingVal = 'Heading2';
+                        else if (fs >= 14) headingVal = 'Heading3';
+
+                        const isBold = (fs >= 14);
+                        const ptSize = Math.max(10, Math.round(fs));
+
+                        if (headingVal) {
+                            // Use heading property — works with both enum and string in docx@8
+                            const hLevel = HeadingLevel ? HeadingLevel[headingVal.replace('Heading', 'HEADING_')] || headingVal : headingVal;
+                            docChildren.push(new Paragraph({
+                                heading: hLevel,
+                                children: [new TextRun({ text: t, bold: true, size: ptSize * 2 })]
+                            }));
                         } else {
-                            docChildren.push(new Paragraph({ children: [new TextRun({ text: t, size: Math.round(fs * 2) || 24 })] }));
+                            docChildren.push(new Paragraph({
+                                children: [new TextRun({ text: t, size: ptSize * 2, bold: false })]
+                            }));
                         }
                     }
-                    bar.style.width = (10 + pi / structured.length * 80) + '%';
+                    bar.style.width = (5 + pi / structured.length * 80) + '%';
+                    await new Promise(r => setTimeout(r, 0)); // yield to UI
                 }
 
                 if (!hasText) {
                     prog.style.display = 'none';
                     const res = document.getElementById('pdf-result');
                     res.style.display = 'block';
-                    res.innerHTML = '<span style="color:var(--danger)">⚠ Nenhum texto extraível. Este PDF pode ser baseado em imagens.</span>';
+                    res.innerHTML = '<span style="color:var(--danger)">⚠ Nenhum texto extraível. Este PDF pode ser baseado em imagens (escaneado).</span>';
                     return;
                 }
 
-                const doc = new Document({ sections: [{ properties: {}, children: docChildren }] });
-                bar.style.width = '95%'; lbl.textContent = 'Compactando…';
-                const blob = await window.docx.Packer.toBlob(doc);
+                bar.style.width = '88%'; lbl.textContent = 'Montando .docx…';
+                const doc = new Document({
+                    sections: [{
+                        properties: {},
+                        children: docChildren
+                    }]
+                });
+
+                bar.style.width = '93%'; lbl.textContent = 'Compactando arquivo…';
+                const blob = await Packer.toBlob(doc);
                 bar.style.width = '100%'; prog.style.display = 'none';
+
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url; a.download = pdfConvFile.name.replace('.pdf', '') + '.docx'; a.click();
-                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                a.href = url;
+                a.download = pdfConvFile.name.replace(/\.pdf$/i, '') + '.docx';
+                a.click();
+                setTimeout(() => URL.revokeObjectURL(url), 15000);
 
-                const total = structured.reduce((s, p) => s + p.lines.length, 0);
+                const totalLines = structured.reduce((s, p) => s + p.lines.length, 0);
                 const res = document.getElementById('pdf-result');
                 res.style.display = 'block';
-                res.innerHTML = `<span style="color:var(--accent)">✓ .docx gerado com ${structured.length} páginas e ~${total} parágrafos.</span>`;
+                res.innerHTML = `<span style="color:var(--accent)">✓ .docx gerado — ${structured.length} página(s), ~${totalLines} parágrafos</span>`;
                 toast('.docx exportado com sucesso!', 'success');
             } catch (err) {
                 prog.style.display = 'none';
