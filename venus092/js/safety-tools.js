@@ -1,10 +1,10 @@
 (function () {
   const reasons = [
     ['golpe', 'Golpe ou fraude'],
-    ['violencia', 'Violencia ou ameaca'],
+    ['violencia', 'Violência ou ameaça'],
     ['sem_consentimento', 'Sem consentimento'],
-    ['ofensa', 'Ofensa ou baixo calao'],
-    ['assedio', 'Assedio'],
+    ['ofensa', 'Ofensa ou baixo calão'],
+    ['assedio', 'Assédio'],
     ['spam', 'Spam'],
     ['outro', 'Outro']
   ];
@@ -108,7 +108,7 @@
             <div class="venus-modal-icon"><i class="ti ti-shield-exclamation"></i></div>
             <div>
               <h2 class="venus-modal-title">${escapeHtml(options.title || 'Denunciar ou bloquear')}</h2>
-              <p class="venus-modal-sub">${escapeHtml(options.subtitle || 'Conte o que aconteceu. Sua denuncia ajuda a manter a comunidade mais segura.')}</p>
+              <p class="venus-modal-sub">${escapeHtml(options.subtitle || 'Conte o que aconteceu. Sua denúncia ajuda a manter a comunidade mais segura.')}</p>
             </div>
           </div>
           <div class="venus-modal-body">
@@ -123,12 +123,12 @@
             </div>
             <label class="venus-check">
               <input type="checkbox" data-block checked>
-              <span>Bloquear esta pessoa. O chat sera bloqueado e o perfil deixara de aparecer no catalogo para voce.</span>
+              <span>Bloquear esta pessoa. O chat será bloqueado e o perfil deixará de aparecer no catálogo para você.</span>
             </label>
           </div>
           <div class="venus-modal-actions">
             <button class="venus-btn" data-cancel>Cancelar</button>
-            <button class="venus-btn venus-btn-danger" data-ok>Enviar denuncia</button>
+            <button class="venus-btn venus-btn-danger" data-ok>Enviar denúncia</button>
           </div>
         </div>`;
       document.body.appendChild(backdrop);
