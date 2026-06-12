@@ -18,7 +18,8 @@
     roomSub: null,
     messageSub: null,
     presenceTimer: null,
-    setupBlocked: false
+    setupBlocked: false,
+    pendingRoomModal: false
   };
 
   const $ = id => document.getElementById(id);
@@ -101,6 +102,32 @@
   function closeModal(id) {
     const modal = $(id);
     if (modal) modal.hidden = true;
+  }
+
+  function withTimeout(promise, ms, message) {
+    let timeoutId;
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error(message)), ms);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+  }
+
+  function hasGuestIdentity() {
+    return Boolean(state.user || (state.nickname && localStorage.getItem(ADULT_OK_KEY) === '1'));
+  }
+
+  function requestRoomModal() {
+    if (!hasGuestIdentity()) {
+      state.pendingRoomModal = true;
+      $('nickInput').value = state.nickname || '';
+      $('adultConsent').checked = localStorage.getItem(ADULT_OK_KEY) === '1';
+      toast('Escolha um nick antes de criar uma sala.', 'info');
+      openModal('nickModal');
+      return;
+    }
+
+    openModal('roomModal');
   }
 
   function setIdentity() {
@@ -336,9 +363,13 @@
     if (!state.sb) return;
     state.guestId = getGuestId();
     state.nickname = localStorage.getItem(NICK_KEY) || '';
+    if (localStorage.getItem(ADULT_OK_KEY) !== '1') state.nickname = '';
 
-    const { data: { user } } = await state.sb.auth.getUser();
-    state.user = user || null;
+    const { data: authData, error: authError } = await state.sb.auth.getUser();
+    if (authError) {
+      console.warn('Sessao do Supabase indisponivel para o chat:', authError);
+    }
+    state.user = authData?.user || null;
 
     if (state.user) {
       const [{ data: customer }, { data: professional }] = await Promise.all([
@@ -350,11 +381,6 @@
     }
 
     setIdentity();
-
-    if (!state.user && (!state.nickname || localStorage.getItem(ADULT_OK_KEY) !== '1')) {
-      $('nickInput').value = state.nickname || '';
-      openModal('nickModal');
-    }
   }
 
   async function loadRooms() {
@@ -482,7 +508,9 @@
       return;
     }
 
-    if (!state.user && !state.nickname) {
+    if (!hasGuestIdentity()) {
+      state.pendingRoomModal = true;
+      toast('Escolha um nick antes de criar uma sala.', 'info');
       openModal('nickModal');
       return;
     }
@@ -504,11 +532,15 @@
 
     if (submitButton) submitButton.disabled = true;
     try {
-      const { data, error } = await state.sb
-        .from('community_chat_rooms')
-        .insert(payload)
-        .select(ROOM_COLUMNS)
-        .single();
+      const { data, error } = await withTimeout(
+        state.sb
+          .from('community_chat_rooms')
+          .insert(payload)
+          .select(ROOM_COLUMNS)
+          .single(),
+        15000,
+        'A criacao demorou demais. Verifique sua conexao e tente novamente.'
+      );
 
       if (error) {
         console.error('Erro ao criar sala da comunidade:', error);
@@ -526,8 +558,10 @@
         await openRoom(data);
       }
 
-      await loadRooms();
-      renderRooms();
+      loadRooms().catch(err => console.error('Erro ao atualizar salas apos criacao:', err));
+    } catch (err) {
+      console.error('Falha inesperada ao criar sala da comunidade:', err);
+      toast(err.message || 'Nao foi possivel criar a sala.', 'erro');
     } finally {
       if (submitButton) submitButton.disabled = false;
     }
@@ -634,8 +668,8 @@
 
   function bindEvents() {
     $('refreshRooms')?.addEventListener('click', loadRooms);
-    $('newRoomBtn')?.addEventListener('click', () => openModal('roomModal'));
-    $('emptyCreateBtn')?.addEventListener('click', () => openModal('roomModal'));
+    $('newRoomBtn')?.addEventListener('click', requestRoomModal);
+    $('emptyCreateBtn')?.addEventListener('click', requestRoomModal);
     $('editNickBtn')?.addEventListener('click', () => {
       $('nickInput').value = state.nickname || '';
       $('adultConsent').checked = localStorage.getItem(ADULT_OK_KEY) === '1';
@@ -662,6 +696,11 @@
       setIdentity();
       closeModal('nickModal');
       toast('Nick salvo. Boa conversa.', 'ok');
+
+      if (state.pendingRoomModal) {
+        state.pendingRoomModal = false;
+        openModal('roomModal');
+      }
     });
 
     $('roomForm')?.addEventListener('submit', createRoom);
