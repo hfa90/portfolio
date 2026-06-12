@@ -152,22 +152,42 @@
     });
   }
 
+  function sortRooms(rooms) {
+    return [...rooms].sort((a, b) => {
+      const aTime = new Date(a.created_at || a.last_message_at || 0).getTime();
+      const bTime = new Date(b.created_at || b.last_message_at || 0).getTime();
+      return bTime - aTime;
+    });
+  }
+
+  function resetRoomFilters() {
+    const search = $('roomSearch');
+    if (search) search.value = '';
+    state.roomFilter = 'all';
+    document.querySelectorAll('.room-filter').forEach(item => {
+      item.classList.toggle('active', item.dataset.filter === 'all');
+    });
+    renderRooms();
+  }
+
   function renderRooms() {
     const list = $('roomsList');
     const rooms = filteredRooms();
 
     if (!rooms.length) {
+      const hasHiddenRooms = state.rooms.length > 0;
       list.innerHTML = `
         <div class="empty-rooms">
           <div class="empty-icon"><i class="ti ti-message-plus"></i></div>
-          <strong>Nenhuma sala encontrada</strong>
-          <p>Crie uma sala publica para visitantes ou uma privada para cadastrados.</p>
+          <strong>${hasHiddenRooms ? 'As salas estao ocultas pelo filtro' : 'Nenhuma sala encontrada'}</strong>
+          <p>${hasHiddenRooms ? 'Limpe a busca ou volte para Todas para ver as salas publicas disponiveis.' : 'Crie uma sala publica para visitantes ou uma privada para cadastrados.'}</p>
+          ${hasHiddenRooms ? '<button class="btn btn-outline" type="button" data-reset-room-filters>Mostrar todas</button>' : ''}
         </div>
       `;
       return;
     }
 
-    list.innerHTML = rooms.map(room => {
+    list.innerHTML = sortRooms(rooms).map(room => {
       const active = state.activeRoom?.id === room.id ? ' active' : '';
       const locked = room.visibility === 'private' && !state.user ? ' locked' : '';
       const meta = [
@@ -355,7 +375,7 @@
     }
 
     state.setupBlocked = false;
-    state.rooms = data || [];
+    state.rooms = sortRooms(data || []);
     renderRooms();
   }
 
@@ -499,6 +519,7 @@
       closeModal('roomModal');
       form.reset();
       $('roomMaxParticipants').value = '80';
+      resetRoomFilters();
       toast('Sala criada e aberta.', 'ok');
 
       if (data?.id) {
@@ -662,6 +683,12 @@
     });
 
     $('roomsList')?.addEventListener('click', event => {
+      const resetButton = event.target.closest('[data-reset-room-filters]');
+      if (resetButton) {
+        resetRoomFilters();
+        return;
+      }
+
       const item = event.target.closest('[data-room-id]');
       if (!item) return;
       openRoom(item.dataset.roomId);
