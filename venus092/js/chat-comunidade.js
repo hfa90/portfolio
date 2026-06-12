@@ -4,6 +4,7 @@
   const GUEST_ID_KEY = 'venus_chat_guest_id';
   const NICK_KEY = 'venus_chat_nickname';
   const ADULT_OK_KEY = 'venus_chat_adult_ok';
+  const ROOM_COLUMNS = 'id,title,description,visibility,topic,mood,city,tags,min_age,max_participants,creator_id,creator_nickname,is_active,is_featured,message_count,last_message_at,created_at';
 
   const state = {
     sb: null,
@@ -195,6 +196,24 @@
     }).join('');
   }
 
+  function mergeRoom(room, prepend = false) {
+    if (!room?.id) return null;
+
+    const index = state.rooms.findIndex(item => item.id === room.id);
+    if (index >= 0) {
+      state.rooms[index] = { ...state.rooms[index], ...room };
+      return state.rooms[index];
+    }
+
+    if (prepend) {
+      state.rooms = [room, ...state.rooms];
+    } else {
+      state.rooms = [...state.rooms, room];
+    }
+
+    return room;
+  }
+
   function renderActiveRoom() {
     const room = state.activeRoom;
     if (!room) return;
@@ -323,7 +342,7 @@
 
     const { data, error } = await state.sb
       .from('community_chat_rooms')
-      .select('id,title,description,visibility,topic,mood,city,tags,min_age,max_participants,creator_id,creator_nickname,is_active,is_featured,message_count,last_message_at,created_at')
+      .select(ROOM_COLUMNS)
       .eq('is_active', true)
       .order('is_featured', { ascending: false })
       .order('last_message_at', { ascending: false, nullsFirst: false })
@@ -340,8 +359,11 @@
     renderRooms();
   }
 
-  async function openRoom(roomId) {
-    const room = state.rooms.find(item => item.id === roomId);
+  async function openRoom(roomOrId) {
+    const room = typeof roomOrId === 'object'
+      ? mergeRoom(roomOrId, true)
+      : state.rooms.find(item => item.id === roomOrId);
+
     if (!room) return;
 
     state.activeRoom = room;
@@ -431,6 +453,8 @@
     event.preventDefault();
     if (!state.sb) return;
 
+    const form = event.currentTarget;
+    const submitButton = form.querySelector('button[type="submit"]');
     const visibility = $('roomVisibility').value;
     if (visibility === 'private' && !state.user) {
       toast('Entre ou cadastre-se para criar salas privadas.', 'erro');
@@ -458,23 +482,34 @@
       tags: []
     };
 
-    const { data, error } = await state.sb
-      .from('community_chat_rooms')
-      .insert(payload)
-      .select()
-      .single();
+    if (submitButton) submitButton.disabled = true;
+    try {
+      const { data, error } = await state.sb
+        .from('community_chat_rooms')
+        .insert(payload)
+        .select(ROOM_COLUMNS)
+        .single();
 
-    if (error) {
-      toast(error.message || 'Nao foi possivel criar a sala.', 'erro');
-      return;
+      if (error) {
+        console.error('Erro ao criar sala da comunidade:', error);
+        toast(error.message || 'Nao foi possivel criar a sala.', 'erro');
+        return;
+      }
+
+      closeModal('roomModal');
+      form.reset();
+      $('roomMaxParticipants').value = '80';
+      toast('Sala criada e aberta.', 'ok');
+
+      if (data?.id) {
+        await openRoom(data);
+      }
+
+      await loadRooms();
+      renderRooms();
+    } finally {
+      if (submitButton) submitButton.disabled = false;
     }
-
-    closeModal('roomModal');
-    event.target.reset();
-    $('roomMaxParticipants').value = '80';
-    toast('Sala criada.', 'ok');
-    await loadRooms();
-    if (data?.id) openRoom(data.id);
   }
 
   async function sendMessage(event) {
