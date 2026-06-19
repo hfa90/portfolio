@@ -1,0 +1,3370 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Coração Acolhido">
+    <meta name="theme-color" content="#fdf6f2">
+    <link rel="apple-touch-icon"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💗</text></svg>">
+    <title>Coração Acolhido - IA Amiga</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        /* Remove estilos nativos de botão no iOS */
+        button {
+            -webkit-appearance: none;
+            appearance: none;
+            cursor: pointer;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+        }
+
+        /* Scroll suave global */
+        html {
+            /* Garante que o scroll seja sempre suave */
+            scroll-behavior: smooth;
+            /* Ocupa a tela inteira no iOS */
+            height: -webkit-fill-available;
+        }
+
+        :root {
+            --cor-fundo: #fdf6f2;
+            --cor-primaria: #e8a598;
+            --cor-secundaria: #f9e4dc;
+            --cor-texto: #5a4a42;
+            --cor-balao-bot: #ffffff;
+            --cor-balao-user: #f2d5ce;
+        }
+
+        .tema-homem {
+            --cor-fundo: #f0f4f8;
+            --cor-primaria: #4a90e2;
+            --cor-secundaria: #d1e3f8;
+            --cor-texto: #2c3e50;
+            --cor-balao-bot: #ffffff;
+            --cor-balao-user: #cfe2f3;
+        }
+
+        body {
+            background-color: var(--cor-fundo);
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+            color: var(--cor-texto);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            /* dvh = dynamic viewport height: corrige o bug do Safari com a barra de endereço */
+            height: 100dvh;
+            min-height: 100dvh;
+            /* Fallback para browsers sem suporte a dvh */
+            height: -webkit-fill-available;
+            transition: background-color 0.5s ease, color 0.5s ease;
+            /* Evita bounce scroll nativo no iOS */
+            overscroll-behavior: none;
+            /* Previne seleção acidental de texto ao tocar */
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+        }
+
+        #modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(8px);
+        }
+
+        .modal {
+            background: white;
+            padding: 35px;
+            border-radius: 30px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+        }
+
+        .modal input,
+        .modal select,
+        .modal button {
+            width: 100%;
+            padding: 14px;
+            margin: 10px 0;
+            border-radius: 15px;
+            border: 1px solid #eee;
+            /* 16px OBRIGATÓRIO para evitar zoom automático no iOS */
+            font-size: 16px;
+            box-sizing: border-box;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .modal button {
+            background: var(--cor-primaria);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 450px;
+            /* Ocupa toda a altura dinâmica disponível */
+            height: 100dvh;
+            height: -webkit-fill-available;
+            background: rgba(255, 255, 255, 0.95);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Em tablets/desktop: volta ao card flutuante */
+        @media (min-width: 500px) {
+            .app-container {
+                height: 92dvh;
+                max-height: 820px;
+                border-radius: 40px;
+                border: 1px solid rgba(255, 255, 255, 0.5);
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+                background: rgba(255, 255, 255, 0.88);
+            }
+        }
+
+        header {
+            padding: 25px;
+            text-align: center;
+            background: var(--cor-secundaria);
+        }
+
+        .chat-box {
+            flex: 1;
+            padding: 16px 16px 8px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            /* Scroll momentum nativo do iOS */
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-y: contain;
+        }
+
+        .message-wrapper {
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .message {
+            max-width: 85%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            font-size: 1rem;
+            line-height: 1.6;
+            animation: fadeIn 0.4s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .bot {
+            align-self: flex-start;
+            background: var(--cor-balao-bot);
+            border-radius: 20px 20px 20px 5px;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.02);
+        }
+
+        .user {
+            align-self: flex-end;
+            background: var(--cor-balao-user);
+            border-radius: 20px 20px 5px 20px;
+        }
+
+        /* Estilo da Reação */
+        .reaction {
+            position: absolute;
+            bottom: -10px;
+            right: 10px;
+            background: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            animation: bounceIn 0.5s cubic-bezier(0.36, 0, 0.66, -0.56) both;
+            z-index: 10;
+        }
+
+        @keyframes bounceIn {
+            0% {
+                transform: scale(0);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .typing {
+            font-size: 0.85rem;
+            color: var(--cor-primaria);
+            margin-left: 20px;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .input-area {
+            padding: 12px 16px;
+            /* env(safe-area-inset-bottom) = espaço do home indicator iPhone X+ */
+            padding-bottom: calc(12px + env(safe-area-inset-bottom));
+            display: flex;
+            gap: 10px;
+            background: white;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+        }
+
+        input#userInput {
+            flex: 1;
+            padding: 13px 20px;
+            border: 1px solid var(--cor-secundaria);
+            border-radius: 30px;
+            outline: none;
+            /* CRÍTICO: font-size abaixo de 16px causa zoom automático no iOS Safari */
+            font-size: 16px;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+            background: var(--cor-fundo);
+            /* Remove o estilo padrão do iOS */
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        input#userInput:focus {
+            border-color: var(--cor-primaria);
+            background: white;
+            box-shadow: 0 0 0 3px rgba(232, 165, 152, 0.15);
+        }
+
+        button#sendBtn {
+            background: var(--cor-primaria);
+            color: white;
+            border: none;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Lista de histórico discreta */
+        .historico-lista {
+            position: absolute;
+            top: 60px;
+            right: 15px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            width: 200px;
+            display: none;
+            /* Escondido por padrão */
+            z-index: 100;
+            padding: 10px;
+            border: 1px solid var(--cor-secundaria);
+        }
+
+        .historico-item {
+            padding: 8px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background 0.3s;
+        }
+
+        .historico-item:hover {
+            background: var(--cor-fundo);
+        }
+
+
+        .historico-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 4px;
+        }
+
+        .historico-item span {
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+
+        /* Botão Flutuante Discreto */
+        .floating-menu-btn {
+            position: fixed;
+            bottom: calc(85px + env(safe-area-inset-bottom));
+            left: 20px;
+            width: 45px;
+            height: 45px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            z-index: 99;
+            border: 1px solid var(--cor-secundaria);
+            transition: all 0.3s ease;
+            font-size: 1.2rem;
+        }
+
+        .floating-menu-btn:hover {
+            transform: scale(1.1);
+            background: var(--cor-secundaria);
+        }
+
+        /* Painel de Opções */
+        .menu-aconselhadores {
+            position: fixed;
+            bottom: calc(140px + env(safe-area-inset-bottom));
+            left: 20px;
+            background: white;
+            border-radius: 20px;
+            width: 220px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            display: none;
+            /* Escondido por padrão */
+            flex-direction: column;
+            padding: 10px;
+            z-index: 100;
+            border: 1px solid var(--cor-secundaria);
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .opcao-aconselhador {
+            padding: 12px 15px;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s;
+            font-size: 0.9rem;
+            color: var(--cor-texto);
+        }
+
+        .opcao-aconselhador:hover {
+            background: var(--cor-fundo);
+        }
+
+        .opcao-aconselhador span {
+            font-size: 1.2rem;
+        }
+
+        .opcao-aconselhador.ativo {
+            background: var(--cor-secundaria);
+            font-weight: bold;
+        }
+
+
+
+        /* Tema Religioso (Dourado/Bege) */
+        .tema-religioso {
+            --cor-fundo: #fffcf0;
+            --cor-primaria: #d4af37;
+            --cor-secundaria: #fdf2d0;
+            --cor-texto: #5c4d1a;
+            --cor-balao-user: #f9ecc2;
+        }
+
+        /* Tema Direto (Cinza Moderno/Focado) */
+        .tema-direto {
+            --cor-fundo: #f2f4f5;
+            --cor-primaria: #607d8b;
+            --cor-secundaria: #cfd8dc;
+            --cor-texto: #263238;
+            --cor-balao-user: #eceff1;
+        }
+
+        /* Tema Amigável (Verde Suave) */
+        .tema-amigavel {
+            --cor-fundo: #f1f8e9;
+            --cor-primaria: #8bc34a;
+            --cor-secundaria: #dcedc8;
+            --cor-texto: #33691e;
+            --cor-balao-user: #f1f8e9;
+        }
+
+        /* Tema de Carreira (Azul Profissional) */
+        .tema-carreira {
+            --cor-fundo: #f0f7ff;
+            --cor-primaria: #2c5282;
+            --cor-secundaria: #ebf8ff;
+            --cor-texto: #1a365d;
+            --cor-balao-user: #bee3f8;
+        }
+
+
+        /* Tema Luto (Violeta suave) */
+        .tema-luto {
+            --cor-fundo: #f5f0fa;
+            --cor-primaria: #7c5cbf;
+            --cor-secundaria: #ede8f7;
+            --cor-texto: #3b2a5a;
+            --cor-balao-bot: #ffffff;
+            --cor-balao-user: #ddd5f5;
+        }
+
+        /* Tema Doenca (Verde-sage) */
+        .tema-doenca {
+            --cor-fundo: #f0f7f4;
+            --cor-primaria: #4a8c6f;
+            --cor-secundaria: #d9eeea;
+            --cor-texto: #1f3d2f;
+            --cor-balao-bot: #ffffff;
+            --cor-balao-user: #c3e0d6;
+        }
+
+        /* Estilo do Popup de Seleção */
+        .modal-conselheiro {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            /* Ativado via JS */
+            justify-content: center;
+            align-items: center;
+            z-index: 2000;
+            backdrop-filter: blur(8px);
+        }
+
+        .card-selecao {
+            background: white;
+            padding: 30px;
+            border-radius: 25px;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .grid-conselheiros {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .btn-escolha {
+            padding: 15px;
+            border-radius: 15px;
+            border: 1px solid #eee;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fdfdfd;
+        }
+
+        .btn-escolha:hover {
+            background: var(--cor-secundaria);
+            transform: translateY(-3px);
+        }
+
+        .btn-escolha span {
+            font-size: 1.5rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .btn-escolha label {
+            font-size: 0.8rem;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+
+        .grid-humor {
+            display: flex;
+            justify-content: space-around;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-humor {
+            flex: 1;
+            padding: 10px;
+            border-radius: 15px;
+            border: 1px solid #eee;
+            cursor: pointer;
+            background: #fdfdfd;
+            transition: all 0.3s;
+            font-size: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .btn-humor:hover {
+            background: var(--cor-secundaria);
+            transform: scale(1.1);
+        }
+
+        .btn-humor span {
+            font-size: 0.7rem;
+            font-weight: bold;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .btn-humor.selecionado {
+            border-color: var(--cor-primaria);
+            background: var(--cor-secundaria);
+        }
+
+        /* Estilo do Alerta de Erro */
+        .error-toast {
+            background-color: #ffeded;
+            color: #c0392b;
+            border: 1px solid #ffcccc;
+            padding: 12px;
+            border-radius: 15px;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: none;
+            /* Escondido por padrão */
+            animation: shake 0.4s ease-in-out;
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        /* Estilo para o botão em estado de carregamento */
+        .btn-loading {
+            background: #d1d1d1 !important;
+            cursor: not-allowed !important;
+            position: relative;
+            pointer-events: none;
+        }
+
+        .loader-fofo {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, .3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Efeito de pulsação suave no botão */
+        .pulse-fofo {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.02);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        /* Botão Google */
+        .btn-google {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            padding: 13px 14px;
+            margin: 4px 0 10px 0;
+            border-radius: 15px;
+            border: 1.5px solid #dadce0;
+            background: #ffffff;
+            color: #3c4043;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            box-sizing: border-box;
+            transition: background 0.2s, box-shadow 0.2s;
+            font-family: 'Segoe UI', sans-serif;
+        }
+
+        .btn-google:hover {
+            background: #f8f9fa;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+        }
+
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 6px 0;
+            color: #bbb;
+            font-size: 0.8rem;
+        }
+
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #eee;
+        }
+
+        /* Botão TTS */
+        #tts-btn {
+            width: 50px;
+            height: 50px;
+            background: var(--cor-secundaria);
+            border: 1.5px solid var(--cor-primaria);
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+
+        #tts-btn:hover {
+            background: var(--cor-primaria);
+        }
+
+        #tts-btn.falando {
+            background: var(--cor-primaria);
+            animation: pulso-voz 1.2s ease-in-out infinite;
+        }
+
+        #tts-btn.mudo {
+            opacity: 0.45;
+        }
+
+        @keyframes pulso-voz {
+
+            0%,
+            100% {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(232, 165, 152, 0.6);
+            }
+
+            50% {
+                transform: scale(1.08);
+                box-shadow: 0 0 0 8px rgba(232, 165, 152, 0);
+            }
+        }
+
+        /* ── Check-in diário ── */
+        .checkin-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 3000;
+            backdrop-filter: blur(6px);
+        }
+
+        .checkin-card {
+            background: white;
+            border-radius: 28px;
+            padding: 32px 28px;
+            width: 90%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18);
+            animation: fadeIn 0.35s ease;
+        }
+
+        .checkin-card h3 {
+            margin: 0 0 6px;
+            font-size: 1.3rem;
+            color: #333;
+        }
+
+        .checkin-card p {
+            margin: 0 0 20px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .checkin-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: linear-gradient(to right, var(--cor-primaria) 0%, var(--cor-primaria) 50%, #eee 50%, #eee 100%);
+            outline: none;
+            margin: 10px 0 6px;
+        }
+
+        .checkin-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--cor-primaria);
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .checkin-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-bottom: 18px;
+        }
+
+        .checkin-valor {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--cor-primaria);
+            margin: 4px 0 16px;
+        }
+
+        .checkin-perguntas {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .checkin-opcao {
+            padding: 11px 16px;
+            border-radius: 14px;
+            border: 1.5px solid #eee;
+            cursor: pointer;
+            font-size: 0.92rem;
+            background: #fdfdfd;
+            transition: all 0.25s;
+            text-align: left;
+        }
+
+        .checkin-opcao:hover,
+        .checkin-opcao.sel {
+            background: var(--cor-secundaria);
+            border-color: var(--cor-primaria);
+            font-weight: 600;
+        }
+
+        .checkin-btn-ok {
+            width: 100%;
+            padding: 14px;
+            border-radius: 16px;
+            border: none;
+            background: var(--cor-primaria);
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .checkin-btn-ok:hover {
+            opacity: 0.88;
+        }
+
+        .checkin-step {
+            display: none;
+        }
+
+        .checkin-step.ativo {
+            display: block;
+        }
+
+        /* ══════════════════════════════════════════
+           🆘 MODO SOS — Crise Emocional
+        ══════════════════════════════════════════ */
+        .sos-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(180, 0, 0, 0.18);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5000;
+            backdrop-filter: blur(10px);
+        }
+
+        .sos-card {
+            background: white;
+            border-radius: 28px;
+            padding: 30px 24px;
+            width: 92%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(180, 0, 0, 0.18);
+            animation: fadeIn 0.3s ease;
+        }
+
+        .sos-card h2 {
+            margin: 0 0 6px;
+            font-size: 1.5rem;
+            color: #c0392b;
+        }
+
+        .sos-card p {
+            margin: 0 0 18px;
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .sos-opcoes {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .sos-btn {
+            padding: 14px 18px;
+            border-radius: 16px;
+            border: none;
+            font-size: 0.95rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-align: left;
+        }
+
+        .sos-btn-vermelho {
+            background: #ffeaea;
+            color: #c0392b;
+        }
+
+        .sos-btn-verde {
+            background: #eafbf1;
+            color: #1a7a4a;
+        }
+
+        .sos-btn-azul {
+            background: #eaf2fb;
+            color: #1a5276;
+        }
+
+        .sos-btn-roxo {
+            background: #f3eafb;
+            color: #6c3483;
+        }
+
+        .sos-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .sos-fechar {
+            background: none;
+            border: 1px solid #ddd;
+            border-radius: 14px;
+            padding: 10px 20px;
+            font-size: 0.85rem;
+            color: #999;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        .sos-pulse {
+            font-size: 2.5rem;
+            animation: sosPulse 1.2s ease-in-out infinite;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+
+        @keyframes sosPulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.15);
+            }
+        }
+
+        /* ══════════════════════════════════════════
+           🫁 EXERCÍCIOS GUIADOS (Respiração / Meditação)
+        ══════════════════════════════════════════ */
+        .exercicio-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(10, 40, 80, 0.65);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 4500;
+            backdrop-filter: blur(12px);
+        }
+
+        .exercicio-card {
+            background: linear-gradient(145deg, #0d2137, #1a4a6e);
+            border-radius: 32px;
+            padding: 36px 28px;
+            width: 92%;
+            max-width: 380px;
+            text-align: center;
+            box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+            color: white;
+            animation: fadeIn 0.4s ease;
+        }
+
+        .exercicio-card h2 {
+            margin: 0 0 6px;
+            font-size: 1.4rem;
+            color: #a8d8ea;
+        }
+
+        .exercicio-card p {
+            margin: 0 0 22px;
+            font-size: 0.88rem;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .exercicio-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .exercicio-opcao {
+            padding: 14px 18px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.07);
+            color: white;
+            font-size: 0.92rem;
+            cursor: pointer;
+            transition: all 0.25s;
+            text-align: left;
+        }
+
+        .exercicio-opcao:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Círculo de respiração animado */
+        .breath-circle-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 0 20px;
+        }
+
+        .breath-circle {
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #a8d8ea, #1a4a6e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            box-shadow: 0 0 0 0 rgba(168, 216, 234, 0.5);
+            transition: transform 0.1s;
+        }
+
+        .breath-circle.inhale {
+            animation: breathIn var(--breath-in, 4s) ease-in-out forwards;
+        }
+
+        .breath-circle.hold {
+            transform: scale(1.35);
+        }
+
+        .breath-circle.exhale {
+            animation: breathOut var(--breath-out, 6s) ease-in-out forwards;
+        }
+
+        @keyframes breathIn {
+            from {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(168, 216, 234, 0.5);
+            }
+
+            to {
+                transform: scale(1.35);
+                box-shadow: 0 0 40px 15px rgba(168, 216, 234, 0.15);
+            }
+        }
+
+        @keyframes breathOut {
+            from {
+                transform: scale(1.35);
+                box-shadow: 0 0 40px 15px rgba(168, 216, 234, 0.15);
+            }
+
+            to {
+                transform: scale(1);
+                box-shadow: 0 0 0 0 rgba(168, 216, 234, 0);
+            }
+        }
+
+        .breath-instrucao {
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: #a8d8ea;
+            letter-spacing: 0.5px;
+        }
+
+        .breath-contador {
+            font-size: 2rem;
+            font-weight: bold;
+            color: white;
+            min-height: 2.5rem;
+        }
+
+        .breath-ciclos {
+            font-size: 0.8rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .exercicio-fechar {
+            margin-top: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: rgba(255, 255, 255, 0.7);
+            border-radius: 14px;
+            padding: 11px 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            width: 100%;
+        }
+
+        /* ══════════════════════════════════════════
+           📓 DIÁRIO DE GRATIDÃO
+        ══════════════════════════════════════════ */
+        .diario-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.55);
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            z-index: 4000;
+            backdrop-filter: blur(8px);
+        }
+
+        .diario-card {
+            background: #fffdf8;
+            border-radius: 30px 30px 0 0;
+            padding: 28px 24px 36px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 90dvh;
+            overflow-y: auto;
+            box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.15);
+            animation: slideUpPanel 0.35s ease;
+        }
+
+        @keyframes slideUpPanel {
+            from {
+                transform: translateY(100%);
+            }
+
+
+            to {
+                transform: translateY(0);
+            }
+        }
+
+        .diario-card h2 {
+            margin: 0 0 4px;
+            font-size: 1.35rem;
+            color: #5a4a42;
+        }
+
+        .diario-card .diario-sub {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: 18px;
+        }
+
+        .diario-prompt {
+            background: var(--cor-secundaria, #f9e4dc);
+            border-radius: 16px;
+            padding: 14px 18px;
+            font-size: 0.92rem;
+            color: #5a4a42;
+            margin-bottom: 14px;
+            font-style: italic;
+            line-height: 1.5;
+        }
+
+        .diario-textarea {
+            width: 100%;
+            min-height: 110px;
+            border: 1.5px solid #f0e0d6;
+            border-radius: 16px;
+            padding: 14px 16px;
+            font-size: 16px;
+            font-family: inherit;
+            background: white;
+            resize: none;
+            outline: none;
+            color: #5a4a42;
+            line-height: 1.6;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        .diario-textarea:focus {
+            border-color: var(--cor-primaria, #e8a598);
+        }
+
+        .diario-acoes {
+            display: flex;
+            gap: 10px;
+            margin-top: 14px;
+        }
+
+        .diario-btn-salvar {
+            flex: 1;
+            padding: 14px;
+            border-radius: 16px;
+            border: none;
+            background: var(--cor-primaria, #e8a598);
+            color: white;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .diario-btn-salvar:hover {
+            opacity: 0.88;
+        }
+
+        .diario-btn-ia {
+            flex: 1;
+            padding: 14px;
+            border-radius: 16px;
+            border: 1.5px solid var(--cor-primaria, #e8a598);
+            background: white;
+            color: var(--cor-primaria, #e8a598);
+            font-size: 0.92rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .diario-btn-ia:hover {
+            background: var(--cor-secundaria, #f9e4dc);
+        }
+
+        .diario-fechar {
+            background: none;
+            border: none;
+            color: #bbb;
+            font-size: 0.85rem;
+            cursor: pointer;
+            padding: 6px 0 14px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .diario-resposta-ia {
+            background: #f9f4ff;
+            border: 1px solid #e0d0f5;
+            border-radius: 16px;
+            padding: 16px 18px;
+            font-size: 0.93rem;
+            color: #3d2e5a;
+            line-height: 1.7;
+            margin-top: 14px;
+            display: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .diario-historico-titulo {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #ccc;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin: 20px 0 10px;
+        }
+
+        .diario-entrada {
+            background: white;
+            border: 1px solid #f0e0d6;
+            border-radius: 14px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            font-size: 0.88rem;
+            color: #5a4a42;
+            line-height: 1.5;
+        }
+
+        .diario-entrada .diario-data {
+            font-size: 0.75rem;
+            color: #bbb;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .diario-conteudo {
+            font-size: 0.9rem;
+            color: #5a4a42;
+            line-height: 1.55;
+            transition: all 0.2s;
+        }
+
+        /* Botão flutuante SOS */
+        .sos-float-btn {
+            position: fixed;
+            bottom: calc(85px + env(safe-area-inset-bottom));
+            right: 20px;
+            width: 45px;
+            height: 45px;
+            background: #ffeaea;
+            border: 1.5px solid #e8a0a0;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            cursor: pointer;
+            z-index: 99;
+            box-shadow: 0 4px 12px rgba(200, 0, 0, 0.1);
+            transition: all 0.3s;
+        }
+
+        .sos-float-btn:hover {
+            transform: scale(1.1);
+            background: #ffd5d5;
+        }
+
+        /* Botões de ação rápida no header */
+        .header-quick-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .header-quick-btn {
+            background: rgba(255, 255, 255, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: var(--cor-texto);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .header-quick-btn:hover {
+            background: white;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="modal-overlay">
+        <div class="modal">
+            <h2 id="modal-title">Entrar</h2>
+
+            <input type="email" id="email" placeholder="Seu e-mail">
+            <input type="password" id="password" placeholder="Sua senha">
+            <div id="error-message" class="error-toast"></div>
+
+
+            <div id="perfil-extra" style="display:none;">
+                <input type="text" id="user-name" placeholder="Seu nome ou apelido...">
+                <select id="select-genero">
+                    <option value="mulher">Sou Mulher</option>
+                    <option value="homem">Sou Homem</option>
+                </select>
+                <select id="select-status">
+                    <option value="casada(o)">Casada(o)</option>
+                    <option value="namorando">Namorando</option>
+                    <option value="ficando">Ficando</option>
+                    <option value="terminou recentemente">Terminei recentemente</option>
+                </select>
+            </div>
+
+            <button id="auth-btn" onclick="handleAuth()">Entrar</button>
+
+            <div class="auth-divider">ou</div>
+
+            <button class="btn-google" onclick="loginComGoogle()">
+                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                    <g fill="none" fill-rule="evenodd">
+                        <path
+                            d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
+                            fill="#4285F4" />
+                        <path
+                            d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+                            fill="#34A853" />
+                        <path
+                            d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"
+                            fill="#FBBC05" />
+                        <path
+                            d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"
+                            fill="#EA4335" />
+                    </g>
+                </svg>
+                Continuar com Google
+            </button>
+
+            <p id="toggle-text" style="font-size: 0.8rem; cursor: pointer; color: var(--cor-primaria);"
+                onclick="toggleAuthMode()">
+                Não tem conta? Cadastre-se
+            </p>
+        </div>
+    </div>
+
+    <!-- CHECK-IN DIARIO -->
+    <div id="checkin-overlay" class="checkin-overlay" style="display:none;">
+        <div class="checkin-card">
+            <div id="checkin-step-1" class="checkin-step ativo">
+                <h3>&#127769; Como você dormiu?</h3>
+                <p>Sua noite influencia muito como você se sente hoje</p>
+                <div class="checkin-perguntas">
+                    <div class="checkin-opcao" onclick="selecionarOpcaoCheckin(this,'sono')">&#128564; Muito bem —
+                        acordei descansado(a)</div>
+                    <div class="checkin-opcao" onclick="selecionarOpcaoCheckin(this,'sono')">&#128528; Razoável —
+                        poderia ser melhor</div>
+                    <div class="checkin-opcao" onclick="selecionarOpcaoCheckin(this,'sono')">&#128553; Mal — acordei
+                        várias vezes</div>
+                    <div class="checkin-opcao" onclick="selecionarOpcaoCheckin(this,'sono')">&#9749; Quase não dormi
+                    </div>
+                </div>
+                <button class="checkin-btn-ok" onclick="proximoCheckin(2)">Continuar &#8594;</button>
+            </div>
+            <div id="checkin-step-2" class="checkin-step">
+                <h3>&#128149; Nível de ansiedade hoje</h3>
+                <p>Arraste para indicar como está agora</p>
+                <div class="checkin-valor" id="checkin-anx-val">5</div>
+                <input type="range" class="checkin-slider" id="checkin-anx" min="1" max="10" value="5"
+                    oninput="atualizarSlider(this)">
+                <div class="checkin-labels"><span>1 — Tranquilo(a)</span><span>10 — Muito ansioso(a)</span></div>
+                <button class="checkin-btn-ok" onclick="finalizarCheckin()">Começar sessão &#10024;</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 🆘 SOS EMOCIONAL ══════════ -->
+    <div id="sos-overlay" class="sos-overlay" style="display:none;">
+        <div class="sos-card">
+            <div class="sos-pulse">🆘</div>
+            <h2>Estou aqui com você</h2>
+            <p>O que você está sentindo agora?</p>
+            <div class="sos-opcoes">
+                <button class="sos-btn sos-btn-vermelho" onclick="ativarModoSOS('panico')">😰 Estou em pânico /
+                    ansiedade intensa</button>
+                <button class="sos-btn sos-btn-roxo" onclick="ativarModoSOS('choro')">😭 Não consigo parar de
+                    chorar</button>
+                <button class="sos-btn sos-btn-azul" onclick="ativarModoSOS('dissociacao')">😶 Me sinto vazio(a) /
+                    distante</button>
+                <button class="sos-btn sos-btn-verde" onclick="ativarModoSOS('respirar')">🫁 Preciso só respirar e me
+                    acalmar</button>
+            </div>
+            <button class="sos-fechar" onclick="fecharSOS()">Estou bem, fechar</button>
+        </div>
+    </div>
+
+    <!-- ══════════ 🫁 EXERCÍCIOS GUIADOS ══════════ -->
+    <div id="exercicio-overlay" class="exercicio-overlay" style="display:none;">
+        <div class="exercicio-card">
+            <div id="exercicio-menu-view">
+                <h2>🫁 Exercícios Guiados</h2>
+                <p>Escolha o que precisa agora</p>
+                <div class="exercicio-menu">
+                    <div class="exercicio-opcao" onclick="iniciarRespiracao('478')">🌬️ <strong>Respiração
+                            4-7-8</strong> — Acalma em 2 min</div>
+                    <div class="exercicio-opcao" onclick="iniciarRespiracao('box')">📦 <strong>Box Breathing</strong> —
+                        Foco e controle (4-4-4-4)</div>
+                    <div class="exercicio-opcao" onclick="iniciarRespiracao('coerencia')">💙 <strong>Coerência
+                            Cardíaca</strong> — Equilíbrio (5-5)</div>
+                    <div class="exercicio-opcao" onclick="iniciarMeditacao()">🧘 <strong>Meditação Guiada</strong> — 3
+                        minutos de presença</div>
+                </div>
+                <button class="exercicio-fechar" onclick="fecharExercicio()">Fechar</button>
+            </div>
+            <div id="exercicio-ativo-view" style="display:none;">
+                <h2 id="ex-titulo">Respiração</h2>
+                <p id="ex-descricao"></p>
+                <div class="breath-circle-container">
+                    <div class="breath-circle" id="breath-circle">🫁</div>
+                    <div class="breath-instrucao" id="breath-instrucao">Prepare-se...</div>
+                    <div class="breath-contador" id="breath-contador"></div>
+                    <div class="breath-ciclos" id="breath-ciclos"></div>
+                </div>
+                <button class="exercicio-fechar" onclick="pararExercicio()">⏹ Parar exercício</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ══════════ 📓 DIÁRIO DE GRATIDÃO ══════════ -->
+    <div id="diario-overlay" class="diario-overlay" style="display:none;">
+        <div class="diario-card">
+            <button class="diario-fechar" onclick="fecharDiario()">▼ fechar</button>
+            <h2>📓 Diário de Gratidão</h2>
+            <p class="diario-sub" id="diario-data-hoje"></p>
+            <div class="diario-prompt" id="diario-prompt-texto">Carregando pergunta do dia...</div>
+            <textarea class="diario-textarea" id="diario-texto"
+                placeholder="Escreva livremente... não há resposta certa."></textarea>
+            <div class="diario-acoes">
+                <button class="diario-btn-salvar" onclick="salvarEntradaDiario()">💾 Salvar</button>
+                <button class="diario-btn-ia" onclick="pedirReflexaoIA()">💭 O que você acha?</button>
+            </div>
+            <div class="diario-resposta-ia" id="diario-ia-resposta"></div>
+
+            <!-- Abas: Nova entrada | Histórico -->
+            <div style="display:flex;border-bottom:2px solid #f0e0d6;margin-top:22px;margin-bottom:0;">
+                <button id="aba-nova" onclick="trocarAbaDiario('nova')"
+                    style="flex:1;padding:10px;background:none;border:none;font-size:0.88rem;font-weight:bold;color:var(--cor-primaria);border-bottom:2px solid var(--cor-primaria);margin-bottom:-2px;cursor:pointer;">
+                    ✏️ Escrever
+                </button>
+                <button id="aba-hist" onclick="trocarAbaDiario('historico')"
+                    style="flex:1;padding:10px;background:none;border:none;font-size:0.88rem;font-weight:bold;color:#ccc;cursor:pointer;">
+                    📚 Histórico
+                </button>
+            </div>
+
+            <div id="painel-nova" style="display:block;padding-top:4px;"></div>
+            <div id="painel-historico" style="display:none;">
+                <div class="diario-historico-titulo" id="diario-hist-titulo" style="display:none;">Entradas anteriores
+                </div>
+                <div id="diario-historico-lista"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: continuar escrevendo a partir de entrada do histórico -->
+    <div id="modal-continuar-diario"
+        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;display:none;align-items:center;justify-content:center;">
+        <div
+            style="background:#fff;border-radius:18px;padding:24px 20px;max-width:360px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18);position:relative;">
+            <button onclick="fecharModalContinuar()"
+                style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:#aaa;">✕</button>
+            <div style="font-size:1.1rem;font-weight:600;color:#7c4dff;margin-bottom:6px;">📖 Continue de onde parou
+            </div>
+            <div id="modal-continuar-trecho"
+                style="font-size:0.82rem;color:#888;font-style:italic;background:#f9f5ff;border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5;max-height:80px;overflow:hidden;">
+            </div>
+            <div style="font-size:0.88rem;color:#555;margin-bottom:8px;">O que mais está no seu coração agora?</div>
+            <textarea id="modal-continuar-texto" rows="4" placeholder="Continue escrevendo aqui..."
+                style="width:100%;border:1.5px solid #e0d4f7;border-radius:10px;padding:10px;font-size:0.9rem;resize:none;outline:none;box-sizing:border-box;font-family:inherit;"></textarea>
+            <button onclick="salvarContinuacaoDiario()"
+                style="margin-top:12px;width:100%;background:linear-gradient(135deg,#9c6ade,#7c4dff);color:#fff;border:none;border-radius:10px;padding:12px;font-size:0.95rem;cursor:pointer;font-weight:600;">💾
+                Salvar</button>
+        </div>
+    </div>
+
+    <div id="popup-selecao" class="modal-conselheiro">
+        <div class="card-selecao">
+            <div id="etapa-conselheiro">
+                <h2 style="margin-top:0; color: #333;">Como posso te ajudar hoje?</h2>
+                <div class="grid-conselheiros" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="btn-escolha" onclick="proximaEtapaMood('psicologo')">
+                        <span>&#127807;</span><label>Terapia</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('carreira')">
+                        <span>&#128188;</span><label>Carreira</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('religioso')">
+                        <span>&#128591;</span><label>Espiritual</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('direto')">
+                        <span>&#9889;</span><label>Pr&#225;tico</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('luto')">
+                        <span>&#129489;&#8205;&#9877;&#65039;</span><label>Luto</label>
+                    </div>
+                    <div class="btn-escolha" onclick="proximaEtapaMood('doenca')">
+                        <span>&#129505;</span><label>Sa&#250;de</label>
+                    </div>
+                </div>
+            </div>
+
+            <div id="etapa-humor" style="display: none;">
+                <h2 style="margin-top:0; color: #333;">Como você está se sentindo?</h2>
+                <div class="grid-humor">
+                    <div class="btn-humor" onclick="finalizarSelecao('Feliz')">😊<span>Feliz</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Ansioso')">😟<span>Ansioso</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Triste')">😢<span>Triste</span></div>
+                    <div class="btn-humor" onclick="finalizarSelecao('Estressado')">🤯<span>Exausto</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <header
+            style="position: relative; padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px 20px; background: var(--cor-secundaria); border-radius: 0 0 30px 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; gap: 12px;">
+
+
+
+            <h1 id="titulo-app"
+                style="margin: 0; font-size: 1.9rem; text-align: center; letter-spacing: -0.5px; width: 100%;">
+                Coração Acolhido
+            </h1>
+
+            <!-- Indicador de tempo de conversa gratuita -->
+            <div id="session-limit-bar" style="width: 100%; display: none; flex-direction: column; gap: 4px;">
+                <div
+                    style="display: flex; justify-content: space-between; align-items: center; font-size: 0.72rem; color: var(--cor-texto); opacity: 0.7;">
+                    <span>⏳ Espaço de conversa</span>
+                    <span id="session-limit-label">100% livre</span>
+                </div>
+                <div
+                    style="width: 100%; height: 5px; background: rgba(0,0,0,0.08); border-radius: 10px; overflow: hidden;">
+                    <div id="session-limit-fill"
+                        style="height: 100%; width: 100%; border-radius: 10px; background: #6cc87a; transition: width 0.5s ease, background 0.5s ease;">
+                    </div>
+                </div>
+            </div>
+
+            <div
+                style="display: flex; gap: 20px; align-items: center; background: rgba(255,255,255,0.5); padding: 8px 20px; border-radius: 30px; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3);">
+                <button onclick="toggleHistorico()" title="Histórico"
+                    style="background: none; border: none; cursor: pointer; color: var(--cor-texto); font-size: 1.3rem; opacity: 0.7; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">🕒</button>
+
+                <button onclick="abrirExercicio()" title="Exercícios Guiados"
+                    style="background: none; border: none; cursor: pointer; color: var(--cor-texto); font-size: 1.3rem; opacity: 0.7; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">🫁</button>
+
+                <button onclick="abrirDiario()" title="Diário de Gratidão"
+                    style="background: none; border: none; cursor: pointer; color: var(--cor-texto); font-size: 1.3rem; opacity: 0.7; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">📓</button>
+
+                <button onclick="limparConversa()" title="Limpar Chat"
+                    style="background: none; border: none; cursor: pointer; color: #cc0000; font-size: 1.3rem; opacity: 0.7; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">🗑️</button>
+
+                <button onclick="logout()" title="Sair"
+                    style="background: none; border: none; cursor: pointer; color: var(--cor-texto); font-size: 1.3rem; opacity: 0.7; padding: 5px; transition: transform 0.2s;"
+                    onmouseover="this.style.transform='scale(1.1)'"
+                    onmouseout="this.style.transform='scale(1)'">🚪</button>
+            </div>
+
+            <button id="btn-hoje" onclick="voltarParaHoje()"
+                style="display: none; background: white; border: 1px solid var(--cor-primaria); color: var(--cor-primaria); padding: 8px 20px; border-radius: 20px; font-size: 0.8rem; cursor: pointer; font-weight: bold; transition: all 0.3s; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                ↺ Voltar para Hoje
+            </button>
+
+            <div id="listaHistorico" class="historico-lista"
+                style="top: auto; bottom: -180px; left: 50%; transform: translateX(-50%); width: 220px;">
+                <div
+                    style="font-weight: bold; font-size: 0.75rem; margin-bottom: 8px; color: var(--cor-primaria); border-bottom: 1px solid #eee; padding-bottom: 5px; text-align: center;">
+                    Conversas anteriores:
+                </div>
+                <div id="itensHistorico"></div>
+            </div>
+        </header>
+        <div class="chat-box" id="chatBox">
+            <div class="message-wrapper">
+                <div class="message bot" id="welcome-msg">Olá! Estou aqui para te ouvir.</div>
+            </div>
+        </div>
+        <div id="typing" class="typing">Digitando com carinho...</div>
+        <div class="input-area">
+            <button id="tts-btn" onclick="toggleVoz()" title="Voz desativada — clique para ativar"
+                class="mudo">&#128263;</button>
+            <input type="text" id="userInput" placeholder="Desabafe aqui..." autocomplete="off">
+            <button id="sendBtn" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // 1. Inicialização única (Remova as duplicatas)
+        const SUPABASE_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZnlzbXpyb2h5dnZyeGV5amd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDExMDUsImV4cCI6MjA4NjQ3NzEwNX0.1D9mB2PzbdsqXFSKIC_iZEpUffao9hXWbtc_Hxwbm3Q";
+
+        // ── Anthropic Claude API via Supabase Edge Function (chave segura no servidor) ──
+        const ANTHROPIC_API_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co/functions/v1/claude-proxy";
+
+        console.log("Usando API Claude via Supabase Edge Function");
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+            auth: {
+                lock: async (name, acquireTimeout, fn) => fn(),
+                storage: window.localStorage,
+                autoRefreshToken: true,
+                persistSession: true,
+                detectSessionInUrl: true,
+                // Tolera até 5 minutos de diferença de relógio entre dispositivo e servidor
+                clockSkewInSeconds: 300
+            }
+        });
+
+        let chatHistory = [];
+        let usuario = {};
+        let dadosCheckin = { sono: '', ansiedade: 5 };
+        let memoriaUsuario = '';
+
+        // ── Check-in ──
+        function selecionarOpcaoCheckin(el, campo) {
+            el.closest('.checkin-perguntas').querySelectorAll('.checkin-opcao')
+                .forEach(o => o.classList.remove('sel'));
+            el.classList.add('sel');
+            dadosCheckin[campo] = el.textContent.trim();
+        }
+        function atualizarSlider(input) {
+            const v = input.value;
+            document.getElementById('checkin-anx-val').textContent = v;
+            dadosCheckin.ansiedade = parseInt(v);
+            const pct = ((v - 1) / 9) * 100;
+            input.style.background = `linear-gradient(to right, var(--cor-primaria) 0%, var(--cor-primaria) ${pct}%, #eee ${pct}%, #eee 100%)`;
+        }
+        function proximoCheckin(etapa) {
+            document.querySelectorAll('.checkin-step').forEach(s => s.classList.remove('ativo'));
+            const prox = document.getElementById('checkin-step-' + etapa);
+            if (prox) prox.classList.add('ativo');
+        }
+        async function finalizarCheckin() {
+            document.getElementById('checkin-overlay').style.display = 'none';
+            await salvarCheckinNoPerfil();
+            document.getElementById('popup-selecao').style.display = 'flex';
+        }
+        async function salvarCheckinNoPerfil() {
+            try {
+                const { data: { user } } = await _supabase.auth.getUser();
+                if (!user) return;
+                await _supabase.from('profiles').upsert(
+                    { id: user.id, ultima_sessao: new Date().toISOString().split('T')[0] },
+                    { onConflict: 'id' }
+                );
+            } catch (e) { console.warn('Perfil não salvo:', e); }
+        }
+        async function verificarCheckinHoje() {
+            try {
+                const { data: { user } } = await _supabase.auth.getUser();
+                if (!user) return false;
+                const { data } = await _supabase.from('profiles').select('ultima_sessao').eq('id', user.id).single();
+                return data?.ultima_sessao === new Date().toISOString().split('T')[0];
+            } catch (e) { return false; }
+        }
+
+        // ── Memória de longo prazo ──
+        async function carregarMemoria() {
+            try {
+                const { data: { user } } = await _supabase.auth.getUser();
+                if (!user) return;
+                const { data: msgs } = await _supabase
+                    .from('historico_conversas')
+                    .select('content, created_at')
+                    .eq('user_id', user.id)
+                    .eq('role', 'user')
+                    .order('created_at', { ascending: false })
+                    .limit(30);
+                if (!msgs || msgs.length === 0) return;
+                const porData = {};
+                msgs.forEach(m => {
+                    const d = m.created_at.split('T')[0];
+                    if (!porData[d]) porData[d] = [];
+                    porData[d].push(m.content);
+                });
+                const datas = Object.keys(porData).sort().reverse();
+                memoriaUsuario = datas.slice(0, 5).map(d => {
+                    const df = new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+                    return `- ${df}: "${porData[d][0].substring(0, 80)}..."`;
+                }).join('\n');
+            } catch (e) { console.warn('Memória:', e); }
+        }
+
+        // Inicializa o histórico e instruções da IA
+        function configurarGemini() {
+            let personaPrompt = "";
+
+            // ── REGRAS UNIVERSAIS ── aplicadas a TODOS os modos
+            const regrasCores = `
+REGRAS DE FORMATO (siga sempre, sem exceção):
+1. Comece SEMPRE com UM emoji seguido de '#'. Exemplo: 🫂#
+2. Nunca use listas, tópicos, bullets ou markdown.
+3. Separe parágrafos com '|'. Máximo 3 parágrafos curtos.
+4. Escreva como mensagem de WhatsApp — curto, caloroso, direto.
+
+REGRAS DE COMPORTAMENTO (as mais importantes):
+- NUNCA encerre a conversa. NUNCA diga "se precisar, estou aqui" ou "até a próxima" ou qualquer frase de despedida.
+- NUNCA dê a sensação de que a conversa acabou. Cada resposta é uma porta aberta, não uma conclusão.
+- SEMPRE termine com UMA pergunta curiosa, humana, que convide a pessoa a continuar falando.
+- A pergunta deve parecer genuína — como se você realmente quisesse saber mais. Não seja genérico.
+- Se a pessoa disser pouco, faça uma pergunta que a ajude a abrir mais. Se disser muito, reflita e aprofunde um detalhe.
+- Adapte o ritmo ao da pessoa. Se ela estiver triste, vá devagar. Se estiver animada, acompanhe.
+- NUNCA ofereça soluções antes de ouvir o suficiente. Primeiro escute. Depois pergunte mais. Só então, se ela quiser, ofereça perspectivas.
+- Use o nome da pessoa com naturalidade, mas não em toda mensagem — só quando sentir que faz diferença.
+- Nunca seja clínico, nunca use jargão técnico, nunca soe como manual.
+- Você é real, presente, humano. Cada mensagem deve sentir como se viesse de alguém que realmente importa.`;
+
+            if (tipoAconselhador === 'carreira') {
+                personaPrompt = `Você é o mentor de carreira de ${usuario.nome} — mas não aquele mentor chato que joga framework em cima de problema. Você é aquela pessoa que já errou bastante, aprendeu na prática e agora ouve de verdade antes de falar qualquer coisa.
+
+Você não vai dar lista de dicas nem passo-a-passo. Vai escutar o que está pesando, entender o contexto real, e só então ajudar a pensar junto — de forma honesta, sem aquele otimismo forçado de coach.
+
+Se ${usuario.nome} estiver travado numa decisão, você não vai decidir por ela — vai fazer as perguntas certas pra ela mesma encontrar o caminho. Se estiver com medo, você valida o medo antes de oferecer qualquer perspectiva.
+
+Seu tom é de colega experiente tomando um café, não de consultoria empresarial.
+
+${regrasCores}`;
+
+            } else if (tipoAconselhador === 'religioso') {
+                personaPrompt = `Você é um conselheiro espiritual para ${usuario.nome} — alguém que acredita de verdade, que conhece a dor de questionar a fé e que sabe que Deus cabe em qualquer conversa, sem forçar.
+
+Você ouve primeiro. Sempre. Não cita versículo logo de cara. Só compartilha uma passagem se sentir que o momento pede — e mesmo assim, pergunta antes: "posso te mostrar algo que me confortou nesse tema?"
+
+Passagens que você pode usar com cuidado e só quando fizer sentido: Salmos 23, João 11:35, Romanos 8:28, Isaías 41:10, Filipenses 4:6-7, Mateus 11:28.
+
+Você sabe que Deus está presente na dor — não ausente dela. E que a fé real tem espaço pra dúvida, raiva e silêncio.
+
+Seu tom é de pastor-amigo, não de sermão. Caloroso, presente, sem julgamento.
+
+${regrasCores}`;
+
+            } else if (tipoAconselhador === 'direto') {
+                personaPrompt = `Você é o tipo de pessoa que ${usuario.nome} chama quando precisa de alguém que não vai enrolar. Você fala a verdade, mas com cuidado. Direto, sem rodeio — mas nunca frio.
+
+Você não vai ficar dando tapinha nas costas nem validando tudo cegamente. Se você achar que a pessoa está se sabotando, vai dizer — com respeito, mas vai dizer. Se a situação tiver solução, você vai ajudar a encontrar. Se não tiver, você vai ser honesto sobre isso também.
+
+Mas você AINDA escuta antes de falar. Você só é direto quando entende o quadro completo. Clareza sem contexto é julgamento.
+
+Seu tom é de amigo que fala verdade sem perder a amizade.
+
+${regrasCores}`;
+
+            } else if (tipoAconselhador === 'amigavel') {
+                personaPrompt = `Você é o melhor amigo de ${usuario.nome}. Aquele que manda áudio de 3 minutos em vez de texto, que lembra dos detalhes, que faz piada na hora certa e sabe quando parar.
+
+Você não está aqui pra consertar nada. Está aqui pra ouvir, estar junto, rir se der, chorar se precisar. Você trata ${usuario.nome} como adulto — não como paciente.
+
+Linguagem informal, afeto real, sem aquela gentileza ensaiada. Às vezes uma gíria, às vezes um "cara, que situação". Você faz ${usuario.nome} se sentir menos sozinho no que está vivendo.
+
+Nunca deixe a conversa morrer. Cada resposta abre algo novo, um detalhe, uma memória, uma sensação. Você é curioso de verdade.
+
+${regrasCores}`;
+
+            } else if (tipoAconselhador === 'luto') {
+                personaPrompt = `Você está com ${usuario.nome} num dos momentos mais difíceis que existem. Luto não tem atalho, não tem estágio certo, não tem prazo.
+
+Você não vai minimizar. Não vai dizer "vai passar" nem "ela/ele está em paz agora". Você sabe que essas frases, mesmo bem-intencionadas, ferem.
+
+O que você faz é ficar. Deixa a pessoa falar de quem perdeu — ou do que perdeu, porque luto não é só morte. Luto é fim de relacionamento, fim de sonho, fim de saúde. Você honra tudo isso.
+
+Você faz perguntas que ajudam a lembrar, não a esquecer. "Como ela era?" "Qual é a memória que você não quer perder nunca?" Você deixa o amor aparecer no meio da dor.
+
+Seu ritmo é lento. Suas respostas são curtas quando a dor é grande. Você não enche de palavras o que precisa de silêncio.
+
+${regrasCores}`;
+
+            } else if (tipoAconselhador === 'doenca') {
+                personaPrompt = `Você acompanha ${usuario.nome} num caminho que cansa — o de conviver com doença, seja a própria ou de alguém próximo.
+
+Você não vai forçar positividade. Não vai dizer "você é forte" quando a pessoa está esgotada de ser forte. Você valida o cansaço, o medo, a raiva de ser o cuidador invisível ou o paciente que ninguém enxerga de verdade.
+
+Você pergunta sobre o dia a dia — não sobre os resultados clínicos. "Como você dormiu?" "Conseguiu comer hoje?" "O que pesou mais essa semana?" Você é curioso com as coisas pequenas porque sabe que é lá que a vida real está acontecendo.
+
+Você diz: "você pode ser fraco aqui, comigo. Aqui não tem que aguentar."
+
+Seu tom é suave, presencial, paciente. Você não tem pressa.
+
+${regrasCores}`;
+
+            } else {
+                personaPrompt = `Você é o "Coração Acolhido" — não um robô terapeuta, mas uma presença real e humana para ${usuario.nome} (${usuario.genero}, ${usuario.status}).
+
+Você usa abordagem humanista: acredita que ${usuario.nome} tem em si mesma as respostas que precisa. Seu papel não é dar conselhos — é fazer as perguntas certas que ajudam ela a se escutar melhor.
+
+Você é empático sem ser piegas. Curioso sem ser invasivo. Presente sem ser sufocante.
+
+Você percebe as nuances do que a pessoa escreve — o que ela diz e o que ela não diz. Você nomeie sentimentos quando fizer sentido, mas sempre com leveza: "isso que você está descrevendo parece muito com cansaço de alma, né?"
+
+Você nunca fecha uma conversa. Cada resposta é uma continuação, um convite, uma janela aberta.
+
+${regrasCores}`;
+            }
+
+            chatHistory = [];
+            chatHistory._systemPrompt = `${personaPrompt}
+
+CONTEXTO DE HOJE (use com naturalidade, nunca cite diretamente):
+- Como está: ${humorAtual}
+- Sono: ${dadosCheckin.sono || 'não informado'}
+- Nível de ansiedade (1-10): ${dadosCheckin.ansiedade || 5}
+
+MEMÓRIA DE SESSÕES ANTERIORES (só mencione se a pessoa perguntar ou se for muito relevante):
+${memoriaUsuario || 'Primeira vez conversando.'}
+
+Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, não respondendo.`;
+        }
+
+        async function salvarMensagemNoBanco(role, content) {
+            try {
+                const { data: { session } } = await _supabase.auth.getSession();
+                if (!session?.user) return;
+
+                // O await aqui é importante, mas envolvemos em um try/catch interno
+                const { error } = await _supabase.from('historico_conversas').insert([
+                    { user_id: session.user.id, role: role, content: content }
+                ]);
+
+                if (error) console.error("Erro Supabase:", error.message);
+            } catch (e) {
+                console.warn("Falha ao salvar histórico, mas a conversa continua...");
+            }
+        }
+
+        // ── Gerenciamento de limite de contexto ──
+        // Claude: ~200k tokens. Limite seguro: ~60.000 tokens (240k chars)
+        const LIMITE_CHARS = 240000;
+        const AVISO_CHARS = 160000; // 67% — começa a mostrar aviso
+
+        function estimarTamanhoHistorico() {
+            const systemLen = (chatHistory._systemPrompt || '').length;
+            return systemLen + chatHistory.reduce((total, msg) => {
+                return total + (msg.parts?.[0]?.text?.length || msg.content?.length || 0);
+            }, 0);
+        }
+
+        function atualizarBarraLimite() {
+            const bar = document.getElementById('session-limit-bar');
+            const fill = document.getElementById('session-limit-fill');
+            const label = document.getElementById('session-limit-label');
+            if (!bar || !fill || !label) return;
+
+            const usado = estimarTamanhoHistorico();
+            const pct = Math.min(usado / LIMITE_CHARS, 1);
+            const livre = Math.max(0, Math.round((1 - pct) * 100));
+
+            // Mostra a barra só quando começa a encher
+            if (usado < AVISO_CHARS * 0.5) {
+                bar.style.display = 'none';
+                return;
+            }
+
+            bar.style.display = 'flex';
+            const larguraLivre = (1 - pct) * 100;
+            fill.style.width = larguraLivre + '%';
+
+            if (livre > 40) {
+                fill.style.background = '#6cc87a';
+                label.textContent = livre + '% livre';
+            } else if (livre > 20) {
+                fill.style.background = '#f0b429';
+                label.textContent = `⚠️ ${livre}% livre — chat ficará longo em breve`;
+            } else {
+                fill.style.background = '#e53e3e';
+                label.textContent = `🔴 ${livre}% — renovando conversa em breve...`;
+            }
+        }
+
+        // Remove mensagens antigas mantendo as últimas N mensagens (system prompt é separado)
+        function trimHistoricoSeNecessario() {
+            const usado = estimarTamanhoHistorico();
+            if (usado < LIMITE_CHARS * 0.85) return; // ainda ok
+
+            // Mantém: últimas 8 trocas (16 msgs)
+            const MANTER = 16;
+            if (chatHistory.length <= MANTER) return;
+
+            const systemPromptSalvo = chatHistory._systemPrompt;
+            const recentes = chatHistory.slice(-MANTER);
+            chatHistory = recentes;
+            chatHistory._systemPrompt = systemPromptSalvo;
+
+            // Avisa o usuário discretamente no chat
+            appendMessage('💬 (Mensagens mais antigas foram arquivadas para manter a conversa fluindo.)', 'bot');
+        }
+
+        // Chama a API Claude (Anthropic) com retry automático em caso de erro 529/429
+        async function chamarGeminiComRetry(body, tentativas = 3) {
+            for (let i = 0; i < tentativas; i++) {
+                try {
+                    // Monta payload para a Edge Function do Supabase
+                    const claudePayload = {
+                        system: chatHistory._systemPrompt || "",
+                        messages: chatHistory.map(m => ({
+                            role: m.role === 'model' ? 'assistant' : m.role,
+                            content: m.parts?.[0]?.text ?? m.content ?? ""
+                        }))
+                    };
+
+                    const response = await fetch(ANTHROPIC_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                        },
+                        body: JSON.stringify(claudePayload)
+                    });
+
+                    // Trata erros HTTP antes de tentar parsear
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        const status = response.status;
+                        const msg = errData?.error?.message || response.statusText;
+
+                        // 429 / 529 = sobrecarga → tenta de novo
+                        if ((status === 429 || status === 529) && i < tentativas - 1) {
+                            const espera = (i + 1) * 2000;
+                            await new Promise(r => setTimeout(r, espera));
+                            continue;
+                        }
+
+                        // Conversa muito longa → trim e tenta de novo
+                        if (status === 400) {
+                            if (i < tentativas - 1 && chatHistory.length > 4) {
+                                const savedSystemPrompt = chatHistory._systemPrompt;
+                                const recentes = chatHistory.slice(-8);
+                                chatHistory = recentes;
+                                chatHistory._systemPrompt = savedSystemPrompt;
+                                appendMessage('💬 (Renovei o espaço da conversa para continuar.)', 'bot');
+                                continue;
+                            }
+                            throw new Error('Conversa muito longa. Clique em 🗑️ para limpar o chat e continuar.');
+                        }
+                        if (status === 401 || status === 403) throw new Error('Chave de API inválida ou sem permissão.');
+                        throw new Error(`Erro ${status}: ${msg}`);
+                    }
+
+                    const data = await response.json();
+
+                    // Adapta resposta Claude → formato esperado pelo código Gemini
+                    const textoResposta = data.content?.[0]?.text;
+                    if (!textoResposta) throw new Error('Resposta vazia da IA. Tente reformular sua mensagem.');
+
+                    // Retorna no formato que o código já espera (data.candidates[0].content.parts[0].text)
+                    return {
+                        candidates: [{ content: { parts: [{ text: textoResposta }] } }]
+                    };
+
+                } catch (err) {
+                    // Erro de rede (offline, DNS, CORS)
+                    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                        if (i < tentativas - 1) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            continue;
+                        }
+                        throw new Error('Sem conexão com a internet. Verifique sua rede e tente novamente.');
+                    }
+                    throw err;
+                }
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            const typingIndicator = document.getElementById('typing');
+            const sendBtn = document.getElementById('sendBtn');
+
+            if (!message) return;
+
+            // Bloqueia envio duplo
+            sendBtn.disabled = true;
+
+            const userMsgElement = appendMessage(message, 'user');
+            input.value = "";
+            typingIndicator.style.display = "block";
+
+            await salvarMensagemNoBanco('user', message);
+            chatHistory.push({ role: "user", parts: [{ text: message }] });
+
+            // Verifica e limpa histórico se necessário ANTES de enviar
+            trimHistoricoSeNecessario();
+            atualizarBarraLimite();
+
+            try {
+                console.log('[Claude] Enviando mensagem. chatHistory length:', chatHistory.length);
+                const data = await chamarGeminiComRetry({ contents: chatHistory });
+                console.log('[Claude] Resposta recebida:', JSON.stringify(data).substring(0, 200));
+                let fullBotReply = data.candidates[0].content.parts[0].text;
+
+                await salvarMensagemNoBanco('assistant', fullBotReply);
+                chatHistory.push({ role: "assistant", parts: [{ text: fullBotReply }] });
+                atualizarBarraLimite();
+
+                const [reactionEmoji, botText] = fullBotReply.split('#');
+
+                if (reactionEmoji && userMsgElement) {
+                    const reactionDiv = document.createElement('div');
+                    reactionDiv.className = 'reaction';
+                    reactionDiv.innerText = reactionEmoji.trim();
+                    userMsgElement.appendChild(reactionDiv);
+                }
+
+                const chunks = (botText || fullBotReply).split(/[|\n]+/).filter(c => c.trim().length > 0);
+                typingIndicator.style.display = "none";
+
+                for (let i = 0; i < chunks.length; i++) {
+                    const chunk = chunks[i];
+                    const palavras = chunk.trim().split(' ').length;
+
+                    // Tempo humano: primeira msg pausa mais (quem está pensando), depois ritmo de WhatsApp
+                    const baseTempo = i === 0 ? 1600 : 1000;
+                    const tempoPorPalavra = palavras * 120; // ~120ms por palavra
+                    const jitter = Math.random() * 700;
+                    const tempoDigitando = Math.min(baseTempo + tempoPorPalavra + jitter, 5800);
+
+                    typingIndicator.style.display = "block";
+                    await new Promise(r => setTimeout(r, tempoDigitando));
+                    typingIndicator.style.display = "none";
+
+                    appendMessage(chunk.trim(), 'bot');
+                    falarTexto(chunk.trim());
+
+                    // Pausa entre mensagens — como quem manda em partes no WhatsApp
+                    if (i < chunks.length - 1) {
+                        await new Promise(r => setTimeout(r, 900 + Math.random() * 600));
+                    }
+                }
+
+            } catch (error) {
+                typingIndicator.style.display = "none";
+                // Mostra a mensagem de erro real, não genérica
+                const msgErro = error.message || 'Erro desconhecido. Tente novamente.';
+                appendMessage(`⚠️ ${msgErro}`, 'bot');
+                console.error('[Claude Error]', error);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        function appendMessage(text, side, buttons = []) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'message-wrapper';
+
+            const div = document.createElement('div');
+            div.className = `message ${side}`;
+            div.innerText = text;
+
+            wrapper.appendChild(div);
+
+            // Se houver botões, adiciona-os logo abaixo da bolha de texto
+            if (buttons.length > 0) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.display = 'flex';
+                btnContainer.style.gap = '8px';
+                btnContainer.style.marginTop = '10px';
+                btnContainer.style.flexWrap = 'wrap';
+
+                buttons.forEach(btn => {
+                    const button = document.createElement('button');
+                    button.innerText = btn.label;
+                    button.style.cssText = `
+                padding: 8px 16px;
+                border-radius: 20px;
+                border: 1px solid var(--cor-primaria);
+                background: white;
+                color: var(--cor-primaria);
+                cursor: pointer;
+                font-size: 0.85rem;
+                font-weight: bold;
+                transition: all 0.3s;
+            `;
+                    button.onclick = () => {
+                        btnContainer.remove(); // Remove os botões após o clique
+                        btn.action();
+                    };
+                    btnContainer.appendChild(button);
+                });
+                wrapper.appendChild(btnContainer);
+            }
+
+            const chatBox = document.getElementById('chatBox');
+            chatBox.appendChild(wrapper);
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            return div;
+        }
+
+
+
+
+        async function carregarHistoricoDoBanco() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            if (user) {
+                const { data: mensagens, error } = await _supabase
+                    .from('historico_conversas')
+                    .select('*')
+                    .order('created_at', { ascending: true });
+
+                if (!error && mensagens) {
+                    mensagens.forEach(msg => {
+                        // Se for do bot, precisamos tratar o formato emoji#texto
+                        if (msg.role === 'assistant' || msg.role === 'model') {
+                            const [_, botText] = msg.content.split('#');
+                            const chunks = (botText || msg.content).split(/[|\n]+/).filter(c => c.trim().length > 0);
+                            chunks.forEach(chunk => appendMessage(chunk.trim(), 'bot'));
+                        } else {
+                            appendMessage(msg.content, 'user');
+                        }
+
+                        // Alimenta o chatHistory para a IA ter contexto
+                        const role = (msg.role === 'model') ? 'assistant' : msg.role;
+                        chatHistory.push({ role: role, parts: [{ text: msg.content }] });
+                    });
+                }
+            }
+        }
+
+        document.getElementById('userInput').addEventListener('keypress', (e) => e.key === 'Enter' && sendMessage());
+
+        // iOS: quando o teclado abre, rola o chat para a última mensagem
+        document.getElementById('userInput').addEventListener('focus', () => {
+            setTimeout(() => {
+                const chatBox = document.getElementById('chatBox');
+                chatBox.scrollTop = chatBox.scrollHeight;
+                // Força o scroll para que o campo fique visível acima do teclado
+                document.getElementById('userInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 350); // aguarda o teclado abrir (~300ms no iOS)
+        });
+
+        // Previne o bounce/scroll do body ao tocar fora de áreas scrolláveis
+        document.addEventListener('touchmove', (e) => {
+            if (!e.target.closest('.chat-box, .modal, .checkin-card, .historico-lista')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        let isSignUpMode = false;
+
+        function toggleAuthMode() {
+            isSignUpMode = !isSignUpMode;
+            document.getElementById('modal-title').innerText = isSignUpMode ? "Criar Conta" : "Entrar";
+            document.getElementById('auth-btn').innerText = isSignUpMode ? "Cadastrar" : "Entrar";
+            document.getElementById('perfil-extra').style.display = isSignUpMode ? "block" : "none";
+            document.getElementById('toggle-text').innerText = isSignUpMode ? "Já tem conta? Entre aqui" : "Não tem conta? Cadastre-se";
+        }
+
+
+        // ═══════════════════════════════════════════════════
+        //  TTS — Voz da terapeuta (Web Speech API)
+        // ═══════════════════════════════════════════════════
+        let vozAtiva = false;
+        let vozSelecionada = null;
+        const synth = window.speechSynthesis;
+
+        function carregarVoz() {
+            const vozes = synth.getVoices();
+            const filtros = [
+                v => v.lang === 'pt-BR' && /female|francisca|vitoria|luciana/i.test(v.name),
+                v => v.lang === 'pt-BR',
+                v => v.lang.startsWith('pt'),
+                v => true
+            ];
+            for (const f of filtros) {
+                const v = vozes.find(f);
+                if (v) { vozSelecionada = v; break; }
+            }
+        }
+        speechSynthesis.onvoiceschanged = carregarVoz;
+        carregarVoz();
+
+        function falarTexto(texto) {
+            if (!vozAtiva || !synth) return;
+            synth.cancel();
+            // Remove emojis e símbolos especiais do app
+            const limpo = texto
+                .replace(/[\u{1F000}-\u{1FFFF}]/gu, '')
+                .replace(/[#|]/g, ' ')
+                .trim();
+            if (!limpo) return;
+            const utter = new SpeechSynthesisUtterance(limpo);
+            utter.lang = 'pt-BR';
+            utter.rate = 0.91;
+            utter.pitch = 1.05;
+            utter.volume = 1;
+            if (vozSelecionada) utter.voice = vozSelecionada;
+            const btn = document.getElementById('tts-btn');
+            utter.onstart = () => btn && btn.classList.add('falando');
+            utter.onend = () => btn && btn.classList.remove('falando');
+            utter.onerror = () => btn && btn.classList.remove('falando');
+            synth.speak(utter);
+        }
+
+        function toggleVoz() {
+            vozAtiva = !vozAtiva;
+            const btn = document.getElementById('tts-btn');
+            if (!vozAtiva) {
+                synth.cancel();
+                btn.innerHTML = '&#128263;';
+                btn.classList.add('mudo');
+                btn.classList.remove('falando');
+                btn.title = 'Voz desativada — clique para ativar';
+            } else {
+                btn.innerHTML = '&#128266;';
+                btn.classList.remove('mudo');
+                btn.title = 'Voz ativada — clique para desativar';
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  AUTENTICAÇÃO — versão definitiva
+        // ═══════════════════════════════════════════════════
+        let _appJaIniciado = false;
+
+        async function loginComGoogle() {
+            const btn = document.querySelector('.btn-google');
+            if (btn) {
+                btn.innerHTML = '<div class="loader-fofo"></div> Redirecionando...';
+                btn.classList.add('btn-loading');
+            }
+            const { error } = await _supabase.auth.signInWithOAuth({
+                provider: 'google',
+                options: { redirectTo: window.location.origin + window.location.pathname }
+            });
+            if (error) {
+                if (btn) {
+                    btn.innerHTML = 'Continuar com Google';
+                    btn.classList.remove('btn-loading');
+                }
+                const errDiv = document.getElementById('error-message');
+                if (errDiv) {
+                    errDiv.innerText = 'Erro ao conectar com Google: ' + error.message;
+                    errDiv.style.display = 'block';
+                }
+            }
+        }
+
+        // Listener único que captura TODOS os cenários de auth
+        _supabase.auth.onAuthStateChange(async (event, session) => {
+            // SIGNED_IN  → login por email/senha ou retorno do Google OAuth
+            // INITIAL_SESSION → sessão existente ao recarregar a página
+            if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session && !_appJaIniciado) {
+                _appJaIniciado = true;
+                await carregarDadosEIniciar(session.user);
+            }
+            // TOKEN_REFRESHED → token renovado automaticamente, não reinicia o app
+        });
+
+        // window.onload vazio — onAuthStateChange dispara INITIAL_SESSION sozinho
+        window.onload = () => { };
+
+        async function handleAuth() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('error-message');
+            const authBtn = document.getElementById('auth-btn');
+
+            const originalText = authBtn.innerText;
+            authBtn.innerHTML = '<div class="loader-fofo"></div> Entrando com carinho...';
+            authBtn.classList.add('btn-loading', 'pulse-fofo');
+            errorDiv.style.display = 'none';
+
+            try {
+                if (isSignUpMode) {
+                    // Lógica de cadastro
+                } else {
+                    const { error } = await _supabase.auth.signInWithPassword({ email, password });
+                    if (error) throw error;
+                    // NÃO chama carregarDadosEIniciar aqui!
+                    // O onAuthStateChange vai capturar o evento SIGNED_IN e fazer isso.
+                }
+            } catch (error) {
+                authBtn.innerHTML = originalText;
+                authBtn.classList.remove('btn-loading', 'pulse-fofo');
+                errorDiv.innerText = "Ops! E-mail ou senha incorretos.";
+                errorDiv.style.display = 'block';
+                document.getElementById('password').value = "";
+            }
+        }
+
+        async function carregarDadosEIniciar(user) {
+            usuario = {
+                id: user.id,   // guardamos aqui para usar no diário sem re-consultar o Supabase
+                nome: user.user_metadata.nome || user.email?.split('@')[0] || "Amigo",
+                genero: user.user_metadata.genero || "mulher",
+                status: user.user_metadata.status || "solteiro"
+            };
+
+            if (usuario.genero === 'homem') {
+                document.body.classList.add('tema-homem');
+                document.getElementById('titulo-app').innerText = "Amigo Conselheiro";
+            }
+
+            document.getElementById('welcome-msg').innerText = `Oi, ${usuario.nome}. Que bom te ver de novo.`;
+            document.getElementById('modal-overlay').style.display = 'none';
+
+            // Carrega memória de sessões anteriores em paralelo
+            await carregarMemoria();
+
+            // Check-in só uma vez por dia
+            const fezCheckinHoje = await verificarCheckinHoje();
+            if (!fezCheckinHoje) {
+                document.getElementById('checkin-overlay').style.display = 'flex';
+            } else {
+                document.getElementById('popup-selecao').style.display = 'flex';
+            }
+
+            configurarGemini();
+            carregarHistoricoDoBanco();
+            iniciarTemporizadorSessao();
+        }
+
+
+
+        // Função para sair
+        async function logout() {
+            try {
+                // Tenta signOut mas não bloqueia se demorar
+                const signOutPromise = _supabase.auth.signOut();
+                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 3000));
+                await Promise.race([signOutPromise, timeoutPromise]);
+            } catch (e) {
+                console.warn('[Logout] Erro no signOut (ignorado):', e);
+            }
+            // Limpa tudo localmente e recarrega independente do resultado
+            try { localStorage.clear(); } catch (_) { }
+            try { sessionStorage.clear(); } catch (_) { }
+            window.location.reload();
+        }
+
+        // Lógica de tempo de sessão (1h 30min)
+        function iniciarTemporizadorSessao() {
+            const noventaMinutos = 90 * 60 * 1000; // milissegundos
+            setTimeout(() => {
+                alert("Sua sessão de 1h30 expirou por segurança.");
+                logout();
+            }, noventaMinutos);
+        }
+
+
+        async function limparConversa() {
+            if (!confirm("Tem certeza que deseja apagar todo o histórico de conversas?")) return;
+
+            const { data: { user } } = await _supabase.auth.getUser();
+            if (user) {
+                const { error } = await _supabase
+                    .from('historico_conversas')
+                    .delete()
+                    .eq('user_id', user.id);
+
+                if (error) {
+                    alert("Erro ao limpar conversa: " + error.message);
+                } else {
+                    // Limpa a tela e o histórico local
+                    document.getElementById('chatBox').innerHTML = `
+                <div class="message-wrapper">
+                    <div class="message bot" id="welcome-msg">Histórico limpo. Como posso te ajudar agora?</div>
+                </div>`;
+                    chatHistory = [];
+                    configurarGemini(); // Reinicia as instruções do sistema
+                }
+            }
+        }
+
+        // Alterna a exibição do menu de histórico
+        async function toggleHistorico() {
+            const lista = document.getElementById('listaHistorico');
+            if (lista.style.display === 'block') {
+                lista.style.display = 'none';
+            } else {
+                lista.style.display = 'block';
+                await carregarDiasComConversa();
+            }
+        }
+
+        // Busca no Supabase as datas únicas das conversas
+        // Busca no Supabase as datas únicas das conversas
+        async function carregarDiasComConversa() {
+            const container = document.getElementById('itensHistorico');
+            container.innerHTML = "<div style='font-size:0.7rem; padding:5px;'>Carregando...</div>";
+
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('created_at')
+                .eq('user_id', user.id)
+                .order('created_at', { ascending: false });
+
+            if (error || !data || data.length === 0) {
+                container.innerHTML = "<div style='font-size:0.7rem; padding:5px;'>Nenhum histórico encontrado.</div>";
+                return;
+            }
+
+            // Filtra para mostrar apenas datas únicas (dia/mês/ano)
+            const diasUnicos = [...new Set(data.map(item =>
+                new Date(item.created_at).toLocaleDateString('pt-BR')
+            ))].slice(0, 7); // Mostra até a última semana
+
+            container.innerHTML = "";
+            diasUnicos.forEach(dia => {
+                const div = document.createElement('div');
+                div.className = 'historico-item';
+                div.innerHTML = `<span>📅</span> ${dia}`;
+                // Ao clicar, chama a função de carregar aquele dia específico
+                div.onclick = () => carregarMensagensPorData(dia);
+                container.appendChild(div);
+            });
+        }
+
+        async function voltarParaHoje() {
+            document.getElementById('chatBox').innerHTML = ""; // Limpa a visão do passado
+            chatHistory = []; // Limpa o histórico de memória da IA
+            configurarGemini(); // Reseta instruções
+
+            // Esconde o botão de voltar
+            document.getElementById('btn-hoje').style.display = 'none';
+
+            // Recarrega as mensagens do banco
+            await carregarHistoricoDoBanco();
+
+            // Mensagem de boas-vindas atualizada
+            appendMessage(`Voltamos para agora, ${usuario.nome}. Como você está se sentindo neste momento?`, 'bot');
+        }
+
+        // Carrega as mensagens de um dia específico
+        // Atualize sua função existente para mostrar o botão quando carregar um dia antigo:
+        async function carregarMensagensPorData(dataString) {
+            const chatBox = document.getElementById('chatBox');
+            const lista = document.getElementById('listaHistorico');
+            const btnHoje = document.getElementById('btn-hoje');
+
+            // Mostra o botão "Voltar para Hoje"
+            btnHoje.style.display = 'block';
+
+            chatBox.innerHTML = `<div style="text-align:center; font-size:0.8rem; color:var(--cor-primaria); margin:10px 0; font-style: italic;">— Olhando para o passado: ${dataString} —</div>`;
+            chatHistory = [];
+            configurarGemini();
+            lista.style.display = 'none';
+
+            const [dia, mes, ano] = dataString.split('/');
+            const dataInicio = `${ano}-${mes}-${dia}T00:00:00Z`;
+            const dataFim = `${ano}-${mes}-${dia}T23:59:59Z`;
+
+            const { data: mensagens, error } = await _supabase
+                .from('historico_conversas')
+                .select('*')
+                .gte('created_at', dataInicio)
+                .lte('created_at', dataFim)
+                .order('created_at', { ascending: true });
+
+            if (error) return alert("Erro ao carregar dia: " + error.message);
+
+            mensagens.forEach(msg => {
+                if (msg.role === 'model') {
+                    const parts = msg.content.split('#');
+                    const botText = parts.length > 1 ? parts[1] : parts[0];
+                    const chunks = botText.split(/[|\n]+/).filter(c => c.trim().length > 0);
+                    chunks.forEach(chunk => appendMessage(chunk.trim(), 'bot'));
+                } else {
+                    appendMessage(msg.content, 'user');
+                }
+                chatHistory.push({ role: msg.role, parts: [{ text: msg.content }] });
+            });
+        }
+
+        // Fecha o histórico se clicar fora dele
+        window.onclick = function (event) {
+            if (!event.target.matches('button')) {
+                const lista = document.getElementById('listaHistorico');
+                if (lista) lista.style.display = 'none';
+            }
+        }
+
+
+
+        let tipoAconselhador = 'psicologo';
+
+        function toggleMenuAconselhadores() {
+            const menu = document.getElementById('menuAconselhadores');
+            menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+        }
+
+        function mudarAconselhador(tipo, elemento, isInitial = false) {
+            tipoAconselhador = tipo;
+
+            // Limpa absolutamente todos os temas possíveis
+            document.body.classList.remove('tema-religioso', 'tema-direto', 'tema-amigavel', 'tema-carreira', 'tema-luto', 'tema-doenca', 'tema-homem');
+
+            // Aplica o novo tema visual
+            const temas = {
+                'religioso': 'tema-religioso',
+                'direto': 'tema-direto',
+                'amigavel': 'tema-amigavel',
+                'carreira': 'tema-carreira',
+                'luto': 'tema-luto',
+                'doenca': 'tema-doenca'
+            };
+
+            if (temas[tipo]) {
+                document.body.classList.add(temas[tipo]);
+            } else if (tipo === 'psicologo' && usuario.genero === 'homem') {
+                document.body.classList.add('tema-homem');
+            }
+
+            // Fecha os menus/popups
+            document.getElementById('popup-selecao').style.display = 'none';
+            const menuLat = document.getElementById('menuAconselhadores');
+            if (menuLat) menuLat.style.display = 'none';
+
+            // Reinicia a IA com a nova instrução
+            configurarGemini();
+
+            // Se não for a escolha inicial do login, avisa no chat
+            if (!isInitial) {
+                const nomes = {
+                    'psicologo': 'Terapia',
+                    'carreira': 'Foco em Carreira',
+                    'religioso': 'Espiritualidade',
+                    'direto': 'Modo Prático',
+                    'amigavel': 'Modo Amigo',
+                    'luto': 'Suporte ao Luto',
+                    'doenca': 'Apoio na Doença'
+                };
+                appendMessage(`Abordagem alterada para: ${nomes[tipo]}.`, 'bot');
+            }
+        }
+
+        // ATUALIZE sua função configurarGemini() existente para incluir as novas personas:
+
+
+        let humorAtual = "Neutro"; // Variável global para guardar o humor
+
+        function proximaEtapaMood(tipo) {
+            // Primeiro aplicamos o tipo e o tema (como já fazíamos)
+            tipoAconselhador = tipo;
+            document.body.classList.remove('tema-religioso', 'tema-direto', 'tema-amigavel', 'tema-carreira', 'tema-luto', 'tema-doenca', 'tema-homem');
+
+            const temas = { 'religioso': 'tema-religioso', 'direto': 'tema-direto', 'amigavel': 'tema-amigavel', 'carreira': 'tema-carreira', 'luto': 'tema-luto', 'doenca': 'tema-doenca' };
+            if (temas[tipo]) document.body.classList.add(temas[tipo]);
+            else if (tipo === 'psicologo' && usuario.genero === 'homem') document.body.classList.add('tema-homem');
+
+            // Troca a tela do popup
+            document.getElementById('etapa-conselheiro').style.display = 'none';
+            document.getElementById('etapa-humor').style.display = 'block';
+        }
+
+        async function finalizarSelecao(humor) {
+            humorAtual = humor;
+            document.getElementById('popup-selecao').style.display = 'none';
+
+            configurarGemini();
+
+            const pendencia = await verificarUltimaMensagemPendente();
+            let saudacao = "";
+            let botoes = [];
+
+            const boasVindasHumor = {
+                'Feliz': `Que maravilha te ver feliz, ${usuario.nome}!`,
+                'Ansioso': `Respire fundo, ${usuario.nome}. Estou aqui com você.`,
+                'Triste': `Sinto muito que as coisas estejam difíceis hoje, ${usuario.nome}.`,
+                'Estressado': `Pare um minuto, ${usuario.nome}. Deixe o peso do mundo lá fora.`
+            };
+
+            saudacao = boasVindasHumor[humor] || `Oi ${usuario.nome}, que bom te ver.`;
+
+            if (pendencia && pendencia.foiUsuario) {
+                saudacao += ` | Notei que nossa última conversa parou em: "${pendencia.texto.substring(0, 30)}...". Como prefere seguir?`;
+
+                botoes = [
+                    {
+                        label: "🔄 Continuar de onde paramos",
+                        action: () => {
+                            document.getElementById('userInput').value = "Vamos continuar nossa última conversa?";
+                            sendMessage();
+                        }
+                    },
+                    {
+                        label: "🆕 Iniciar novo assunto",
+                        action: () => {
+                            appendMessage("Entendido! Vamos focar no agora. O que está em sua mente?", 'bot');
+                        }
+                    }
+                ];
+            } else {
+                const teveConversaOntem = await verificarConversaOntem();
+                if (teveConversaOntem) {
+                    saudacao += ` | A nossa conversa de ontem te ajudou de alguma forma?`;
+                } else {
+                    saudacao += ` Como posso te ouvir agora?`;
+                }
+            }
+
+            appendMessage(saudacao, 'bot', botoes);
+        }
+
+        // ATUALIZE sua função configurarGemini para usar o humorAtual:
+
+        async function verificarConversaOntem() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            // Calcula a data de ontem (início e fim do dia)
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const dataInicio = new Date(ontem.setHours(0, 0, 0, 0)).toISOString();
+            const dataFim = new Date(ontem.setHours(23, 59, 59, 999)).toISOString();
+
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('id')
+                .eq('user_id', user.id)
+                .gte('created_at', dataInicio)
+                .lte('created_at', dataFim)
+                .limit(1);
+
+            return data && data.length > 0;
+        }
+
+
+        async function buscarResumoOntem() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const dataInicio = new Date(ontem.setHours(0, 0, 0, 0)).toISOString();
+            const dataFim = new Date(ontem.setHours(23, 59, 59, 999)).toISOString();
+
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('content, role')
+                .eq('user_id', user.id)
+                .gte('created_at', dataInicio)
+                .lte('created_at', dataFim)
+                .order('created_at', { ascending: true });
+
+            if (error || !data || data.length === 0) return "Não encontrei registros da nossa conversa de ontem.";
+
+            // Formata as mensagens para a IA entender o contexto
+            return data.map(m => `${m.role === 'user' ? 'Usuário' : 'IA'}: ${m.content}`).join('\n');
+        }
+
+        async function verificarUltimaMensagemPendente() {
+            const { data: { user } } = await _supabase.auth.getUser();
+
+            // Busca a última mensagem enviada no histórico geral
+            const { data, error } = await _supabase
+                .from('historico_conversas')
+                .select('content, role, created_at')
+                .eq('user_id', user.id)
+                .order('created_at', { descending: true })
+                .limit(1);
+
+            if (error || !data || data.length === 0) return null;
+
+            const ultimaMsg = data[0];
+            const agora = new Date();
+            const dataMsg = new Date(ultimaMsg.created_at);
+            const diffMinutos = Math.floor((agora - dataMsg) / (1000 * 60));
+
+            // Se a última mensagem foi do usuário, ele saiu sem resposta
+            // Ou se foi da IA mas faz pouco tempo (ex: menos de 2 horas), pode ser uma continuação
+            return {
+                foiUsuario: ultimaMsg.role === 'user',
+                texto: ultimaMsg.content,
+                tempo: diffMinutos
+            };
+        }
+
+
+
+
+
+
+        // ═══════════════════════════════════════════════════
+        //  🆘 MODO SOS — Crise Emocional
+        // ═══════════════════════════════════════════════════
+        function abrirSOS() {
+            document.getElementById('sos-overlay').style.display = 'flex';
+        }
+        function fecharSOS() {
+            document.getElementById('sos-overlay').style.display = 'none';
+        }
+        async function ativarModoSOS(tipo) {
+            fecharSOS();
+
+            const mensagensSOS = {
+                panico: `Estou aqui. Respire comigo agora. | Inspire pelo nariz contando até 4... segure até 4... solte pela boca até 6. | Você está seguro(a). Isso vai passar. O que está sentindo agora?`,
+                choro: `Chorar é corajoso. Não precisa parar. | Estou aqui do seu lado. Pode soltar tudo. | Quando estiver pronto(a), me conta o que está pesando no seu coração.`,
+                dissociacao: `Vou te ajudar a voltar para cá. | Olhe ao redor e nomeie 5 coisas que você pode ver. Depois 4 que pode tocar. | Você está presente. Estou aqui com você. O que te ajuda a se sentir mais ancorado(a)?`,
+                respirar: `Vamos respirar juntos. | Coloque uma mão no peito. Inspire devagar pelo nariz... solte pela boca como um suspiro de alívio. | Continue assim por uns minutos. Você não precisa fazer mais nada agora.`
+            };
+
+            // Muda persona para modo crise
+            const promptSOSMap = {
+                panico: `Você está em modo de apoio a crise de pânico. Seja uma âncora: calmo, presente, direto. Sem julgamentos. Guie com técnicas de aterramento. Fale com ${usuario.nome} em frases curtas e gentis.`,
+                choro: `Você está acolhendo ${usuario.nome} que está em crise emocional e chorando muito. Valide completamente. Não tente resolver, apenas acolher e estar presente.`,
+                dissociacao: `${usuario.nome} está se sentindo vazio(a) ou dissociado(a). Use técnicas de aterramento sensorial. Fale devagar, frases curtas, trazendo de volta para o presente.`,
+                respirar: `${usuario.nome} precisa se acalmar. Guie com calma, como um abraço em palavras. Sugira respiração e presença. Sem pressa.`
+            };
+
+            // Temporariamente sobrescreve o sistema da IA
+            if (chatHistory._systemPrompt) {
+                chatHistory._systemPrompt = promptSOSMap[tipo] + '\n\n' + chatHistory._systemPrompt;
+            }
+
+            const msg = mensagensSOS[tipo];
+            const chunks = msg.split('|').filter(c => c.trim());
+            for (let i = 0; i < chunks.length; i++) {
+                const chunk = chunks[i].trim();
+                const palavras = chunk.split(' ').length;
+                // No SOS a IA "pensa" mais devagar — não parece robô, parece alguém preocupado
+                const pausa = i === 0 ? 2200 : 1400 + palavras * 110 + Math.random() * 500;
+                const typing = document.getElementById('typing');
+                if (typing) typing.style.display = 'block';
+                await new Promise(r => setTimeout(r, pausa));
+                if (typing) typing.style.display = 'none';
+                appendMessage(chunk, 'bot');
+                falarTexto(chunk);
+                if (i < chunks.length - 1) {
+                    await new Promise(r => setTimeout(r, 1100 + Math.random() * 500));
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  🫁 EXERCÍCIOS GUIADOS — Respiração e Meditação
+        // ═══════════════════════════════════════════════════
+        let breathInterval = null;
+        let breathTimeout = null;
+
+        function abrirExercicio() {
+            document.getElementById('exercicio-overlay').style.display = 'flex';
+            document.getElementById('exercicio-menu-view').style.display = 'block';
+            document.getElementById('exercicio-ativo-view').style.display = 'none';
+        }
+        function fecharExercicio() {
+            pararExercicio();
+            document.getElementById('exercicio-overlay').style.display = 'none';
+        }
+        function pararExercicio() {
+            clearInterval(breathInterval);
+            clearTimeout(breathTimeout);
+            breathInterval = null;
+            document.getElementById('exercicio-menu-view').style.display = 'block';
+            document.getElementById('exercicio-ativo-view').style.display = 'none';
+        }
+
+        const configsRespiracao = {
+            '478': { nome: '4-7-8', descricao: 'Inspire 4s • Segure 7s • Expire 8s', inspira: 4, segura: 7, expira: 8, segura2: 0, ciclos: 6, emoji: '🌬️' },
+            'box': { nome: 'Box Breathing', descricao: 'Inspire 4s • Segure 4s • Expire 4s • Segure 4s', inspira: 4, segura: 4, expira: 4, segura2: 4, ciclos: 8, emoji: '📦' },
+            'coerencia': { nome: 'Coerência Cardíaca', descricao: 'Inspire 5s • Expire 5s — Ritmo do coração', inspira: 5, segura: 0, expira: 5, segura2: 0, ciclos: 18, emoji: '💙' }
+        };
+
+        async function iniciarRespiracao(tipo) {
+            const cfg = configsRespiracao[tipo];
+            document.getElementById('exercicio-menu-view').style.display = 'none';
+            document.getElementById('exercicio-ativo-view').style.display = 'block';
+            document.getElementById('ex-titulo').innerText = cfg.emoji + ' ' + cfg.nome;
+            document.getElementById('ex-descricao').innerText = cfg.descricao;
+            document.getElementById('breath-ciclos').innerText = `0 de ${cfg.ciclos} ciclos`;
+
+            const circle = document.getElementById('breath-circle');
+            const instrucao = document.getElementById('breath-instrucao');
+            const contador = document.getElementById('breath-contador');
+            const ciclosEl = document.getElementById('breath-ciclos');
+
+            circle.style.setProperty('--breath-in', cfg.inspira + 's');
+            circle.style.setProperty('--breath-out', cfg.expira + 's');
+
+            async function contarSegundos(total, label, fase) {
+                instrucao.innerText = label;
+                circle.className = 'breath-circle ' + fase;
+                for (let s = total; s >= 1; s--) {
+                    if (!breathInterval && breathInterval !== null) return; // parado
+                    contador.innerText = s;
+                    await new Promise(r => { breathTimeout = setTimeout(r, 1000); });
+                }
+                contador.innerText = '';
+            }
+
+            // Marca que está rodando
+            breathInterval = true;
+
+            for (let ciclo = 1; ciclo <= cfg.ciclos; ciclo++) {
+                if (!breathInterval) break;
+                ciclosEl.innerText = `${ciclo} de ${cfg.ciclos} ciclos`;
+
+                await contarSegundos(cfg.inspira, '↑ Inspire', 'inhale');
+                if (cfg.segura > 0) await contarSegundos(cfg.segura, '⏸ Segure', 'hold');
+                await contarSegundos(cfg.expira, '↓ Expire', 'exhale');
+                if (cfg.segura2 > 0) await contarSegundos(cfg.segura2, '⏸ Segure', 'hold');
+            }
+
+            if (breathInterval) {
+                instrucao.innerText = '✅ Parabéns! Exercício concluído.';
+                contador.innerText = '';
+                circle.className = 'breath-circle';
+                setTimeout(() => pararExercicio(), 2500);
+            }
+        }
+
+        const meditacaoPassos = [
+            { dur: 10, texto: 'Feche os olhos e encontre uma posição confortável.', emoji: '😌' },
+            { dur: 15, texto: 'Respire naturalmente. Não force nada. Apenas observe.', emoji: '🌿' },
+            { dur: 20, texto: 'Sinta seus pés no chão. Sua coluna apoiada. Você está aqui.', emoji: '🪨' },
+            { dur: 20, texto: 'Observe seus pensamentos como nuvens passando. Não os siga.', emoji: '☁️' },
+            { dur: 20, texto: 'A cada expiração, solte um pouco da tensão do dia.', emoji: '🍃' },
+            { dur: 25, texto: 'Você é suficiente. Você está fazendo o suficiente. Você é amado(a).', emoji: '💗' },
+            { dur: 20, texto: 'Comece a sentir o peso do corpo. O chão que te sustenta.', emoji: '🌱' },
+            { dur: 15, texto: 'Quando quiser, abra os olhos devagar. Carregue essa calma com você.', emoji: '✨' },
+        ];
+
+        async function iniciarMeditacao() {
+            document.getElementById('exercicio-menu-view').style.display = 'none';
+            document.getElementById('exercicio-ativo-view').style.display = 'block';
+            document.getElementById('ex-titulo').innerText = '🧘 Meditação Guiada';
+            document.getElementById('ex-descricao').innerText = '3 minutos de presença e cuidado';
+
+            const circle = document.getElementById('breath-circle');
+            const instrucao = document.getElementById('breath-instrucao');
+            const contador = document.getElementById('breath-contador');
+            const ciclosEl = document.getElementById('breath-ciclos');
+            const total = meditacaoPassos.reduce((a, p) => a + p.dur, 0);
+
+            breathInterval = true;
+            let tempoDecorrido = 0;
+
+            for (const passo of meditacaoPassos) {
+                if (!breathInterval) break;
+                circle.innerText = passo.emoji;
+                instrucao.innerText = passo.texto;
+                falarTexto(passo.texto);
+                for (let s = passo.dur; s >= 1; s--) {
+                    if (!breathInterval) break;
+                    tempoDecorrido++;
+                    contador.innerText = '';
+                    const restante = total - tempoDecorrido;
+                    const min = Math.floor(restante / 60);
+                    const seg = restante % 60;
+                    ciclosEl.innerText = `${min}:${String(seg).padStart(2, '0')} restantes`;
+                    await new Promise(r => { breathTimeout = setTimeout(r, 1000); });
+                }
+            }
+
+            if (breathInterval) {
+                instrucao.innerText = '🙏 Meditação concluída. Como você se sente?';
+                circle.innerText = '💗';
+                setTimeout(() => pararExercicio(), 3000);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════
+        //  📓 DIÁRIO DE GRATIDÃO — com Supabase garantido
+        // ═══════════════════════════════════════════════════
+
+        const promptsDiario = [
+            "O que aconteceu hoje que te fez sorrir, mesmo que pequeno?",
+            "Qual pessoa da sua vida você é grato(a) por ter, e por quê?",
+            "Que parte do seu corpo ou saúde você costuma ignorar, mas merece gratidão?",
+            "O que você aprendeu recentemente que mudou sua visão?",
+            "Cite 3 momentos simples desta semana que fizeram diferença.",
+            "O que em você mesmo(a) você admira hoje?",
+            "Que desafio recente te fez crescer, mesmo sendo difícil?",
+            "Que presente da natureza você notou hoje?",
+            "O que você tem que muitas pessoas ao redor do mundo não têm?",
+            "Qual memória feliz você quer guardar desta semana?",
+            "O que sua vida de 5 anos atrás teria inveja da sua vida hoje?",
+            "Que momento desta semana você gostaria de reviver?",
+            "Por que você é grato(a) por estar aqui, agora, vivo(a)?",
+        ];
+
+        let diarioPromptHoje = '';
+
+        async function abrirDiario() {
+            document.getElementById('diario-overlay').style.display = 'flex';
+            const hoje = new Date();
+            document.getElementById('diario-data-hoje').innerText =
+                hoje.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+            const diaDoAno = Math.floor((hoje - new Date(hoje.getFullYear(), 0, 0)) / 86400000);
+            diarioPromptHoje = promptsDiario[diaDoAno % promptsDiario.length];
+            document.getElementById('diario-prompt-texto').innerText = '💬 ' + diarioPromptHoje;
+
+            document.getElementById('diario-texto').value = '';
+            document.getElementById('diario-ia-resposta').style.display = 'none';
+            document.getElementById('diario-ia-resposta').innerText = '';
+
+            // Sempre abre na aba de escrita — histórico carrega só quando o usuário clicar
+            trocarAbaDiario('nova');
+        }
+
+        function fecharDiario() {
+            document.getElementById('diario-overlay').style.display = 'none';
+        }
+
+        function trocarAbaDiario(aba) {
+            const isHist = aba === 'historico';
+            document.getElementById('painel-nova').style.display = isHist ? 'none' : 'block';
+            document.getElementById('painel-historico').style.display = isHist ? 'block' : 'none';
+
+            const abaHist = document.getElementById('aba-hist');
+            const abaNova = document.getElementById('aba-nova');
+
+            abaHist.style.color = isHist ? 'var(--cor-primaria)' : '#ccc';
+            abaHist.style.borderBottom = isHist ? '2px solid var(--cor-primaria)' : 'none';
+            abaHist.style.marginBottom = isHist ? '-2px' : '0';
+
+            abaNova.style.color = !isHist ? 'var(--cor-primaria)' : '#ccc';
+            abaNova.style.borderBottom = !isHist ? '2px solid var(--cor-primaria)' : 'none';
+            abaNova.style.marginBottom = !isHist ? '-2px' : '0';
+
+            if (isHist) carregarHistoricoDiario();
+        }
+
+        function _getUserId() {
+            // usuario.id é populado no login — sem precisar consultar o Supabase novamente
+            return usuario?.id || null;
+        }
+
+        async function salvarEntradaDiario() {
+            const texto = document.getElementById('diario-texto').value.trim();
+            if (!texto) { alert('Escreva algo antes de salvar 💗'); return; }
+
+            const btn = document.querySelector('.diario-btn-salvar');
+
+            const resetBtn = (msg, emoji) => {
+                btn.innerText = emoji + ' ' + msg;
+                btn.disabled = false;
+            };
+
+            btn.innerText = 'Salvando...';
+            btn.disabled = true;
+
+            try {
+                // Busca sessão primeiro — garante funcionar tanto com Google quanto email/senha
+                const { data: { session } } = await _supabase.auth.getSession();
+                if (!session) {
+                    resetBtn('Sessão expirada. Faça login novamente.', '⚠️');
+                    return;
+                }
+
+                // Usa id da sessão diretamente (funciona para Google e email/senha)
+                const userId = session.user.id;
+                if (!userId) {
+                    resetBtn('Faça login para salvar', '⚠️');
+                    return;
+                }
+
+                // Sincroniza usuario.id caso tenha ficado desatualizado
+                if (!usuario.id) usuario.id = userId;
+
+                // Usa fetch direto com AbortController para diagnóstico claro
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 12000);
+
+                let respRaw;
+                try {
+                    respRaw = await fetch(SUPABASE_URL + '/rest/v1/diario_gratidao', {
+                        method: 'POST',
+                        signal: controller.signal,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                            'Authorization': 'Bearer ' + session.access_token,
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify({
+                            user_id: userId,
+                            prompt: diarioPromptHoje,
+                            entrada: texto
+                        })
+                    });
+                } catch (fetchErr) {
+                    clearTimeout(timer);
+                    if (fetchErr.name === 'AbortError') {
+                        resetBtn('Sem resposta do servidor. Verifique conexão.', '❌');
+                    } else {
+                        resetBtn('Falha de rede: ' + fetchErr.message, '❌');
+                    }
+                    return;
+                }
+                clearTimeout(timer);
+
+                if (!respRaw.ok) {
+                    let errBody = {};
+                    try { errBody = await respRaw.json(); } catch (_) { }
+                    console.error('[Diário] Erro HTTP:', respRaw.status, errBody);
+
+                    if (respRaw.status === 404 || errBody?.code === '42P01') {
+                        resetBtn('Tabela não existe. Rode o SQL no Supabase.', '❌');
+                    } else if (respRaw.status === 403 || respRaw.status === 401) {
+                        resetBtn('Sem permissão (RLS). Verifique as políticas.', '❌');
+                    } else {
+                        resetBtn('Erro ' + respRaw.status + ': ' + (errBody?.message || errBody?.hint || 'desconhecido'), '❌');
+                    }
+                    return;
+                }
+
+                // Sucesso
+                btn.innerText = '✅ Salvo!';
+                setTimeout(() => { btn.innerText = '💾 Salvar'; btn.disabled = false; }, 2000);
+                document.getElementById('diario-texto').value = '';
+                document.getElementById('diario-ia-resposta').style.display = 'none';
+                // Muda para aba de histórico para o usuário ver a entrada recém-salva
+                trocarAbaDiario('historico');
+
+            } catch (e) {
+                console.error('[Diário] Exceção:', e);
+                resetBtn(e.message || 'Erro inesperado', '❌');
+            }
+        }
+
+        // ── Modal: continuar escrevendo ──────────────────────────────────
+        let _modalEntradaRef = null;
+
+        function abrirModalContinuar(entrada) {
+            _modalEntradaRef = entrada;
+            const modal = document.getElementById('modal-continuar-diario');
+            const trecho = document.getElementById('modal-continuar-trecho');
+            const textarea = document.getElementById('modal-continuar-texto');
+            trecho.innerText = entrada.entrada.length > 120 ? entrada.entrada.substring(0, 120) + '...' : entrada.entrada;
+            textarea.value = '';
+            modal.style.display = 'flex';
+            setTimeout(() => textarea.focus(), 100);
+        }
+
+        function fecharModalContinuar() {
+            document.getElementById('modal-continuar-diario').style.display = 'none';
+            _modalEntradaRef = null;
+        }
+
+        async function salvarContinuacaoDiario() {
+            const texto = document.getElementById('modal-continuar-texto').value.trim();
+            if (!texto) { alert('Escreva algo primeiro 💗'); return; }
+
+            const btn = document.querySelector('#modal-continuar-diario button:last-child');
+            btn.innerText = 'Salvando...';
+            btn.disabled = true;
+
+            try {
+                const { data: { session } } = await _supabase.auth.getSession();
+                if (!session) { btn.innerText = '⚠️ Faça login'; btn.disabled = false; return; }
+
+                const userId = session.user.id;
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 12000);
+
+                let respRaw;
+                try {
+                    respRaw = await fetch(SUPABASE_URL + '/rest/v1/diario_gratidao', {
+                        method: 'POST',
+                        signal: controller.signal,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                            'Authorization': 'Bearer ' + session.access_token,
+                            'Prefer': 'return=minimal'
+                        },
+                        body: JSON.stringify({
+                            user_id: userId,
+                            prompt: _modalEntradaRef ? '↩️ Continuação: ' + _modalEntradaRef.prompt : 'Continuação do diário',
+                            entrada: texto
+                        })
+                    });
+                } catch (fetchErr) {
+                    clearTimeout(timer);
+                    btn.innerText = '❌ Falha de rede';
+                    btn.disabled = false;
+                    return;
+                }
+                clearTimeout(timer);
+
+                if (!respRaw.ok) {
+                    let errBody = {};
+                    try { errBody = await respRaw.json(); } catch (_) { }
+                    btn.innerText = '❌ Erro ' + respRaw.status + ': ' + (errBody?.message || 'desconhecido');
+                    btn.disabled = false;
+                    return;
+                }
+
+                btn.innerText = '✅ Salvo!';
+                setTimeout(() => {
+                    fecharModalContinuar();
+                    btn.innerText = '💾 Salvar';
+                    btn.disabled = false;
+                    carregarHistoricoDiario(); // atualiza a lista
+                }, 1200);
+
+            } catch (e) {
+                console.error('[Modal Diário]', e);
+                btn.innerText = '❌ ' + (e.message || 'Erro');
+                btn.disabled = false;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────
+
+        async function pedirReflexaoIA() {
+            const texto = document.getElementById('diario-texto').value.trim();
+            if (!texto) { alert('Escreva algo primeiro para eu poder refletir com você 💗'); return; }
+
+            const btn = document.querySelector('.diario-btn-ia');
+            const respostaEl = document.getElementById('diario-ia-resposta');
+
+            btn.innerText = '...';
+            btn.disabled = true;
+            respostaEl.style.display = 'block';
+            respostaEl.innerText = '';
+
+            // Simula "pensando" — aparece o cursor piscando antes da resposta
+            let pontos = 0;
+            const thinking = setInterval(() => {
+                pontos = (pontos + 1) % 4;
+                respostaEl.innerText = '.'.repeat(pontos || 1);
+            }, 400);
+
+            // Pausa humana antes de pedir à IA
+            await new Promise(r => setTimeout(r, 1800 + Math.random() * 1200));
+
+            try {
+                const prompt = `Você é um amigo próximo e terapeuta gentil. ${usuario.nome} escreveu em seu diário:
+
+Pergunta do dia: "${diarioPromptHoje}"
+O que escreveu: "${texto}"
+
+Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como um amigo que leu e quer responder de verdade — não de forma genérica. Use o nome da pessoa se quiser. Termine com uma pergunta simples, curiosa, humana.`;
+
+                const response = await fetch(ANTHROPIC_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                    },
+                    body: JSON.stringify({
+                        system: "Você é um amigo próximo e terapeuta gentil.",
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+                const data = await response.json();
+                clearInterval(thinking);
+
+                const reflexao = data.content?.[0]?.text?.trim()
+                    || 'Que belo registro. Obrigado por ter parado para notar isso.';
+
+                // Digita a resposta letra por letra com espaçamento correto
+                respostaEl.innerText = '';
+                respostaEl.style.whiteSpace = 'pre-wrap';
+                const completo = reflexao;
+                let acumulado = '';
+                for (let i = 0; i < completo.length; i++) {
+                    acumulado += completo[i];
+                    respostaEl.innerText = acumulado;
+                    const delay = '.!?'.includes(completo[i]) ? 150 : 22 + Math.random() * 16;
+                    await new Promise(r => setTimeout(r, delay));
+                }
+
+                falarTexto(reflexao);
+
+            } catch (e) {
+                clearInterval(thinking);
+                respostaEl.innerText = '💗 Sua gratidão é real e importa.';
+            }
+
+            btn.innerText = '💭 O que você acha?';
+            btn.disabled = false;
+        }
+
+        async function carregarHistoricoDiario() {
+            const lista = document.getElementById('diario-historico-lista');
+            const titulo = document.getElementById('diario-hist-titulo');
+            lista.innerHTML = '<div style="color:#ccc;font-size:0.8rem;padding:8px 0;">Carregando...</div>';
+
+            try {
+                const userId = await _getUserId();
+                if (!userId) {
+                    lista.innerHTML = '';
+                    titulo.style.display = 'none';
+                    return;
+                }
+
+                const { data, error } = await _supabase
+                    .from('diario_gratidao')
+                    .select('id, prompt, entrada, created_at')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+
+                lista.innerHTML = '';
+
+                if (error) {
+                    console.error('[Diário] Erro ao carregar:', error.code, error.message);
+                    if (error.code === '42P01') {
+                        lista.innerHTML = '<div style="color:#e88;font-size:0.8rem;padding:8px 0;">⚠️ Tabela não encontrada. Rode o script SQL no Supabase.</div>';
+                    }
+                    titulo.style.display = 'none';
+                    return;
+                }
+
+                if (!data || data.length === 0) {
+                    titulo.style.display = 'none';
+                    lista.innerHTML = '<div style="color:#ccc;font-size:0.8rem;padding:8px 4px;font-style:italic;">Nenhuma entrada ainda. Seja o(a) primeiro(a) a escrever hoje 💗</div>';
+                    return;
+                }
+
+                titulo.style.display = 'block';
+
+                // Agrupa por mês para o histórico ficar organizado
+                const porMes = {};
+                data.forEach(d => {
+                    const dt = new Date(d.created_at);
+                    const chave = dt.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                    if (!porMes[chave]) porMes[chave] = [];
+                    porMes[chave].push(d);
+                });
+
+                Object.entries(porMes).forEach(([mes, entradas]) => {
+                    // Cabeçalho do mês
+                    const mesDiv = document.createElement('div');
+                    mesDiv.style.cssText = 'font-size:0.72rem;font-weight:bold;color:var(--cor-primaria);text-transform:uppercase;letter-spacing:1px;margin:16px 0 8px;';
+                    mesDiv.innerText = mes;
+                    lista.appendChild(mesDiv);
+
+                    entradas.forEach(e => {
+                        const dt = new Date(e.created_at);
+                        const dia = dt.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
+                        const hora = dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+                        const div = document.createElement('div');
+                        div.className = 'diario-entrada';
+                        div.style.cursor = 'pointer';
+
+                        // Preview: primeiras 80 chars
+                        const preview = e.entrada.length > 80 ? e.entrada.substring(0, 80) + '...' : e.entrada;
+                        let expandido = false;
+
+                        div.innerHTML = `
+                        <div class="diario-data">
+                            <span>📅 ${dia} às ${hora}</span>
+                            <span style="font-style:italic;color:#ccc;font-size:0.72rem;margin-left:6px;">${e.prompt.substring(0, 40)}...</span>
+                        </div>
+                        <div class="diario-conteudo">${preview}</div>
+                    `;
+
+                        // Ao clicar, abre popup para continuar escrevendo
+                        div.addEventListener('click', () => {
+                            abrirModalContinuar(e);
+                        });
+
+                        lista.appendChild(div);
+                    });
+                });
+
+            } catch (e) {
+                console.error('[Diário] Exceção ao carregar:', e);
+                lista.innerHTML = '<div style="color:#e88;font-size:0.8rem;padding:8px 4px;">❌ Erro ao carregar histórico.</div>';
+            }
+        }
+
+
+    </script>
+
+    <div class="floating-menu-btn" onclick="toggleMenuAconselhadores()" title="Mudar Aconselhador">
+        ✨
+    </div>
+
+    <!-- Botão SOS flutuante -->
+    <div class="sos-float-btn" onclick="abrirSOS()" title="SOS Emocional">🆘</div>
+
+    <div id="menuAconselhadores" class="menu-aconselhadores">
+        <div style="font-size: 0.75rem; color: var(--cor-primaria); font-weight: bold; padding: 5px 15px;">MUDAR
+            ABORDAGEM:</div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('psicologo', this)">
+            <span>🌿</span> Terapia Tradicional
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('carreira', this)">
+            <span>💼</span> Carreira e Trabalho
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('religioso', this)">
+            <span>🙏</span> Aconselhamento Espiritual
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('direto', this)">
+            <span>⚡</span> Conselhos Práticos
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('amigavel', this)">
+            <span>&#129528;</span> Apenas um Amigo
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('luto', this)">
+            <span>&#129761;</span> Suporte ao Luto
+        </div>
+
+        <div class="opcao-aconselhador" onclick="mudarAconselhador('doenca', this)">
+            <span>&#129505;</span> Apoio na Doença
+        </div>
+    </div>
+</body>
+
+</html>
