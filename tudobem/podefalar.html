@@ -1655,13 +1655,13 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
         // 1. Inicialização única (Remova as duplicatas)
-        const SUPABASE_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtsZnlzbXpyb2h5dnZyeGV5amd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5MDExMDUsImV4cCI6MjA4NjQ3NzEwNX0.1D9mB2PzbdsqXFSKIC_iZEpUffao9hXWbtc_Hxwbm3Q";
+        const SUPABASE_URL = "https://jchhthyzijpwibfkbnha.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpjaGh0aHl6aWpwd2liZmtibmhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4Mzk5NjQsImV4cCI6MjA5NzQxNTk2NH0.1ZgGfBsc-B96MGGzi39FizUr4Js05ZKhpNBCh_XdkxQ";
 
-        // ── Anthropic Claude API via Supabase Edge Function (chave segura no servidor) ──
-        const ANTHROPIC_API_URL = "https://klfysmzrohyvvrxeyjgy.supabase.co/functions/v1/claude-proxy";
+        // OpenAI via Supabase Edge Function (chave segura no servidor)
+        const OPENAI_CHAT_URL = `${SUPABASE_URL}/functions/v1/openai-chat`;
+        const AUTH_REDIRECT_URL = "https://haydenfernandes.com.br/tudobem/podefalar.html";
 
-        console.log("Usando API Claude via Supabase Edge Function");
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
             auth: {
                 lock: async (name, acquireTimeout, fn) => fn(),
@@ -1750,7 +1750,7 @@
         }
 
         // Inicializa o histórico e instruções da IA
-        function configurarGemini() {
+        function configurarIA() {
             let personaPrompt = "";
 
             // ── REGRAS UNIVERSAIS ── aplicadas a TODOS os modos
@@ -1890,7 +1890,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
         }
 
         // ── Gerenciamento de limite de contexto ──
-        // Claude: ~200k tokens. Limite seguro: ~60.000 tokens (240k chars)
+        // Limite seguro para manter a conversa leve no navegador e na API.
         const LIMITE_CHARS = 240000;
         const AVISO_CHARS = 160000; // 67% — começa a mostrar aviso
 
@@ -1951,26 +1951,29 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             appendMessage('💬 (Mensagens mais antigas foram arquivadas para manter a conversa fluindo.)', 'bot');
         }
 
-        // Chama a API Claude (Anthropic) com retry automático em caso de erro 529/429
-        async function chamarGeminiComRetry(body, tentativas = 3) {
+        // Chama a API OpenAI via Supabase Edge Function com retry automático.
+        async function chamarOpenAIComRetry(mensagens, systemPrompt = chatHistory._systemPrompt || "", tentativas = 3) {
             for (let i = 0; i < tentativas; i++) {
                 try {
-                    // Monta payload para a Edge Function do Supabase
-                    const claudePayload = {
-                        system: chatHistory._systemPrompt || "",
-                        messages: chatHistory.map(m => ({
+                    const { data: { session } } = await _supabase.auth.getSession();
+                    if (!session?.access_token) throw new Error('Sessao expirada. Entre novamente para continuar.');
+
+                    const payload = {
+                        system: systemPrompt,
+                        messages: mensagens.map(m => ({
                             role: m.role === 'model' ? 'assistant' : m.role,
                             content: m.parts?.[0]?.text ?? m.content ?? ""
                         }))
                     };
 
-                    const response = await fetch(ANTHROPIC_API_URL, {
+                    const response = await fetch(OPENAI_CHAT_URL, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'apikey': SUPABASE_KEY,
+                            'Authorization': 'Bearer ' + session.access_token,
                         },
-                        body: JSON.stringify(claudePayload)
+                        body: JSON.stringify(payload)
                     });
 
                     // Trata erros HTTP antes de tentar parsear
@@ -1980,7 +1983,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                         const msg = errData?.error?.message || response.statusText;
 
                         // 429 / 529 = sobrecarga → tenta de novo
-                        if ((status === 429 || status === 529) && i < tentativas - 1) {
+                        if ((status === 429 || status === 500 || status === 502 || status === 503) && i < tentativas - 1) {
                             const espera = (i + 1) * 2000;
                             await new Promise(r => setTimeout(r, espera));
                             continue;
@@ -1998,14 +2001,14 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                             }
                             throw new Error('Conversa muito longa. Clique em 🗑️ para limpar o chat e continuar.');
                         }
-                        if (status === 401 || status === 403) throw new Error('Chave de API inválida ou sem permissão.');
+                        if (status === 401 || status === 403) throw new Error('Sua sessao expirou. Entre novamente.');
                         throw new Error(`Erro ${status}: ${msg}`);
                     }
 
                     const data = await response.json();
 
-                    // Adapta resposta Claude → formato esperado pelo código Gemini
-                    const textoResposta = data.content?.[0]?.text;
+                    // Mantem o formato que o restante do app ja espera.
+                    const textoResposta = data.reply || data.content?.[0]?.text;
                     if (!textoResposta) throw new Error('Resposta vazia da IA. Tente reformular sua mensagem.');
 
                     // Retorna no formato que o código já espera (data.candidates[0].content.parts[0].text)
@@ -2050,9 +2053,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             atualizarBarraLimite();
 
             try {
-                console.log('[Claude] Enviando mensagem. chatHistory length:', chatHistory.length);
-                const data = await chamarGeminiComRetry({ contents: chatHistory });
-                console.log('[Claude] Resposta recebida:', JSON.stringify(data).substring(0, 200));
+                const data = await chamarOpenAIComRetry(chatHistory);
                 let fullBotReply = data.candidates[0].content.parts[0].text;
 
                 await salvarMensagemNoBanco('assistant', fullBotReply);
@@ -2099,7 +2100,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 // Mostra a mensagem de erro real, não genérica
                 const msgErro = error.message || 'Erro desconhecido. Tente novamente.';
                 appendMessage(`⚠️ ${msgErro}`, 'bot');
-                console.error('[Claude Error]', error);
+                console.error('[AI Error]', error);
             } finally {
                 sendBtn.disabled = false;
             }
@@ -2288,7 +2289,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             }
             const { error } = await _supabase.auth.signInWithOAuth({
                 provider: 'google',
-                options: { redirectTo: window.location.origin + window.location.pathname }
+                options: { redirectTo: AUTH_REDIRECT_URL }
             });
             if (error) {
                 if (btn) {
@@ -2318,7 +2319,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
         window.onload = () => { };
 
         async function handleAuth() {
-            const email = document.getElementById('email').value;
+            const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
             const errorDiv = document.getElementById('error-message');
             const authBtn = document.getElementById('auth-btn');
@@ -2329,8 +2330,27 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             errorDiv.style.display = 'none';
 
             try {
+                if (!email || !password || password.length < 6) {
+                    throw new Error('Informe email e senha com pelo menos 6 caracteres.');
+                }
+
                 if (isSignUpMode) {
-                    // Lógica de cadastro
+                    const nome = document.getElementById('user-name').value.trim() || email.split('@')[0];
+                    const genero = document.getElementById('select-genero').value;
+                    const status = document.getElementById('select-status').value;
+                    const { error } = await _supabase.auth.signUp({
+                        email,
+                        password,
+                        options: {
+                            data: { nome, genero, status },
+                            emailRedirectTo: AUTH_REDIRECT_URL
+                        }
+                    });
+                    if (error) throw error;
+                    errorDiv.innerText = 'Conta criada. Confira seu email para confirmar o acesso.';
+                    errorDiv.style.display = 'block';
+                    authBtn.innerHTML = originalText;
+                    authBtn.classList.remove('btn-loading', 'pulse-fofo');
                 } else {
                     const { error } = await _supabase.auth.signInWithPassword({ email, password });
                     if (error) throw error;
@@ -2340,7 +2360,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             } catch (error) {
                 authBtn.innerHTML = originalText;
                 authBtn.classList.remove('btn-loading', 'pulse-fofo');
-                errorDiv.innerText = "Ops! E-mail ou senha incorretos.";
+                errorDiv.innerText = error.message || "Ops! Nao foi possivel entrar agora.";
                 errorDiv.style.display = 'block';
                 document.getElementById('password').value = "";
             }
@@ -2353,6 +2373,13 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 genero: user.user_metadata.genero || "mulher",
                 status: user.user_metadata.status || "solteiro"
             };
+
+            await _supabase.from('profiles').upsert({
+                id: usuario.id,
+                nome: usuario.nome,
+                genero: usuario.genero,
+                status: usuario.status
+            }, { onConflict: 'id' });
 
             if (usuario.genero === 'homem') {
                 document.body.classList.add('tema-homem');
@@ -2373,7 +2400,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 document.getElementById('popup-selecao').style.display = 'flex';
             }
 
-            configurarGemini();
+            configurarIA();
             carregarHistoricoDoBanco();
             iniciarTemporizadorSessao();
         }
@@ -2425,7 +2452,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                     <div class="message bot" id="welcome-msg">Histórico limpo. Como posso te ajudar agora?</div>
                 </div>`;
                     chatHistory = [];
-                    configurarGemini(); // Reinicia as instruções do sistema
+                    configurarIA(); // Reinicia as instrucoes do sistema
                 }
             }
         }
@@ -2479,7 +2506,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
         async function voltarParaHoje() {
             document.getElementById('chatBox').innerHTML = ""; // Limpa a visão do passado
             chatHistory = []; // Limpa o histórico de memória da IA
-            configurarGemini(); // Reseta instruções
+            configurarIA(); // Reseta instrucoes
 
             // Esconde o botão de voltar
             document.getElementById('btn-hoje').style.display = 'none';
@@ -2503,7 +2530,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
 
             chatBox.innerHTML = `<div style="text-align:center; font-size:0.8rem; color:var(--cor-primaria); margin:10px 0; font-style: italic;">— Olhando para o passado: ${dataString} —</div>`;
             chatHistory = [];
-            configurarGemini();
+            configurarIA();
             lista.style.display = 'none';
 
             const [dia, mes, ano] = dataString.split('/');
@@ -2577,7 +2604,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             if (menuLat) menuLat.style.display = 'none';
 
             // Reinicia a IA com a nova instrução
-            configurarGemini();
+            configurarIA();
 
             // Se não for a escolha inicial do login, avisa no chat
             if (!isInitial) {
@@ -2594,7 +2621,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             }
         }
 
-        // ATUALIZE sua função configurarGemini() existente para incluir as novas personas:
+        // Personas extras para a IA.
 
 
         let humorAtual = "Neutro"; // Variável global para guardar o humor
@@ -2617,7 +2644,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             humorAtual = humor;
             document.getElementById('popup-selecao').style.display = 'none';
 
-            configurarGemini();
+            configurarIA();
 
             const pendencia = await verificarUltimaMensagemPendente();
             let saudacao = "";
@@ -2662,7 +2689,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
             appendMessage(saudacao, 'bot', botoes);
         }
 
-        // ATUALIZE sua função configurarGemini para usar o humorAtual:
+        // A selecao de humor alimenta o contexto da IA.
 
         async function verificarConversaOntem() {
             const { data: { user } } = await _supabase.auth.getUser();
@@ -3017,61 +3044,18 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 // Sincroniza usuario.id caso tenha ficado desatualizado
                 if (!usuario.id) usuario.id = userId;
 
-                // Usa fetch direto com AbortController para diagnóstico claro
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 12000);
+                const { error } = await _supabase
+                    .from('diario_gratidao')
+                    .insert({ user_id: userId, prompt: diarioPromptHoje, entrada: texto });
 
-                let respRaw;
-                try {
-                    respRaw = await fetch(SUPABASE_URL + '/rest/v1/diario_gratidao', {
-                        method: 'POST',
-                        signal: controller.signal,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': SUPABASE_KEY,
-                            'Authorization': 'Bearer ' + session.access_token,
-                            'Prefer': 'return=minimal'
-                        },
-                        body: JSON.stringify({
-                            user_id: userId,
-                            prompt: diarioPromptHoje,
-                            entrada: texto
-                        })
-                    });
-                } catch (fetchErr) {
-                    clearTimeout(timer);
-                    if (fetchErr.name === 'AbortError') {
-                        resetBtn('Sem resposta do servidor. Verifique conexão.', '❌');
-                    } else {
-                        resetBtn('Falha de rede: ' + fetchErr.message, '❌');
-                    }
-                    return;
-                }
-                clearTimeout(timer);
+                if (error) throw error;
 
-                if (!respRaw.ok) {
-                    let errBody = {};
-                    try { errBody = await respRaw.json(); } catch (_) { }
-                    console.error('[Diário] Erro HTTP:', respRaw.status, errBody);
-
-                    if (respRaw.status === 404 || errBody?.code === '42P01') {
-                        resetBtn('Tabela não existe. Rode o SQL no Supabase.', '❌');
-                    } else if (respRaw.status === 403 || respRaw.status === 401) {
-                        resetBtn('Sem permissão (RLS). Verifique as políticas.', '❌');
-                    } else {
-                        resetBtn('Erro ' + respRaw.status + ': ' + (errBody?.message || errBody?.hint || 'desconhecido'), '❌');
-                    }
-                    return;
-                }
-
-                // Sucesso
-                btn.innerText = '✅ Salvo!';
-                setTimeout(() => { btn.innerText = '💾 Salvar'; btn.disabled = false; }, 2000);
+                btn.innerText = 'Salvo!';
+                setTimeout(() => { btn.innerText = 'Salvar'; btn.disabled = false; }, 2000);
                 document.getElementById('diario-texto').value = '';
                 document.getElementById('diario-ia-resposta').style.display = 'none';
-                // Muda para aba de histórico para o usuário ver a entrada recém-salva
                 trocarAbaDiario('historico');
-
+                return;
             } catch (e) {
                 console.error('[Diário] Exceção:', e);
                 resetBtn(e.message || 'Erro inesperado', '❌');
@@ -3110,49 +3094,21 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                 if (!session) { btn.innerText = '⚠️ Faça login'; btn.disabled = false; return; }
 
                 const userId = session.user.id;
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), 12000);
+                const prompt = _modalEntradaRef ? 'Continuacao: ' + _modalEntradaRef.prompt : 'Continuacao do diario';
+                const { error } = await _supabase
+                    .from('diario_gratidao')
+                    .insert({ user_id: userId, prompt, entrada: texto });
 
-                let respRaw;
-                try {
-                    respRaw = await fetch(SUPABASE_URL + '/rest/v1/diario_gratidao', {
-                        method: 'POST',
-                        signal: controller.signal,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': SUPABASE_KEY,
-                            'Authorization': 'Bearer ' + session.access_token,
-                            'Prefer': 'return=minimal'
-                        },
-                        body: JSON.stringify({
-                            user_id: userId,
-                            prompt: _modalEntradaRef ? '↩️ Continuação: ' + _modalEntradaRef.prompt : 'Continuação do diário',
-                            entrada: texto
-                        })
-                    });
-                } catch (fetchErr) {
-                    clearTimeout(timer);
-                    btn.innerText = '❌ Falha de rede';
-                    btn.disabled = false;
-                    return;
-                }
-                clearTimeout(timer);
+                if (error) throw error;
 
-                if (!respRaw.ok) {
-                    let errBody = {};
-                    try { errBody = await respRaw.json(); } catch (_) { }
-                    btn.innerText = '❌ Erro ' + respRaw.status + ': ' + (errBody?.message || 'desconhecido');
-                    btn.disabled = false;
-                    return;
-                }
-
-                btn.innerText = '✅ Salvo!';
+                btn.innerText = 'Salvo!';
                 setTimeout(() => {
                     fecharModalContinuar();
-                    btn.innerText = '💾 Salvar';
+                    btn.innerText = 'Salvar';
                     btn.disabled = false;
-                    carregarHistoricoDiario(); // atualiza a lista
+                    carregarHistoricoDiario();
                 }, 1200);
+                return;
 
             } catch (e) {
                 console.error('[Modal Diário]', e);
@@ -3192,11 +3148,15 @@ O que escreveu: "${texto}"
 
 Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como um amigo que leu e quer responder de verdade — não de forma genérica. Use o nome da pessoa se quiser. Termine com uma pergunta simples, curiosa, humana.`;
 
-                const response = await fetch(ANTHROPIC_API_URL, {
+                const { data: { session } } = await _supabase.auth.getSession();
+                if (!session?.access_token) throw new Error('Sessao expirada. Entre novamente para continuar.');
+
+                const response = await fetch(OPENAI_CHAT_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + session.access_token,
                     },
                     body: JSON.stringify({
                         system: "Você é um amigo próximo e terapeuta gentil.",
@@ -3204,9 +3164,10 @@ Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como 
                     })
                 });
                 const data = await response.json();
+                if (!response.ok) throw new Error(data?.error?.message || 'Erro ao pedir reflexao.');
                 clearInterval(thinking);
 
-                const reflexao = data.content?.[0]?.text?.trim()
+                const reflexao = (data.reply || data.content?.[0]?.text)?.trim()
                     || 'Que belo registro. Obrigado por ter parado para notar isso.';
 
                 // Digita a resposta letra por letra com espaçamento correto
