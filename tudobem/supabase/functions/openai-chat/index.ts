@@ -27,6 +27,13 @@ function extractOutputText(data: any) {
   return parts.join("\n").trim();
 }
 
+function isQuotaError(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("exceeded your current quota")
+    || normalized.includes("check your plan and billing")
+    || normalized.includes("insufficient_quota");
+}
+
 function getJwtPayload(req: Request) {
   const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
   const payload = token?.split(".")[1];
@@ -109,7 +116,8 @@ Deno.serve(async (req: Request) => {
     const data = await openaiResponse.json().catch(() => ({}));
     if (!openaiResponse.ok) {
       const message = data?.error?.message || openaiResponse.statusText;
-      return new Response(JSON.stringify({ error: { message } }), {
+      const code = data?.error?.code || (isQuotaError(message) ? "insufficient_quota" : undefined);
+      return new Response(JSON.stringify({ error: { message, code } }), {
         status: openaiResponse.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

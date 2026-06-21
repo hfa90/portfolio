@@ -1952,6 +1952,23 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
         }
 
         // Chama a API OpenAI via Supabase Edge Function com retry automático.
+        function isOpenAIQuotaError(status, code, message) {
+            const texto = String(message || '').toLowerCase();
+            return code === 'insufficient_quota'
+                || (status === 429 && (
+                    texto.includes('exceeded your current quota')
+                    || texto.includes('check your plan and billing')
+                    || texto.includes('insufficient_quota')
+                ));
+        }
+
+        function mensagemAmigavelOpenAI(status, code, message) {
+            if (isOpenAIQuotaError(status, code, message)) {
+                return 'A IA esta temporariamente sem creditos de uso. O responsavel pelo app precisa ativar billing ou adicionar creditos na plataforma da OpenAI.';
+            }
+            return `Erro ${status}: ${message}`;
+        }
+
         async function chamarOpenAIComRetry(mensagens, systemPrompt = chatHistory._systemPrompt || "", tentativas = 3) {
             for (let i = 0; i < tentativas; i++) {
                 try {
@@ -1981,6 +1998,11 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                         const errData = await response.json().catch(() => ({}));
                         const status = response.status;
                         const msg = errData?.error?.message || response.statusText;
+                        const code = errData?.error?.code;
+
+                        if (isOpenAIQuotaError(status, code, msg)) {
+                            throw new Error(mensagemAmigavelOpenAI(status, code, msg));
+                        }
 
                         // 429 / 529 = sobrecarga → tenta de novo
                         if ((status === 429 || status === 500 || status === 502 || status === 503) && i < tentativas - 1) {
@@ -2002,7 +2024,7 @@ Lembre: você não é um assistente. Você é uma presença. Comece acolhendo, n
                             throw new Error('Conversa muito longa. Clique em 🗑️ para limpar o chat e continuar.');
                         }
                         if (status === 401 || status === 403) throw new Error('Sua sessao expirou. Entre novamente.');
-                        throw new Error(`Erro ${status}: ${msg}`);
+                        throw new Error(mensagemAmigavelOpenAI(status, code, msg));
                     }
 
                     const data = await response.json();
@@ -3164,7 +3186,10 @@ Responda em até 2 frases curtas e calorosas. Sem listar. Sem formalidade. Como 
                     })
                 });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data?.error?.message || 'Erro ao pedir reflexao.');
+                if (!response.ok) {
+                    const msg = data?.error?.message || 'Erro ao pedir reflexao.';
+                    throw new Error(mensagemAmigavelOpenAI(response.status, data?.error?.code, msg));
+                }
                 clearInterval(thinking);
 
                 const reflexao = (data.reply || data.content?.[0]?.text)?.trim()
