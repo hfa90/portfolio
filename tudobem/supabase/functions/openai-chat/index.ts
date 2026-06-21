@@ -27,6 +27,20 @@ function extractOutputText(data: any) {
   return parts.join("\n").trim();
 }
 
+function getJwtPayload(req: Request) {
+  const token = req.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+  const payload = token?.split(".")[1];
+  if (!payload) return null;
+
+  try {
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -35,6 +49,14 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: { message: "Method not allowed" } }), {
       status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const jwtPayload = getJwtPayload(req);
+  if (jwtPayload?.role !== "authenticated" || !jwtPayload?.sub) {
+    return new Response(JSON.stringify({ error: { message: "Authentication required." } }), {
+      status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
