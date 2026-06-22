@@ -84,35 +84,14 @@
         <div class="cadastro-form-wrap">
           <div class="cadastro-form-header">
             <h2>Criar conta gratuita</h2>
-            <p>Cadastre pelo telefone. O perfil completo vem depois, dentro do painel.</p>
-          </div>
-
-          <div class="telegram-security" id="telegramSignupBox">
-            <div class="telegram-security-head">
-              <div class="telegram-security-icon"><i class="ti ti-brand-telegram"></i></div>
-              <div>
-                <h3>Cadastro rapido por telefone</h3>
-                <p id="telegramSignupStatus">Digite seu telefone, receba o codigo no Telegram e entre no painel para completar o perfil depois.</p>
-              </div>
-            </div>
-            <div class="telegram-security-grid">
-              <div>
-                <span class="telegram-security-timer"><i class="ti ti-clock-bolt"></i> codigo no Telegram</span>
-                <div data-telegram-code data-role="profissional" data-purpose="signup" data-compact="true"></div>
-              </div>
-              <div class="telegram-security-steps">
-                <div class="security-step"><i class="ti ti-shield-check"></i><span><strong>Seguranca:</strong> o telefone fica vinculado ao Telegram.</span></div>
-                <div class="security-step"><i class="ti ti-lock"></i><span><strong>Rapido:</strong> cadastro sem preencher perfil agora.</span></div>
-                <div class="security-step"><i class="ti ti-sparkles"></i><span><strong>Depois:</strong> o painel mostra como completar o perfil.</span></div>
-              </div>
-            </div>
+            <p>Cadastre com e-mail e senha. Depois de confirmar o e-mail, você acessa o painel profissional.</p>
           </div>
 
           <div class="quick-form-note">
-            O formulario completo foi movido para depois do cadastro. Assim a profissional cria a conta primeiro e preenche fotos, bio, servicos e localizacao com calma no painel.
+            Preencha os dados essenciais agora para publicar um perfil completo e confiável no catálogo.
           </div>
 
-          <div class="legacy-profile-form" hidden>
+          <div class="legacy-profile-form">
           <!-- STEPS INDICATOR -->
           <div class="steps-indicator">
             <div class="step active" id="step-ind-1">
@@ -302,7 +281,7 @@
               </div>
               <div class="quick-form-note">
                 Fotos, servicos, locais e disponibilidade podem ser preenchidos em seguida no painel com um tutorial rapido.
-                <button type="button" class="telegram-fallback-link" style="margin-left:.25rem;" onclick="goStep(3)">
+                <button type="button" class="inline-action-link" style="margin-left:.25rem;" onclick="goStep(3)">
                   adicionar detalhes agora
                 </button>
               </div>
@@ -441,7 +420,6 @@
     const EDGE_BASE = `${SUPABASE_URL}/functions/v1`;
     // Sempre cria _supabase inline — não depende de supabase.js externo
     const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    const TELEGRAM_SIGNUP_KEY = 'venus:telegramSignup';
 
     function toast(msg, tipo = 'info') {
       const el = document.createElement('div');
@@ -458,40 +436,6 @@
     // ── Variáveis globais ─────────────────────────────────────────
     let currentStep = 1;
     let uploadedFiles = [];
-
-    function getTelegramSignup() {
-      try {
-        const raw = sessionStorage.getItem(TELEGRAM_SIGNUP_KEY);
-        if (!raw) return null;
-        const parsed = JSON.parse(raw);
-        const ageMs = Date.now() - Number(parsed.saved_at || 0);
-        if (parsed.role !== 'profissional' || !parsed.user || ageMs > 15 * 60 * 1000) {
-          sessionStorage.removeItem(TELEGRAM_SIGNUP_KEY);
-          return null;
-        }
-        return parsed;
-      } catch {
-        return null;
-      }
-    }
-
-    function updateTelegramSignupUI() {
-      const pending = getTelegramSignup();
-      const box = document.getElementById('telegramSignupBox');
-      const status = document.getElementById('telegramSignupStatus');
-      if (!box || !status) return;
-      if (!pending) {
-        box.classList.remove('verified');
-        status.textContent = 'Digite seu telefone, receba o codigo no Telegram e entre no painel para completar o perfil depois.';
-        return;
-      }
-      const name = [pending.user.first_name, pending.user.last_name].filter(Boolean).join(' ') || pending.user.username || 'Telegram verificado';
-      box.classList.add('verified');
-      status.textContent = `${name}: Telegram verificado. Agora preencha os campos essenciais; o vinculo sera salvo junto com seu cadastro.`;
-    }
-
-    document.addEventListener('venus:telegram-signup-verified', updateTelegramSignupUI);
-    updateTelegramSignupUI();
 
     // ── Navegação entre steps ─────────────────────────────────────
     function goStep(n) {
@@ -640,8 +584,6 @@
         whatsapp: tel.replace(/\D/g, ''),
         termos_aceitos: termos,
         conteudo_adulto_aceito: adulto,
-        telegram: getTelegramSignup()?.user || null,
-
         // step2 — usa placeholder exato do HTML
         nome_artistico: document.querySelector('#step2 input[placeholder="Como você quer ser chamada(o)"]')?.value?.trim() || '',
         categoria: document.querySelector('#step2 select')?.value || '',
@@ -687,7 +629,6 @@
       // 2. Login automático
       toast('Cadastro criado! Confirme o e-mail enviado para liberar seu painel profissional.', 'ok');
       try {
-        sessionStorage.removeItem(TELEGRAM_SIGNUP_KEY);
         localStorage.setItem('venus:onboarding:profissional', '1');
       } catch {}
       btn.innerHTML = '<i class="ti ti-mail-check"></i> Verifique seu e-mail';
@@ -722,7 +663,6 @@
       setTimeout(() => window.location.href = 'painel.html', 1500);
     });
   </script>
-  <script src="js/telegram-code.js" defer></script>
   <script src="js/site.js" defer></script>
   <script src="js/mobile-nav.js" defer></script>
 </body>

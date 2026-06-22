@@ -3,7 +3,7 @@
     profissional: [
       {
         title: 'Acesso seguro pronto',
-        text: 'Seu Telegram fica como atalho de seguranca. Quando quiser, use o botao do painel ou do login para entrar sem digitar senha.',
+        text: 'Sua conta pode ser acessada com e-mail e senha ou pelo botão do Google na tela de login.',
         nav: () => window.goPage?.('dashboard')
       },
       {
@@ -25,7 +25,7 @@
     cliente: [
       {
         title: 'Conta pronta',
-        text: 'Seu painel guarda favoritos, historico e conversas. O Telegram fica como entrada rapida e verificacao da conta.',
+        text: 'Seu painel guarda favoritos, historico e conversas. Para entrar, use e-mail e senha ou o botão do Google.',
         nav: () => window.openPanel?.('inicio')
       },
       {

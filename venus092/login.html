@@ -42,23 +42,6 @@
 
       <!-- FORM PROFISSIONAL -->
       <div class="login-form-wrap" id="tab-profissional">
-        <div class="login-primary-hint">
-          <i class="ti ti-brand-telegram"></i>
-          <span>Entre pelo telefone com codigo no Telegram. Rapido e sem senha.</span>
-        </div>
-
-        <div class="telegram-quick login-phone-first">
-          <div data-telegram-code data-role="profissional" data-purpose="login"></div>
-        </div>
-
-        <details class="telegram-quick" id="recuperar-profissional">
-          <summary class="telegram-quick-title"><i class="ti ti-key"></i> Esqueci minha senha</summary>
-          <div data-telegram-code data-role="profissional" data-purpose="reset" data-allow-password="true"></div>
-        </details>
-
-        <details class="email-login-details">
-          <summary><i class="ti ti-mail"></i> Entrar com e-mail e senha</summary>
-
         <form id="loginForm">
           <div class="form-group">
             <label class="form-label">E-mail</label>
@@ -95,28 +78,15 @@
             <a href="cadastro.html">Cadastre-se grátis <i class="ti ti-arrow-right"></i></a>
           </p>
         </form>
-        </details>
+
+        <div class="login-divider"><span>ou continue com</span></div>
+        <button type="button" class="btn btn-google login-btn" onclick="loginWithGoogle('profissional')">
+          <i class="ti ti-brand-google"></i> Entrar com Google
+        </button>
       </div>
 
       <!-- FORM CLIENTE -->
       <div class="login-form-wrap" id="tab-cliente" style="display:none;">
-        <div class="login-primary-hint">
-          <i class="ti ti-brand-telegram"></i>
-          <span>Entre pelo telefone com codigo no Telegram. Rapido e sem senha.</span>
-        </div>
-
-        <div class="telegram-quick login-phone-first">
-          <div data-telegram-code data-role="cliente" data-purpose="login"></div>
-        </div>
-
-        <details class="telegram-quick" id="recuperar-cliente">
-          <summary class="telegram-quick-title"><i class="ti ti-key"></i> Esqueci minha senha</summary>
-          <div data-telegram-code data-role="cliente" data-purpose="reset" data-allow-password="true"></div>
-        </details>
-
-        <details class="email-login-details">
-          <summary><i class="ti ti-mail"></i> Entrar com e-mail e senha</summary>
-
         <form>
           <div class="form-group">
             <label class="form-label">E-mail</label>
@@ -149,7 +119,11 @@
             <a href="cadastro-cliente.html">Cadastre-se grátis <i class="ti ti-arrow-right"></i></a>
           </p>
         </form>
-        </details>
+
+        <div class="login-divider"><span>ou continue com</span></div>
+        <button type="button" class="btn btn-google login-btn" onclick="loginWithGoogle('cliente')">
+          <i class="ti ti-brand-google"></i> Entrar com Google
+        </button>
 
         <div class="login-divider"><span>ou continue sem conta</span></div>
 
@@ -194,8 +168,34 @@
     }
 
     // ── Redireciona conforme o tipo de conta ─────────────────────
+    function consumeOAuthRole() {
+      try {
+        const role = localStorage.getItem('venus_oauth_role');
+        localStorage.removeItem('venus_oauth_role');
+        return role;
+      } catch {
+        return null;
+      }
+    }
+
+    async function ensureCustomerForOAuth(user) {
+      const nome = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Cliente';
+      const { error } = await _supabase.from('customers').upsert({
+        id: user.id,
+        nome,
+        email: user.email,
+        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+      if (error) throw error;
+    }
+
     async function redirectByRole(user) {
       const userId = user?.id || user;
+      const isGoogleUser = user?.app_metadata?.provider === 'google'
+        || user?.app_metadata?.providers?.includes?.('google');
+      const oauthRole = isGoogleUser ? consumeOAuthRole() : null;
+
       // Checar as duas tabelas em paralelo para evitar ambiguidade de role
       const [
         { data: cliente, error: errCliente },
@@ -223,12 +223,44 @@
           return;
         }
         window.location.replace('painel.html');
+      } else if (oauthRole === 'cliente') {
+        try {
+          await ensureCustomerForOAuth(user);
+          window.location.replace(redirect || 'painel-cliente.html');
+        } catch (err) {
+          console.error('Erro ao criar cliente OAuth:', err);
+          toast('Nao foi possivel concluir o acesso pelo Google.', 'erro');
+          await _supabase.auth.signOut();
+        }
+      } else if (oauthRole === 'profissional') {
+        toast('Complete seu cadastro profissional para liberar o painel.', 'info');
+        await _supabase.auth.signOut();
+        window.location.replace('cadastro.html');
       } else {
         // Nenhum registro encontrado — deslogar para não entrar em loop
         console.warn('redirectByRole: nenhum registro encontrado para', userId);
         toast('Conta nao encontrada. Verifique seus dados ou cadastre-se.', 'erro');
         await _supabase.auth.signOut();
       }
+    }
+
+    async function loginWithGoogle(role) {
+      try {
+        localStorage.setItem('venus_oauth_role', role);
+      } catch {}
+
+      const redirectTo = new URL('login.html', window.location.href).href;
+      const { error } = await _supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        }
+      });
+      if (error) toast(error.message || 'Erro ao entrar com Google.', 'erro');
     }
 
     // ── Redireciona se já está logado ─────────────────────────────
@@ -314,22 +346,19 @@
     // ── Esqueci a senha ───────────────────────────────────────────
     document.querySelectorAll('.forgot-link').forEach((link) => link.addEventListener('click', async (e) => {
       e.preventDefault();
-      const isCliente = e.target.closest('#tab-cliente');
-      const details = document.getElementById(isCliente ? 'recuperar-cliente' : 'recuperar-profissional');
-      if (details) {
-        details.open = true;
-        details.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const form = e.target.closest('form');
+      const email = form?.querySelector('input[type=email]')?.value?.trim();
+      if (!email) {
+        toast('Digite seu e-mail para recuperar a senha.', 'info');
+        form?.querySelector('input[type=email]')?.focus();
+        return;
       }
-      toast('Digite seu telefone para receber o codigo no Telegram.', 'info');
-    }));
-
-    document.addEventListener('click', (event) => {
-      document.querySelectorAll('.email-login-details[open]').forEach((details) => {
-        if (!details.contains(event.target)) details.open = false;
+      const { error } = await _supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: new URL('login.html', window.location.href).href
       });
-    });
+      toast(error ? error.message : 'Enviamos o link de recuperação para seu e-mail.', error ? 'erro' : 'ok');
+    }));
   </script>
-  <script src="js/telegram-code.js" defer></script>
   <script src="js/site.js" defer></script>
   <script src="js/mobile-nav.js" defer></script>
 </body>
