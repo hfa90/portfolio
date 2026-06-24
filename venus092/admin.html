@@ -890,6 +890,20 @@
         @media (max-width: 980px) {
             .moderation-grid { grid-template-columns: 1fr }
         }
+        .ads-admin-toolbar { display:grid; grid-template-columns:minmax(240px,1fr) auto; gap:12px; align-items:end; margin-bottom:20px; padding:18px; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
+        .ads-admin-toolbar label { display:block; margin-bottom:7px; color:var(--muted); font-size:.75rem; font-weight:700; }
+        .ads-admin-toolbar input { width:100%; padding:11px 12px; border:1px solid var(--border); border-radius:9px; color:var(--text); background:var(--surface2); }
+        .ads-admin-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+        .ad-admin-card { overflow:hidden; border:1px solid var(--border); border-radius:16px; background:var(--surface); }
+        .ad-admin-cover { height:210px; background:#17131b center/cover; }
+        .ad-admin-body { padding:17px; }
+        .ad-admin-status { display:inline-flex; margin-bottom:9px; padding:4px 8px; border-radius:999px; color:var(--gold); background:var(--gold-dim); font-size:.67rem; font-weight:800; text-transform:uppercase; }
+        .ad-admin-body h3 { margin:0 0 6px; }
+        .ad-admin-body p { color:var(--muted); font-size:.82rem; line-height:1.5; }
+        .ad-admin-meta { margin:12px 0; color:var(--muted); font-size:.75rem; line-height:1.55; }
+        .ad-admin-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+        .ad-admin-actions input { width:72px; padding:9px; border:1px solid var(--border); border-radius:8px; color:var(--text); background:var(--surface2); }
+        @media (max-width:900px) { .ads-admin-grid { grid-template-columns:1fr; } .ads-admin-toolbar { grid-template-columns:1fr; } }
     </style>
 </head>
 
@@ -920,6 +934,7 @@
                 <button onclick="goPage('usuarios')" data-page="usuarios">👥 Usuários <span class="nav-badge"
                         id="navBadgeUsers" style="display:none">0</span></button>
                 <button onclick="goPage('seguranca')" data-page="seguranca">Seguranca <span class="nav-badge" id="navBadgeSafety" style="display:none">0</span></button>
+                <button onclick="goPage('destaques')" data-page="destaques">✨ Destaques <span class="nav-badge" id="navBadgeAds" style="display:none">0</span></button>
                 <button onclick="goPage('dashboard')" data-page="dashboard">📊 Dashboard</button>
             </nav>
             <div class="sidebar-bottom">
@@ -995,6 +1010,23 @@
             </div>
 
             <!-- DASHBOARD -->
+            <div class="page" id="page-destaques">
+                <h1 class="page-title">Propagandas em Destaques</h1>
+                <p class="page-sub">Confirme pagamentos via Pix e defina por quantos dias cada propaganda ficará ativa.</p>
+
+                <div class="ads-admin-toolbar">
+                    <div>
+                        <label>Chave Pix exibida para as profissionais</label>
+                        <input id="adminPixKey" placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória">
+                    </div>
+                    <button class="btn-login" style="width:auto;padding:11px 18px" onclick="saveAdminPixKey()">Salvar chave Pix</button>
+                </div>
+                <div class="ads-admin-grid" id="adminAdsGrid">
+                    <div class="empty-state"><div class="spin"></div><p style="margin-top:12px">Carregando propagandas...</p></div>
+                </div>
+            </div>
+
+            <!-- DASHBOARD -->
             <div class="page" id="page-dashboard">
                 <h1 class="page-title">Dashboard</h1>
                 <p class="page-sub">Visão geral da plataforma</p>
@@ -1049,7 +1081,7 @@
             }
         });
 
-        let allFotos = [], allUsers = [], allReports = [], allReviews = [], currentFilter = 'pending';
+        let allFotos = [], allUsers = [], allReports = [], allReviews = [], allHighlightAds = [], currentFilter = 'pending';
 
         // AUTH
         async function init() {
@@ -1085,10 +1117,12 @@
             loadFotos();
             loadUsers(); // carrega em background para mostrar badge de pendentes
             loadModeration();
+            loadHighlightAds();
         }
 
         // NAV
         const pageTitles = { fotos: 'AprovaÃ§Ã£o de Fotos', usuarios: 'UsuÃ¡rios', seguranca: 'SeguranÃ§a', dashboard: 'Dashboard' };
+        pageTitles.destaques = 'Propagandas em Destaques';
         function goPage(page) {
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('nav button[data-page]').forEach(b => b.classList.remove('active'));
@@ -1097,6 +1131,7 @@
             document.getElementById('headerTitle').textContent = pageTitles[page];
             if (page === 'usuarios') { if (!allUsers.length) loadUsers(); else renderUsers(); }
             if (page === 'seguranca') loadModeration();
+            if (page === 'destaques') loadHighlightAds();
             if (page === 'dashboard') loadDashboard();
         }
 
@@ -1512,6 +1547,102 @@
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;')
                 .replace(/'/g, '&#039;');
+        }
+
+        // DESTAQUES PAGOS
+        async function loadHighlightAds() {
+            const grid = document.getElementById('adminAdsGrid');
+            if (!grid) return;
+
+            const [{ data: settings }, { data: ads, error }] = await Promise.all([
+                sb.from('app_public_settings').select('setting_key,setting_value').eq('setting_key', 'highlight_pix_key').maybeSingle(),
+                sb.from('highlight_ads').select('*, profiles(nome_artistico,cidade,uf)').order('created_at', { ascending: false })
+            ]);
+
+            document.getElementById('adminPixKey').value = settings?.setting_value || '';
+            if (error) {
+                grid.innerHTML = `<div class="empty-state"><p>Execute o arquivo supabase/highlight-ads-and-security-fixes.sql. Erro: ${safeAdmin(error.message)}</p></div>`;
+                return;
+            }
+
+            const paths = (ads || []).map(ad => ad.photo_paths?.[0]).filter(Boolean);
+            const signedMap = {};
+            if (paths.length) {
+                const { data: signed } = await sb.storage.from('fotos').createSignedUrls(paths, 3600);
+                (signed || []).forEach(item => { signedMap[item.path] = item.signedUrl; });
+            }
+
+            allHighlightAds = (ads || []).map(ad => ({ ...ad, coverUrl: signedMap[ad.photo_paths?.[0]] || '' }));
+            const pending = allHighlightAds.filter(ad => ad.status === 'payment_pending').length;
+            const badge = document.getElementById('navBadgeAds');
+            badge.textContent = pending;
+            badge.style.display = pending ? 'inline-flex' : 'none';
+            renderHighlightAdsAdmin();
+        }
+
+        function renderHighlightAdsAdmin() {
+            const grid = document.getElementById('adminAdsGrid');
+            if (!allHighlightAds.length) {
+                grid.innerHTML = '<div class="empty-state"><p>Nenhuma propaganda criada.</p></div>';
+                return;
+            }
+
+            grid.innerHTML = allHighlightAds.map(ad => {
+                const expired = ad.status === 'approved' && ad.expires_at && new Date(ad.expires_at) <= new Date();
+                const status = expired ? 'expired' : ad.status;
+                const labels = { draft: 'Rascunho', payment_pending: 'Pagamento pendente', approved: 'Ativa', rejected: 'Rejeitada', expired: 'Encerrada' };
+                return `<article class="ad-admin-card">
+                    <div class="ad-admin-cover" ${ad.coverUrl ? `style="background-image:url('${safeAdmin(ad.coverUrl)}')"` : ''}></div>
+                    <div class="ad-admin-body">
+                        <span class="ad-admin-status">${safeAdmin(labels[status] || status)}</span>
+                        <h3>${safeAdmin(ad.headline)}</h3>
+                        <p>${safeAdmin(ad.description)}</p>
+                        <div class="ad-admin-meta">
+                            Profissional: <strong>${safeAdmin(ad.profiles?.nome_artistico || ad.profile_id)}</strong><br>
+                            Local: ${safeAdmin([ad.profiles?.cidade, ad.profiles?.uf].filter(Boolean).join(' / ') || 'Não informado')}<br>
+                            Valor: R$ ${(Number(ad.price_cents || 1990) / 100).toFixed(2).replace('.', ',')}<br>
+                            Referência: ${safeAdmin(ad.payment_reference || '—')}<br>
+                            Solicitado: ${formatDateTime(ad.payment_requested_at || ad.created_at)}
+                            ${ad.expires_at ? `<br>Expira: ${formatDateTime(ad.expires_at)}` : ''}
+                        </div>
+                        <div class="ad-admin-actions">
+                            ${ad.status === 'payment_pending' ? `
+                                <label style="font-size:.72rem;color:var(--muted)">Dias <input id="ad-days-${ad.id}" type="number" min="1" max="90" value="2"></label>
+                                <button class="btn-aprovar" onclick="approveHighlightAd('${ad.id}')">✅ Confirmar Pix e publicar</button>
+                                <button class="btn-rejeitar" onclick="rejectHighlightAd('${ad.id}')">❌ Rejeitar</button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </article>`;
+            }).join('');
+        }
+
+        async function saveAdminPixKey() {
+            const setting_value = document.getElementById('adminPixKey').value.trim();
+            if (!setting_value) { toast('Informe uma chave Pix válida.', 'err'); return; }
+            const { error } = await sb.from('app_public_settings')
+                .upsert({ setting_key: 'highlight_pix_key', setting_value, updated_at: new Date().toISOString() });
+            if (error) { toast('Erro ao salvar Pix: ' + error.message, 'err'); return; }
+            toast('Chave Pix atualizada.');
+        }
+
+        async function approveHighlightAd(id) {
+            const days = Math.max(1, Math.min(90, Number(document.getElementById('ad-days-' + id)?.value || 2)));
+            if (!await VenusSafety.confirmAction(`Confirmar o Pix e publicar por ${days} dia(s)?`, 'Aprovar propaganda', 'Publicar')) return;
+            const { error } = await sb.rpc('approve_highlight_ad', { p_ad_id: id, p_days: days });
+            if (error) { toast('Erro ao aprovar: ' + error.message, 'err'); return; }
+            toast('Propaganda publicada.');
+            loadHighlightAds();
+        }
+
+        async function rejectHighlightAd(id) {
+            const reason = prompt('Motivo da rejeição (opcional):') || null;
+            const { error } = await sb.from('highlight_ads')
+                .update({ status: 'rejected', rejection_reason: reason, updated_at: new Date().toISOString() })
+                .eq('id', id);
+            if (error) { toast('Erro ao rejeitar: ' + error.message, 'err'); return; }
+            toast('Propaganda rejeitada.', 'err');
+            loadHighlightAds();
         }
 
         // DASHBOARD
