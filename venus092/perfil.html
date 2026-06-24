@@ -187,10 +187,12 @@
                     <a id="mobileWhatsappBtn" href="#" target="_blank" class="perfil-mobile-cta whatsapp"
                       style="pointer-events:none;opacity:0.5" aria-label="Chamar no WhatsApp">
                       <i class="ti ti-brand-whatsapp"></i>
+                      <span><strong>WhatsApp</strong><small>Resposta direta</small></span>
                     </a>
                     <a id="mobileChatBtn" href="#" class="perfil-mobile-cta chat" style="pointer-events:none;opacity:0.55"
                       aria-label="Iniciar chat">
                       <i class="ti ti-message-heart"></i>
+                      <span><strong>Chat privado</strong><small>Seguro por 24h</small></span>
                     </a>
                   </div>
                   <div class="perfil-mobile-stat-strip" aria-label="Estatísticas do perfil">
@@ -276,21 +278,28 @@
               <span class="perfil-price-unit">/hora</span>
             </div>
 
-            <!-- CTA PRINCIPAL -->
-            <a id="whatsappBtn" href="#" target="_blank" class="btn btn-gold btn-lg perfil-cta-btn"
-              style="pointer-events:none;opacity:0.5">
-              <i class="ti ti-brand-whatsapp"></i>
-              Chamar no WhatsApp
-            </a>
+            <!-- CONTATO -->
+            <div class="perfil-contact-panel">
+              <div class="perfil-contact-head">
+                <span class="perfil-contact-kicker">Fale comigo</span>
+                <strong>Escolha como prefere conversar</strong>
+              </div>
+              <div class="perfil-contact-actions">
+                <a id="whatsappBtn" href="#" target="_blank" class="perfil-contact-option whatsapp"
+                  style="pointer-events:none;opacity:0.5">
+                  <i class="ti ti-brand-whatsapp"></i>
+                  <span><strong>WhatsApp</strong><small>Contato rápido e direto</small></span>
+                  <i class="ti ti-arrow-up-right"></i>
+                </a>
 
-            <a id="chatBtn" href="#" class="perfil-chat-cta" style="pointer-events:none;opacity:0.55">
-              <span class="perfil-chat-cta-icon"><i class="ti ti-message-heart"></i></span>
-              <span class="perfil-chat-cta-copy">
-                <strong>Iniciar uma conversa privada</strong>
-                <small>Mensagens somem automaticamente em 24h</small>
-              </span>
-              <i class="ti ti-arrow-right"></i>
-            </a>
+                <a id="chatBtn" href="#" class="perfil-contact-option chat" style="pointer-events:none;opacity:0.55">
+                  <i class="ti ti-message-heart"></i>
+                  <span><strong>Chat privado</strong><small>Mensagens protegidas por 24h</small></span>
+                  <i class="ti ti-arrow-right"></i>
+                </a>
+              </div>
+              <p class="perfil-contact-note"><i class="ti ti-shield-lock"></i> Seus dados de contato permanecem protegidos.</p>
+            </div>
 
             <!-- STATS -->
             <div class="perfil-stats">
@@ -367,11 +376,6 @@
 
     </div>
   </main>
-
-  <a id="floatingChatBtn" href="#" class="perfil-floating-chat" style="pointer-events:none;opacity:0">
-    <i class="ti ti-message-heart"></i>
-    <span>Conversar</span>
-  </a>
 
   <div class="pix-modal" id="pixModal" aria-hidden="true">
     <div class="pix-dialog" role="dialog" aria-modal="true" aria-labelledby="pixModalTitle">
@@ -595,6 +599,25 @@
       return map[local] || 'ti-map-pin';
     }
 
+    function profileAvailableNow(rows) {
+      const now = new Date();
+      const day = now.getDay();
+      const minutes = now.getHours() * 60 + now.getMinutes();
+      return (rows || []).some(row => {
+        if (Number(row.dia_semana) !== day) return false;
+        const start = profileTimeToMinutes(row.hora_inicio);
+        const end = profileTimeToMinutes(row.hora_fim);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+        return end >= start ? minutes >= start && minutes <= end : minutes >= start || minutes <= end;
+      });
+    }
+
+    function profileTimeToMinutes(value) {
+      const [h, m] = String(value || '').slice(0, 5).split(':').map(Number);
+      if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+      return h * 60 + m;
+    }
+
     function setupMobileExpandable(el, lines) {
       if (!el) return;
       let btn = el.nextElementSibling?.classList?.contains('perfil-expand-toggle')
@@ -799,7 +822,7 @@
       document.getElementById('breadcrumbCategoria').textContent = p.categoria || 'Catálogo';
 
       const chatUrl = `chat-cliente.html?profissional=${encodeURIComponent(profileId)}&nome=${encodeURIComponent(nome)}`;
-      ['chatBtn', 'floatingChatBtn', 'mobileChatBtn'].forEach(id => {
+      ['chatBtn', 'mobileChatBtn'].forEach(id => {
         protectContactButton(document.getElementById(id), chatUrl, profileId, 'chat_click');
       });
 
@@ -916,8 +939,11 @@
         const horas = disponib.sort((a, b) => a.hora_inicio.localeCompare(b.hora_inicio));
         const ini = horas[0].hora_inicio.slice(0, 5);
         const fim = horas[horas.length - 1].hora_fim.slice(0, 5);
+        const agendaAgora = profileAvailableNow(disponib);
         document.getElementById('disponibHorario').style.display = '';
-        document.getElementById('disponibHorarioTxt').textContent = `${ini} às ${fim}`;
+        document.getElementById('disponibHorarioTxt').textContent = agendaAgora
+          ? `Atendendo agora · ${ini} às ${fim}`
+          : `Agenda: ${DIAS_CURTOS.filter((_, i) => diasAtivos.includes(i)).join(', ')} · ${ini} às ${fim}`;
       }
 
       // Localização
