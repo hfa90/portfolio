@@ -441,18 +441,19 @@
     .catalog-highlights-kicker { color:var(--gold); font-size:.7rem; font-weight:900; letter-spacing:.15em; text-transform:uppercase; }
     .catalog-highlights-title { margin:3px 0 0; font-family:Georgia,serif; font-size:1.55rem; }
     .catalog-highlights-title span { color:var(--gold-light); }
-    .highlight-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
-    .catalog-highlight-card { position:relative; min-height:330px; overflow:hidden; border:1px solid rgba(201,168,76,.24); border-radius:22px; cursor:pointer; background:#100d13; box-shadow:0 18px 44px rgba(0,0,0,.3); }
-    .catalog-highlight-photo { position:absolute; inset:0; background:radial-gradient(circle at 50% 20%,#5b2847,#100d13 68%); background-size:cover; background-position:center; transition:transform .35s ease; }
-    .catalog-highlight-card:hover .catalog-highlight-photo { transform:scale(1.035); }
-    .catalog-highlight-card::after { content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,5,10,.05),rgba(8,5,10,.94) 84%); }
-    .catalog-highlight-content { position:absolute; z-index:2; right:0; bottom:0; left:0; padding:22px; }
+    .highlight-cards { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 14px; scroll-snap-type:x mandatory; scrollbar-width:thin; scrollbar-color:rgba(201,168,76,.45) transparent; }
+    .catalog-highlight-card { flex:0 0 clamp(310px,42vw,560px); overflow:hidden; border:1px solid rgba(201,168,76,.24); border-radius:22px; cursor:pointer; background:#100d13; box-shadow:0 18px 44px rgba(0,0,0,.3); scroll-snap-align:start; }
+    .catalog-highlight-media { position:relative; height:clamp(260px,32vw,390px); overflow:hidden; background:#151019; }
+    .catalog-highlight-media::before { content:""; position:absolute; inset:-24px; background-image:var(--highlight-image); background-size:cover; background-position:center; filter:blur(25px); opacity:.34; transform:scale(1.12); }
+    .catalog-highlight-photo { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:contain; object-position:center; transition:transform .35s ease; }
+    .catalog-highlight-card:hover .catalog-highlight-photo { transform:scale(1.018); }
+    .catalog-highlight-content { position:relative; padding:20px 22px 22px; background:linear-gradient(145deg,#17121b,#0d0b10); }
     .catalog-highlight-badge { display:inline-flex; margin-bottom:9px; padding:5px 9px; border:1px solid rgba(244,215,127,.38); border-radius:999px; color:#f4d77f; background:rgba(12,9,14,.7); font-size:.64rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
     .catalog-highlight-content h2 { margin:0 0 6px; font-family:Georgia,serif; font-size:1.65rem; }
     .catalog-highlight-content p { display:-webkit-box; overflow:hidden; margin:0 0 13px; color:#d6ced7; font-size:.84rem; line-height:1.45; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
     .catalog-highlight-meta { display:flex; flex-wrap:wrap; gap:7px; }
     .catalog-highlight-meta span { padding:5px 8px; border-radius:999px; background:rgba(255,255,255,.1); font-size:.68rem; }
-    @media (max-width:780px) { .highlight-cards { grid-template-columns:1fr; } .catalog-highlight-card { min-height:300px; } }
+    @media (max-width:780px) { .catalog-highlight-card { flex-basis:88vw; } .catalog-highlight-media { height:340px; } }
   </style>
 </head>
 
@@ -1016,6 +1017,7 @@
     function aplicarFiltros() {
       state.page = 0;
       coletarFiltros();
+      loadCatalogHighlights();
       loadPerfis();
     }
 
@@ -1121,6 +1123,7 @@
         onlineOnly: false, availableNowOnly: false, verificadoOnly: false, uf: '', cidade: '', bairro: '',
         precoMin: null, precoMax: null, sort: 'recent'
       };
+      loadCatalogHighlights();
       loadPerfis();
     }
 
@@ -1672,11 +1675,19 @@
       const cards = document.getElementById('catalogHighlightCards');
       if (!section || !cards) return;
 
+      const targetUf = document.getElementById('filtroUf')?.value || state.uf || '';
+      if (!targetUf) {
+        section.classList.remove('visible');
+        cards.innerHTML = '';
+        return;
+      }
+
       const { data: ads, error } = await sb
         .from('active_highlight_ads')
         .select('*')
-        .order('expires_at', { ascending: true })
-        .limit(6);
+        .eq('target_uf', targetUf)
+        .order('starts_at', { ascending: true })
+        .limit(20);
 
       if (error || !ads?.length) {
         section.classList.remove('visible');
@@ -1718,13 +1729,16 @@
         const photo = signedMap[ad.photo_paths?.[0]] || '';
         const location = [ad.bairro, ad.cidade].filter(Boolean).join(', ');
         return `<article class="catalog-highlight-card" onclick="location.href='perfil.html?id=${encodeURIComponent(ad.profile_id)}'">
-          <div class="catalog-highlight-photo" ${photo ? `style="background-image:url('${esc(photo)}')"` : ''}></div>
+          <div class="catalog-highlight-media" ${photo ? `style="--highlight-image:url('${esc(photo)}')"` : ''}>
+            ${photo ? `<img class="catalog-highlight-photo" src="${esc(photo)}" alt="Destaque de ${esc(ad.nome_artistico)}">` : ''}
+          </div>
           <div class="catalog-highlight-content">
             <div class="catalog-highlight-badge">✦ Diferenciada</div>
             <h2>${esc(ad.headline || ad.nome_artistico)}</h2>
             <p>${esc(ad.description)}</p>
             <div class="catalog-highlight-meta">
               <span>${esc(ad.nome_artistico)}</span>
+              <span>⌖ ${esc(ad.target_uf)}</span>
               ${location ? `<span>⌖ ${esc(location)}</span>` : ''}
               <span>★ ${rating}</span>
               <span>♥ ${Number(stats.favorites_count || 0).toLocaleString('pt-BR')}</span>
