@@ -1601,13 +1601,13 @@
                             <div class="moderation-title">${'★'.repeat(r.rating)}${'☆'.repeat(5 - r.rating)} · ${safeAdmin(r.reviewer_name || 'Cliente')}</div>
                             <div class="moderation-meta">${formatDateTime(r.created_at)} · Status: ${safeAdmin(r.status)}</div>
                         </div>
-                        <span class="pill ${r.status === 'published' ? 'pill-green' : 'pill-red'}">${safeAdmin(r.status)}</span>
+                        <span class="pill ${r.status === 'approved' ? 'pill-green' : 'pill-red'}">${safeAdmin(r.status)}</span>
                     </div>
                     <div class="moderation-meta">Perfil avaliado: ${safeAdmin(r.profile_id)}<br>Cliente: ${safeAdmin(r.customer_id)}</div>
                     <p class="moderation-text">${safeAdmin(r.comment)}</p>
                     <div class="moderation-actions">
-                        ${r.status !== 'published' ? `<button class="mod-btn ok" onclick="setReviewStatus('${r.id}','published')">Publicar</button>` : ''}
-                        ${r.status !== 'hidden' ? `<button class="mod-btn err" onclick="setReviewStatus('${r.id}','hidden')">Ocultar</button>` : ''}
+                        ${r.status !== 'approved' ? `<button class="mod-btn ok" onclick="setReviewStatus('${r.id}','approved')">Publicar</button>` : ''}
+                        ${r.status !== 'rejected' ? `<button class="mod-btn err" onclick="setReviewStatus('${r.id}','rejected')">Ocultar</button>` : ''}
                     </div>
                 </article>`).join('') : '<div class="empty-state"><p>Nenhuma avaliacao ou comentario enviado.</p></div>';
         }
@@ -1663,7 +1663,7 @@
 
             const [{ data: settings }, { data: ads, error }] = await Promise.all([
                 sb.from('app_public_settings').select('setting_key,setting_value').eq('setting_key', 'highlight_pix_key').maybeSingle(),
-                sb.from('highlight_ads').select('*, profiles(nome_artistico,cidade,uf)').order('created_at', { ascending: false })
+                sb.from('highlight_ads').select('*, profiles(nome_artistico,cidade,uf,status)').order('created_at', { ascending: false })
             ]);
 
             document.getElementById('adminPixKey').value = settings?.setting_value || '';
@@ -1699,6 +1699,17 @@
                 const scheduled = ad.status === 'approved' && ad.starts_at && new Date(ad.starts_at) > new Date();
                 const status = expired ? 'expired' : scheduled ? 'scheduled' : ad.status;
                 const labels = { draft: 'Rascunho', payment_pending: 'Pagamento pendente', approved: 'Ativa', scheduled: 'Agendada', rejected: 'Rejeitada', expired: 'Encerrada' };
+                const visibilityReason = ad.profiles?.status !== 'active'
+                    ? 'Oculta: perfil profissional não está ativo'
+                    : ad.status !== 'approved'
+                        ? `Oculta: status ${labels[status] || status}`
+                        : scheduled
+                            ? `Agendada para ${formatDateTime(ad.starts_at)}`
+                            : expired
+                                ? 'Oculta: período encerrado'
+                                : !ad.expires_at
+                                    ? 'Oculta: validade não definida'
+                                    : 'Visível agora no catálogo';
                 return `<article class="ad-admin-card">
                     <div class="ad-admin-cover" ${ad.coverUrl ? `style="background-image:url('${safeAdmin(ad.coverUrl)}')"` : ''}></div>
                     <div class="ad-admin-body">
@@ -1712,6 +1723,7 @@
                             Estado de exibição: <strong>${safeAdmin(ad.target_uf || '—')}</strong><br>
                             Início solicitado: ${formatDateTime(ad.starts_at)}<br>
                             Referência: ${safeAdmin(ad.payment_reference || '—')}<br>
+                            Visibilidade: <strong>${safeAdmin(visibilityReason)}</strong><br>
                             Solicitado: ${formatDateTime(ad.payment_requested_at || ad.created_at)}
                             ${ad.expires_at ? `<br>Expira: ${formatDateTime(ad.expires_at)}` : ''}
                         </div>

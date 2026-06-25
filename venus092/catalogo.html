@@ -1684,7 +1684,7 @@
       if (targetUf) adsQuery = adsQuery.eq('target_uf', targetUf);
       let { data: ads, error } = await adsQuery;
 
-      if (error) {
+      if (error || !ads?.length) {
         let fallback = sb.from('highlight_ads')
           .select('id,profile_id,headline,description,cta_label,photo_paths,target_uf,starts_at,expires_at,profiles(nome_artistico,categoria,cidade,bairro,uf,verificado,online_now,status)')
           .eq('status', 'approved')
@@ -1694,8 +1694,12 @@
           .limit(20);
         if (targetUf) fallback = fallback.eq('target_uf', targetUf);
         const fallbackResult = await fallback;
-        error = fallbackResult.error;
-        ads = (fallbackResult.data || []).map(ad => ({ ...ad, ...(ad.profiles || {}) }));
+        if (!fallbackResult.error) {
+          error = null;
+          ads = (fallbackResult.data || []).map(ad => ({ ...ad, ...(ad.profiles || {}) }));
+        } else if (error) {
+          error = fallbackResult.error;
+        }
       }
 
       if (error || !ads?.length) {
