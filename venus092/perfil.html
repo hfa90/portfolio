@@ -377,6 +377,55 @@
     </div>
   </main>
 
+  <button class="perfil-reviews-float" type="button" onclick="openReviewsModal()" aria-label="Ver avaliações">
+    <i class="ti ti-star-filled"></i>
+    <span>
+      <strong id="reviewsFloatRating">Nova</strong>
+      <small id="reviewsFloatCount">Ver avaliações</small>
+    </span>
+  </button>
+
+  <div class="reviews-modal" id="reviewsModal" aria-hidden="true" onclick="closeReviewsModal(event)">
+    <section class="reviews-dialog" role="dialog" aria-modal="true" aria-labelledby="reviewsModalTitle">
+      <header class="reviews-dialog-head">
+        <div>
+          <span class="reviews-kicker">Experiências reais</span>
+          <h2 id="reviewsModalTitle">Avaliações e comentários</h2>
+        </div>
+        <button type="button" onclick="closeReviewsModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+
+      <div class="reviews-summary">
+        <strong id="reviewsAverage">—</strong>
+        <div>
+          <div class="reviews-stars" id="reviewsAverageStars">☆☆☆☆☆</div>
+          <span id="reviewsCount">Nenhuma avaliação ainda</span>
+        </div>
+      </div>
+
+      <div class="reviews-list" id="reviewsList">
+        <div class="reviews-empty">Carregando avaliações...</div>
+      </div>
+
+      <form class="review-compose" id="reviewCompose" onsubmit="submitProfessionalReview(event)" style="display:none">
+        <div class="review-compose-head">
+          <strong>Conte como foi sua experiência</strong>
+          <small>A avaliação será analisada antes de aparecer publicamente.</small>
+        </div>
+        <div class="review-rating-input" id="reviewRatingInput">
+          <button type="button" onclick="setReviewRating(1)">★</button>
+          <button type="button" onclick="setReviewRating(2)">★</button>
+          <button type="button" onclick="setReviewRating(3)">★</button>
+          <button type="button" onclick="setReviewRating(4)">★</button>
+          <button type="button" onclick="setReviewRating(5)">★</button>
+        </div>
+        <textarea id="reviewComment" maxlength="500" placeholder="Escreva um comentário respeitoso e útil para outras pessoas."></textarea>
+        <button class="btn btn-gold" id="reviewSubmitBtn" type="submit">Enviar avaliação</button>
+      </form>
+      <div class="reviews-login-note" id="reviewsLoginNote"></div>
+    </section>
+  </div>
+
   <div class="pix-modal" id="pixModal" aria-hidden="true">
     <div class="pix-dialog" role="dialog" aria-modal="true" aria-labelledby="pixModalTitle">
       <button class="pix-close" type="button" onclick="closePixModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
@@ -493,6 +542,9 @@
     let activePix = null;
     let activePack = null;
     let activePixCode = '';
+    let professionalReviews = [];
+    let selectedReviewRating = 0;
+    let canReviewProfessional = false;
 
     function removeCustomerUploadLeak() {
       const markers = [
@@ -803,6 +855,7 @@
       const { data: publicStats } = await sb.rpc('get_profile_public_stats', { p_profile_id: profileId }).maybeSingle();
       const views = publicStats?.views_count || 0;
       const favs = publicStats?.favorites_count || 0;
+      await loadProfessionalReviews(profileId);
 
       if (visitorSession?.user?.id) {
         const { data: favoriteRow } = await sb.from('favorites')
@@ -1132,6 +1185,122 @@
 
     function esc(value) {
       return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    async function loadProfessionalReviews(profileId) {
+      const [{ data: reviews, error }, eligibility] = await Promise.all([
+        sb.from('profile_reviews')
+          .select('id,rating,reviewer_name,comment,created_at')
+          .eq('profile_id', profileId)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false }),
+        visitorSession?.user?.id
+          ? sb.from('chat_conversations').select('id', { count: 'exact', head: true })
+              .eq('client_id', visitorSession.user.id).eq('professional_id', profileId)
+          : Promise.resolve({ count: 0 })
+      ]);
+
+      professionalReviews = error ? [] : (reviews || []);
+      canReviewProfessional = Boolean(visitorCanContact && (eligibility.count || 0) > 0);
+
+      const ratings = professionalReviews.map(review => Number(review.rating)).filter(Number.isFinite);
+      const average = ratings.length
+        ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+        : 0;
+
+      document.getElementById('reviewsFloatRating').textContent = ratings.length ? `★ ${average.toFixed(1)}` : 'Nova';
+      document.getElementById('reviewsFloatCount').textContent = ratings.length
+        ? `${ratings.length} avaliação${ratings.length === 1 ? '' : 'ões'}`
+        : 'Ver avaliações';
+      document.getElementById('reviewsAverage').textContent = ratings.length ? average.toFixed(1) : '—';
+      document.getElementById('reviewsAverageStars').textContent = ratings.length
+        ? '★'.repeat(Math.round(average)) + '☆'.repeat(5 - Math.round(average))
+        : '☆☆☆☆☆';
+      document.getElementById('reviewsCount').textContent = ratings.length
+        ? `Baseado em ${ratings.length} experiência${ratings.length === 1 ? '' : 's'}`
+        : 'Nenhuma avaliação publicada ainda';
+
+      renderProfessionalReviews();
+      document.getElementById('reviewCompose').style.display = canReviewProfessional ? 'grid' : 'none';
+      document.getElementById('reviewsLoginNote').textContent = canReviewProfessional
+        ? ''
+        : visitorCanContact
+          ? 'A opção de avaliar aparece após você iniciar um atendimento pelo chat.'
+          : 'Entre como cliente para avaliar uma profissional atendida.';
+    }
+
+    function renderProfessionalReviews() {
+      const list = document.getElementById('reviewsList');
+      if (!professionalReviews.length) {
+        list.innerHTML = '<div class="reviews-empty">Esta profissional ainda não recebeu avaliações públicas.</div>';
+        return;
+      }
+      list.innerHTML = professionalReviews.map(review => `
+        <article class="review-item">
+          <div class="review-item-head">
+            <strong>${esc(review.reviewer_name || 'Cliente verificado')}</strong>
+            <span>${'★'.repeat(Number(review.rating) || 0)}${'☆'.repeat(5 - (Number(review.rating) || 0))}</span>
+          </div>
+          ${review.comment ? `<p>${esc(review.comment)}</p>` : ''}
+          <time>${new Date(review.created_at).toLocaleDateString('pt-BR')}</time>
+        </article>
+      `).join('');
+    }
+
+    function openReviewsModal() {
+      document.getElementById('reviewsModal').classList.add('open');
+      document.getElementById('reviewsModal').setAttribute('aria-hidden', 'false');
+    }
+
+    function closeReviewsModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.getElementById('reviewsModal').classList.remove('open');
+      document.getElementById('reviewsModal').setAttribute('aria-hidden', 'true');
+    }
+
+    function setReviewRating(rating) {
+      selectedReviewRating = rating;
+      document.querySelectorAll('#reviewRatingInput button').forEach((button, index) => {
+        button.classList.toggle('active', index < rating);
+      });
+    }
+
+    async function submitProfessionalReview(event) {
+      event.preventDefault();
+      if (!canReviewProfessional || !visitorSession?.user?.id) return;
+      if (!selectedReviewRating) {
+        alert('Escolha uma nota de 1 a 5 estrelas.');
+        return;
+      }
+
+      const profileId = getProfileId();
+      const comment = document.getElementById('reviewComment').value.trim();
+      const btn = document.getElementById('reviewSubmitBtn');
+      btn.disabled = true;
+      btn.textContent = 'Enviando...';
+
+      const { data: customer } = await sb.from('customers')
+        .select('nome').eq('id', visitorSession.user.id).maybeSingle();
+      const firstName = String(customer?.nome || 'Cliente').trim().split(/\s+/)[0];
+      const { error } = await sb.from('profile_reviews').upsert({
+        profile_id: profileId,
+        customer_id: visitorSession.user.id,
+        rating: selectedReviewRating,
+        reviewer_name: firstName,
+        comment: comment || null,
+        status: 'pending',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'customer_id,profile_id' });
+
+      btn.disabled = false;
+      btn.textContent = 'Enviar avaliação';
+      if (error) {
+        alert('Não foi possível enviar: ' + error.message);
+        return;
+      }
+      document.getElementById('reviewComment').value = '';
+      setReviewRating(0);
+      alert('Avaliação enviada para análise.');
     }
 
     // ============================================================

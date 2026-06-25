@@ -1676,18 +1676,27 @@
       if (!section || !cards) return;
 
       const targetUf = document.getElementById('filtroUf')?.value || state.uf || '';
-      if (!targetUf) {
-        section.classList.remove('visible');
-        cards.innerHTML = '';
-        return;
-      }
-
-      const { data: ads, error } = await sb
+      let adsQuery = sb
         .from('active_highlight_ads')
         .select('*')
-        .eq('target_uf', targetUf)
         .order('starts_at', { ascending: true })
         .limit(20);
+      if (targetUf) adsQuery = adsQuery.eq('target_uf', targetUf);
+      let { data: ads, error } = await adsQuery;
+
+      if (error) {
+        let fallback = sb.from('highlight_ads')
+          .select('id,profile_id,headline,description,cta_label,photo_paths,target_uf,starts_at,expires_at,profiles(nome_artistico,categoria,cidade,bairro,uf,verificado,online_now,status)')
+          .eq('status', 'approved')
+          .lte('starts_at', new Date().toISOString())
+          .gt('expires_at', new Date().toISOString())
+          .order('starts_at', { ascending: true })
+          .limit(20);
+        if (targetUf) fallback = fallback.eq('target_uf', targetUf);
+        const fallbackResult = await fallback;
+        error = fallbackResult.error;
+        ads = (fallbackResult.data || []).map(ad => ({ ...ad, ...(ad.profiles || {}) }));
+      }
 
       if (error || !ads?.length) {
         section.classList.remove('visible');
