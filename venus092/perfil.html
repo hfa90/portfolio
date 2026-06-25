@@ -152,6 +152,16 @@
                 <div class="placeholder-galeria-main" id="mainImgPlaceholder"></div>
                 <img id="mainImgEl" src="" alt=""
                   style="display:none;width:100%;height:100%;object-fit:cover;border-radius:inherit" />
+                <div class="profile-story-entry" id="profileStoryEntry" style="display:none">
+                  <button class="profile-story-ring" id="profileStoryButton" type="button" onclick="handleStoryButtonClick(event)"
+                    aria-label="Visualizar stories">
+                    <span class="profile-story-avatar" id="profileStoryAvatar">
+                      <i class="ti ti-photo"></i>
+                    </span>
+                    <span class="profile-story-add" id="profileStoryAdd" style="display:none"><i class="ti ti-plus"></i></span>
+                  </button>
+                  <span class="profile-story-label" id="profileStoryLabel">Stories</span>
+                </div>
                 <div class="galeria-overlay">
                   <button class="galeria-nav galeria-prev" onclick="galeriaPrev()">
                     <i class="ti ti-chevron-left"></i>
@@ -385,6 +395,67 @@
     </span>
   </button>
 
+  <div class="story-viewer" id="storyViewer" aria-hidden="true">
+    <section class="story-viewer-dialog" role="dialog" aria-modal="true" aria-label="Stories da profissional">
+      <div class="story-progress-list" id="storyProgressList"></div>
+      <header class="story-viewer-head">
+        <div class="story-viewer-author">
+          <span class="story-viewer-author-avatar" id="storyViewerAvatar"><i class="ti ti-user"></i></span>
+          <div>
+            <strong id="storyViewerName">Profissional</strong>
+            <small id="storyViewerTime">agora</small>
+          </div>
+        </div>
+        <div class="story-viewer-actions">
+          <button id="storyDeleteButton" type="button" onclick="deleteActiveStory()" style="display:none" aria-label="Excluir story">
+            <i class="ti ti-trash"></i>
+          </button>
+          <button type="button" onclick="closeStoryViewer()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+        </div>
+      </header>
+      <div class="story-media-stage" id="storyMediaStage">
+        <img id="storyViewerImage" alt="Story da profissional" />
+        <video id="storyViewerVideo" playsinline controls></video>
+        <button class="story-viewer-nav prev" type="button" onclick="previousStory()" aria-label="Story anterior"></button>
+        <button class="story-viewer-nav next" type="button" onclick="nextStory()" aria-label="Próximo story"></button>
+      </div>
+      <p class="story-viewer-caption" id="storyViewerCaption"></p>
+    </section>
+  </div>
+
+  <div class="story-create-modal" id="storyCreateModal" aria-hidden="true" onclick="closeStoryCreateModal(event)">
+    <section class="story-create-dialog" role="dialog" aria-modal="true" aria-labelledby="storyCreateTitle">
+      <header class="story-create-head">
+        <div>
+          <span>Seu perfil em movimento</span>
+          <h2 id="storyCreateTitle">Criar novo story</h2>
+          <p>Compartilhe uma foto ou vídeo. O story ficará disponível por 24 horas.</p>
+        </div>
+        <button type="button" onclick="closeStoryCreateModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+      <label class="story-upload-area" for="storyFileInput" id="storyUploadArea">
+        <input id="storyFileInput" type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+          onchange="previewStoryFile()" />
+        <span class="story-upload-icon"><i class="ti ti-photo-video"></i></span>
+        <strong>Escolher foto ou vídeo</strong>
+        <small>Formato vertical recomendado · até 25 MB</small>
+        <img id="storyCreateImagePreview" alt="Prévia do story" />
+        <video id="storyCreateVideoPreview" playsinline muted controls></video>
+      </label>
+      <label class="story-caption-field" for="storyCaption">
+        <span>Legenda <small>opcional</small></span>
+        <textarea id="storyCaption" maxlength="180" placeholder="Escreva algo para quem está assistindo..."></textarea>
+      </label>
+      <div class="story-create-feedback" id="storyCreateFeedback"></div>
+      <div class="story-create-actions">
+        <button class="btn btn-outline" type="button" onclick="closeStoryCreateModal()">Cancelar</button>
+        <button class="btn btn-gold" id="storyPublishButton" type="button" onclick="publishStory()">
+          <i class="ti ti-send"></i> Publicar por 24h
+        </button>
+      </div>
+    </section>
+  </div>
+
   <div class="reviews-modal" id="reviewsModal" aria-hidden="true" onclick="closeReviewsModal(event)">
     <section class="reviews-dialog" role="dialog" aria-modal="true" aria-labelledby="reviewsModalTitle">
       <header class="reviews-dialog-head">
@@ -566,6 +637,11 @@
     let professionalReviews = [];
     let selectedReviewRating = 0;
     let canReviewProfessional = false;
+    let profileStories = [];
+    let activeStoryIndex = 0;
+    let storyTimer = null;
+    let isStoryOwner = false;
+    let storyProfileName = 'Profissional';
 
     function removeCustomerUploadLeak() {
       const markers = [
@@ -833,6 +909,310 @@
     function galeiaNext() { gotoPhoto((currentPhoto + 1) % photos.length); }
 
     // ============================================================
+    // STORIES DA PROFISSIONAL
+    // ============================================================
+    async function loadProfileStories(profileId, profileName) {
+      storyProfileName = profileName || 'Profissional';
+      isStoryOwner = visitorSession?.user?.id === profileId;
+
+      const { data, error } = await sb.from('profile_stories')
+        .select('id,profile_id,storage_path,media_type,caption,created_at,expires_at')
+        .eq('profile_id', profileId)
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        console.warn('Erro ao carregar stories:', error.message);
+        profileStories = [];
+      } else {
+        const rows = data || [];
+        const paths = rows.map(story => story.storage_path);
+        let signedMap = {};
+        if (paths.length) {
+          const { data: signed, error: signedError } = await sb.storage
+            .from('profile-stories')
+            .createSignedUrls(paths, 900);
+          if (signedError) console.warn('Erro ao assinar stories:', signedError.message);
+          signedMap = Object.fromEntries((signed || []).map(item => [item.path, item.signedUrl]));
+        }
+        profileStories = rows
+          .map(story => ({ ...story, signedUrl: signedMap[story.storage_path] || '' }))
+          .filter(story => story.signedUrl);
+      }
+
+      renderProfileStoryEntry();
+    }
+
+    function renderProfileStoryEntry() {
+      const entry = document.getElementById('profileStoryEntry');
+      const add = document.getElementById('profileStoryAdd');
+      const label = document.getElementById('profileStoryLabel');
+      const avatar = document.getElementById('profileStoryAvatar');
+      const hasStories = profileStories.length > 0;
+
+      entry.style.display = hasStories || isStoryOwner ? '' : 'none';
+      entry.classList.toggle('is-empty', !hasStories);
+      add.style.display = isStoryOwner ? 'grid' : 'none';
+      label.textContent = isStoryOwner ? (hasStories ? 'Seu story' : 'Criar story') : 'Ver stories';
+      avatar.innerHTML = photos[0]
+        ? `<img src="${photos[0]}" alt="${esc(storyProfileName)}">`
+        : '<i class="ti ti-photo"></i>';
+    }
+
+    function handleStoryButtonClick(event) {
+      if (isStoryOwner && (event?.target?.closest('.profile-story-add') || !profileStories.length)) {
+        openStoryCreateModal();
+        return;
+      }
+      if (profileStories.length) openStoryViewer(0);
+    }
+
+    function openStoryViewer(index = 0) {
+      if (!profileStories.length) return;
+      activeStoryIndex = Math.max(0, Math.min(index, profileStories.length - 1));
+      const viewer = document.getElementById('storyViewer');
+      viewer.classList.add('open');
+      viewer.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      renderActiveStory();
+    }
+
+    function closeStoryViewer() {
+      clearTimeout(storyTimer);
+      const video = document.getElementById('storyViewerVideo');
+      video.pause();
+      video.removeAttribute('src');
+      document.getElementById('storyViewer').classList.remove('open');
+      document.getElementById('storyViewer').setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+    }
+
+    function storyTimeAgo(value) {
+      const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60000));
+      if (minutes < 1) return 'agora';
+      if (minutes < 60) return `há ${minutes} min`;
+      const hours = Math.floor(minutes / 60);
+      return `há ${hours}h`;
+    }
+
+    function renderStoryProgress(durationSeconds) {
+      const progress = document.getElementById('storyProgressList');
+      progress.innerHTML = profileStories.map((story, index) => `
+        <span class="story-progress-track ${index < activeStoryIndex ? 'done' : index === activeStoryIndex ? 'active' : ''}"
+          ${index === activeStoryIndex ? `style="--story-duration:${durationSeconds}s"` : ''}>
+          <span class="story-progress-fill"></span>
+        </span>
+      `).join('');
+    }
+
+    function startStoryTimer(milliseconds) {
+      clearTimeout(storyTimer);
+      storyTimer = setTimeout(() => nextStory(), milliseconds);
+    }
+
+    function renderActiveStory() {
+      clearTimeout(storyTimer);
+      const story = profileStories[activeStoryIndex];
+      if (!story) {
+        closeStoryViewer();
+        return;
+      }
+
+      const image = document.getElementById('storyViewerImage');
+      const video = document.getElementById('storyViewerVideo');
+      image.style.display = 'none';
+      video.style.display = 'none';
+      video.pause();
+      video.removeAttribute('src');
+
+      document.getElementById('storyViewerName').textContent = storyProfileName;
+      document.getElementById('storyViewerTime').textContent = storyTimeAgo(story.created_at);
+      document.getElementById('storyViewerCaption').textContent = story.caption || '';
+      document.getElementById('storyDeleteButton').style.display = isStoryOwner ? 'grid' : 'none';
+
+      const authorAvatar = document.getElementById('storyViewerAvatar');
+      authorAvatar.innerHTML = photos[0]
+        ? `<img src="${photos[0]}" alt="${esc(storyProfileName)}">`
+        : '<i class="ti ti-user"></i>';
+
+      if (story.media_type === 'video') {
+        video.style.display = 'block';
+        video.src = story.signedUrl;
+        video.onloadedmetadata = () => {
+          const duration = Math.min(Math.max(Number(video.duration) || 15, 3), 30);
+          renderStoryProgress(duration);
+          video.play().catch(() => {});
+          startStoryTimer(duration * 1000);
+        };
+        video.onended = () => nextStory();
+      } else {
+        image.style.display = 'block';
+        image.src = story.signedUrl;
+        renderStoryProgress(7);
+        startStoryTimer(7000);
+      }
+    }
+
+    function nextStory() {
+      if (activeStoryIndex >= profileStories.length - 1) {
+        closeStoryViewer();
+        return;
+      }
+      activeStoryIndex += 1;
+      renderActiveStory();
+    }
+
+    function previousStory() {
+      activeStoryIndex = Math.max(0, activeStoryIndex - 1);
+      renderActiveStory();
+    }
+
+    function setStoryFeedback(message = '', type = '') {
+      const feedback = document.getElementById('storyCreateFeedback');
+      feedback.textContent = message;
+      feedback.className = `story-create-feedback ${type}`.trim();
+    }
+
+    function openStoryCreateModal() {
+      if (!isStoryOwner || visitorSession?.user?.id !== getProfileId()) return;
+      setStoryFeedback();
+      const modal = document.getElementById('storyCreateModal');
+      modal.classList.add('open');
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeStoryCreateModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      const modal = document.getElementById('storyCreateModal');
+      modal.classList.remove('open');
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      resetStoryCreateForm();
+    }
+
+    function resetStoryCreateForm() {
+      const input = document.getElementById('storyFileInput');
+      const image = document.getElementById('storyCreateImagePreview');
+      const video = document.getElementById('storyCreateVideoPreview');
+      if (video.src) URL.revokeObjectURL(video.src);
+      if (image.src) URL.revokeObjectURL(image.src);
+      input.value = '';
+      image.removeAttribute('src');
+      video.removeAttribute('src');
+      image.style.display = 'none';
+      video.style.display = 'none';
+      document.getElementById('storyCaption').value = '';
+      setStoryFeedback();
+    }
+
+    function previewStoryFile() {
+      const file = document.getElementById('storyFileInput').files[0];
+      const image = document.getElementById('storyCreateImagePreview');
+      const video = document.getElementById('storyCreateVideoPreview');
+      image.style.display = 'none';
+      video.style.display = 'none';
+      setStoryFeedback();
+      if (!file) return;
+      if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+        setStoryFeedback('Escolha uma foto ou vídeo válido.', 'error');
+        return;
+      }
+      if (file.size > 25 * 1024 * 1024) {
+        setStoryFeedback('O arquivo deve ter no máximo 25 MB.', 'error');
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      if (file.type.startsWith('video/')) {
+        video.src = url;
+        video.style.display = 'block';
+      } else {
+        image.src = url;
+        image.style.display = 'block';
+      }
+    }
+
+    async function publishStory() {
+      if (!isStoryOwner || !visitorSession?.user?.id) return;
+      const file = document.getElementById('storyFileInput').files[0];
+      const caption = document.getElementById('storyCaption').value.trim();
+      const button = document.getElementById('storyPublishButton');
+
+      if (!file || (!file.type.startsWith('image/') && !file.type.startsWith('video/'))) {
+        setStoryFeedback('Escolha uma foto ou vídeo para publicar.', 'error');
+        return;
+      }
+      if (file.size > 25 * 1024 * 1024) {
+        setStoryFeedback('O arquivo deve ter no máximo 25 MB.', 'error');
+        return;
+      }
+
+      const extension = (file.name.split('.').pop() || (file.type.startsWith('video/') ? 'mp4' : 'jpg'))
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+      const storagePath = `${visitorSession.user.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+      const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
+      button.disabled = true;
+      button.innerHTML = '<i class="ti ti-loader-2"></i> Publicando...';
+      setStoryFeedback('Enviando seu story...');
+
+      const { error: uploadError } = await sb.storage
+        .from('profile-stories')
+        .upload(storagePath, file, { upsert: false, contentType: file.type });
+
+      if (uploadError) {
+        button.disabled = false;
+        button.innerHTML = '<i class="ti ti-send"></i> Publicar por 24h';
+        setStoryFeedback('Não foi possível enviar: ' + uploadError.message, 'error');
+        return;
+      }
+
+      const { error: insertError } = await sb.from('profile_stories').insert({
+        profile_id: visitorSession.user.id,
+        storage_path: storagePath,
+        media_type: mediaType,
+        caption: caption || null,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+      });
+
+      if (insertError) {
+        await sb.storage.from('profile-stories').remove([storagePath]);
+        button.disabled = false;
+        button.innerHTML = '<i class="ti ti-send"></i> Publicar por 24h';
+        setStoryFeedback('Não foi possível publicar: ' + insertError.message, 'error');
+        return;
+      }
+
+      setStoryFeedback('Story publicado com sucesso.', 'success');
+      await loadProfileStories(getProfileId(), storyProfileName);
+      button.disabled = false;
+      button.innerHTML = '<i class="ti ti-send"></i> Publicar por 24h';
+      setTimeout(() => closeStoryCreateModal(), 500);
+    }
+
+    async function deleteActiveStory() {
+      if (!isStoryOwner) return;
+      const story = profileStories[activeStoryIndex];
+      if (!story) return;
+      const button = document.getElementById('storyDeleteButton');
+      button.disabled = true;
+      const { error } = await sb.from('profile_stories').delete().eq('id', story.id);
+      if (error) {
+        button.disabled = false;
+        console.warn('Erro ao excluir story:', error.message);
+        return;
+      }
+      await sb.storage.from('profile-stories').remove([story.storage_path]);
+      profileStories.splice(activeStoryIndex, 1);
+      button.disabled = false;
+      renderProfileStoryEntry();
+      if (!profileStories.length) closeStoryViewer();
+      else {
+        activeStoryIndex = Math.min(activeStoryIndex, profileStories.length - 1);
+        renderActiveStory();
+      }
+    }
+
+    // ============================================================
     // CARREGAR PERFIL
     // ============================================================
     async function loadPerfil() {
@@ -868,6 +1248,7 @@
 
       // Carrega fotos (bucket privado — URLs assinadas)
       await loadFotos(profileId);
+      await loadProfileStories(profileId, p.nome_artistico || 'Profissional');
 
       // Registra visualização assíncrona (não bloqueia o render)
       recordProfileEvent(profileId, 'view');
