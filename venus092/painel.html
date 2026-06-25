@@ -1618,8 +1618,15 @@
     .highlight-manage-actions button { justify-content:flex-start; width:100%; }
     .highlight-manage-meta { display:grid; gap:7px; margin:14px 0; padding:12px; border-radius:12px; background:rgba(255,255,255,.035); color:var(--text-muted); font-size:.74rem; }
     .highlight-manage-meta strong { color:var(--text); }
+    .oauth-welcome { display:none; margin-bottom:18px; padding:20px; border:1px solid rgba(201,168,76,.32); border-radius:18px; background:linear-gradient(135deg,rgba(201,168,76,.13),rgba(35,25,42,.88)); }
+    .oauth-welcome.visible { display:grid; grid-template-columns:1fr auto; gap:18px; align-items:center; }
+    .oauth-welcome h2 { margin:4px 0 6px; font-size:1.25rem; }
+    .oauth-welcome p { color:var(--text-muted); font-size:.84rem; line-height:1.55; }
+    .oauth-welcome-checks { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; }
+    .oauth-welcome-checks label { display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.76rem; cursor:pointer; }
+    .oauth-welcome-checks input { accent-color:var(--gold); }
     @media (max-width:760px) { .highlight-popup { grid-template-columns:1fr; } .highlight-popup-media { min-height:340px; } .highlight-schedule-grid { grid-template-columns:1fr; } }
-    @media (max-width:1050px) { #page-dashboard .stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-content-grid,.highlight-preview-row { grid-template-columns:1fr; } }
+    @media (max-width:1050px) { #page-dashboard .stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-content-grid,.highlight-preview-row,.oauth-welcome.visible { grid-template-columns:1fr; } }
   </style>
 </head>
 
@@ -1758,6 +1765,21 @@
     <div class="page" id="page-perfil">
       <h1 class="page-title">Meu Perfil</h1>
       <p class="page-sub">Edite suas informações pessoais</p>
+
+      <section class="oauth-welcome" id="oauthWelcome">
+        <div>
+          <div class="highlight-kicker">Bem-vinda à Vênus</div>
+          <h2>Sua conta profissional já foi criada</h2>
+          <p>Complete nome artístico, categoria, WhatsApp, bio, localização e fotos. Enquanto isso, seu perfil permanece privado e não aparece no catálogo.</p>
+          <div class="oauth-welcome-checks">
+            <label><input id="oauthAdultCheck" type="checkbox"> Confirmo que tenho 18 anos ou mais</label>
+            <label><input id="oauthTermsCheck" type="checkbox"> Li e aceito os Termos e a Política de Privacidade</label>
+          </div>
+        </div>
+        <button class="btn btn-gold" type="button" onclick="acceptOAuthOnboarding()">
+          <i class="ti ti-sparkles"></i> Começar meu perfil
+        </button>
+      </section>
 
       <!-- Informações principais -->
       <div class="form-section">
@@ -2405,12 +2427,51 @@
       buildWeekGrid();
       loadPage('dashboard');
       openInitialPageFromHash();
+      showFirstAccessWelcome();
     }
 
     function openInitialPageFromHash() {
       const page = String(location.hash || '').replace('#', '');
       const allowed = ['dashboard', 'perfil', 'fotos', 'servicos', 'localizacao', 'disponibilidade', 'destaque', 'mensagens'];
       if (allowed.includes(page)) goPage(page);
+    }
+
+    function showFirstAccessWelcome() {
+      const firstAccess = new URLSearchParams(location.search).get('primeiro_acesso') === 'google';
+      const welcome = document.getElementById('oauthWelcome');
+      if (!welcome || !firstAccess) return;
+      welcome.classList.add('visible');
+      document.getElementById('oauthAdultCheck').checked = Boolean(currentProfile?.conteudo_adulto_aceito);
+      document.getElementById('oauthTermsCheck').checked = Boolean(currentProfile?.termos_aceitos);
+      setTimeout(() => welcome.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    }
+
+    async function acceptOAuthOnboarding() {
+      const adult = document.getElementById('oauthAdultCheck').checked;
+      const terms = document.getElementById('oauthTermsCheck').checked;
+      if (!adult || !terms) {
+        showToast('Confirme sua maioridade e aceite os termos para continuar.', 'error');
+        return;
+      }
+      const { error } = await sb.from('profiles').update({
+        termos_aceitos: true,
+        conteudo_adulto_aceito: true,
+        termos_aceitos_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }).eq('id', currentUser.id);
+      if (error) {
+        showToast('Não foi possível registrar o aceite: ' + error.message, 'error');
+        return;
+      }
+      currentProfile = {
+        ...currentProfile,
+        termos_aceitos: true,
+        conteudo_adulto_aceito: true
+      };
+      document.getElementById('oauthWelcome').classList.remove('visible');
+      history.replaceState({}, '', 'painel.html#perfil');
+      document.getElementById('p_nome_artistico')?.focus();
+      showToast('Tudo certo. Agora complete as informações do seu perfil.');
     }
 
     async function loadProfile() {
@@ -2429,7 +2490,7 @@
       document.getElementById('avatarInitials').textContent = initials;
       document.getElementById('headerName').textContent = name;
       // CORRIGIDO: usar nome_artistico do perfil, não outro campo
-      document.getElementById('dashGreet').textContent = `Olá, ${p.nome_artistico}! 👋`;
+      document.getElementById('dashGreet').textContent = `Olá, ${p.nome_artistico || 'profissional'}! 👋`;
 
       // Online toggle
       const tog = document.getElementById('onlineToggle');
