@@ -503,6 +503,21 @@
       if (error) console.warn('Erro ao registrar evento do perfil:', error.message);
     }
 
+    async function recordContactInteraction(profileId, channel) {
+      if (!visitorCanContact || !visitorSession?.user?.id || !profileId) return;
+      const dedupeKey = `venus_contact_${visitorSession.user.id}_${profileId}_${channel}`;
+      const last = Number(localStorage.getItem(dedupeKey) || 0);
+      if (Date.now() - last < 10 * 60 * 1000) return;
+
+      const { error } = await sb.from('contact_interactions').insert({
+        professional_id: profileId,
+        customer_id: visitorSession.user.id,
+        channel
+      });
+      if (!error) localStorage.setItem(dedupeKey, String(Date.now()));
+      else console.warn('Erro ao registrar interação:', error.message);
+    }
+
     function protectContactButton(el, targetUrl, profileId, evento, options = {}) {
       if (!el) return;
 
@@ -523,8 +538,14 @@
       el.href = targetUrl;
       if (options.target) el.target = options.target;
       el.title = '';
-      el.addEventListener('click', () => {
+      el.addEventListener('click', async event => {
         recordProfileEvent(profileId, evento);
+        if (evento === 'whatsapp_click') await recordContactInteraction(profileId, 'whatsapp');
+        if (evento === 'chat_click') {
+          event.preventDefault();
+          await recordContactInteraction(profileId, 'chat');
+          window.location.href = targetUrl;
+        }
       });
     }
 

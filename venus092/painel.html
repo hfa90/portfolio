@@ -1692,6 +1692,12 @@
           <div class="stat-value" id="statRate">—</div>
           <div class="stat-delta" id="statRateDelta"></div>
         </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(168,85,247,.15);color:#c084fc">✨</div>
+          <div class="stat-label">Pontos de engajamento</div>
+          <div class="stat-value" id="statEngagement">0</div>
+          <div class="stat-delta up">Avaliações aprovadas colocam seu perfil em evidência</div>
+        </div>
       </div>
 
       <div class="card auth-note">
@@ -2218,7 +2224,25 @@
         <label>Comentário privado para outras profissionais</label>
         <textarea id="customerReviewComment" maxlength="600" placeholder="Compartilhe informações objetivas e úteis. Evite dados pessoais sensíveis."></textarea>
       </div>
-      <button class="btn btn-gold" type="button" onclick="saveCustomerReview()">Salvar avaliação do cliente</button>
+      <button class="btn btn-gold" id="saveCustomerReviewBtn" type="button" onclick="saveCustomerReview()">Salvar avaliação do cliente</button>
+    </section>
+  </div>
+
+  <div class="customer-review-modal" id="evaluationReminderModal">
+    <section class="customer-review-dialog" style="max-width:520px">
+      <header class="customer-review-head">
+        <div>
+          <div class="highlight-kicker">Atendimento pelo site</div>
+          <h2>Como foi a experiência com este cliente?</h2>
+          <p class="page-sub" id="evaluationReminderText">Uma interação foi registrada há 15 minutos.</p>
+        </div>
+      </header>
+      <p style="color:var(--text-muted);line-height:1.55">Avaliar cada atendimento ajuda outras profissionais e mantém a reputação da comunidade confiável. Confirme apenas se o atendimento realmente aconteceu.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:18px">
+        <button class="btn btn-gold" type="button" onclick="evaluateInteractionNow()">Avaliar agora</button>
+        <button class="btn btn-outline" type="button" onclick="snoozeInteractionReview()">Lembrar depois</button>
+        <button class="btn btn-outline" type="button" onclick="dismissInteractionReview()">Atendimento não aconteceu</button>
+      </div>
     </section>
   </div>
 
@@ -2276,6 +2300,8 @@
       currentUser = session.user;
       await loadProfile();
       subscribeProfileActivity();
+      checkDueInteractionReviews();
+      setInterval(checkDueInteractionReviews, 60000);
       buildWeekGrid();
       loadPage('dashboard');
       openInitialPageFromHash();
@@ -2310,6 +2336,7 @@
       tog.checked = p.online_now;
       document.getElementById('onlineLabel').textContent = p.online_now ? 'Ativo' : 'Offline';
       document.getElementById('onlineLabel').style.color = p.online_now ? 'var(--green)' : 'var(--text-muted)';
+      document.getElementById('statEngagement').textContent = Number(p.engagement_points || 0).toLocaleString('pt-BR');
 
       // Perfil form
       setVal('p_nome_artistico', p.nome_artistico);
@@ -2987,11 +3014,21 @@
       const rows = [];
       for (let i = 0; i < 7; i++) {
         if (document.getElementById('day-toggle-' + i).checked) {
+          const start = document.getElementById('day-start-' + i).value;
+          const end = document.getElementById('day-end-' + i).value;
+          if (!start || !end) {
+            showToast(`Informe os dois horários de ${DIAS[i]}.`, 'error');
+            return;
+          }
+          if (start === end) {
+            showToast(`Em ${DIAS[i]}, início e fim não podem ser iguais.`, 'error');
+            return;
+          }
           rows.push({
             profile_id: currentUser.id,
             dia_semana: i,
-            hora_inicio: document.getElementById('day-start-' + i).value + ':00',
-            hora_fim: document.getElementById('day-end-' + i).value + ':00'
+            hora_inicio: start + ':00',
+            hora_fim: end + ':00'
           });
         }
       }
@@ -3493,15 +3530,87 @@
     function cHandleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); cSend(); } }
     function cResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
     function cFmt(iso) { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+    let dueInteractionReview = null;
+
+    async function checkDueInteractionReviews() {
+      if (!currentUser || dueInteractionReview) return;
+      const { data, error } = await sb.from('contact_interactions')
+        .select('id,customer_id,channel,occurred_at,review_due_at,professional_review_status,snoozed_until')
+        .eq('professional_id', currentUser.id)
+        .in('professional_review_status', ['pending', 'snoozed'])
+        .order('review_due_at', { ascending: true })
+        .limit(20);
+      if (error) return;
+
+      const now = Date.now();
+      dueInteractionReview = (data || []).find(item => {
+        const due = item.professional_review_status === 'snoozed'
+          ? new Date(item.snoozed_until || item.review_due_at).getTime()
+          : new Date(item.review_due_at).getTime();
+        return due <= now;
+      }) || null;
+      if (!dueInteractionReview) return;
+
+      const { data: customer } = await sb.from('customers')
+        .select('nome').eq('id', dueInteractionReview.customer_id).maybeSingle();
+      const name = customer?.nome || 'este cliente';
+      cOtherProfiles[dueInteractionReview.customer_id] = {
+        ...(cOtherProfiles[dueInteractionReview.customer_id] || {}),
+        name
+      };
+      document.getElementById('evaluationReminderText').textContent =
+        `${name} iniciou contato por ${dueInteractionReview.channel === 'whatsapp' ? 'WhatsApp' : 'chat'} há pelo menos 15 minutos.`;
+      document.getElementById('evaluationReminderModal').classList.add('open');
+    }
+
+    async function evaluateInteractionNow() {
+      if (!dueInteractionReview) return;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      const conv = cConvs.find(item => item.client_id === dueInteractionReview.customer_id);
+      if (conv) {
+        await cOpenConv(conv.id);
+      } else {
+        cConvData = {
+          id: null,
+          client_id: dueInteractionReview.customer_id,
+          professional_id: currentUser.id
+        };
+      }
+      openCustomerReviewModal();
+    }
+
+    async function snoozeInteractionReview() {
+      if (!dueInteractionReview) return;
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'snoozed',
+        snoozed_until: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      showToast('Lembraremos novamente em 1 hora.');
+    }
+
+    async function dismissInteractionReview() {
+      if (!dueInteractionReview) return;
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'dismissed'
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      showToast('Interação marcada como atendimento não realizado.');
+    }
+
     async function loadCustomerReputation() {
       if (!cConvData?.client_id) return;
       const { data, error } = await sb.from('customer_professional_reviews')
-        .select('id,professional_id,rating,tags,comment,created_at')
+        .select('id,professional_id,interaction_id,rating,tags,comment,created_at')
         .eq('customer_id', cConvData.client_id)
         .order('created_at', { ascending: false });
 
       const reviews = error ? [] : (data || []);
-      const own = reviews.find(review => review.professional_id === currentUser.id);
+      const own = dueInteractionReview
+        ? reviews.find(review => review.interaction_id === dueInteractionReview.id)
+        : reviews.find(review => review.professional_id === currentUser.id);
       const average = reviews.length
         ? reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length
         : 0;
@@ -3533,6 +3642,11 @@
       document.querySelectorAll('.customer-reputation-tags input').forEach(input => {
         input.checked = (own?.tags || []).includes(input.value);
       });
+      const saveBtn = document.getElementById('saveCustomerReviewBtn');
+      saveBtn.disabled = !dueInteractionReview;
+      saveBtn.textContent = dueInteractionReview
+        ? 'Salvar avaliação do cliente'
+        : 'Aguarde um lembrete de atendimento';
     }
 
     function openCustomerReviewModal() {
@@ -3547,26 +3661,44 @@
     }
 
     async function saveCustomerReview() {
-      if (!cConvData?.client_id || !cConvId) return;
+      if (!cConvData?.client_id) return;
+      if (!dueInteractionReview) {
+        showToast('Esta avaliação precisa estar ligada a uma interação registrada pelo site.', 'error');
+        return;
+      }
       const rating = Number(document.getElementById('customerReviewRating').value);
       const tags = [...document.querySelectorAll('.customer-reputation-tags input:checked')].map(input => input.value);
       const comment = document.getElementById('customerReviewComment').value.trim();
-      const { error } = await sb.from('customer_professional_reviews').upsert({
+      const payload = {
         professional_id: currentUser.id,
         customer_id: cConvData.client_id,
-        conversation_id: cConvId,
+        conversation_id: cConvId || null,
+        interaction_id: dueInteractionReview.id,
         rating,
         tags,
         comment: comment || null,
         updated_at: new Date().toISOString()
-      }, { onConflict: 'professional_id,customer_id' });
+      };
+      const { data: existing } = await sb.from('customer_professional_reviews')
+        .select('id').eq('interaction_id', dueInteractionReview.id).maybeSingle();
+      const result = existing
+        ? await sb.from('customer_professional_reviews').update(payload).eq('id', existing.id)
+        : await sb.from('customer_professional_reviews').insert(payload);
+      const { error } = result;
 
       if (error) {
         showToast('Erro ao avaliar cliente: ' + error.message, 'error');
         return;
       }
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'completed',
+        completed_at: new Date().toISOString()
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
       showToast('Avaliação do cliente salva.');
       await loadCustomerReputation();
+      closeCustomerReviewModal();
+      checkDueInteractionReviews();
     }
 
     function cInitials(name) { return (name || '?').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(); }

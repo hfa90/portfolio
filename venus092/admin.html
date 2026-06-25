@@ -1721,6 +1721,9 @@
                                 <button class="btn-aprovar" onclick="approveHighlightAd('${ad.id}')">✅ Confirmar Pix e publicar</button>
                                 <button class="btn-rejeitar" onclick="rejectHighlightAd('${ad.id}')">❌ Rejeitar</button>
                             ` : ''}
+                            <button class="btn-aprovar" onclick="editHighlightAd('${ad.id}')">Editar</button>
+                            ${['approved', 'expired', 'rejected'].includes(status) ? `<button class="btn-aprovar" onclick="republishHighlightAd('${ad.id}')">Republicar</button>` : ''}
+                            <button class="btn-rejeitar" onclick="deleteHighlightAd('${ad.id}')">Excluir</button>
                         </div>
                     </div>
                 </article>`;
@@ -1752,6 +1755,49 @@
                 .eq('id', id);
             if (error) { toast('Erro ao rejeitar: ' + error.message, 'err'); return; }
             toast('Propaganda rejeitada.', 'err');
+            loadHighlightAds();
+        }
+
+        async function editHighlightAd(id) {
+            const ad = allHighlightAds.find(item => item.id === id);
+            if (!ad) return;
+            const headline = prompt('Título da propaganda:', ad.headline);
+            if (headline === null) return;
+            const description = prompt('Texto da propaganda:', ad.description);
+            if (description === null) return;
+            const target_uf = (prompt('Estado de exibição (UF):', ad.target_uf || '') || '').trim().toUpperCase();
+            const startsInput = prompt('Início no formato AAAA-MM-DDTHH:MM:', ad.starts_at ? new Date(ad.starts_at).toISOString().slice(0, 16) : '');
+            if (!headline.trim() || description.trim().length < 10 || !/^[A-Z]{2}$/.test(target_uf) || !startsInput) {
+                toast('Revise título, texto, UF e início.', 'err');
+                return;
+            }
+            const { error } = await sb.from('highlight_ads').update({
+                headline: headline.trim(),
+                description: description.trim(),
+                target_uf,
+                starts_at: new Date(startsInput).toISOString(),
+                updated_at: new Date().toISOString()
+            }).eq('id', id);
+            if (error) { toast('Erro ao editar: ' + error.message, 'err'); return; }
+            toast('Propaganda atualizada.');
+            loadHighlightAds();
+        }
+
+        async function republishHighlightAd(id) {
+            const rawDays = prompt('Por quantos dias deseja republicar?', '2');
+            if (rawDays === null) return;
+            const days = Math.max(1, Math.min(90, Number(rawDays) || 2));
+            const { error } = await sb.rpc('approve_highlight_ad', { p_ad_id: id, p_days: days });
+            if (error) { toast('Erro ao republicar: ' + error.message, 'err'); return; }
+            toast('Propaganda republicada.');
+            loadHighlightAds();
+        }
+
+        async function deleteHighlightAd(id) {
+            if (!await VenusSafety.confirmAction('Excluir esta propaganda definitivamente?', 'Excluir propaganda', 'Excluir')) return;
+            const { error } = await sb.from('highlight_ads').delete().eq('id', id);
+            if (error) { toast('Erro ao excluir: ' + error.message, 'err'); return; }
+            toast('Propaganda excluída.');
             loadHighlightAds();
         }
 
