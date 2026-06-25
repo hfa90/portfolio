@@ -1,0 +1,1765 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo — Vênus</title>
+  <link rel="stylesheet" href="css/global.css" />
+  <link rel="stylesheet" href="css/catalogo.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/safety-tools.js"></script>
+  <style>
+    /* ── SPINNER ── */
+    .grid-spinner {
+      grid-column: 1/-1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 80px 20px;
+      gap: 16px;
+      color: var(--text-muted, #888);
+    }
+
+    .grid-spinner .spin {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(201, 168, 76, .15);
+      border-top-color: #C9A84C;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── GPS BUTTON ── */
+    .gps-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--gold-dim, rgba(201, 168, 76, .12));
+      border: 1px solid rgba(201, 168, 76, .3);
+      color: #C9A84C;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: .82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+      width: 100%;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .gps-btn:hover {
+      background: rgba(201, 168, 76, .22);
+    }
+
+    .gps-btn:disabled {
+      opacity: .5;
+      cursor: not-allowed;
+    }
+
+    .gps-btn .spin-sm {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(201, 168, 76, .2);
+      border-top-color: #C9A84C;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+
+    /* ── CEP INFO ── */
+    .filtro-cep-info {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: .8rem;
+      color: #4ADE80;
+      margin-top: 6px;
+      background: rgba(74, 222, 128, .08);
+      border: 1px solid rgba(74, 222, 128, .2);
+      padding: 6px 10px;
+      border-radius: 8px;
+    }
+
+    .cep-error {
+      display: none;
+      font-size: .8rem;
+      color: #F87171;
+      margin-top: 6px;
+    }
+
+    /* ── EMPTY STATE ── */
+    .grid-empty {
+      grid-column: 1/-1;
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted, #888);
+    }
+
+    .grid-empty .icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    /* ── CHIP ACTIVE ── */
+    .chip.active {
+      background: #C9A84C;
+      color: #000;
+      border-color: #C9A84C;
+    }
+
+    /* ── FOTO COVER ── */
+    .profile-card-img .cover-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: inherit;
+    }
+
+    /* ── Navbar: chip de cliente logado ───────────────────── */
+    .nav-cliente {
+      display: flex;
+      align-items: center;
+    }
+
+    .nav-cliente-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(201, 168, 76, .1);
+      border: 1px solid rgba(201, 168, 76, .3);
+      border-radius: 50px;
+      padding: 6px 14px 6px 6px;
+      color: #c9a84c;
+      text-decoration: none;
+      font-size: .85rem;
+      font-family: sans-serif;
+      transition: background .2s, box-shadow .2s;
+      white-space: nowrap;
+      max-width: 220px;
+    }
+
+    .nav-cliente-chip:hover {
+      background: rgba(201, 168, 76, .18);
+      box-shadow: 0 2px 12px rgba(201, 168, 76, .2);
+    }
+
+    .nav-cliente-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(201, 168, 76, .2);
+      border: 1.5px solid rgba(201, 168, 76, .4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      overflow: hidden;
+      font-size: .9rem;
+    }
+
+    .nav-cliente-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .nav-cliente-nome {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 130px;
+      font-weight: 600;
+    }
+
+    .nav-cliente-arrow {
+      font-size: .8rem;
+      opacity: .6;
+      flex-shrink: 0;
+    }
+
+    @media (max-width: 640px) {
+      .nav-cliente-nome {
+        display: none;
+      }
+
+      .nav-cliente-chip {
+        padding: 6px;
+      }
+    }
+
+    .smart-search-panel {
+      display: grid;
+      gap: 10px;
+      margin-bottom: 16px;
+      padding: 14px;
+      border: 1px solid rgba(201, 168, 76, .22);
+      border-radius: 14px;
+      background: rgba(201, 168, 76, .07);
+    }
+
+    .smart-search-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--gold);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    .smart-search-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+
+    .smart-search-row input {
+      min-height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 13px;
+      outline: none;
+    }
+
+    .smart-search-row input:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 4px rgba(201, 168, 76, .08);
+    }
+
+    .smart-search-hints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .smart-search-hints button,
+    .compare-float button,
+    .compare-pill,
+    .card-compare {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, .1);
+      background: rgba(255, 255, 255, .045);
+      color: var(--text-muted);
+      font-size: .78rem;
+      font-weight: 700;
+      transition: .18s ease;
+    }
+
+    .smart-search-hints button {
+      min-height: 30px;
+      padding: 0 10px;
+    }
+
+    .smart-search-hints button:hover,
+    .card-compare:hover,
+    .card-compare.active {
+      border-color: rgba(201, 168, 76, .45);
+      background: rgba(201, 168, 76, .14);
+      color: var(--gold-light);
+    }
+
+    .agenda-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 8px;
+      color: #4ADE80;
+      font-size: .76rem;
+      font-weight: 800;
+    }
+
+    .card-compare {
+      position: absolute;
+      right: .75rem;
+      bottom: .75rem;
+      z-index: 3;
+      min-height: 32px;
+      padding: 0 10px;
+      backdrop-filter: blur(8px);
+    }
+
+    .compare-float {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      z-index: 180;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      width: min(94vw, 760px);
+      padding: 10px;
+      border: 1px solid rgba(201, 168, 76, .32);
+      border-radius: 16px;
+      background: rgba(17, 17, 26, .96);
+      box-shadow: 0 18px 54px rgba(0, 0, 0, .45);
+      backdrop-filter: blur(14px);
+    }
+
+    .compare-float.show {
+      display: flex;
+    }
+
+    .compare-pills {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .compare-pill {
+      min-height: 32px;
+      padding: 0 10px;
+      color: var(--text);
+      max-width: 180px;
+    }
+
+    .compare-pill span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .compare-float button {
+      min-height: 36px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    .compare-float .compare-primary {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #111;
+    }
+
+    .compare-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 220;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(0, 0, 0, .72);
+      backdrop-filter: blur(8px);
+    }
+
+    .compare-modal.show {
+      display: flex;
+    }
+
+    .compare-box {
+      width: min(960px, 100%);
+      max-height: calc(100vh - 36px);
+      overflow: auto;
+      border: 1px solid rgba(201, 168, 76, .28);
+      border-radius: 16px;
+      background: var(--card);
+      box-shadow: 0 26px 80px rgba(0, 0, 0, .56);
+    }
+
+    .compare-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .compare-head strong {
+      font-size: 1.05rem;
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1px;
+      background: var(--border);
+    }
+
+    .compare-col {
+      display: grid;
+      gap: 10px;
+      padding: 16px;
+      background: var(--card);
+    }
+
+    .compare-name {
+      color: var(--gold-light);
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .compare-line {
+      display: grid;
+      gap: 3px;
+      color: var(--text);
+      font-size: .86rem;
+    }
+
+    .compare-line span {
+      color: var(--text-muted);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+    }
+
+    @media (max-width: 680px) {
+      .smart-search-row {
+        grid-template-columns: 1fr;
+      }
+
+      .compare-float {
+        align-items: stretch;
+        flex-direction: column;
+      }
+    }
+    .catalog-highlights { display:none; margin-bottom:22px; }
+    .catalog-highlights.visible { display:block; }
+    .catalog-highlights-head { display:flex; justify-content:space-between; align-items:end; gap:18px; margin-bottom:12px; }
+    .catalog-highlights-kicker { color:var(--gold); font-size:.7rem; font-weight:900; letter-spacing:.15em; text-transform:uppercase; }
+    .catalog-highlights-title { margin:3px 0 0; font-family:Georgia,serif; font-size:1.55rem; }
+    .catalog-highlights-title span { color:var(--gold-light); }
+    .highlight-cards { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 14px; scroll-snap-type:x mandatory; scrollbar-width:thin; scrollbar-color:rgba(201,168,76,.45) transparent; }
+    .catalog-highlight-card { flex:0 0 clamp(275px,28vw,390px); overflow:hidden; border:1px solid rgba(201,168,76,.24); border-radius:18px; cursor:pointer; background:#100d13; box-shadow:0 14px 34px rgba(0,0,0,.28); scroll-snap-align:start; }
+    .catalog-highlight-media { position:relative; height:clamp(190px,20vw,260px); overflow:hidden; background:#151019; }
+    .catalog-highlight-media::before { content:""; position:absolute; inset:-24px; background-image:var(--highlight-image); background-size:cover; background-position:center; filter:blur(25px); opacity:.34; transform:scale(1.12); }
+    .catalog-highlight-photo { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:contain; object-position:center; transition:transform .35s ease; }
+    .catalog-highlight-card:hover .catalog-highlight-photo { transform:scale(1.018); }
+    .catalog-highlight-content { position:relative; padding:15px 16px 17px; background:linear-gradient(145deg,#17121b,#0d0b10); }
+    .catalog-highlight-badge { display:inline-flex; margin-bottom:7px; padding:4px 8px; border:1px solid rgba(244,215,127,.38); border-radius:999px; color:#f4d77f; background:rgba(12,9,14,.7); font-size:.58rem; font-weight:900; letter-spacing:.1em; text-transform:uppercase; }
+    .catalog-highlight-content h2 { margin:0 0 5px; font-family:Georgia,serif; font-size:1.25rem; }
+    .catalog-highlight-content p { display:-webkit-box; overflow:hidden; margin:0 0 13px; color:#d6ced7; font-size:.84rem; line-height:1.45; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+    .catalog-highlight-meta { display:flex; flex-wrap:wrap; gap:7px; }
+    .catalog-highlight-meta span { padding:5px 8px; border-radius:999px; background:rgba(255,255,255,.1); font-size:.68rem; }
+    @media (max-width:780px) { .catalog-highlight-card { flex-basis:min(82vw,340px); } .catalog-highlight-media { height:230px; } }
+  </style>
+</head>
+
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <a href="index.html" class="navbar-brand"><em>Vênus</em></a>
+    <div class="navbar-search">
+      <i class="ti ti-search search-icon"></i>
+      <input type="text" id="navSearch" placeholder="Buscar por nome, cidade…" oninput="debounceSearch()" />
+    </div>
+    <nav class="navbar-nav" id="navbarNav">
+      <a href="catalogo.html" class="nav-link active" id="navLinkCatalogo">Catálogo</a>
+      <!-- Grupo anônimo: visível quando não logado -->
+      <a href="cadastro.html" class="nav-link" id="navLinkCadastro">Cadastre-se</a>
+      <a href="login.html" class="btn btn-outline btn-sm" id="navBtnEntrar">Entrar</a>
+      <a href="cadastro.html" class="btn btn-gold btn-sm" id="navBtnAnuncie">Anuncie grátis</a>
+      <!-- Grupo cliente: visível quando logado como cliente -->
+      <div class="nav-cliente" id="navCliente" style="display:none;">
+        <a href="painel-cliente.html" class="nav-cliente-chip" id="navClienteChip">
+          <span class="nav-cliente-avatar" id="navClienteAvatar">
+            <i class="ti ti-user"></i>
+          </span>
+          <span class="nav-cliente-nome" id="navClienteNome">Meu perfil</span>
+          <i class="ti ti-chevron-right nav-cliente-arrow"></i>
+        </a>
+      </div>
+    </nav>
+  </nav>
+
+  <main class="page">
+    <div class="catalogo-layout">
+
+      <!-- SIDEBAR FILTROS -->
+      <aside class="filtros-sidebar" id="filtrosSidebar">
+        <div class="filtros-header">
+          <h2>Filtros</h2>
+          <div class="filtros-header-actions">
+            <button class="filtros-clear" onclick="limparFiltros()">Limpar tudo</button>
+            <button class="filtros-close" type="button" onclick="closeFiltros()" aria-label="Fechar filtros">
+              <i class="ti ti-x"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Localização -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Localização</h3>
+          <div class="filtro-cep-wrap">
+            <div class="form-group">
+              <label class="form-label">Seu CEP</label>
+              <div class="cep-input-wrap">
+                <i class="ti ti-map-pin"></i>
+                <input type="text" class="form-input" id="filtrosCep" placeholder="00000-000" maxlength="9"
+                  oninput="onCepInput()" />
+              </div>
+              <span class="cep-error" id="cepError">CEP não encontrado.</span>
+            </div>
+            <div class="filtro-cep-info" id="cepiInfo">
+              <i class="ti ti-check"></i> <span id="cepInfoText"></span>
+            </div>
+
+            <!-- BOTÃO GPS -->
+            <button class="gps-btn" id="gpsBtn" onclick="usarGPS()">
+              <i class="ti ti-current-location"></i> Usar minha localização
+            </button>
+          </div>
+
+          <div class="form-group" style="margin-top:1rem">
+            <label class="form-label">Estado (UF)</label>
+            <select class="form-select" id="filtroUf" onchange="aplicarFiltros()">
+              <option value="">Todos os estados</option>
+              <option>AC</option>
+              <option>AL</option>
+              <option>AM</option>
+              <option>AP</option>
+              <option>BA</option>
+              <option>CE</option>
+              <option>DF</option>
+              <option>ES</option>
+              <option>GO</option>
+              <option>MA</option>
+              <option>MG</option>
+              <option>MS</option>
+              <option>MT</option>
+              <option>PA</option>
+              <option>PB</option>
+              <option>PE</option>
+              <option>PI</option>
+              <option>PR</option>
+              <option>RJ</option>
+              <option>RN</option>
+              <option>RO</option>
+              <option>RR</option>
+              <option>RS</option>
+              <option>SC</option>
+              <option>SE</option>
+              <option>SP</option>
+              <option>TO</option>
+            </select>
+          </div>
+
+          <div class="form-group" style="margin-top:.75rem">
+            <label class="form-label">Cidade</label>
+            <input type="text" class="form-input" id="filtroCidade" placeholder="Digite a cidade"
+              oninput="debounceSearch()" />
+          </div>
+
+          <div class="form-group" style="margin-top:.75rem">
+            <label class="form-label">Bairro</label>
+            <input type="text" class="form-input" id="filtroBairro" placeholder="Digite o bairro"
+              oninput="debounceSearch()" />
+          </div>
+        </div>
+
+        <!-- Categoria -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Categoria</h3>
+          <div class="filtro-checks" id="filtroCategoria">
+            <label class="check-item">
+              <input type="checkbox" value="GP Feminina" onchange="aplicarFiltros()" />
+              <span>GP Feminina</span>
+              <span class="check-count" id="cnt-GP Feminina">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="GP Masculino" onchange="aplicarFiltros()" />
+              <span>GP Masculino</span>
+              <span class="check-count" id="cnt-GP Masculino">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Trans" onchange="aplicarFiltros()" />
+              <span>Trans</span>
+              <span class="check-count" id="cnt-Trans">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Travesti" onchange="aplicarFiltros()" />
+              <span>Travesti</span>
+              <span class="check-count" id="cnt-Travesti">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Lésbica" onchange="aplicarFiltros()" />
+              <span>Lésbica</span>
+              <span class="check-count" id="cnt-Lésbica">—</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Gay" onchange="aplicarFiltros()" />
+              <span>Gay</span>
+              <span class="check-count" id="cnt-Gay">—</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Atendimento -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Local de atendimento</h3>
+          <div class="filtro-checks">
+            <label class="check-item">
+              <input type="checkbox" value="Local próprio" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Local próprio</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="A domicílio" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>A domicílio</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Motel / Hotel" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Motel / Hotel</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" value="Online" class="chk-atend" onchange="aplicarFiltros()" />
+              <span>Online</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Preço -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Faixa de preço</h3>
+          <div class="price-range">
+            <div class="form-group">
+              <label class="form-label">De</label>
+              <input type="number" class="form-input" id="filtroPrecoMin" placeholder="R$ 0" min="0"
+                oninput="debounceSearch()" />
+            </div>
+            <div class="price-sep">—</div>
+            <div class="form-group">
+              <label class="form-label">Até</label>
+              <input type="number" class="form-input" id="filtroPrecoMax" placeholder="Sem limite" min="0"
+                oninput="debounceSearch()" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Disponibilidade -->
+        <div class="filtro-section">
+          <h3 class="filtro-title">Disponibilidade</h3>
+          <div class="filtro-checks">
+            <label class="check-item">
+              <input type="checkbox" id="chkAvailableNow" onchange="aplicarFiltros()" />
+              <span>Atendendo agora</span>
+              <span class="badge badge-green" style="font-size:.625rem"><i class="ti ti-calendar-check"></i></span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" id="chkOnline" onchange="aplicarFiltros()" />
+              <span>Online agora</span>
+              <span class="badge badge-green" style="font-size:.625rem">●</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" id="chkVerif" onchange="aplicarFiltros()" />
+              <span>Verificados</span>
+              <span class="badge badge-gold" style="font-size:.625rem">✓</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn btn-gold" style="width:100%;margin-top:.5rem" onclick="aplicarFiltros()">
+          <i class="ti ti-filter"></i> Aplicar filtros
+        </button>
+      </aside>
+      <button class="filtros-overlay" id="filtrosOverlay" type="button" onclick="closeFiltros()" aria-label="Fechar painel de filtros tocando fora"></button>
+
+      <!-- CONTEÚDO PRINCIPAL -->
+      <div class="catalogo-main">
+        <section class="catalog-highlights" id="catalogHighlights">
+          <div class="catalog-highlights-head">
+            <div>
+              <div class="catalog-highlights-kicker">Seleção especial</div>
+              <h2 class="catalog-highlights-title"><span>Destaques</span> & Diferenciadas</h2>
+            </div>
+            <small style="color:var(--text-muted)">Propagandas patrocinadas</small>
+          </div>
+          <div class="highlight-cards" id="catalogHighlightCards"></div>
+        </section>
+
+        <!-- BARRA SUPERIOR -->
+        <div class="catalogo-topbar">
+          <div class="catalogo-topbar-left">
+            <button class="btn-filtros-mobile btn btn-ghost btn-sm" onclick="toggleFiltros()">
+              <i class="ti ti-adjustments-horizontal"></i> Filtros
+            </button>
+            <h1 class="catalogo-title">
+              Catálogo <span class="catalogo-count" id="totalCount">…</span>
+            </h1>
+          </div>
+          <div class="catalogo-topbar-right">
+            <div class="chips" id="activeChips">
+              <button class="chip active" onclick="toggleChip(this,'')">Todos</button>
+              <button class="chip" onclick="toggleChip(this,'GP Feminina')">GP Feminina</button>
+              <button class="chip" onclick="toggleChip(this,'Trans')">Trans</button>
+              <button class="chip" onclick="toggleChip(this,'Gay')">Gay</button>
+              <button class="chip" onclick="toggleChip(this,'Lésbica')">Lésbica</button>
+              <button class="chip" onclick="toggleChip(this,'GP Masculino')">Masculino</button>
+            </div>
+            <div class="catalogo-sort">
+              <select class="form-select sort-select" id="sortSelect" onchange="aplicarFiltros()">
+                <option value="recent">Mais recentes</option>
+                <option value="online">Online agora</option>
+                <option value="price_asc">Menor preço</option>
+                <option value="price_desc">Maior preço</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="catalogo-smartbar">
+          <div>
+            <span class="catalogo-smartbar-label"><i class="ti ti-current-location"></i> Busca por região</span>
+            <strong data-location-label>Detectando sua localização...</strong>
+          </div>
+          <label class="catalogo-bairro-quick">
+            <i class="ti ti-map-pin-search"></i>
+            <span>Bairro</span>
+            <input type="text" id="quickBairro" placeholder="Digite o bairro" oninput="syncQuickBairro()" />
+          </label>
+          <div class="catalogo-smartbar-actions">
+            <button class="btn btn-outline btn-sm" type="button" onclick="usarGPS()">
+              <i class="ti ti-radar"></i> Atualizar localização
+            </button>
+            <button class="btn btn-gold btn-sm" type="button" onclick="toggleFiltros()">
+              <i class="ti ti-adjustments-horizontal"></i> Filtro avançado
+            </button>
+          </div>
+        </div>
+
+        <!-- GRID DE PERFIS -->
+        <div class="grid-profiles" id="profilesGrid">
+          <div class="grid-spinner">
+            <div class="spin"></div>
+            <p>Carregando perfis…</p>
+          </div>
+        </div>
+
+        <!-- PAGINAÇÃO -->
+        <div class="pagination" id="paginacao" style="display:none"></div>
+
+      </div>
+    </div>
+  </main>
+
+  <div class="compare-float" id="compareFloat" aria-live="polite">
+    <div class="compare-pills" id="comparePills"></div>
+    <button type="button" onclick="limparComparador()">Limpar</button>
+    <button class="compare-primary" type="button" onclick="abrirComparador()">
+      <i class="ti ti-columns-3"></i> Comparar
+    </button>
+  </div>
+
+  <div class="compare-modal" id="compareModal" role="dialog" aria-modal="true" aria-label="Comparar perfis">
+    <div class="compare-box">
+      <div class="compare-head">
+        <strong>Comparador de perfis</strong>
+        <button class="btn btn-outline btn-sm" type="button" onclick="fecharComparador()">
+          <i class="ti ti-x"></i> Fechar
+        </button>
+      </div>
+      <div class="compare-grid" id="compareGrid"></div>
+    </div>
+  </div>
+
+  <script>
+    // ══════════════════════════════════════════════════
+    // CONFIG
+    // ══════════════════════════════════════════════════
+    const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { storageKey: 'venus-user-session' }
+    });
+
+    // ══════════════════════════════════════════════════
+    // NAVBAR: detectar cliente logado
+    // ══════════════════════════════════════════════════
+    let currentSession = null;
+
+    async function initNavbar() {
+      const { data: { session } } = await sb.auth.getSession();
+      currentSession = session;
+      if (!session) return; // anônimo → navbar padrão
+
+      const { data: blocks } = await sb
+        .from('user_blocks')
+        .select('blocked_id')
+        .eq('blocker_id', session.user.id);
+      state.blockedProfileIds = (blocks || []).map(b => b.blocked_id);
+
+      // Checar se é cliente (tem registro em customers)
+      const { data: cliente } = await sb
+        .from('customers')
+        .select('nome, avatar_url')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!cliente) return; // profissional → navbar padrão
+
+      // ── Ocultar itens anônimos ──
+      const hide = ['navLinkCadastro', 'navBtnEntrar', 'navBtnAnuncie'];
+      hide.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+
+      // ── Mostrar chip do cliente ──
+      const chip = document.getElementById('navCliente');
+      if (chip) chip.style.display = 'flex';
+
+      // Nome (primeiro nome apenas, para caber)
+      const nomeEl = document.getElementById('navClienteNome');
+      if (nomeEl) {
+        const primeiroNome = (cliente.nome || session.user.email).split(' ')[0];
+        nomeEl.textContent = primeiroNome;
+      }
+
+      // Avatar (se existir)
+      if (cliente.avatar_url) {
+        const avatarWrap = document.getElementById('navClienteAvatar');
+        if (avatarWrap) {
+          avatarWrap.innerHTML = `<img src="${cliente.avatar_url}" alt="Avatar" />`;
+        }
+      }
+    }
+
+
+
+    const PAGE_SIZE = 12;
+
+    // ══════════════════════════════════════════════════
+    // STATE
+    // ══════════════════════════════════════════════════
+    let state = {
+      page: 0,
+      total: 0,
+      categoryChip: '',   // chip rápido
+      search: '',
+      categorias: [],     // checkboxes sidebar
+      atendimentos: [],
+      onlineOnly: false,
+      availableNowOnly: false,
+      verificadoOnly: false,
+      uf: '',
+      cidade: '',
+      bairro: '',
+      precoMin: null,
+      precoMax: null,
+      sort: 'recent',
+      blockedProfileIds: [],
+      coverUrls: {},      // cache profile_id -> signedUrl
+      currentProfiles: [],
+      compare: []
+    };
+
+    const CAT_ALIASES = {
+      feminina: 'GP Feminina',
+      mulher: 'GP Feminina',
+      masculino: 'GP Masculino',
+      homem: 'GP Masculino',
+      trans: 'Trans',
+      travesti: 'Travesti',
+      lesbica: 'Lésbica',
+      'lésbica': 'Lésbica',
+      gay: 'Gay'
+    };
+
+    function normalizeCategoria(value) {
+      if (!value) return '';
+      const raw = String(value).trim();
+      const key = raw.toLowerCase();
+      return CAT_ALIASES[key] || raw;
+    }
+
+    function setCategoriaRapida(cat) {
+      document.querySelectorAll('#activeChips .chip').forEach(c => c.classList.remove('active'));
+      const chips = [...document.querySelectorAll('#activeChips .chip')];
+      const match = chips.find(chip => chip.textContent.trim().toLowerCase() === cat.toLowerCase());
+      (match || chips[0])?.classList.add('active');
+      state.categoryChip = match ? cat : '';
+      if (!match && cat) {
+        document.querySelectorAll('#filtroCategoria input').forEach(cb => {
+          cb.checked = cb.value === cat;
+        });
+      }
+    }
+
+    function initCatalogoFromUrl() {
+      const params = new URLSearchParams(window.location.search);
+      const q = params.get('q') || params.get('busca') || '';
+      const cat = normalizeCategoria(params.get('cat') || params.get('categoria') || '');
+
+      if (q) document.getElementById('navSearch').value = q;
+      if (params.get('uf')) document.getElementById('filtroUf').value = params.get('uf').toUpperCase().slice(0, 2);
+      if (params.get('cidade')) document.getElementById('filtroCidade').value = params.get('cidade');
+      if (params.get('bairro')) document.getElementById('filtroBairro').value = params.get('bairro');
+      if (params.get('cep')) {
+        const cep = params.get('cep').replace(/\D/g, '');
+        if (cep.length === 8) document.getElementById('filtrosCep').value = cep.slice(0, 5) + '-' + cep.slice(5);
+      }
+      if (params.get('precoMin')) document.getElementById('filtroPrecoMin').value = params.get('precoMin');
+      if (params.get('precoMax')) document.getElementById('filtroPrecoMax').value = params.get('precoMax');
+      if (params.get('online') === '1') document.getElementById('chkOnline').checked = true;
+      if (params.get('disponivel') === '1') document.getElementById('chkAvailableNow').checked = true;
+      if (params.get('verificado') === '1') document.getElementById('chkVerif').checked = true;
+      if (params.get('sort')) document.getElementById('sortSelect').value = params.get('sort');
+      if (params.get('atendimento')) {
+        document.querySelectorAll('.chk-atend').forEach(cb => {
+          cb.checked = cb.value === params.get('atendimento');
+        });
+      }
+      if (cat) setCategoriaRapida(cat);
+
+      const loc = [params.get('bairro'), params.get('cidade'), params.get('uf')].filter(Boolean).join(', ');
+      if (loc) mostrarCepInfo(loc);
+      syncBairroFields();
+    }
+
+    function applyLocationToFilters(location, auto = false) {
+      if (!location) return;
+      const hasLocationFilter = document.getElementById('filtroCidade').value
+        || document.getElementById('filtroBairro').value
+        || document.getElementById('filtroUf').value
+        || document.getElementById('navSearch').value;
+      if (auto && hasLocationFilter) return;
+
+      if (location.bairro) document.getElementById('filtroBairro').value = location.bairro;
+      if (location.cidade) document.getElementById('filtroCidade').value = location.cidade;
+      if (location.uf) document.getElementById('filtroUf').value = location.uf;
+      if (location.cep?.length === 8) {
+        document.getElementById('filtrosCep').value = location.cep.slice(0, 5) + '-' + location.cep.slice(5);
+      }
+
+      const label = [location.bairro, location.cidade, location.uf].filter(Boolean).join(', ');
+      if (label) mostrarCepInfo(label);
+      syncBairroFields();
+      state.page = 0;
+      aplicarFiltros();
+    }
+
+    let debounceTimer = null;
+    function debounceSearch() {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => { state.page = 0; loadPerfis(); }, 450);
+    }
+
+    // ══════════════════════════════════════════════════
+    // CHIPS (seleção rápida de categoria)
+    // ══════════════════════════════════════════════════
+    function toggleChip(el, cat) {
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      el.classList.add('active');
+      state.categoryChip = cat;
+      // Desmarca checkboxes de categoria se chip selecionado
+      if (cat) {
+        document.querySelectorAll('#filtroCategoria input').forEach(cb => cb.checked = false);
+        state.categorias = [];
+      }
+      state.page = 0;
+      loadPerfis();
+    }
+
+    // ══════════════════════════════════════════════════
+    // COLETA FILTROS DA SIDEBAR
+    // ══════════════════════════════════════════════════
+    function coletarFiltros() {
+      syncBairroFields();
+      state.search = document.getElementById('navSearch').value.trim();
+      state.uf = document.getElementById('filtroUf').value;
+      state.cidade = document.getElementById('filtroCidade').value.trim();
+      state.bairro = document.getElementById('filtroBairro').value.trim();
+      state.sort = document.getElementById('sortSelect').value;
+      state.onlineOnly = document.getElementById('chkOnline').checked;
+      state.availableNowOnly = document.getElementById('chkAvailableNow').checked;
+      state.verificadoOnly = document.getElementById('chkVerif').checked;
+
+      const pMin = parseFloat(document.getElementById('filtroPrecoMin').value);
+      const pMax = parseFloat(document.getElementById('filtroPrecoMax').value);
+      state.precoMin = isNaN(pMin) ? null : pMin;
+      state.precoMax = isNaN(pMax) ? null : pMax;
+
+      state.categorias = [...document.querySelectorAll('#filtroCategoria input:checked')]
+        .map(cb => cb.value);
+
+      state.atendimentos = [...document.querySelectorAll('.chk-atend:checked')]
+        .map(cb => cb.value);
+    }
+
+    function aplicarFiltros() {
+      state.page = 0;
+      coletarFiltros();
+      loadCatalogHighlights();
+      loadPerfis();
+    }
+
+    function smartSearchKey(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        aplicarBuscaInteligente();
+      }
+    }
+
+    function usarSugestaoBusca(texto) {
+      document.getElementById('smartSearch').value = texto;
+      aplicarBuscaInteligente();
+    }
+
+    function aplicarBuscaInteligente() {
+      const input = document.getElementById('smartSearch');
+      const text = (input.value || '').trim();
+      const parsed = parseSmartSearch(text);
+
+      if (parsed.category) setCategoriaRapida(parsed.category);
+      if (parsed.city) document.getElementById('filtroCidade').value = parsed.city;
+      if (parsed.bairro) document.getElementById('filtroBairro').value = parsed.bairro;
+      if (parsed.uf) document.getElementById('filtroUf').value = parsed.uf;
+      if (parsed.availableNow) document.getElementById('chkAvailableNow').checked = true;
+      if (parsed.onlineOnly) document.getElementById('chkOnline').checked = true;
+      if (parsed.verified) document.getElementById('chkVerif').checked = true;
+      if (parsed.sort) document.getElementById('sortSelect').value = parsed.sort;
+
+      document.getElementById('navSearch').value = parsed.freeText;
+      state.page = 0;
+      aplicarFiltros();
+    }
+
+    function parseSmartSearch(text) {
+      const normalized = normalizeText(text);
+      const parsed = {
+        category: '',
+        city: '',
+        bairro: '',
+        uf: '',
+        availableNow: /\b(agora|hoje|noite|manha|tarde|disponivel|atendendo)\b/.test(normalized),
+        onlineOnly: /\b(online|conectad[ao])\b/.test(normalized),
+        verified: /\b(verificad[ao]|segur[ao])\b/.test(normalized),
+        sort: '',
+        freeText: text
+      };
+
+      const categories = [
+        ['GP Feminina', /\b(feminina|mulher|gp feminina)\b/],
+        ['GP Masculino', /\b(masculino|homem|gp masculino)\b/],
+        ['Trans', /\btrans\b/],
+        ['Travesti', /\btravesti\b/],
+        ['Lésbica', /\b(lesbica|lésbica)\b/],
+        ['Gay', /\bgay\b/]
+      ];
+      const foundCategory = categories.find(([, pattern]) => pattern.test(normalized));
+      if (foundCategory) parsed.category = foundCategory[0];
+
+      const cityMatch = text.match(/\b(?:em|no|na|de)\s+([A-Za-zÀ-ÿ\s]{3,}?)(?=\s+(?:hoje|agora|online|a noite|à noite|de noite|de manha|de manhã|a tarde|à tarde)|$)/i);
+      if (cityMatch) parsed.city = titleCase(cityMatch[1].trim());
+
+      if (/\b(perto de mim|proximo|próximo|minha localizacao|minha localização)\b/.test(normalized)) {
+        parsed.freeText = '';
+      } else if (parsed.city) {
+        parsed.freeText = text.replace(cityMatch[0], '').trim();
+      }
+
+      parsed.freeText = parsed.freeText
+        .replace(/\b(quero|procuro|alguem|alguém|perfil|profissional|disponivel|disponível|atendendo|agora|hoje|online|verificado|verificada|a noite|à noite|de noite|de manha|de manhã|a tarde|à tarde)\b/gi, '')
+        .trim();
+
+      return parsed;
+    }
+
+    function normalizeText(value) {
+      return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    }
+
+    function titleCase(value) {
+      return String(value || '').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function limparFiltros() {
+      document.querySelectorAll('.filtros-sidebar input[type=checkbox]').forEach(cb => cb.checked = false);
+      document.querySelectorAll('.filtros-sidebar input[type=text]').forEach(i => i.value = '');
+      document.querySelectorAll('.filtros-sidebar input[type=number]').forEach(i => i.value = '');
+      document.getElementById('filtroUf').value = '';
+      document.getElementById('navSearch').value = '';
+      const quickBairro = document.getElementById('quickBairro');
+      if (quickBairro) quickBairro.value = '';
+      document.getElementById('cepiInfo').style.display = 'none';
+      document.getElementById('cepError').style.display = 'none';
+      syncBairroFields();
+      // Reset chips
+      document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      document.querySelector('.chip').classList.add('active');
+      state = {
+        ...state, page: 0, categoryChip: '', search: '', categorias: [], atendimentos: [],
+        onlineOnly: false, availableNowOnly: false, verificadoOnly: false, uf: '', cidade: '', bairro: '',
+        precoMin: null, precoMax: null, sort: 'recent'
+      };
+      loadCatalogHighlights();
+      loadPerfis();
+    }
+
+    // ══════════════════════════════════════════════════
+    // LOAD PERFIS DO SUPABASE
+    // ══════════════════════════════════════════════════
+    async function loadPerfis() {
+      coletarFiltros();
+      const grid = document.getElementById('profilesGrid');
+      grid.innerHTML = '<div class="grid-spinner"><div class="spin"></div><p>Carregando perfis…</p></div>';
+
+      // ─ Monta query base ─
+      let query = sb
+        .from('profiles')
+        .select(`
+      id, nome_artistico, categoria, cidade, bairro, uf,
+      online_now, verificado, plano, engagement_points, engagement_score, created_at,
+      services(nome, preco, local, ativo),
+      attendance_locations(tipo),
+      availability(dia_semana, hora_inicio, hora_fim),
+      profile_photos(storage_path, is_cover, status)
+    `, { count: 'exact' })
+        .eq('status', 'active');
+
+      // ─ Filtros ─
+      const cat = state.categorias.length ? state.categorias
+        : state.categoryChip ? [state.categoryChip] : null;
+      if (cat) query = query.in('categoria', cat);
+
+      if (state.onlineOnly) query = query.eq('online_now', true);
+      if (state.verificadoOnly) query = query.eq('verificado', true);
+      if (state.uf) query = query.eq('uf', state.uf);
+      if (state.cidade) query = query.ilike('cidade', `%${state.cidade}%`);
+      // bairro sozinho sem cidade pode ocultar perfis — só aplica junto com cidade
+      if (state.bairro && state.cidade)
+        query = query.ilike('bairro', `%${state.bairro}%`);
+      // Busca ampla: nome, cidade ou bairro
+      if (state.search) {
+        query = query.or(
+          `nome_artistico.ilike.%${state.search}%,cidade.ilike.%${state.search}%,bairro.ilike.%${state.search}%`
+        );
+      }
+
+      // ─ Ordenação ─
+      if (state.sort === 'online') query = query.order('online_now', { ascending: false }).order('engagement_score', { ascending: false }).order('created_at', { ascending: false });
+      else if (state.sort === 'recent') query = query.order('engagement_score', { ascending: false }).order('created_at', { ascending: false });
+      else query = query.order('created_at', { ascending: false }); // preço tratado client-side
+
+      // ─ Paginação ─
+      const hasClientSideFilters = state.availableNowOnly
+        || state.atendimentos.length
+        || state.precoMin !== null
+        || state.precoMax !== null
+        || state.sort === 'price_asc'
+        || state.sort === 'price_desc';
+      const from = state.page * PAGE_SIZE;
+      query = hasClientSideFilters
+        ? query.range(0, 119)
+        : query.range(from, from + PAGE_SIZE - 1);
+
+      const { data, count, error } = await query;
+
+      if (error) {
+        // Erro 42501 = RLS bloqueando; array vazio sem erro também pode ser RLS
+        const isRls = error.code === '42501' || error.message?.includes('permission');
+        grid.innerHTML = `<div class="grid-empty">
+          <div class="icon">⚠️</div>
+          <p>${isRls
+            ? 'Sem permissão para ler perfis. Execute o SQL de policies no Supabase.'
+            : 'Erro ao carregar: ' + error.message}</p>
+        </div>`;
+        console.error('Supabase error:', error);
+        return;
+      }
+
+      // Se retornou 0 sem filtros, provavelmente é RLS bloqueando anônimos
+      const semFiltros = !state.search && !state.uf && !state.cidade && !state.bairro
+        && !state.categoryChip && !state.categorias.length
+        && !state.onlineOnly && !state.availableNowOnly && !state.verificadoOnly;
+
+      state.total = count || 0;
+      document.getElementById('totalCount').textContent =
+        state.total > 0 ? `${state.total.toLocaleString('pt-BR')} perfis` : '';
+
+      let perfis = data || [];
+      if (state.blockedProfileIds?.length) {
+        const blocked = new Set(state.blockedProfileIds);
+        perfis = perfis.filter(p => !blocked.has(p.id));
+      }
+
+      // ─ Filtro de preço client-side (precisa dos serviços) ─
+      if (state.precoMin !== null || state.precoMax !== null) {
+        perfis = perfis.filter(p => {
+          const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+          if (!precos.length) return false;
+          const min = Math.min(...precos);
+          if (state.precoMin !== null && min < state.precoMin) return false;
+          if (state.precoMax !== null && min > state.precoMax) return false;
+          return true;
+        });
+      }
+
+      // ─ Filtro de atendimento client-side ─
+      if (state.atendimentos.length) {
+        perfis = perfis.filter(p => {
+          const tipos = (p.attendance_locations || []).map(a => a.tipo);
+          return state.atendimentos.every(a => tipos.includes(a));
+        });
+      }
+
+      if (state.availableNowOnly) {
+        perfis = perfis.filter(p => isAvailableNow(p));
+      }
+
+      // ─ Ordenação por preço client-side ─
+      if (state.sort === 'price_asc' || state.sort === 'price_desc') {
+        perfis.sort((a, b) => {
+          const minA = minPreco(a), minB = minPreco(b);
+          return state.sort === 'price_asc' ? minA - minB : minB - minA;
+        });
+      }
+
+      // ─ Busca URLs assinadas para fotos de capa ─
+      if (hasClientSideFilters) {
+        state.total = perfis.length;
+        perfis = perfis.slice(from, from + PAGE_SIZE);
+        document.getElementById('totalCount').textContent =
+          state.total > 0 ? `${state.total.toLocaleString('pt-BR')} perfis` : '';
+      }
+
+      const coverPaths = perfis.map(p => {
+        const fotos = (p.profile_photos || []).filter(f => f.status === 'approved');
+        const cover = fotos.find(f => f.is_cover) || fotos[0];
+        return cover ? cover.storage_path : null;
+      }).filter(Boolean);
+
+      if (coverPaths.length) {
+        const { data: signed } = await sb.storage.from('fotos').createSignedUrls(coverPaths, 3600);
+        (signed || []).forEach(s => { state.coverUrls[s.path] = s.signedUrl; });
+      }
+
+      state.currentProfiles = perfis;
+      renderPerfis(perfis);
+      renderPaginacao();
+      atualizarContadores();
+    }
+
+    function minPreco(p) {
+      const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+      return precos.length ? Math.min(...precos) : Infinity;
+    }
+
+    function isAvailableNow(profile) {
+      const agenda = profile.availability || [];
+      if (!agenda.length) return false;
+      const now = new Date();
+      const day = now.getDay();
+      const minutes = now.getHours() * 60 + now.getMinutes();
+      return agenda.some(row => {
+        if (Number(row.dia_semana) !== day) return false;
+        const start = timeToMinutes(row.hora_inicio);
+        const end = timeToMinutes(row.hora_fim);
+        if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+        return end >= start ? minutes >= start && minutes <= end : minutes >= start || minutes <= end;
+      });
+    }
+
+    function timeToMinutes(value) {
+      const [h, m] = String(value || '').slice(0, 5).split(':').map(Number);
+      if (!Number.isFinite(h) || !Number.isFinite(m)) return NaN;
+      return h * 60 + m;
+    }
+
+    function availabilitySummary(profile) {
+      const agenda = profile.availability || [];
+      if (!agenda.length) return 'Nao informado';
+      if (isAvailableNow(profile)) return 'Atendendo agora';
+      const labels = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+      const days = [...new Set(agenda.map(row => labels[Number(row.dia_semana)]).filter(Boolean))];
+      const first = agenda[0];
+      const time = first?.hora_inicio && first?.hora_fim
+        ? `${first.hora_inicio.slice(0, 5)} as ${first.hora_fim.slice(0, 5)}`
+        : '';
+      return `${days.slice(0, 4).join(', ')}${days.length > 4 ? '...' : ''}${time ? ' · ' + time : ''}`;
+    }
+
+    // ══════════════════════════════════════════════════
+    // RENDER CARDS
+    // ══════════════════════════════════════════════════
+    const catBadge = {
+      'GP Feminina': 'badge-gold',
+      'GP Masculino': 'badge-blue',
+      'Trans': 'badge-purple',
+      'Travesti': 'badge-purple',
+      'Lésbica': 'badge-rose',
+      'Gay': 'badge-blue',
+    };
+
+    function renderPerfis(perfis) {
+      const grid = document.getElementById('profilesGrid');
+
+      if (!perfis.length) {
+        const semFiltros2 = !state.search && !state.uf && !state.cidade && !state.categoryChip && !state.categorias.length && !state.availableNowOnly;
+        grid.innerHTML = `<div class="grid-empty">
+          <div class="icon">🔍</div>
+          <p>${semFiltros2
+            ? 'Nenhum perfil ativo encontrado. Verifique as policies RLS no Supabase.'
+            : 'Nenhum perfil encontrado com esses filtros.'}</p>
+        </div>`;
+        return;
+      }
+
+      grid.innerHTML = perfis.map(p => {
+        const fotos = (p.profile_photos || []).filter(f => f.status === 'approved');
+        const cover = fotos.find(f => f.is_cover) || fotos[0];
+        const url = cover ? state.coverUrls[cover.storage_path] : null;
+
+        const precos = (p.services || []).filter(s => s.ativo && s.preco).map(s => s.preco);
+        const precMin = precos.length ? Math.min(...precos) : null;
+
+        const loc = [p.bairro, p.cidade].filter(Boolean).join(', ');
+        const badge = catBadge[p.categoria] || 'badge-gold';
+        const catLabel = p.categoria || '';
+        const availableNow = isAvailableNow(p);
+        const selectedCompare = state.compare.some(item => item.id === p.id);
+
+        return `
+    <div class="profile-card" onclick="location.href='perfil.html?id=${p.id}'">
+      <div class="profile-card-img" style="position:relative">
+        ${url
+            ? `<img class="cover-img" src="${url}" alt="${p.nome_artistico}" loading="lazy" />`
+            : `<div class="placeholder-img-card" style="background:linear-gradient(135deg,#1e1820,#2a2232)"></div>`
+          }
+        <div class="card-overlay"></div>
+        <div class="card-badges">
+          ${p.online_now ? '<span class="badge badge-green">● Online</span>' : ''}
+          ${p.plano === 'premium' ? '<span class="badge badge-gold">★ Top</span>' : ''}
+          ${p.verificado ? '<span class="badge badge-blue">✓</span>' : ''}
+        </div>
+        <button class="card-fav" onclick="event.stopPropagation()">
+          <i class="ti ti-heart"></i>
+        </button>
+        <button class="card-compare ${selectedCompare ? 'active' : ''}" type="button" onclick="event.stopPropagation(); toggleCompare('${p.id}')">
+          <i class="ti ${selectedCompare ? 'ti-check' : 'ti-columns-3'}"></i> ${selectedCompare ? 'Comparando' : 'Comparar'}
+        </button>
+      </div>
+      <div class="profile-card-body">
+        <p class="profile-card-name">${p.nome_artistico || '—'}</p>
+        <p class="profile-card-meta">
+          <i class="ti ti-map-pin"></i> ${loc || p.uf || '—'}
+        </p>
+        <div class="agenda-chip">
+          <i class="ti ${availableNow ? 'ti-calendar-check' : 'ti-calendar-time'}"></i>
+          ${availableNow ? 'Atendendo agora' : availabilitySummary(p)}
+        </div>
+        <div class="profile-card-footer">
+          ${precMin !== null
+            ? `<div class="profile-card-price">De <strong>R$ ${precMin.toLocaleString('pt-BR')}</strong></div>`
+            : `<div class="profile-card-price" style="color:var(--text-muted,#888)">A combinar</div>`
+          }
+          <span class="badge ${badge}">${catLabel}</span>
+        </div>
+      </div>
+    </div>`;
+      }).join('');
+    }
+
+    // ══════════════════════════════════════════════════
+    // PAGINAÇÃO
+    // ══════════════════════════════════════════════════
+    function toggleCompare(profileId) {
+      const existing = state.compare.find(item => item.id === profileId);
+      if (existing) {
+        state.compare = state.compare.filter(item => item.id !== profileId);
+      } else {
+        const profile = state.currentProfiles.find(item => item.id === profileId);
+        if (!profile) return;
+        if (state.compare.length >= 3) {
+          VenusSafety.notice('Escolha no maximo 3 perfis para comparar.', 'Comparador', 'error');
+          return;
+        }
+        state.compare.push(profile);
+      }
+      renderCompareBar();
+      renderPerfis(state.currentProfiles);
+    }
+
+    function renderCompareBar() {
+      const bar = document.getElementById('compareFloat');
+      const pills = document.getElementById('comparePills');
+      if (!bar || !pills) return;
+      bar.classList.toggle('show', state.compare.length > 0);
+      pills.innerHTML = state.compare.map(item => `
+        <div class="compare-pill">
+          <span>${esc(item.nome_artistico || 'Perfil')}</span>
+          <button type="button" onclick="toggleCompare('${item.id}')" aria-label="Remover ${esc(item.nome_artistico || 'perfil')}">
+            <i class="ti ti-x"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function limparComparador() {
+      state.compare = [];
+      fecharComparador();
+      renderCompareBar();
+      renderPerfis(state.currentProfiles);
+    }
+
+    function abrirComparador() {
+      if (state.compare.length < 2) {
+        VenusSafety.notice('Selecione pelo menos 2 perfis para comparar.', 'Comparador', 'error');
+        return;
+      }
+      const grid = document.getElementById('compareGrid');
+      grid.innerHTML = state.compare.map(profile => {
+        const services = (profile.services || []).filter(s => s.ativo);
+        const min = minPreco(profile);
+        const locais = (profile.attendance_locations || []).map(item => item.tipo).join(', ') || 'Nao informado';
+        const servicos = services.length
+          ? services.slice(0, 3).map(s => `${esc(s.nome || 'Servico')}${s.preco ? ' · R$ ' + Number(s.preco).toLocaleString('pt-BR') : ''}`).join('<br>')
+          : 'A combinar';
+        return `
+          <div class="compare-col">
+            <div class="compare-name">${esc(profile.nome_artistico || 'Perfil')}</div>
+            <div class="compare-line"><span>Categoria</span>${esc(profile.categoria || 'Nao informado')}</div>
+            <div class="compare-line"><span>Localizacao</span>${esc([profile.bairro, profile.cidade, profile.uf].filter(Boolean).join(', ') || 'Nao informado')}</div>
+            <div class="compare-line"><span>Valor inicial</span>${Number.isFinite(min) ? 'R$ ' + min.toLocaleString('pt-BR') : 'A combinar'}</div>
+            <div class="compare-line"><span>Servicos</span>${servicos}</div>
+            <div class="compare-line"><span>Atendimento</span>${esc(locais)}</div>
+            <div class="compare-line"><span>Disponibilidade</span>${esc(availabilitySummary(profile))}</div>
+            <div class="compare-line"><span>Status</span>${profile.online_now ? 'Online agora' : 'Offline'}${profile.verificado ? ' · Verificado' : ''}</div>
+            <a class="btn btn-gold btn-sm" href="perfil.html?id=${encodeURIComponent(profile.id)}">Abrir perfil</a>
+          </div>
+        `;
+      }).join('');
+      document.getElementById('compareModal')?.classList.add('show');
+    }
+
+    function fecharComparador() {
+      document.getElementById('compareModal')?.classList.remove('show');
+    }
+
+    function esc(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderPaginacao() {
+      const totalPages = Math.ceil(state.total / PAGE_SIZE);
+      const pag = document.getElementById('paginacao');
+      if (totalPages <= 1) { pag.style.display = 'none'; return; }
+      pag.style.display = 'flex';
+      const cur = state.page;
+
+      let html = '';
+      if (cur > 0) html += `<button class="page-btn" onclick="goPage(${cur - 1})"><i class="ti ti-arrow-left"></i> Anterior</button>`;
+
+      const range = Array.from({ length: totalPages }, (_, i) => i)
+        .filter(i => i === 0 || i === totalPages - 1 || Math.abs(i - cur) <= 2);
+
+      let prev = null;
+      range.forEach(i => {
+        if (prev !== null && i - prev > 1) html += `<span class="page-dots">…</span>`;
+        html += `<button class="page-btn ${i === cur ? 'page-btn-active' : ''}" onclick="goPage(${i})">${i + 1}</button>`;
+        prev = i;
+      });
+
+      if (cur < totalPages - 1) html += `<button class="page-btn page-next" onclick="goPage(${cur + 1})">Próxima <i class="ti ti-arrow-right"></i></button>`;
+      pag.innerHTML = html;
+    }
+
+    function goPage(n) {
+      state.page = n;
+      loadPerfis();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ══════════════════════════════════════════════════
+    // CONTADORES DE CATEGORIAS
+    // ══════════════════════════════════════════════════
+    async function atualizarContadores() {
+      const cats = ['GP Feminina', 'GP Masculino', 'Trans', 'Travesti', 'Lésbica', 'Gay'];
+      const { data } = await sb
+        .from('profiles')
+        .select('categoria')
+        .eq('status', 'active');
+
+      if (!data) return;
+      const counts = {};
+      data.forEach(p => { counts[p.categoria] = (counts[p.categoria] || 0) + 1; });
+      cats.forEach(c => {
+        const el = document.getElementById('cnt-' + c);
+        if (el) el.textContent = (counts[c] || 0).toLocaleString('pt-BR');
+      });
+    }
+
+    // ══════════════════════════════════════════════════
+    // GPS
+    // ══════════════════════════════════════════════════
+    async function usarGPS() {
+      if (!navigator.geolocation) { VenusSafety.notice('Seu navegador nao suporta GPS.', 'Localizacao', 'error'); return; }
+
+      const btn = document.getElementById('gpsBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<div class="spin-sm"></div> Obtendo localização…';
+
+      if (window.VenusSite?.captureLocation) {
+        try {
+          const location = await window.VenusSite.captureLocation({ force: true });
+          applyLocationToFilters(location);
+        } catch {
+          VenusSafety.notice('Não foi possível obter sua localização.', 'Localização', 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+        }
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords;
+            // Nominatim reverse geocoding (OpenStreetMap — gratuito)
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+              { headers: { 'Accept-Language': 'pt-BR' } }
+            );
+            const geo = await res.json();
+            const addr = geo.address || {};
+
+            const bairro = addr.suburb || addr.neighbourhood || addr.quarter || '';
+            const cidade = addr.city || addr.town || addr.village || '';
+            const uf = addr.state_code || addr.state || '';
+            const cep = (addr.postcode || '').replace(/\D/g, '');
+
+            // Preenche campos
+            if (bairro) document.getElementById('filtroBairro').value = bairro;
+            if (cidade) document.getElementById('filtroCidade').value = cidade;
+            if (uf) document.getElementById('filtroUf').value = uf.toUpperCase().slice(0, 2);
+            syncBairroFields();
+            if (cep && cep.length === 8) {
+              document.getElementById('filtrosCep').value = cep.slice(0, 5) + '-' + cep.slice(5);
+              mostrarCepInfo(`${bairro || cidade}, ${uf.toUpperCase().slice(0, 2)}`);
+            }
+
+            aplicarFiltros();
+          } catch (e) {
+            await VenusSafety.notice('Nao foi possivel identificar o endereco. Tente digitar o CEP manualmente.', 'Localizacao', 'error');
+          }
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+        },
+        (err) => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="ti ti-current-location"></i> Usar minha localização';
+          if (err.code === 1) VenusSafety.notice('Permissao de localizacao negada. Permita o acesso nas configuracoes do navegador.', 'Localizacao', 'error');
+          else VenusSafety.notice('Nao foi possivel obter sua localizacao.', 'Localizacao', 'error');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+
+    // ══════════════════════════════════════════════════
+    // CEP via ViaCEP
+    // ══════════════════════════════════════════════════
+    let cepTimer = null;
+    function onCepInput() {
+      const el = document.getElementById('filtrosCep');
+      let v = el.value.replace(/\D/g, '');
+      if (v.length > 5) v = v.slice(0, 5) + '-' + v.slice(5, 8);
+      el.value = v;
+
+      document.getElementById('cepiInfo').style.display = 'none';
+      document.getElementById('cepError').style.display = 'none';
+
+      if (v.replace('-', '').length === 8) {
+        clearTimeout(cepTimer);
+        cepTimer = setTimeout(() => buscarCep(v.replace('-', '')), 500);
+      }
+    }
+
+    async function buscarCep(cep) {
+      try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          document.getElementById('cepError').style.display = 'block';
+          return;
+        }
+        document.getElementById('filtroCidade').value = data.localidade || '';
+        document.getElementById('filtroBairro').value = data.bairro || '';
+        document.getElementById('filtroUf').value = data.uf || '';
+        syncBairroFields();
+        mostrarCepInfo(`${data.bairro ? data.bairro + ', ' : ''}${data.localidade} — ${data.uf}`);
+        aplicarFiltros();
+      } catch {
+        document.getElementById('cepError').style.display = 'block';
+      }
+    }
+
+    function mostrarCepInfo(texto) {
+      document.getElementById('cepInfoText').textContent = texto;
+      document.getElementById('cepiInfo').style.display = 'flex';
+      document.getElementById('cepError').style.display = 'none';
+    }
+
+    function syncQuickBairro() {
+      const quick = document.getElementById('quickBairro');
+      const bairro = document.getElementById('filtroBairro');
+      if (!quick || !bairro) return;
+      bairro.value = quick.value;
+      debounceSearch();
+    }
+
+    function syncBairroFields() {
+      const quick = document.getElementById('quickBairro');
+      const bairro = document.getElementById('filtroBairro');
+      if (quick && bairro && quick.value !== bairro.value) quick.value = bairro.value;
+    }
+
+    // ══════════════════════════════════════════════════
+    // MISC
+    // ══════════════════════════════════════════════════
+    function toggleFiltros() {
+      const sidebar = document.getElementById('filtrosSidebar');
+      const overlay = document.getElementById('filtrosOverlay');
+      const willOpen = !sidebar.classList.contains('open');
+      sidebar.classList.toggle('open', willOpen);
+      overlay?.classList.toggle('open', willOpen);
+      document.body.classList.toggle('filtros-open', willOpen);
+    }
+
+    function closeFiltros() {
+      document.getElementById('filtrosSidebar')?.classList.remove('open');
+      document.getElementById('filtrosOverlay')?.classList.remove('open');
+      document.body.classList.remove('filtros-open');
+    }
+
+    // ══════════════════════════════════════════════════
+    // INIT
+    // ══════════════════════════════════════════════════
+    async function loadCatalogHighlights() {
+      const section = document.getElementById('catalogHighlights');
+      const cards = document.getElementById('catalogHighlightCards');
+      if (!section || !cards) return;
+
+      const targetUf = document.getElementById('filtroUf')?.value || state.uf || '';
+      let adsQuery = sb
+        .from('active_highlight_ads')
+        .select('*')
+        .order('starts_at', { ascending: true })
+        .limit(20);
+      if (targetUf) adsQuery = adsQuery.eq('target_uf', targetUf);
+      let { data: ads, error } = await adsQuery;
+
+      if (error || !ads?.length) {
+        let fallback = sb.from('highlight_ads')
+          .select('id,profile_id,headline,description,cta_label,photo_paths,target_uf,starts_at,expires_at,profiles(nome_artistico,categoria,cidade,bairro,uf,verificado,online_now,status)')
+          .eq('status', 'approved')
+          .lte('starts_at', new Date().toISOString())
+          .gt('expires_at', new Date().toISOString())
+          .order('starts_at', { ascending: true })
+          .limit(20);
+        if (targetUf) fallback = fallback.eq('target_uf', targetUf);
+        const fallbackResult = await fallback;
+        if (!fallbackResult.error) {
+          error = null;
+          ads = (fallbackResult.data || []).map(ad => ({ ...ad, ...(ad.profiles || {}) }));
+        } else if (error) {
+          error = fallbackResult.error;
+        }
+      }
+
+      if (error || !ads?.length) {
+        section.classList.remove('visible');
+        return;
+      }
+
+      const coverPaths = ads.map(ad => ad.photo_paths?.[0]).filter(Boolean);
+      const signedMap = {};
+      if (coverPaths.length) {
+        const { data: signed } = await sb.storage.from('fotos').createSignedUrls(coverPaths, 3600);
+        (signed || []).forEach(item => { signedMap[item.path] = item.signedUrl; });
+      }
+
+      const profileIds = [...new Set(ads.map(ad => ad.profile_id))];
+      const { data: reviews } = await sb
+        .from('profile_reviews')
+        .select('profile_id,rating')
+        .in('profile_id', profileIds)
+        .eq('status', 'approved');
+
+      const ratingMap = {};
+      (reviews || []).forEach(review => {
+        ratingMap[review.profile_id] ||= [];
+        ratingMap[review.profile_id].push(Number(review.rating));
+      });
+
+      const statsRows = await Promise.all(ads.map(async ad => {
+        const { data } = await sb.rpc('get_profile_public_stats', { p_profile_id: ad.profile_id });
+        return { id: ad.id, ...(data?.[0] || {}) };
+      }));
+      const statsMap = Object.fromEntries(statsRows.map(row => [row.id, row]));
+
+      cards.innerHTML = ads.map(ad => {
+        const ratings = ratingMap[ad.profile_id] || [];
+        const rating = ratings.length
+          ? (ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(1)
+          : 'Nova';
+        const stats = statsMap[ad.id] || {};
+        const photo = signedMap[ad.photo_paths?.[0]] || '';
+        const location = [ad.bairro, ad.cidade].filter(Boolean).join(', ');
+        return `<article class="catalog-highlight-card" onclick="location.href='perfil.html?id=${encodeURIComponent(ad.profile_id)}'">
+          <div class="catalog-highlight-media" ${photo ? `style="--highlight-image:url('${esc(photo)}')"` : ''}>
+            ${photo ? `<img class="catalog-highlight-photo" src="${esc(photo)}" alt="Destaque de ${esc(ad.nome_artistico)}">` : ''}
+          </div>
+          <div class="catalog-highlight-content">
+            <div class="catalog-highlight-badge">✦ Diferenciada</div>
+            <h2>${esc(ad.headline || ad.nome_artistico)}</h2>
+            <p>${esc(ad.description)}</p>
+            <div class="catalog-highlight-meta">
+              <span>${esc(ad.nome_artistico)}</span>
+              <span>⌖ ${esc(ad.target_uf)}</span>
+              ${location ? `<span>⌖ ${esc(location)}</span>` : ''}
+              <span>★ ${rating}</span>
+              <span>♥ ${Number(stats.favorites_count || 0).toLocaleString('pt-BR')}</span>
+              <span>◉ ${Number(stats.views_count || 0).toLocaleString('pt-BR')}</span>
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+      section.classList.add('visible');
+    }
+
+    async function initCatalogo() {
+      initCatalogoFromUrl();
+      window.addEventListener('venus:location', event => applyLocationToFilters(event.detail, true));
+      await initNavbar();
+      await loadCatalogHighlights();
+      await loadPerfis();
+    }
+
+    initCatalogo();
+  </script>
+  <script src="js/site.js" defer></script>
+  <script src="js/mobile-nav.js" defer></script>
+</body>
+
+</html>

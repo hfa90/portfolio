@@ -1,0 +1,3941 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vênus — Painel</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --gold: #C9A84C;
+      --gold-light: #E8C96A;
+      --gold-dim: rgba(201, 168, 76, 0.15);
+      --bg: #0E0E0F;
+      --surface: #18181B;
+      --surface2: #222226;
+      --surface3: #2A2A30;
+      --border: rgba(255, 255, 255, 0.07);
+      --text: #F0EDE8;
+      --text-muted: #888;
+      --green: #4ADE80;
+      --red: #F87171;
+      --radius: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* SIDEBAR */
+    aside {
+      width: 220px;
+      min-height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      padding: 22px 20px 16px;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--gold);
+      font-style: italic;
+      letter-spacing: -0.5px;
+    }
+
+    nav {
+      flex: 1;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    nav button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-align: left;
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.15s;
+    }
+
+    nav button:hover {
+      background: var(--surface2);
+      color: var(--text);
+    }
+
+    nav button.active {
+      background: var(--gold-dim);
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .sidebar-bottom {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .plan-badge {
+      background: var(--gold-dim);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    .plan-sub {
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      text-align: center;
+      margin-top: 4px;
+    }
+
+    .btn-logout {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      margin-top: 12px;
+      background: rgba(248, 113, 113, 0.08);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      color: var(--red);
+      padding: 9px 14px;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-logout:hover {
+      background: rgba(248, 113, 113, 0.18);
+      border-color: var(--red);
+    }
+
+    /* HEADER */
+    header {
+      position: fixed;
+      top: 0;
+      left: 220px;
+      right: 0;
+      height: 56px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 24px;
+      gap: 16px;
+      z-index: 50;
+    }
+
+    .hdr-link {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }
+
+    .hdr-link:hover {
+      color: var(--gold);
+    }
+
+    .avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: var(--gold);
+      color: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.8rem;
+    }
+
+    /* MAIN */
+    main {
+      margin-left: 220px;
+      margin-top: 56px;
+      flex: 1;
+      padding: 32px;
+      min-height: calc(100vh - 56px);
+    }
+
+    /* PAGE */
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .page-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .page-sub {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-bottom: 28px;
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .profile-guide {
+      margin-bottom: 24px;
+      border-color: rgba(201, 168, 76, 0.24);
+      background: linear-gradient(180deg, rgba(201, 168, 76, 0.08), rgba(24, 24, 27, 0.96));
+    }
+
+    .profile-guide-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .profile-guide-title {
+      font-weight: 800;
+      font-size: 1rem;
+      margin-bottom: 4px;
+    }
+
+    .profile-guide-sub {
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .profile-guide-score {
+      min-width: 76px;
+      height: 76px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--surface2);
+      border: 1px solid rgba(201, 168, 76, 0.35);
+      color: var(--gold-light);
+      font-size: 1.15rem;
+      font-weight: 800;
+    }
+
+    .profile-guide-bar {
+      width: 100%;
+      height: 8px;
+      border-radius: 99px;
+      background: var(--surface2);
+      overflow: hidden;
+      margin-bottom: 14px;
+    }
+
+    .profile-guide-bar span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--gold), var(--green));
+      transition: width 0.2s ease;
+    }
+
+    .profile-guide-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .profile-guide-item {
+      display: grid;
+      grid-template-columns: 34px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border);
+    }
+
+    .profile-guide-item.done {
+      background: rgba(74, 222, 128, 0.07);
+      border-color: rgba(74, 222, 128, 0.2);
+    }
+
+    .profile-guide-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--surface2);
+      color: var(--gold);
+      font-weight: 800;
+    }
+
+    .profile-guide-item.done .profile-guide-icon {
+      color: var(--green);
+    }
+
+    .profile-guide-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .profile-guide-detail {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      line-height: 1.35;
+    }
+
+    .profile-guide-action {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid rgba(201, 168, 76, 0.26);
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.78rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .profile-guide-action:hover {
+      border-color: var(--gold);
+      color: var(--gold-light);
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      font-size: 1.1rem;
+    }
+
+    .stat-label {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.8rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .stat-delta {
+      font-size: 0.75rem;
+      margin-top: 6px;
+    }
+
+    .up {
+      color: var(--green);
+    }
+
+    .down {
+      color: var(--red);
+    }
+
+    /* STATUS TOGGLE */
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .toggle-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+    }
+
+    .toggle {
+      position: relative;
+      width: 40px;
+      height: 22px;
+    }
+
+    .toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--surface3);
+      border-radius: 22px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+
+    .slider:before {
+      content: '';
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 3px;
+      bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+
+    input:checked+.slider {
+      background: var(--green);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(18px);
+    }
+
+    /* FORM */
+    .form-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+
+    .form-section-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group.full {
+      grid-column: 1 / -1;
+    }
+
+    label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    input,
+    select,
+    textarea {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--gold);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    select option {
+      background: var(--surface2);
+    }
+
+    /* CHECKBOX GROUP */
+    .check-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .check-item:hover {
+      border-color: var(--gold);
+    }
+
+    .check-item input[type=checkbox] {
+      width: 15px;
+      height: 15px;
+      accent-color: var(--gold);
+      cursor: pointer;
+    }
+
+    .check-item.checked {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* MULTI-SELECT TAGS */
+    .multi-select {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 0.82rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .tag:hover {
+      border-color: var(--gold);
+    }
+
+    .tag.selected {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    /* BUTTONS */
+    .btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+
+    .btn-gold {
+      background: var(--gold);
+      color: #000;
+    }
+
+    .btn-gold:hover {
+      background: var(--gold-light);
+    }
+
+    .btn-outline {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+
+    .btn-outline:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    .btn-danger {
+      background: rgba(248, 113, 113, 0.15);
+      border: 1px solid var(--red);
+      color: var(--red);
+    }
+
+    .save-row {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    /* PHOTOS */
+    .photos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+
+    .photo-card {
+      position: relative;
+      aspect-ratio: 3/4;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+    }
+
+    .photo-card img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .photo-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: opacity 0.15s;
+    }
+
+    .photo-card:hover .photo-overlay {
+      opacity: 1;
+    }
+
+    .photo-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 700;
+    }
+
+    .badge-pending {
+      background: rgba(234, 179, 8, 0.3);
+      color: #EAB308;
+      border: 1px solid #EAB308;
+    }
+
+    .badge-approved {
+      background: rgba(74, 222, 128, 0.3);
+      color: var(--green);
+      border: 1px solid var(--green);
+    }
+
+    .badge-rejected {
+      background: rgba(248, 113, 113, 0.3);
+      color: var(--red);
+      border: 1px solid var(--red);
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .upload-zone:hover {
+      border-color: var(--gold);
+      background: var(--gold-dim);
+    }
+
+    .upload-icon {
+      font-size: 2rem;
+      margin-bottom: 10px;
+    }
+
+    .upload-text {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    /* SERVICES */
+    .service-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 1fr auto auto auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .svc-name {
+      font-weight: 600;
+    }
+
+    .svc-price {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    /* AVAILABILITY */
+    .week-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .day-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+
+    .day-label {
+      width: 100px;
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .day-toggle {
+      margin-left: auto;
+    }
+
+    /* LOCATION */
+    .loc-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .loc-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .loc-item:hover {
+      border-color: var(--gold);
+    }
+
+    .loc-item.selected {
+      background: var(--gold-dim);
+      border-color: var(--gold);
+    }
+
+    .loc-item input[type=checkbox] {
+      accent-color: var(--gold);
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    }
+
+    /* TOAST */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 14px 20px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      display: none;
+      z-index: 999;
+      max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    #toast.success {
+      border-color: var(--green);
+      color: var(--green);
+    }
+
+    #toast.error {
+      border-color: var(--red);
+      color: var(--red);
+    }
+
+    /* LOADER */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ══════════════════════════════════
+       CHAT — Painel Profissional
+    ══════════════════════════════════ */
+    #page-mensagens {
+      padding: 0 !important;
+      height: calc(100vh - 56px);
+      display: none;
+      overflow: hidden;
+    }
+
+    #page-mensagens.active {
+      display: flex !important;
+    }
+
+    .chat-wrap {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* Lista de conversas */
+    .clist {
+      width: 280px;
+      min-width: 240px;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .clist-head {
+      padding: 16px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: .72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--text-muted);
+    }
+
+    .clist-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px;
+    }
+
+    .clist-body::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .clist-body::-webkit-scrollbar-thumb {
+      background: var(--surface3);
+      border-radius: 2px;
+    }
+
+    .ci {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 10px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+
+    .ci:hover {
+      background: var(--surface2);
+    }
+
+    .ci.active {
+      background: var(--gold-dim);
+    }
+
+    .ci-ava {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), #6b3f0a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .82rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .ci-ava img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .ci-info {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .ci-name {
+      font-size: .84rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ci-prev {
+      font-size: .72rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 1px;
+    }
+
+    .ci-side {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      flex-shrink: 0;
+    }
+
+    .ci-time {
+      font-size: .68rem;
+      color: var(--text-muted);
+    }
+
+    .ci-badge {
+      background: var(--gold);
+      color: #000;
+      font-size: .62rem;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 8px;
+      min-width: 16px;
+      text-align: center;
+    }
+
+    .ci-exp {
+      font-size: .62rem;
+      color: var(--red);
+      border: 1px solid rgba(248, 113, 113, .3);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* Área principal do chat */
+    .cmain {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chead {
+      height: 60px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .chead-ava {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), #6b3f0a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .82rem;
+      font-weight: 700;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .chead-ava img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .chead-info {
+      flex: 1;
+    }
+
+    .chead-name {
+      font-size: .88rem;
+      font-weight: 600;
+    }
+
+    .chead-sub {
+      font-size: .72rem;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .chead-chips {
+      display: flex;
+      gap: 6px;
+    }
+
+    .cchip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: .65rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .cchip-gold {
+      color: var(--gold);
+      background: var(--gold-dim);
+      border: 1px solid rgba(201, 168, 76, .2);
+    }
+
+    .cchip-green {
+      color: var(--green);
+      background: rgba(74, 222, 128, .08);
+      border: 1px solid rgba(74, 222, 128, .2);
+    }
+
+    .cchip-timer {
+      color: var(--text-muted);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-family: monospace;
+      display: none;
+    }
+
+    .cchip-timer.warn {
+      color: var(--red);
+      border-color: rgba(248, 113, 113, .3);
+    }
+
+    /* Mensagens */
+    .cmsgs {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .cmsgs::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .cmsgs::-webkit-scrollbar-thumb {
+      background: var(--surface3);
+      border-radius: 2px;
+    }
+
+    .cmsg-date {
+      text-align: center;
+      font-size: .68rem;
+      color: var(--text-muted);
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cmsg-date::before,
+    .cmsg-date::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .cmsg-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      animation: msgIn .18s ease;
+    }
+
+    @keyframes msgIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .cmsg-row.sent {
+      flex-direction: row-reverse;
+    }
+
+    .cmsg-mini-ava {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--gold), #6b3f0a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .58rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .cmsg-mini-ava img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+
+    .cmsg-wrap {
+      max-width: 65%;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .cmsg-row.sent .cmsg-wrap {
+      align-items: flex-end;
+    }
+
+    .cmsg-bub {
+      padding: 9px 13px;
+      border-radius: 15px;
+      font-size: .858rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .cmsg-row.received .cmsg-bub {
+      background: var(--surface2);
+      border-bottom-left-radius: 3px;
+    }
+
+    .cmsg-row.sent .cmsg-bub {
+      background: linear-gradient(135deg, #7a5010, var(--gold));
+      color: #160f00;
+      font-weight: 500;
+      border-bottom-right-radius: 3px;
+    }
+
+    .cmsg-foot {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: .65rem;
+      color: var(--text-muted);
+    }
+
+    .cmsg-row.sent .cmsg-foot {
+      justify-content: flex-end;
+    }
+
+    /* Selos */
+    .seal {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-size: .62rem;
+      font-weight: 600;
+      padding: 1px 5px;
+      border-radius: 7px;
+    }
+
+    .seal-auth {
+      color: var(--gold);
+      background: var(--gold-dim);
+      border: 1px solid rgba(201, 168, 76, .18);
+    }
+
+    .seal-sent svg {
+      stroke: var(--text-muted);
+    }
+
+    .seal-deliv svg {
+      stroke: var(--text-muted);
+    }
+
+    .seal-read svg {
+      stroke: #60A5FA;
+    }
+
+    .seal svg {
+      width: 13px;
+      height: 9px;
+      fill: none;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      overflow: visible;
+    }
+
+    /* No-conv placeholder */
+    .cno-conv {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-muted);
+    }
+
+    .cno-conv-icon {
+      font-size: 3rem;
+      opacity: .18;
+    }
+
+    /* Empty msgs */
+    .cempty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--text-muted);
+    }
+
+    /* Input */
+    .cinput-bar {
+      padding: 12px 14px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .cinput-bar.locked {
+      opacity: .4;
+      pointer-events: none;
+    }
+
+    .cinput {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 9px 15px;
+      color: var(--text);
+      font-size: .875rem;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      resize: none;
+      max-height: 100px;
+      line-height: 1.45;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .cinput:focus {
+      border-color: rgba(201, 168, 76, .4);
+    }
+
+    .cinput::placeholder {
+      color: var(--text-muted);
+    }
+
+    .csend-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--gold);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform .15s, background .2s;
+    }
+
+    .csend-btn:hover {
+      background: var(--gold-light);
+      transform: scale(1.05);
+    }
+
+    .csend-btn:active {
+      transform: scale(.93);
+    }
+
+    .csend-btn svg {
+      width: 15px;
+      height: 15px;
+      stroke: #160f00;
+      fill: none;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .panel-menu-btn,
+    .panel-scrim {
+      display: none;
+    }
+
+    @media (max-width: 860px) {
+      body {
+        display: block;
+      }
+
+      aside {
+        width: min(86vw, 320px);
+        transform: translateX(-104%);
+        transition: transform .24s ease;
+        box-shadow: 18px 0 52px rgba(0, 0, 0, .45);
+      }
+
+      aside.open {
+        transform: translateX(0);
+      }
+
+      header {
+        left: 0;
+        padding-left: 64px;
+      }
+
+      main {
+        margin-left: 0;
+        padding: 84px 16px 32px;
+      }
+
+      .panel-menu-btn {
+        position: fixed;
+        top: 10px;
+        left: 12px;
+        z-index: 180;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 14px;
+        background: var(--surface2);
+        color: var(--text);
+        border: 1px solid var(--border);
+        font-size: 1.2rem;
+      }
+
+      .panel-scrim.open {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 90;
+        background: rgba(0, 0, 0, .56);
+        backdrop-filter: blur(4px);
+      }
+
+      .cards-grid,
+      .form-grid,
+      .photo-grid,
+      .profile-guide-head,
+      .profile-guide-item {
+        grid-template-columns: 1fr !important;
+      }
+
+      .profile-guide-score {
+        width: 72px;
+        min-width: 72px;
+        height: 72px;
+      }
+
+      .profile-guide-action {
+        width: 100%;
+        min-height: 44px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      header {
+        height: 56px;
+        padding: 0 12px 0 62px;
+        gap: 8px;
+      }
+
+      .hdr-link {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        justify-content: center;
+        overflow: hidden;
+        font-size: 0;
+      }
+
+      .hdr-link::before {
+        content: "↗";
+        font-size: 1rem;
+      }
+
+      .avatar {
+        width: 38px;
+        height: 38px;
+      }
+
+      #headerName {
+        max-width: 132px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      main {
+        padding: 74px 12px 24px;
+      }
+
+      .page-title {
+        font-size: 1.55rem;
+        line-height: 1.12;
+      }
+
+      .page-sub {
+        font-size: 0.86rem;
+      }
+
+      .stat-grid,
+      .cards-grid,
+      .form-grid,
+      .photo-grid,
+      .profile-guide-list {
+        gap: 12px;
+      }
+
+      .stat-card,
+      .card,
+      .form-section {
+        border-radius: 14px;
+        padding: 16px;
+      }
+
+      .toggle-wrap {
+        margin-top: 12px;
+        flex-wrap: wrap;
+      }
+
+      #page-dashboard > div:first-child {
+        display: block !important;
+        margin-bottom: 18px !important;
+      }
+
+      #page-mensagens {
+        height: calc(100dvh - 56px);
+      }
+
+      .chat-wrap {
+        flex-direction: column;
+      }
+
+      .clist {
+        width: 100%;
+        min-width: 0;
+        max-height: 238px;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .cmain {
+        min-height: 0;
+      }
+
+      .chead {
+        height: auto;
+        min-height: 58px;
+        padding: 10px 12px;
+      }
+
+      .cmsgs {
+        padding: 14px 12px;
+      }
+
+      .cmsg-wrap {
+        max-width: 84%;
+      }
+
+      .cmsg-mini-ava {
+        display: none;
+      }
+
+      .cinput-bar {
+        padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+      }
+    }
+
+    .highlight-builder { display:grid; grid-template-columns:minmax(0,1fr); gap:22px; align-items:start; }
+    .highlight-editor,.highlight-preview-shell { background:linear-gradient(145deg,rgba(31,27,39,.98),rgba(17,16,22,.98)); border:1px solid rgba(201,168,76,.18); border-radius:18px; padding:22px; }
+    .highlight-kicker { color:#e6c76d; font-size:.72rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+    .highlight-price { display:flex; justify-content:space-between; gap:16px; margin:18px 0; padding:15px 16px; border:1px solid rgba(236,72,153,.22); border-radius:14px; background:linear-gradient(120deg,rgba(190,24,93,.13),rgba(201,168,76,.09)); }
+    .highlight-price strong { color:#f4d77f; font-size:1.25rem; }
+    .highlight-price span { color:var(--text-muted); font-size:.8rem; }
+    .highlight-photo-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-top:9px; }
+    .highlight-photo-option { position:relative; min-height:110px; overflow:hidden; border:2px solid transparent; border-radius:13px; cursor:pointer; background:var(--surface2); }
+    .highlight-photo-option.selected { border-color:#e6c76d; }
+    .highlight-photo-option img { width:100%; height:116px; object-fit:cover; display:block; }
+    .highlight-photo-option input { position:absolute; top:8px; right:8px; accent-color:#e6c76d; }
+    .highlight-preview-shell { max-width:920px; width:100%; }
+    .highlight-popup { display:grid; grid-template-columns:minmax(280px,1.15fr) minmax(280px,.85fr); min-height:390px; overflow:hidden; border:1px solid rgba(244,215,127,.24); border-radius:24px; background:#0d0b10; box-shadow:0 28px 70px rgba(0,0,0,.45),0 0 60px rgba(190,24,93,.08); }
+    .highlight-popup-media { position:relative; min-height:390px; overflow:hidden; background:#110d14; }
+    .highlight-popup-media::before { content:""; position:absolute; inset:-22px; background-image:var(--highlight-image); background-size:cover; background-position:center; filter:blur(24px); opacity:.34; transform:scale(1.12); }
+    .highlight-popup-photo { position:absolute; inset:0; z-index:1; width:100%; height:100%; object-fit:contain; object-position:center; }
+    .highlight-popup-content { display:flex; flex-direction:column; justify-content:center; padding:34px; background:linear-gradient(145deg,#17121b,#0d0b10); }
+    .highlight-popup-badge { display:inline-flex; gap:7px; align-items:center; margin-bottom:11px; padding:6px 10px; border:1px solid rgba(244,215,127,.35); border-radius:999px; color:#f4d77f; background:rgba(16,12,19,.68); font-size:.68rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; }
+    .highlight-popup h2 { margin:0 0 8px; font-family:Georgia,serif; font-size:2rem; }
+    .highlight-popup p { margin:0 0 17px; color:#d1c8d2; line-height:1.55; }
+    .highlight-popup-meta { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+    .highlight-popup-meta span { padding:5px 9px; border-radius:999px; background:rgba(255,255,255,.09); font-size:.72rem; }
+    .highlight-status { margin-top:16px; padding:13px 14px; border-radius:12px; color:var(--text-muted); background:rgba(255,255,255,.04); font-size:.82rem; line-height:1.5; }
+    .highlight-status strong { color:var(--text); }
+    .pix-box { display:none; margin-top:16px; padding:17px; border-radius:14px; background:rgba(34,197,94,.08); border:1px solid rgba(34,197,94,.2); }
+    .pix-box.visible { display:block; }
+    .pix-key { margin:10px 0; padding:11px; border-radius:10px; background:#0c1210; color:#86efac; word-break:break-all; font-family:monospace; }
+    .highlight-schedule-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:14px; }
+    .customer-reputation-btn { display:none; align-items:center; gap:6px; padding:8px 11px; border:1px solid rgba(201,168,76,.3); border-radius:10px; color:var(--gold-light); background:rgba(201,168,76,.08); font-size:.72rem; font-weight:800; }
+    .customer-review-modal { position:fixed; inset:0; z-index:1300; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(4,3,6,.8); backdrop-filter:blur(10px); }
+    .customer-review-modal.open { display:flex; }
+    .customer-review-dialog { width:min(660px,100%); max-height:88vh; overflow-y:auto; padding:22px; border:1px solid rgba(201,168,76,.25); border-radius:22px; background:linear-gradient(145deg,#1c1721,#0e0c11); box-shadow:0 34px 90px rgba(0,0,0,.55); }
+    .customer-review-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; }
+    .customer-review-head h2 { margin:3px 0 0; }
+    .customer-review-head button { width:38px; height:38px; border-radius:11px; color:var(--text); background:rgba(255,255,255,.06); }
+    .customer-reputation-summary { display:flex; align-items:center; gap:14px; padding:14px; border-radius:14px; background:rgba(255,255,255,.04); }
+    .customer-reputation-summary strong { color:var(--gold-light); font-size:2rem; }
+    .customer-reputation-tags { display:flex; flex-wrap:wrap; gap:7px; margin:12px 0; }
+    .customer-reputation-tags label { padding:7px 10px; border:1px solid rgba(255,255,255,.09); border-radius:999px; color:var(--text-muted); font-size:.72rem; cursor:pointer; }
+    .customer-reputation-tags label:has(input:checked) { border-color:rgba(201,168,76,.55); color:var(--gold-light); background:rgba(201,168,76,.1); }
+    .customer-reputation-tags input { display:none; }
+    .customer-review-list { display:grid; gap:8px; margin:14px 0; }
+    .customer-review-item { padding:12px; border:1px solid rgba(255,255,255,.07); border-radius:12px; background:rgba(255,255,255,.03); }
+    .customer-review-item span { color:var(--gold); font-size:.75rem; }
+    .customer-review-item p { margin:6px 0 0; color:var(--text-muted); font-size:.78rem; line-height:1.5; }
+    #page-dashboard .stat-grid { grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
+    #page-dashboard .stat-card { padding:15px; min-height:132px; }
+    #page-dashboard .stat-icon { width:32px; height:32px; margin-bottom:9px; }
+    #page-dashboard .stat-value { font-size:1.45rem; }
+    .dashboard-tools { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:18px; }
+    .dashboard-tool { display:inline-flex; align-items:center; gap:7px; min-height:40px; padding:0 13px; border:1px solid var(--border); border-radius:10px; color:var(--text-muted); background:var(--surface); cursor:pointer; font-weight:700; }
+    .dashboard-tool:hover { color:var(--gold-light); border-color:rgba(201,168,76,.4); }
+    .dashboard-content-grid { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(290px,.65fr); gap:16px; align-items:start; }
+    .dashboard-modal { position:fixed; inset:0; z-index:1250; display:none; align-items:center; justify-content:center; padding:18px; background:rgba(3,3,6,.82); backdrop-filter:blur(10px); }
+    .dashboard-modal.open { display:flex; }
+    .dashboard-dialog { width:min(820px,100%); max-height:88vh; overflow-y:auto; padding:22px; border:1px solid rgba(201,168,76,.25); border-radius:22px; background:linear-gradient(145deg,#1d1822,#0e0c11); box-shadow:0 34px 90px rgba(0,0,0,.58); }
+    .dashboard-dialog-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px; }
+    .dashboard-dialog-head button { width:38px; height:38px; border-radius:11px; color:var(--text); background:var(--surface2); }
+    .highlight-preview-row { display:grid; grid-template-columns:minmax(0,920px) minmax(260px,330px); gap:18px; align-items:start; }
+    .highlight-manage-panel { padding:20px; border:1px solid rgba(201,168,76,.18); border-radius:18px; background:linear-gradient(145deg,rgba(31,27,39,.98),rgba(17,16,22,.98)); }
+    .highlight-manage-panel h3 { margin:5px 0 8px; }
+    .highlight-manage-copy { color:var(--text-muted); font-size:.78rem; line-height:1.5; margin-bottom:14px; }
+    .highlight-manage-actions { display:grid; gap:9px; }
+    .highlight-manage-actions button { justify-content:flex-start; width:100%; }
+    .highlight-manage-meta { display:grid; gap:7px; margin:14px 0; padding:12px; border-radius:12px; background:rgba(255,255,255,.035); color:var(--text-muted); font-size:.74rem; }
+    .highlight-manage-meta strong { color:var(--text); }
+    @media (max-width:760px) { .highlight-popup { grid-template-columns:1fr; } .highlight-popup-media { min-height:340px; } .highlight-schedule-grid { grid-template-columns:1fr; } }
+    @media (max-width:1050px) { #page-dashboard .stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-content-grid,.highlight-preview-row { grid-template-columns:1fr; } }
+  </style>
+</head>
+
+<body data-onboarding-role="profissional">
+  <button class="panel-menu-btn" type="button" onclick="togglePanelMenu()" aria-label="Abrir menu">☰</button>
+  <button class="panel-scrim" id="panelScrim" type="button" onclick="closePanelMenu()" aria-label="Fechar menu"></button>
+
+  <aside>
+    <div class="logo">Vênus</div>
+    <nav>
+      <button class="active" onclick="goPage('dashboard')" data-page="dashboard">
+        <span>📊</span> Dashboard
+      </button>
+      <button onclick="goPage('perfil')" data-page="perfil">
+        <span>👤</span> Meu Perfil
+      </button>
+      <button onclick="goPage('fotos')" data-page="fotos">
+        <span>📷</span> Fotos
+      </button>
+      <button onclick="goPage('servicos')" data-page="servicos">
+        <span>☰</span> Serviços
+      </button>
+      <button onclick="goPage('localizacao')" data-page="localizacao">
+        <span>📍</span> Localização
+      </button>
+      <button onclick="goPage('disponibilidade')" data-page="disponibilidade">
+        <span>📅</span> Disponibilidade
+      </button>
+      <button onclick="goPage('destaque')" data-page="destaque">
+        <span>✨</span> Criar Destaque
+      </button>
+      <button onclick="goPage('mensagens')" data-page="mensagens" id="navMensagens">
+        <span>💬</span> Mensagens
+        <span class="nav-unread-badge" id="navUnreadBadge"
+          style="display:none;margin-left:auto;background:var(--gold);color:#000;font-size:.62rem;font-weight:700;padding:1px 6px;border-radius:10px;min-width:16px;text-align:center;"></span>
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <div class="plan-badge">PLANO GRATUITO</div>
+      <div class="plan-sub">Upgrade em breve</div>
+      <button class="btn-logout" onclick="logout()">🚪 Sair</button>
+    </div>
+  </aside>
+
+  <header>
+    <a class="hdr-link" href="perfil.html" target="_blank">🔗 Ver meu perfil</a>
+    <div class="avatar" id="avatarInitials">?</div>
+    <span id="headerName" style="font-size:0.875rem;color:var(--text-muted)"></span>
+  </header>
+
+  <main>
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px">
+        <div>
+          <h1 class="page-title" id="dashGreet">Olá! 👋</h1>
+          <p class="page-sub">Aqui está um resumo do seu perfil</p>
+        </div>
+        <div class="toggle-wrap">
+          <span style="font-size:0.85rem;color:var(--text-muted)">Status:</span>
+          <label class="toggle">
+            <input type="checkbox" id="onlineToggle" onchange="toggleOnline()">
+            <span class="slider"></span>
+          </label>
+          <span id="onlineLabel" style="font-size:0.85rem;font-weight:600;color:var(--text-muted)">Offline</span>
+        </div>
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(99,102,241,0.15);color:#818CF8">👁</div>
+          <div class="stat-label">Visualizações (7 dias)</div>
+          <div class="stat-value" id="statViews">—</div>
+          <div class="stat-delta up" id="statViewsDelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(239,68,68,0.15);color:#F87171">♥</div>
+          <div class="stat-label">Favoritos</div>
+          <div class="stat-value" id="statFavs">—</div>
+          <div class="stat-delta up" id="statFavsDelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(34,197,94,0.15);color:#4ADE80">💬</div>
+          <div class="stat-label">Cliques no WhatsApp</div>
+          <div class="stat-value" id="statWA">—</div>
+          <div class="stat-delta up" id="statWADelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(201,168,76,0.15);color:var(--gold)">📈</div>
+          <div class="stat-label">Taxa de contato</div>
+          <div class="stat-value" id="statRate">—</div>
+          <div class="stat-delta" id="statRateDelta"></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(168,85,247,.15);color:#c084fc">✨</div>
+          <div class="stat-label">Pontos de engajamento</div>
+          <div class="stat-value" id="statEngagement">0</div>
+          <div class="stat-delta up">Avaliações aprovadas colocam seu perfil em evidência</div>
+        </div>
+      </div>
+
+      <div class="dashboard-tools">
+        <button class="dashboard-tool" type="button" onclick="openDashboardModal('profileGuideModal')">
+          <i class="ti ti-checklist"></i> Ver conclusão do perfil
+        </button>
+        <button class="dashboard-tool" type="button" onclick="openDashboardModal('activityModal')">
+          <i class="ti ti-bell"></i> Atividades recentes
+        </button>
+        <button class="dashboard-tool" type="button" onclick="goPage('destaque')">
+          <i class="ti ti-sparkles"></i> Gerenciar Destaque
+        </button>
+      </div>
+
+      <div class="dashboard-content-grid">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+            <span style="font-weight:600">Visualizações dos últimos 14 dias</span>
+            <span style="font-size:0.78rem;background:var(--surface2);padding:4px 10px;border-radius:20px;color:var(--text-muted)">14 dias</span>
+          </div>
+          <canvas id="viewsChart" height="105"></canvas>
+        </div>
+
+        <div class="card">
+          <span style="font-weight:600">Atalhos</span>
+          <div style="display:grid;gap:9px;margin-top:14px">
+            <button class="dashboard-tool" type="button" onclick="goPage('mensagens')"><i class="ti ti-message-circle"></i> Mensagens</button>
+            <button class="dashboard-tool" type="button" onclick="goPage('disponibilidade')"><i class="ti ti-calendar-time"></i> Disponibilidade</button>
+            <button class="dashboard-tool" type="button" onclick="goPage('fotos')"><i class="ti ti-photo"></i> Fotos</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEU PERFIL -->
+    <div class="page" id="page-perfil">
+      <h1 class="page-title">Meu Perfil</h1>
+      <p class="page-sub">Edite suas informações pessoais</p>
+
+      <!-- Informações principais -->
+      <div class="form-section">
+        <div class="form-section-title">Informações Principais</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Nome Artístico</label>
+            <input id="p_nome_artistico" type="text" placeholder="Seu nome artístico">
+          </div>
+          <div class="form-group">
+            <label>Categoria</label>
+            <select id="p_categoria">
+              <option value="">Selecionar...</option>
+              <option value="GP Feminina">GP Feminina</option>
+              <option value="GP Masculino">GP Masculino</option>
+              <option value="Trans">Trans</option>
+              <option value="Travesti">Travesti</option>
+              <option value="Lésbica">Lésbica</option>
+              <option value="Gay">Gay</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <input id="p_whatsapp" type="tel" placeholder="Ex: 92999990000">
+          </div>
+          <div class="form-group">
+            <label>Idiomas</label>
+            <div class="multi-select" id="idiomasGroup">
+              <span class="tag" data-val="Português" onclick="toggleTag(this,'idiomas')">Português</span>
+              <span class="tag" data-val="Inglês" onclick="toggleTag(this,'idiomas')">Inglês</span>
+              <span class="tag" data-val="Espanhol" onclick="toggleTag(this,'idiomas')">Espanhol</span>
+              <span class="tag" data-val="Francês" onclick="toggleTag(this,'idiomas')">Francês</span>
+              <span class="tag" data-val="Italiano" onclick="toggleTag(this,'idiomas')">Italiano</span>
+            </div>
+          </div>
+          <div class="form-group full">
+            <label>Bio / Sobre mim <span style="color:var(--text-muted)">(mín. 50 caracteres)</span></label>
+            <textarea id="p_bio" placeholder="Fale sobre você..."></textarea>
+            <span id="bioCount" style="font-size:0.75rem;color:var(--text-muted);text-align:right">0 / mín 50</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Características físicas -->
+      <div class="form-section">
+        <div class="form-section-title">Características Físicas</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>Idade</label>
+            <input id="p_idade" type="number" min="18" max="99" placeholder="Ex: 25">
+          </div>
+          <div class="form-group">
+            <label>Altura (m)</label>
+            <input id="p_altura" type="number" step="0.01" min="1.20" max="2.50" placeholder="Ex: 1.68">
+          </div>
+          <div class="form-group">
+            <label>Peso (kg)</label>
+            <input id="p_peso" type="number" min="30" max="300" placeholder="Ex: 58">
+          </div>
+          <div class="form-group">
+            <label>Etnia</label>
+            <select id="p_etnia">
+              <option value="">Selecionar...</option>
+              <option value="Branca">Branca</option>
+              <option value="Morena">Morena</option>
+              <option value="Negra">Negra</option>
+              <option value="Latina">Latina</option>
+              <option value="Asiática">Asiática</option>
+              <option value="Outra">Outra</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Cabelo</label>
+            <select id="p_cabelo">
+              <option value="">Selecionar...</option>
+              <option>Liso curto</option>
+              <option>Liso médio</option>
+              <option>Liso longo</option>
+              <option>Ondulado curto</option>
+              <option>Ondulado médio</option>
+              <option>Ondulado longo</option>
+              <option>Cacheado curto</option>
+              <option>Cacheado médio</option>
+              <option>Cacheado longo</option>
+              <option>Crespo curto</option>
+              <option>Crespo médio</option>
+              <option>Crespo longo</option>
+              <option>Loiro</option>
+              <option>Castanho claro</option>
+              <option>Castanho escuro</option>
+              <option>Preto</option>
+              <option>Ruivo</option>
+              <option>Colorido</option>
+              <option>Careca / Raspado</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Olhos</label>
+            <select id="p_olhos">
+              <option value="">Selecionar...</option>
+              <option>Castanho</option>
+              <option>Preto</option>
+              <option>Azul</option>
+              <option>Verde</option>
+              <option>Mel / Âmbar</option>
+              <option>Cinza</option>
+              <option>Avelã</option>
+              <option>Heterocromia</option>
+            </select>
+          </div>
+        </div>
+        <!-- Silicone -->
+        <div style="margin-top:20px">
+          <label
+            style="font-size:0.8rem;color:var(--text-muted);font-weight:500;display:block;margin-bottom:10px">Silicone —
+            onde possui implante (marque todos que se aplicam)</label>
+          <div class="check-group" id="siliconeGroup">
+            <label class="check-item"><input type="checkbox" value="Seios"> Seios</label>
+            <label class="check-item"><input type="checkbox" value="Bumbum / Glúteos"> Bumbum / Glúteos</label>
+            <label class="check-item"><input type="checkbox" value="Lábios"> Lábios</label>
+            <label class="check-item"><input type="checkbox" value="Rosto / Maçãs"> Rosto / Maçãs</label>
+            <label class="check-item"><input type="checkbox" value="Braços"> Braços</label>
+            <label class="check-item"><input type="checkbox" value="Pernas"> Pernas</label>
+            <label class="check-item"><input type="checkbox" value="Quadril"> Quadril</label>
+            <label class="check-item"><input type="checkbox" value="Pênis"> Pênis</label>
+            <label class="check-item"><input type="checkbox" value="Outros"> Outros</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="savePerfil()">💾 Salvar Perfil</button>
+      </div>
+    </div>
+
+    <!-- FOTOS -->
+    <div class="page" id="page-fotos">
+      <h1 class="page-title">Fotos</h1>
+      <p class="page-sub">Gerencie suas fotos de perfil</p>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="upload-zone" onclick="document.getElementById('fileInput').click()" id="uploadZone">
+          <div class="upload-icon">📤</div>
+          <div class="upload-text">Clique para selecionar fotos (JPG, PNG, WEBP — máx 10MB cada)</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/*" multiple style="display:none" onchange="uploadFotos(this)">
+        <div id="uploadProgress" style="margin-top:14px;display:none">
+          <div style="background:var(--surface2);border-radius:20px;height:6px">
+            <div id="progressBar"
+              style="background:var(--gold);height:6px;border-radius:20px;width:0;transition:width 0.3s"></div>
+          </div>
+          <div id="progressText" style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;text-align:center">
+          </div>
+        </div>
+      </div>
+
+      <div class="photos-grid" id="photosGrid">
+        <div style="color:var(--text-muted);font-size:0.875rem;grid-column:1/-1;padding:20px 0">Carregando fotos...
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVIÇOS -->
+    <div class="page" id="page-servicos">
+      <h1 class="page-title">Serviços</h1>
+      <p class="page-sub">Gerencie os serviços que você oferece</p>
+
+      <div class="card" style="margin-bottom:20px">
+        <div class="form-section-title">Adicionar Serviço</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto auto;gap:12px;align-items:end">
+          <div class="form-group">
+            <label>Nome do serviço</label>
+            <input id="svc_nome" placeholder="Ex: Acompanhamento jantar">
+          </div>
+          <div class="form-group">
+            <label>Preço (R$)</label>
+            <input id="svc_preco" type="number" min="0" step="0.01" placeholder="Ex: 300">
+          </div>
+          <div class="form-group">
+            <label>Local</label>
+            <select id="svc_local">
+              <option value="">A combinar</option>
+              <option value="Local próprio">Local próprio</option>
+              <option value="A domicílio">A domicílio</option>
+              <option value="Motel / Hotel">Motel / Hotel</option>
+              <option value="Online">Online</option>
+            </select>
+          </div>
+          <button class="btn btn-gold" onclick="addServico()" style="height:42px">+ Adicionar</button>
+        </div>
+      </div>
+
+      <div id="servicosList"></div>
+    </div>
+
+    <!-- LOCALIZAÇÃO -->
+    <div class="page" id="page-localizacao">
+      <h1 class="page-title">Localização</h1>
+      <p class="page-sub">Informe onde você atende</p>
+
+      <div class="form-section">
+        <div class="form-section-title">Endereço</div>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>CEP</label>
+            <input id="loc_cep" type="text" placeholder="Ex: 69000-000" maxlength="9" oninput="buscaCep(this)">
+          </div>
+          <div class="form-group">
+            <label>Bairro</label>
+            <input id="loc_bairro" type="text" placeholder="Ex: Centro">
+          </div>
+          <div class="form-group">
+            <label>Cidade</label>
+            <input id="loc_cidade" type="text" placeholder="Ex: Manaus">
+          </div>
+          <div class="form-group">
+            <label>Estado (UF)</label>
+            <select id="loc_uf">
+              <option value="">Selecionar...</option>
+              <option>AC</option>
+              <option>AL</option>
+              <option>AP</option>
+              <option>AM</option>
+              <option>BA</option>
+              <option>CE</option>
+              <option>DF</option>
+              <option>ES</option>
+              <option>GO</option>
+              <option>MA</option>
+              <option>MT</option>
+              <option>MS</option>
+              <option>MG</option>
+              <option>PA</option>
+              <option>PB</option>
+              <option>PR</option>
+              <option>PE</option>
+              <option>PI</option>
+              <option>RJ</option>
+              <option>RN</option>
+              <option>RS</option>
+              <option>RO</option>
+              <option>RR</option>
+              <option>SC</option>
+              <option>SP</option>
+              <option>SE</option>
+              <option>TO</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <div class="form-section-title">Locais de Atendimento</div>
+        <div class="loc-grid" id="locGrid">
+          <label class="loc-item"><input type="checkbox" value="Local próprio" onchange="updateLocItem(this)"> 🏠 Local
+            próprio</label>
+          <label class="loc-item"><input type="checkbox" value="A domicílio" onchange="updateLocItem(this)"> 🚗 A
+            domicílio</label>
+          <label class="loc-item"><input type="checkbox" value="Motel / Hotel" onchange="updateLocItem(this)"> 🏨 Motel
+            / Hotel</label>
+          <label class="loc-item"><input type="checkbox" value="Online" onchange="updateLocItem(this)"> 💻
+            Online</label>
+        </div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="saveLocalizacao()">💾 Salvar Localização</button>
+      </div>
+    </div>
+
+    <!-- DISPONIBILIDADE -->
+    <div class="page" id="page-disponibilidade">
+      <h1 class="page-title">Disponibilidade</h1>
+      <p class="page-sub">Configure seus horários de atendimento</p>
+
+      <div class="form-section">
+        <div class="form-section-title">Horários por dia da semana</div>
+        <div class="week-grid" id="weekGrid"></div>
+      </div>
+
+      <div class="save-row">
+        <button class="btn btn-gold" onclick="saveDisponibilidade()">💾 Salvar Disponibilidade</button>
+      </div>
+    </div>
+
+    <!-- DESTAQUE PAGO -->
+    <div class="page" id="page-destaque">
+      <h1 class="page-title">Criar propaganda em Destaques</h1>
+      <p class="page-sub">Monte uma chamada elegante para aparecer no topo do catálogo.</p>
+
+      <div class="highlight-builder">
+        <section class="highlight-editor">
+          <div class="highlight-kicker">Destaque por 48 horas</div>
+          <div class="highlight-price">
+            <div><strong>R$ 19,90</strong><div><span>Pagamento único via Pix</span></div></div>
+            <span>Publicação após aprovação<br>do administrador</span>
+          </div>
+
+          <div class="form-group">
+            <label>Frase principal</label>
+            <input id="adHeadline" maxlength="70" placeholder="Ex: Uma experiência inesquecível" oninput="renderHighlightPreview()">
+          </div>
+          <div class="form-group" style="margin-top:14px">
+            <label>Texto da propaganda</label>
+            <textarea id="adDescription" maxlength="240" placeholder="Conte, com charme e objetividade, o que torna seu atendimento especial." oninput="renderHighlightPreview()"></textarea>
+          </div>
+          <div class="form-group" style="margin-top:14px">
+            <label>Texto do botão</label>
+            <select id="adCta" onchange="renderHighlightPreview()">
+              <option>Ver perfil</option>
+              <option>Conhecer agora</option>
+              <option>Descobrir detalhes</option>
+              <option>Quero conhecer</option>
+            </select>
+          </div>
+          <div class="highlight-schedule-grid">
+            <div class="form-group">
+              <label>Estado onde o Destaque aparecerá</label>
+              <select id="adTargetUf" onchange="renderHighlightPreview()">
+                <option value="">Selecione o estado</option>
+                <option>AC</option><option>AL</option><option>AP</option><option>AM</option><option>BA</option>
+                <option>CE</option><option>DF</option><option>ES</option><option>GO</option><option>MA</option>
+                <option>MT</option><option>MS</option><option>MG</option><option>PA</option><option>PB</option>
+                <option>PR</option><option>PE</option><option>PI</option><option>RJ</option><option>RN</option>
+                <option>RS</option><option>RO</option><option>RR</option><option>SC</option><option>SP</option>
+                <option>SE</option><option>TO</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Data e hora para iniciar</label>
+              <input id="adStartsAt" type="datetime-local" onchange="renderHighlightPreview()">
+            </div>
+          </div>
+          <div class="form-group" style="margin-top:14px">
+            <label>Escolha de 1 a 3 fotos aprovadas</label>
+            <div class="highlight-photo-list" id="highlightPhotoList">
+              <div style="color:var(--text-muted);font-size:.8rem">Carregando fotos...</div>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:20px">
+            <button class="btn btn-outline" type="button" onclick="saveHighlightDraft()">Salvar rascunho</button>
+            <button class="btn btn-gold" type="button" onclick="requestHighlightPayment()">Pagar com Pix e solicitar publicação</button>
+          </div>
+
+          <div class="pix-box" id="highlightPixBox">
+            <strong>Pagamento via Pix</strong>
+            <p style="margin:6px 0;color:var(--text-muted);font-size:.8rem">Envie R$ 19,90 e aguarde a confirmação no painel administrativo.</p>
+            <div class="pix-key" id="highlightPixKey">Chave Pix não configurada</div>
+            <button class="btn btn-outline btn-sm" type="button" onclick="copyHighlightPix()">Copiar chave Pix</button>
+          </div>
+          <div class="highlight-status" id="highlightStatus">Você ainda não criou uma propaganda.</div>
+        </section>
+
+        <div class="highlight-preview-row">
+        <section class="highlight-preview-shell">
+          <div class="highlight-kicker" style="margin-bottom:12px">Pré-visualização no catálogo</div>
+          <article class="highlight-popup">
+            <div class="highlight-popup-media" id="adPreviewMedia">
+              <img class="highlight-popup-photo" id="adPreviewPhoto" alt="Prévia da foto selecionada">
+            </div>
+            <div class="highlight-popup-content">
+              <div class="highlight-popup-badge">✦ Diferenciada</div>
+              <h2 id="adPreviewName">Seu nome artístico</h2>
+              <p id="adPreviewText">Sua propaganda vai aparecer aqui com uma apresentação moderna e envolvente.</p>
+              <div class="highlight-popup-meta">
+                <span id="adPreviewUf">⌖ Estado</span>
+                <span id="adPreviewRating">★ Nova</span>
+                <span id="adPreviewFavs">♥ 0 favoritas</span>
+                <span id="adPreviewViews">◉ 0 visualizações</span>
+              </div>
+              <button class="btn btn-gold" id="adPreviewCta" type="button">Ver perfil</button>
+            </div>
+          </article>
+        </section>
+        <section class="highlight-manage-panel">
+          <div class="highlight-kicker">Gerenciar campanha</div>
+          <h3>Seu Destaque</h3>
+          <p class="highlight-manage-copy">Edite os campos, ajuste o horário ou solicite uma nova publicação sem sair desta tela.</p>
+          <div class="highlight-manage-meta">
+            <span>Status: <strong id="highlightManageStatus">Nenhuma campanha</strong></span>
+            <span>Início: <strong id="highlightManageStart">—</strong></span>
+            <span>Expira: <strong id="highlightManageEnd">—</strong></span>
+          </div>
+          <div class="highlight-manage-actions">
+            <button class="btn btn-outline" type="button" onclick="editCurrentHighlight()"><i class="ti ti-edit"></i> Editar conteúdo</button>
+            <button class="btn btn-outline" type="button" onclick="changeCurrentHighlightTime()"><i class="ti ti-clock-edit"></i> Alterar horário</button>
+            <button class="btn btn-gold" type="button" onclick="requestHighlightRepublish()"><i class="ti ti-refresh"></i> Solicitar republicação</button>
+            <button class="btn btn-danger" type="button" onclick="deleteCurrentHighlight()"><i class="ti ti-trash"></i> Excluir campanha</button>
+          </div>
+        </section>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ MENSAGENS ══════════ -->
+    <div class="page" id="page-mensagens">
+      <div class="chat-wrap">
+
+        <!-- Lista lateral -->
+        <div class="clist">
+          <div class="clist-head">Conversas</div>
+          <div class="clist-body" id="cListBody">
+            <div style="padding:20px;text-align:center;font-size:.78rem;color:var(--text-muted)">Carregando...</div>
+          </div>
+        </div>
+
+        <!-- Área principal -->
+        <div class="cmain" id="cMain">
+
+          <!-- Placeholder -->
+          <div class="cno-conv" id="cNoConv">
+            <div class="cno-conv-icon">💬</div>
+            <div style="font-size:.88rem;font-weight:600;opacity:.4">Selecione uma conversa</div>
+            <div style="font-size:.75rem;opacity:.3;text-align:center;max-width:200px;margin-top:4px">Suas mensagens com
+              clientes aparecem aqui</div>
+          </div>
+
+          <!-- Chat ativo (oculto inicialmente) -->
+          <div id="cBox" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+
+            <div class="chead">
+              <div class="chead-ava" id="cHeadAva">?</div>
+              <div class="chead-info">
+                <div class="chead-name" id="cHeadName">–</div>
+                <div class="chead-sub">Conversa autenticada</div>
+              </div>
+              <div class="chead-chips">
+                <span class="cchip cchip-gold">✓ Autenticado</span>
+                <span class="cchip cchip-green">● Conectado</span>
+                <span class="cchip cchip-timer" id="cTimer"></span>
+                <button class="customer-reputation-btn" id="customerReputationBtn" type="button" onclick="openCustomerReviewModal()">
+                  <i class="ti ti-user-star"></i> Reputação
+                </button>
+              </div>
+            </div>
+
+            <div class="cmsgs" id="cMsgs"></div>
+
+            <div class="cinput-bar" id="cInputBar">
+              <textarea class="cinput" id="cInput" placeholder="Escreva uma mensagem…" rows="1"
+                onkeydown="cHandleKey(event)" oninput="cResize(this)"></textarea>
+              <button class="csend-btn" onclick="cSend()">
+                <svg viewBox="0 0 24 24">
+                  <line x1="22" y1="2" x2="11" y2="13" />
+                  <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <div class="dashboard-modal" id="profileGuideModal" onclick="closeDashboardModal(event)">
+    <section class="dashboard-dialog">
+      <header class="dashboard-dialog-head">
+        <div>
+          <div class="highlight-kicker">Qualidade do perfil</div>
+          <h2>Conclusão e próximos passos</h2>
+        </div>
+        <button type="button" onclick="closeDashboardModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+      <div class="profile-guide" id="profileGuide">
+        <div class="profile-guide-head">
+          <div>
+            <div class="profile-guide-title">Complete seu perfil no seu ritmo</div>
+            <div class="profile-guide-sub">Revise os itens que ajudam seu perfil a aparecer melhor no catálogo.</div>
+          </div>
+          <div class="profile-guide-score" id="profileGuideScore">0%</div>
+        </div>
+        <div class="profile-guide-bar"><span id="profileGuideBar"></span></div>
+        <div class="profile-guide-list" id="profileGuideList">
+          <div class="profile-guide-detail">Carregando próximos passos...</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="dashboard-modal" id="activityModal" onclick="closeDashboardModal(event)">
+    <section class="dashboard-dialog">
+      <header class="dashboard-dialog-head">
+        <div>
+          <div class="highlight-kicker">Movimento do perfil</div>
+          <h2>Atividades recentes</h2>
+        </div>
+        <button type="button" onclick="closeDashboardModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+      <div id="activityList" style="display:flex;flex-direction:column;gap:10px"></div>
+    </section>
+  </div>
+
+  <div class="dashboard-modal" id="highlightDeleteModal" onclick="closeDashboardModal(event)">
+    <section class="dashboard-dialog" style="width:min(520px,100%)">
+      <header class="dashboard-dialog-head">
+        <div>
+          <div class="highlight-kicker">Gerenciar Destaque</div>
+          <h2>Excluir esta campanha?</h2>
+        </div>
+        <button type="button" onclick="closeDashboardModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+      <p class="page-sub" style="margin-bottom:20px">A campanha será removida definitivamente. Destaques ativos só podem ser excluídos depois do encerramento.</p>
+      <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline" type="button" onclick="closeDashboardModal()">Cancelar</button>
+        <button class="btn btn-danger" id="confirmHighlightDeleteButton" type="button" onclick="confirmDeleteCurrentHighlight()">
+          <i class="ti ti-trash"></i> Excluir campanha
+        </button>
+      </div>
+    </section>
+  </div>
+
+  <div id="toast"></div>
+
+  <div class="customer-review-modal" id="customerReviewModal" onclick="closeCustomerReviewModal(event)">
+    <section class="customer-review-dialog">
+      <header class="customer-review-head">
+        <div>
+          <div class="highlight-kicker">Visível somente para profissionais</div>
+          <h2>Avaliar cliente</h2>
+          <p class="page-sub" id="customerReviewName">Reputação entre profissionais</p>
+        </div>
+        <button type="button" onclick="closeCustomerReviewModal()" aria-label="Fechar"><i class="ti ti-x"></i></button>
+      </header>
+      <div class="customer-reputation-summary">
+        <strong id="customerReviewAverage">—</strong>
+        <div>
+          <div id="customerReviewStars" style="color:var(--gold)">☆☆☆☆☆</div>
+          <small id="customerReviewCount" style="color:var(--text-muted)">Nenhuma avaliação</small>
+        </div>
+      </div>
+      <div class="customer-review-list" id="customerReviewList"></div>
+      <div class="form-group">
+        <label>Sua nota</label>
+        <select id="customerReviewRating">
+          <option value="5">5 — Excelente</option>
+          <option value="4">4 — Bom cliente</option>
+          <option value="3">3 — Regular</option>
+          <option value="2">2 — Atenção</option>
+          <option value="1">1 — Não recomendado</option>
+        </select>
+      </div>
+      <div class="customer-reputation-tags">
+        <label><input type="checkbox" value="educado"> Educado</label>
+        <label><input type="checkbox" value="confiavel"> Confiável</label>
+        <label><input type="checkbox" value="pontual"> Pontual</label>
+        <label><input type="checkbox" value="respeitoso"> Respeitoso</label>
+        <label><input type="checkbox" value="nao_compareceu"> Não compareceu</label>
+        <label><input type="checkbox" value="golpista"> Alerta de golpe</label>
+      </div>
+      <div class="form-group">
+        <label>Comentário privado para outras profissionais</label>
+        <textarea id="customerReviewComment" maxlength="600" placeholder="Compartilhe informações objetivas e úteis. Evite dados pessoais sensíveis."></textarea>
+      </div>
+      <button class="btn btn-gold" id="saveCustomerReviewBtn" type="button" onclick="saveCustomerReview()">Salvar avaliação do cliente</button>
+    </section>
+  </div>
+
+  <div class="customer-review-modal" id="evaluationReminderModal">
+    <section class="customer-review-dialog" style="max-width:520px">
+      <header class="customer-review-head">
+        <div>
+          <div class="highlight-kicker">Atendimento pelo site</div>
+          <h2>Como foi a experiência com este cliente?</h2>
+          <p class="page-sub" id="evaluationReminderText">Uma interação foi registrada há 15 minutos.</p>
+        </div>
+      </header>
+      <p style="color:var(--text-muted);line-height:1.55">Avaliar cada atendimento ajuda outras profissionais e mantém a reputação da comunidade confiável. Confirme apenas se o atendimento realmente aconteceu.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:18px">
+        <button class="btn btn-gold" type="button" onclick="evaluateInteractionNow()">Avaliar agora</button>
+        <button class="btn btn-outline" type="button" onclick="snoozeInteractionReview()">Lembrar depois</button>
+        <button class="btn btn-outline" type="button" onclick="dismissInteractionReview()">Atendimento não aconteceu</button>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    // ============================================================
+    // CONFIG — Substitua pelos seus dados do Supabase
+    // ============================================================
+    const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0'; // Substitua pela sua anon key
+
+    const { createClient } = supabase;
+    const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        storageKey: 'venus-user-session'
+      }
+    });
+
+    let currentUser = null;
+    let currentProfile = null;
+
+    // ============================================================
+    // LOGOUT
+    // ============================================================
+    async function logout() {
+      if (!confirm('Deseja sair do painel?')) return;
+      await sb.auth.signOut();
+      window.location.href = 'login.html';
+    }
+
+    function togglePanelMenu() {
+      document.querySelector('aside')?.classList.toggle('open');
+      document.getElementById('panelScrim')?.classList.toggle('open');
+    }
+
+    function closePanelMenu() {
+      document.querySelector('aside')?.classList.remove('open');
+      document.getElementById('panelScrim')?.classList.remove('open');
+    }
+
+    function openDashboardModal(id) {
+      document.getElementById(id)?.classList.add('open');
+    }
+
+    function closeDashboardModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.querySelectorAll('.dashboard-modal.open').forEach(modal => modal.classList.remove('open'));
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    async function init() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) {
+        window.location.href = 'login.html';
+        return;
+      }
+      if (!session.user.email_confirmed_at) {
+        showToast('Confirme seu e-mail antes de acessar o painel profissional.', 'error');
+        await sb.auth.signOut();
+        setTimeout(() => window.location.href = 'login.html?confirmacao=pendente', 1200);
+        return;
+      }
+      currentUser = session.user;
+      await loadProfile();
+      subscribeProfileActivity();
+      checkDueInteractionReviews();
+      setInterval(checkDueInteractionReviews, 60000);
+      buildWeekGrid();
+      loadPage('dashboard');
+      openInitialPageFromHash();
+    }
+
+    function openInitialPageFromHash() {
+      const page = String(location.hash || '').replace('#', '');
+      const allowed = ['dashboard', 'perfil', 'fotos', 'servicos', 'localizacao', 'disponibilidade', 'destaque', 'mensagens'];
+      if (allowed.includes(page)) goPage(page);
+    }
+
+    async function loadProfile() {
+      const { data, error } = await sb.from('profiles').select('*').eq('id', currentUser.id).single();
+      if (error || !data) { showToast('Erro ao carregar perfil', 'error'); return; }
+      currentProfile = data;
+      updateUIFromProfile();
+    }
+
+    function updateUIFromProfile() {
+      if (!currentProfile) return;
+      const p = currentProfile;
+      const name = p.nome_artistico || p.email || 'Usuário';
+      const initials = name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+
+      document.getElementById('avatarInitials').textContent = initials;
+      document.getElementById('headerName').textContent = name;
+      // CORRIGIDO: usar nome_artistico do perfil, não outro campo
+      document.getElementById('dashGreet').textContent = `Olá, ${p.nome_artistico}! 👋`;
+
+      // Online toggle
+      const tog = document.getElementById('onlineToggle');
+      tog.checked = p.online_now;
+      document.getElementById('onlineLabel').textContent = p.online_now ? 'Ativo' : 'Offline';
+      document.getElementById('onlineLabel').style.color = p.online_now ? 'var(--green)' : 'var(--text-muted)';
+      document.getElementById('statEngagement').textContent = Number(p.engagement_points || 0).toLocaleString('pt-BR');
+
+      // Perfil form
+      setVal('p_nome_artistico', p.nome_artistico);
+      setVal('p_categoria', p.categoria);
+      setVal('p_whatsapp', p.whatsapp);
+      setVal('p_bio', p.bio);
+      setVal('p_idade', p.idade);
+      setVal('p_altura', p.altura);
+      setVal('p_peso', p.peso);
+      setVal('p_etnia', p.etnia);
+      setVal('p_cabelo', p.cabelo);
+      setVal('p_olhos', p.olhos);
+      updateBioCount();
+
+      // Idiomas tags
+      const idiomas = p.idiomas || [];
+      document.querySelectorAll('#idiomasGroup .tag').forEach(t => {
+        if (idiomas.includes(t.dataset.val)) t.classList.add('selected');
+        else t.classList.remove('selected');
+      });
+
+      // Localização
+      setVal('loc_cep', p.cep);
+      setVal('loc_bairro', p.bairro);
+      setVal('loc_cidade', p.cidade);
+      setVal('loc_uf', p.uf);
+
+      loadProfileGuide();
+    }
+
+    async function loadProfileGuide() {
+      const list = document.getElementById('profileGuideList');
+      if (!list || !currentUser || !currentProfile) return;
+
+      const [photos, services, locations, availability] = await Promise.all([
+        sb.from('profile_photos').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id).eq('status', 'approved'),
+        sb.from('services').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id),
+        sb.from('attendance_locations').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id),
+        sb.from('availability').select('id', { count: 'exact', head: true }).eq('profile_id', currentUser.id)
+      ]);
+
+      const p = currentProfile;
+      const phoneDigits = String(p.whatsapp || '').replace(/\D/g, '');
+      const hasCoreProfile = Boolean((p.nome_artistico || '').trim())
+        && Boolean(p.categoria)
+        && phoneDigits.length >= 10
+        && (p.bio || '').trim().length >= 50
+        && Boolean(p.cidade && p.uf);
+      const steps = [
+        {
+          label: 'Perfil completo',
+          detail: 'Nome, categoria, WhatsApp, bio e localizacao deixam voce mais forte no catalogo.',
+          done: hasCoreProfile,
+          action: 'Completar perfil',
+          page: 'perfil'
+        },
+        {
+          label: 'Fotos aprovadas',
+          detail: 'Fotos aprovadas aumentam a confianca e melhoram o clique no perfil.',
+          done: (photos.count || 0) > 0,
+          action: 'Enviar fotos',
+          page: 'fotos'
+        },
+        {
+          label: 'Servicos e valores',
+          detail: 'Clientes decidem mais rapido quando entendem servicos, valores e local de atendimento.',
+          done: (services.count || 0) > 0 && (locations.count || 0) > 0,
+          action: 'Adicionar servicos',
+          page: 'servicos'
+        },
+        {
+          label: 'Disponibilidade ativa',
+          detail: 'Marque dias e horarios para aparecer nos filtros de atendimento agora.',
+          done: (availability.count || 0) > 0,
+          action: 'Marcar agenda',
+          page: 'disponibilidade'
+        },
+        {
+          label: 'Resposta rapida',
+          detail: 'Deixe o status ativo quando puder responder. Isso ajuda o cliente a chamar quem esta disponivel.',
+          done: Boolean(p.online_now),
+          action: 'Ativar status',
+          page: 'dashboard'
+        }
+      ];
+
+      renderProfileGuide(steps);
+    }
+
+    function renderProfileGuide(steps) {
+      const list = document.getElementById('profileGuideList');
+      const score = document.getElementById('profileGuideScore');
+      const bar = document.getElementById('profileGuideBar');
+      if (!list || !score || !bar) return;
+
+      const completed = steps.filter(step => step.done).length;
+      const pct = Math.round((completed / steps.length) * 100);
+      score.textContent = pct + '%';
+      bar.style.width = pct + '%';
+
+      list.innerHTML = steps.map(step => `
+        <div class="profile-guide-item ${step.done ? 'done' : ''}">
+          <div class="profile-guide-icon">${step.done ? 'OK' : '...'}</div>
+          <div>
+            <div class="profile-guide-name">${cEsc(step.label)}</div>
+            <div class="profile-guide-detail">${cEsc(step.detail)}</div>
+          </div>
+          <button class="profile-guide-action" type="button" onclick="goPage('${step.page}')">
+            ${step.done ? 'Revisar' : cEsc(step.action)}
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function setVal(id, val) {
+      const el = document.getElementById(id);
+      if (el && val !== null && val !== undefined) el.value = val;
+    }
+
+    // ============================================================
+    // NAVIGATION
+    // ============================================================
+    function goPage(page) {
+      closePanelMenu();
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      document.getElementById('page-' + page)?.classList.add('active');
+      document.querySelector(`nav button[data-page="${page}"]`)?.classList.add('active');
+      loadPage(page);
+    }
+
+    async function loadPage(page) {
+      if (page === 'dashboard') loadDashboard();
+      else if (page === 'fotos') loadFotos();
+      else if (page === 'servicos') loadServicos();
+      else if (page === 'localizacao') loadLocalizacao();
+      else if (page === 'disponibilidade') loadDisponibilidade();
+      else if (page === 'perfil') loadSilicone();
+      else if (page === 'destaque') loadHighlightBuilder();
+      else if (page === 'mensagens') cInit();
+    }
+
+    // ============================================================
+    // TOAST
+    // ============================================================
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = type === 'success' ? '✅ ' + msg : '❌ ' + msg;
+      t.className = type;
+      t.style.display = 'block';
+      setTimeout(() => t.style.display = 'none', 3500);
+    }
+
+    // ============================================================
+    // ONLINE TOGGLE
+    // ============================================================
+    async function toggleOnline() {
+      const tog = document.getElementById('onlineToggle');
+      const label = document.getElementById('onlineLabel');
+      const val = tog.checked;
+
+      // Atualiza UI imediatamente (otimista)
+      label.textContent = val ? 'Ativo' : 'Offline';
+      label.style.color = val ? 'var(--green)' : 'var(--text-muted)';
+      tog.disabled = true;
+
+      const { error } = await sb
+        .from('profiles')
+        .update({ online_now: val })
+        .eq('id', currentUser.id);
+
+      tog.disabled = false;
+
+      if (error) {
+        // Reverte se falhou
+        tog.checked = !val;
+        label.textContent = !val ? 'Ativo' : 'Offline';
+        label.style.color = !val ? 'var(--green)' : 'var(--text-muted)';
+        showToast('Erro ao atualizar status: ' + error.message, 'error');
+      } else {
+        showToast(val ? '● Você está Ativo no catálogo' : 'Você está Offline', val ? 'success' : 'info');
+      }
+    }
+
+    // ============================================================
+    // DASHBOARD
+    // ============================================================
+    async function loadDashboard() {
+      // Analytics
+      const since7 = new Date(Date.now() - 7 * 86400000).toISOString();
+      const since14 = new Date(Date.now() - 14 * 86400000).toISOString();
+      const sincePrev = new Date(Date.now() - 14 * 86400000).toISOString();
+
+      const { data: analytics } = await sb.from('profile_analytics')
+        .select('evento, created_at')
+        .eq('profile_id', currentUser.id)
+        .gte('created_at', since14);
+
+      const now = Date.now();
+      const week1 = (analytics || []).filter(r => new Date(r.created_at) >= new Date(since7));
+      const week2 = (analytics || []).filter(r => new Date(r.created_at) < new Date(since7));
+
+      const views7 = week1.filter(r => r.evento === 'view').length;
+      const viewsPrev = week2.filter(r => r.evento === 'view').length;
+      const favs7 = week1.filter(r => r.evento === 'favorite').length;
+      const favsPrev = week2.filter(r => r.evento === 'favorite').length;
+      const wa7 = week1.filter(r => r.evento === 'whatsapp_click').length;
+      const waPrev = week2.filter(r => r.evento === 'whatsapp_click').length;
+
+      document.getElementById('statViews').textContent = views7.toLocaleString('pt-BR');
+      document.getElementById('statFavs').textContent = favs7;
+      document.getElementById('statWA').textContent = wa7;
+
+      const rate = views7 > 0 ? ((wa7 / views7) * 100).toFixed(1) : '0.0';
+      document.getElementById('statRate').textContent = rate + '%';
+
+      const delta = (curr, prev) => {
+        if (prev === 0) return curr > 0 ? '+' + curr + ' novos' : '';
+        const pct = ((curr - prev) / prev * 100).toFixed(0);
+        return (pct >= 0 ? '+' : '') + pct + '% vs semana anterior';
+      };
+      const rateDelta = () => {
+        const prevRate = viewsPrev > 0 ? (waPrev / viewsPrev * 100) : 0;
+        const diff = (parseFloat(rate) - prevRate).toFixed(1);
+        return (diff >= 0 ? '+' : '') + diff + '% vs semana anterior';
+      };
+
+      const dv = document.getElementById('statViewsDelta');
+      dv.textContent = delta(views7, viewsPrev);
+      dv.className = 'stat-delta ' + (views7 >= viewsPrev ? 'up' : 'down');
+
+      document.getElementById('statFavsDelta').textContent = delta(favs7, favsPrev);
+      document.getElementById('statWADelta').textContent = delta(wa7, waPrev);
+
+      const rd = document.getElementById('statRateDelta');
+      rd.textContent = rateDelta();
+      rd.className = 'stat-delta ' + (parseFloat(rate) >= (viewsPrev > 0 ? waPrev / viewsPrev * 100 : 0) ? 'up' : 'down');
+
+      // Chart
+      const { data: chartData } = await sb.from('profile_analytics')
+        .select('created_at')
+        .eq('profile_id', currentUser.id)
+        .eq('evento', 'view')
+        .gte('created_at', since14);
+
+      const dayMap = {};
+      for (let i = 13; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        const key = `${d.getDate()}/${d.getMonth() + 1}`;
+        dayMap[key] = 0;
+      }
+      (chartData || []).forEach(r => {
+        const d = new Date(r.created_at);
+        const key = `${d.getDate()}/${d.getMonth() + 1}`;
+        if (key in dayMap) dayMap[key]++;
+      });
+
+      const ctx = document.getElementById('viewsChart');
+      if (window._chart) window._chart.destroy();
+      window._chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(dayMap),
+          datasets: [{ data: Object.values(dayMap), backgroundColor: Object.keys(dayMap).map((_, i, a) => i === a.length - 1 || i === a.length - 7 ? '#C9A84C' : '#2A2A30'), borderRadius: 6, borderSkipped: false }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#666' } }, y: { grid: { color: 'rgba(255,255,255,0.04)' }, ticks: { color: '#666' } } } }
+      });
+
+      await loadRecentActivity();
+    }
+
+    async function loadRecentActivity() {
+      const list = document.getElementById('activityList');
+      if (!list) return;
+
+      const { data, error } = await sb.from('profile_analytics')
+        .select('evento, created_at')
+        .eq('profile_id', currentUser.id)
+        .in('evento', ['view', 'favorite'])
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (error || !data?.length) {
+        list.innerHTML = '<div style="color:var(--text-muted);font-size:.85rem;padding:8px 0">Nenhuma visita ou favorito registrado ainda.</div>';
+        return;
+      }
+
+      list.innerHTML = data.map(activityHTML).join('');
+    }
+
+    function activityHTML(item) {
+      const isFav = item.evento === 'favorite';
+      const label = isFav ? 'Seu perfil foi favoritado' : 'Seu perfil foi visualizado';
+      const sub = isFav ? 'Um cliente salvou seu perfil nos favoritos.' : 'Um visitante abriu seu perfil profissional.';
+      const icon = isFav ? 'ti-heart-filled' : 'ti-eye';
+      const color = isFav ? '#F87171' : '#818CF8';
+      return `
+        <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+          <span style="width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.05);display:inline-flex;align-items:center;justify-content:center;color:${color}">
+            <i class="ti ${icon}"></i>
+          </span>
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <strong style="font-size:.9rem">${label}</strong>
+            <small style="color:var(--text-muted);font-size:.78rem">${sub} ${timeAgo(item.created_at)}</small>
+          </span>
+        </div>`;
+    }
+
+    function subscribeProfileActivity() {
+      sb.channel('profile-activity-' + currentUser.id)
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'profile_analytics',
+          filter: `profile_id=eq.${currentUser.id}`
+        }, payload => {
+          if (!['view', 'favorite'].includes(payload.new?.evento)) return;
+          showToast(payload.new.evento === 'favorite'
+            ? 'Seu perfil foi favoritado.'
+            : 'Seu perfil esta recebendo uma visita.');
+          loadDashboard();
+        })
+        .subscribe();
+    }
+
+    function timeAgo(dateStr) {
+      const diff = Date.now() - new Date(dateStr).getTime();
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1) return 'agora';
+      if (minutes < 60) return `ha ${minutes} min`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `ha ${hours} h`;
+      const days = Math.floor(hours / 24);
+      return `ha ${days} d`;
+    }
+
+    // ============================================================
+    // PERFIL — SAVE
+    // ============================================================
+    function updateBioCount() {
+      const val = document.getElementById('p_bio')?.value || '';
+      const el = document.getElementById('bioCount');
+      if (el) { el.textContent = `${val.length} / mín 50`; el.style.color = val.length >= 50 ? 'var(--green)' : 'var(--text-muted)'; }
+    }
+    document.getElementById('p_bio')?.addEventListener('input', updateBioCount);
+
+    function toggleTag(el, group) {
+      el.classList.toggle('selected');
+    }
+
+    function getSelectedTags(groupId) {
+      return [...document.querySelectorAll(`#${groupId} .tag.selected`)].map(t => t.dataset.val);
+    }
+
+    async function savePerfil() {
+      const bio = document.getElementById('p_bio').value;
+      if (bio.length > 0 && bio.length < 50) { showToast('Bio deve ter no mínimo 50 caracteres', 'error'); return; }
+
+      const updates = {
+        nome_artistico: document.getElementById('p_nome_artistico').value,
+        categoria: document.getElementById('p_categoria').value,
+        whatsapp: document.getElementById('p_whatsapp').value,
+        bio: bio || null,
+        idade: parseInt(document.getElementById('p_idade').value) || null,
+        altura: parseFloat(document.getElementById('p_altura').value) || null,
+        peso: parseFloat(document.getElementById('p_peso').value) || null,
+        etnia: document.getElementById('p_etnia').value || null,
+        cabelo: document.getElementById('p_cabelo').value || null,
+        olhos: document.getElementById('p_olhos').value || null,
+        idiomas: getSelectedTags('idiomasGroup'),
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+      // Salvar silicone
+      await saveSilicone();
+
+      currentProfile = { ...currentProfile, ...updates };
+      document.getElementById('dashGreet').textContent = `Olá, ${updates.nome_artistico}! 👋`;
+      document.getElementById('headerName').textContent = updates.nome_artistico;
+      const initials = updates.nome_artistico.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+      document.getElementById('avatarInitials').textContent = initials;
+
+      loadProfileGuide();
+      showToast('Perfil salvo com sucesso!');
+    }
+
+    // Silicone
+    async function loadSilicone() {
+      const { data } = await sb.from('profile_silicone').select('local').eq('profile_id', currentUser.id);
+      const selected = (data || []).map(r => r.local);
+      document.querySelectorAll('#siliconeGroup .check-item input').forEach(cb => {
+        cb.checked = selected.includes(cb.value);
+        cb.closest('.check-item').classList.toggle('checked', cb.checked);
+      });
+      document.querySelectorAll('#siliconeGroup .check-item input').forEach(cb => {
+        cb.addEventListener('change', () => cb.closest('.check-item').classList.toggle('checked', cb.checked));
+      });
+    }
+
+    async function saveSilicone() {
+      const checked = [...document.querySelectorAll('#siliconeGroup .check-item input:checked')].map(cb => cb.value);
+      // Delete existing and re-insert
+      await sb.from('profile_silicone').delete().eq('profile_id', currentUser.id);
+      if (checked.length > 0) {
+        const rows = checked.map(local => ({ profile_id: currentUser.id, local }));
+        await sb.from('profile_silicone').insert(rows);
+      }
+    }
+
+    // ============================================================
+    // FOTOS
+    // ============================================================
+    async function loadFotos() {
+      const { data, error } = await sb.from('profile_photos')
+        .select('*').eq('profile_id', currentUser.id).order('ordem');
+      const grid = document.getElementById('photosGrid');
+      if (error || !data || data.length === 0) {
+        grid.innerHTML = '<div style="color:var(--text-muted);font-size:0.875rem;grid-column:1/-1;padding:20px 0;text-align:center">Nenhuma foto ainda. Faça upload acima!</div>';
+        return;
+      }
+      grid.innerHTML = data.map(p => `
+    <div class="photo-card">
+      <img src="${p.url || ''}" loading="lazy" onerror="this.style.display='none'">
+      <div class="photo-badge badge-${p.status}">${statusLabel(p.status)}</div>
+      <div class="photo-overlay">
+        ${p.status !== 'rejected' ? `<button class="btn btn-outline" style="font-size:0.75rem;padding:6px 12px" onclick="setFotoCover('${p.id}')">Capa</button>` : ''}
+        <button class="btn btn-danger" style="font-size:0.75rem;padding:6px 12px" onclick="deleteFoto('${p.id}','${p.storage_path}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+    }
+
+    function statusLabel(s) { return s === 'pending' ? '⏳ Análise' : s === 'approved' ? '✅ Aprovada' : '❌ Rejeitada'; }
+
+    async function uploadFotos(input) {
+      const files = [...input.files];
+      if (!files.length) return;
+      const prog = document.getElementById('uploadProgress');
+      const bar = document.getElementById('progressBar');
+      const txt = document.getElementById('progressText');
+      prog.style.display = 'block';
+      let done = 0, success = 0;
+
+      for (const file of files) {
+        txt.textContent = `Enviando ${done + 1} de ${files.length}...`;
+        const ext = file.name.split('.').pop();
+        const path = `${currentUser.id}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: upErr } = await sb.storage.from('fotos').upload(path, file, { upsert: false });
+        if (upErr) {
+          console.error('Erro storage:', upErr);
+          done++;
+          bar.style.width = (done / files.length * 100) + '%';
+          txt.textContent = `Erro no storage: ${upErr.message}`;
+          continue;
+        }
+        const { data: urlData } = sb.storage.from('fotos').getPublicUrl(path);
+        const { error: dbErr } = await sb.from('profile_photos').insert({
+          profile_id: currentUser.id, storage_path: path, url: urlData.publicUrl,
+          is_cover: false, ordem: 0, status: 'pending',
+          mime_type: file.type, size_bytes: file.size
+        });
+        if (dbErr) {
+          console.error('Erro DB:', dbErr);
+          // Remove do storage se falhou no DB
+          await sb.storage.from('fotos').remove([path]);
+        } else {
+          success++;
+        }
+        done++;
+        bar.style.width = (done / files.length * 100) + '%';
+      }
+
+      txt.textContent = `${success} de ${files.length} foto(s) enviada(s) para aprovação!`;
+      setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0'; }, 3000);
+      input.value = '';
+      if (success > 0) showToast(`${success} foto(s) enviada(s) para aprovação!`);
+      else showToast('Nenhuma foto enviada. Verifique o console (F12) para o erro do storage.', 'error');
+      loadFotos();
+      loadProfileGuide();
+    }
+
+    async function deleteFoto(id, path) {
+      if (!confirm('Deseja remover esta foto?')) return;
+      await sb.storage.from('fotos').remove([path]);
+      const { error } = await sb.from('profile_photos').delete().eq('id', id);
+      if (error) { showToast('Erro ao remover foto', 'error'); return; }
+      showToast('Foto removida!');
+      loadFotos();
+      loadProfileGuide();
+    }
+
+    async function setFotoCover(id) {
+      await sb.from('profile_photos').update({ is_cover: false }).eq('profile_id', currentUser.id);
+      await sb.from('profile_photos').update({ is_cover: true }).eq('id', id);
+      showToast('Foto de capa definida!');
+      loadFotos();
+    }
+
+    // ============================================================
+    // SERVIÇOS
+    // ============================================================
+    let servicosList = [];
+
+    async function loadServicos() {
+      const { data, error } = await sb.from('services').select('*').eq('profile_id', currentUser.id).order('ordem');
+      servicosList = data || [];
+      renderServicos();
+    }
+
+    function renderServicos() {
+      const el = document.getElementById('servicosList');
+      if (!servicosList.length) {
+        el.innerHTML = '<div class="card" style="color:var(--text-muted);text-align:center;padding:30px">Nenhum serviço cadastrado. Adicione acima!</div>';
+        return;
+      }
+      el.innerHTML = servicosList.map((s, i) => `
+    <div class="service-item">
+      <div>
+        <div class="svc-name">${s.nome}</div>
+        <div style="font-size:0.78rem;color:var(--text-muted);margin-top:2px">${s.local || 'A combinar'}</div>
+      </div>
+      <div class="svc-price">${s.preco ? 'R$ ' + parseFloat(s.preco).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'A combinar'}</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.82rem;cursor:pointer">
+        <label class="toggle"><input type="checkbox" ${s.ativo ? 'checked' : ''} onchange="toggleServico('${s.id}',this.checked)"><span class="slider"></span></label>
+        ${s.ativo ? 'Ativo' : 'Inativo'}
+      </label>
+      <button class="btn btn-danger" style="padding:8px 14px" onclick="deleteServico('${s.id}')">🗑</button>
+    </div>
+  `).join('');
+    }
+
+    async function addServico() {
+      const nome = document.getElementById('svc_nome').value.trim();
+      const preco = document.getElementById('svc_preco').value;
+      const local = document.getElementById('svc_local').value;
+      if (!nome || nome.length < 2) { showToast('Nome do serviço muito curto', 'error'); return; }
+      const { data, error } = await sb.from('services').insert({
+        profile_id: currentUser.id, nome,
+        preco: preco ? parseFloat(preco) : null,
+        local: local || 'A combinar', ativo: true, ordem: servicosList.length
+      }).select().single();
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+      servicosList.push(data);
+      renderServicos();
+      document.getElementById('svc_nome').value = '';
+      document.getElementById('svc_preco').value = '';
+      loadProfileGuide();
+      showToast('Serviço adicionado!');
+    }
+
+    async function toggleServico(id, ativo) {
+      const { error } = await sb.from('services').update({ ativo }).eq('id', id);
+      if (error) { showToast('Erro ao atualizar serviço', 'error'); return; }
+      const idx = servicosList.findIndex(s => s.id === id);
+      if (idx >= 0) servicosList[idx].ativo = ativo;
+      showToast(ativo ? 'Serviço ativado!' : 'Serviço desativado!');
+    }
+
+    async function deleteServico(id) {
+      if (!confirm('Remover este serviço?')) return;
+      const { error } = await sb.from('services').delete().eq('id', id);
+      if (error) { showToast('Erro ao remover serviço', 'error'); return; }
+      servicosList = servicosList.filter(s => s.id !== id);
+      renderServicos();
+      loadProfileGuide();
+      showToast('Serviço removido!');
+    }
+
+    // ============================================================
+    // LOCALIZAÇÃO
+    // ============================================================
+    async function loadLocalizacao() {
+      // Profile fields já carregados via loadProfile / updateUIFromProfile
+      // Carregar locais de atendimento
+      const { data } = await sb.from('attendance_locations').select('tipo').eq('profile_id', currentUser.id);
+      const tipos = (data || []).map(r => r.tipo);
+      document.querySelectorAll('#locGrid input[type=checkbox]').forEach(cb => {
+        cb.checked = tipos.includes(cb.value);
+        cb.closest('.loc-item').classList.toggle('selected', cb.checked);
+      });
+    }
+
+    function updateLocItem(cb) {
+      cb.closest('.loc-item').classList.toggle('selected', cb.checked);
+    }
+
+    async function saveLocalizacao() {
+      const updates = {
+        cep: document.getElementById('loc_cep').value || null,
+        bairro: document.getElementById('loc_bairro').value || null,
+        cidade: document.getElementById('loc_cidade').value,
+        uf: document.getElementById('loc_uf').value,
+        updated_at: new Date().toISOString()
+      };
+      if (!updates.cidade || !updates.uf) { showToast('Cidade e UF são obrigatórios', 'error'); return; }
+
+      const { error } = await sb.from('profiles').update(updates).eq('id', currentUser.id);
+      if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+
+      // Attendance locations
+      const checked = [...document.querySelectorAll('#locGrid input[type=checkbox]:checked')].map(cb => cb.value);
+      await sb.from('attendance_locations').delete().eq('profile_id', currentUser.id);
+      if (checked.length > 0) {
+        const rows = checked.map(tipo => ({ profile_id: currentUser.id, tipo }));
+        const { error: locErr } = await sb.from('attendance_locations').insert(rows);
+        if (locErr) { showToast('Erro ao salvar locais: ' + locErr.message, 'error'); return; }
+      }
+
+      currentProfile = { ...currentProfile, ...updates };
+      loadProfileGuide();
+      showToast('Localização salva com sucesso!');
+    }
+
+    async function buscaCep(input) {
+      const cep = input.value.replace(/\D/g, '');
+      if (cep.length === 8) {
+        try {
+          const r = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+          const d = await r.json();
+          if (!d.erro) {
+            document.getElementById('loc_bairro').value = d.bairro || '';
+            document.getElementById('loc_cidade').value = d.localidade || '';
+            document.getElementById('loc_uf').value = d.uf || '';
+          }
+        } catch (e) { }
+      }
+    }
+
+    // ============================================================
+    // DISPONIBILIDADE
+    // ============================================================
+    const DIAS = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+
+    function buildWeekGrid() {
+      const grid = document.getElementById('weekGrid');
+      grid.innerHTML = DIAS.map((dia, i) => `
+    <div class="day-row" id="dayrow-${i}">
+      <span class="day-label">${dia}</span>
+      <label class="toggle">
+        <input type="checkbox" id="day-toggle-${i}" onchange="toggleDay(${i})">
+        <span class="slider"></span>
+      </label>
+      <div id="day-times-${i}" style="display:none;align-items:center;gap:8px;margin-left:8px">
+        <input type="time" id="day-start-${i}" value="09:00" style="width:110px">
+        <span style="color:var(--text-muted)">até</span>
+        <input type="time" id="day-end-${i}" value="22:00" style="width:110px">
+      </div>
+      <span id="day-label-${i}" style="font-size:0.8rem;color:var(--text-muted);margin-left:8px">Fechado</span>
+    </div>
+  `).join('');
+    }
+
+    function toggleDay(i) {
+      const on = document.getElementById('day-toggle-' + i).checked;
+      document.getElementById('day-times-' + i).style.display = on ? 'flex' : 'none';
+      document.getElementById('day-label-' + i).textContent = on ? 'Aberto' : 'Fechado';
+      document.getElementById('day-label-' + i).style.color = on ? 'var(--green)' : 'var(--text-muted)';
+    }
+
+    async function loadDisponibilidade() {
+      const { data } = await sb.from('availability').select('*').eq('profile_id', currentUser.id);
+      (data || []).forEach(row => {
+        const i = row.dia_semana;
+        document.getElementById('day-toggle-' + i).checked = true;
+        toggleDay(i);
+        document.getElementById('day-start-' + i).value = row.hora_inicio.slice(0, 5);
+        document.getElementById('day-end-' + i).value = row.hora_fim.slice(0, 5);
+      });
+    }
+
+    async function saveDisponibilidade() {
+      const rows = [];
+      for (let i = 0; i < 7; i++) {
+        if (document.getElementById('day-toggle-' + i).checked) {
+          const start = document.getElementById('day-start-' + i).value;
+          const end = document.getElementById('day-end-' + i).value;
+          if (!start || !end) {
+            showToast(`Informe os dois horários de ${DIAS[i]}.`, 'error');
+            return;
+          }
+          if (start === end) {
+            showToast(`Em ${DIAS[i]}, início e fim não podem ser iguais.`, 'error');
+            return;
+          }
+          rows.push({
+            profile_id: currentUser.id,
+            dia_semana: i,
+            hora_inicio: start + ':00',
+            hora_fim: end + ':00'
+          });
+        }
+      }
+      // Limpar e re-inserir
+      const { error: delErr } = await sb.from('availability').delete().eq('profile_id', currentUser.id);
+      if (delErr) { showToast('Erro ao salvar: ' + delErr.message, 'error'); return; }
+      if (rows.length > 0) {
+        const { error } = await sb.from('availability').insert(rows);
+        if (error) { showToast('Erro: ' + error.message, 'error'); return; }
+      }
+      loadProfileGuide();
+      showToast('Disponibilidade salva com sucesso!');
+    }
+
+    // ============================================================
+    // START
+    // ============================================================
+    init();
+
+    // ============================================================
+    // DESTAQUE PAGO
+    // ============================================================
+    let currentHighlightAd = null;
+    let highlightPhotos = [];
+    let highlightSelectedPaths = [];
+    let highlightPixKey = '';
+
+    async function loadHighlightBuilder() {
+      const statusEl = document.getElementById('highlightStatus');
+      if (!statusEl || !currentUser) return;
+      statusEl.textContent = 'Carregando sua propaganda...';
+
+      const [settingsRes, photosRes, adRes, statsRes, reviewsRes] = await Promise.all([
+        sb.from('app_public_settings').select('setting_key,setting_value').in('setting_key', ['highlight_pix_key', 'highlight_pix_receiver']),
+        sb.from('profile_photos').select('storage_path,is_cover,ordem').eq('profile_id', currentUser.id).eq('status', 'approved').order('ordem'),
+        sb.from('highlight_ads').select('*').eq('profile_id', currentUser.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+        sb.rpc('get_profile_public_stats', { p_profile_id: currentUser.id }),
+        sb.from('profile_reviews').select('rating').eq('profile_id', currentUser.id).eq('status', 'approved')
+      ]);
+
+      if (adRes.error && adRes.error.code !== 'PGRST116') {
+        statusEl.innerHTML = 'O banco ainda não possui o módulo de Destaques. Execute <strong>supabase/highlight-ads-and-security-fixes.sql</strong> no SQL Editor.';
+        return;
+      }
+
+      highlightPixKey = settingsRes.data?.find(item => item.setting_key === 'highlight_pix_key')?.setting_value || '';
+      document.getElementById('highlightPixKey').textContent = highlightPixKey || 'Chave Pix ainda não configurada pelo administrador';
+
+      highlightPhotos = photosRes.data || [];
+      const paths = highlightPhotos.map(photo => photo.storage_path);
+      const signedMap = {};
+      if (paths.length) {
+        const { data: signed } = await sb.storage.from('fotos').createSignedUrls(paths, 3600);
+        (signed || []).forEach(item => { signedMap[item.path] = item.signedUrl; });
+      }
+      highlightPhotos = highlightPhotos.map(photo => ({ ...photo, signedUrl: signedMap[photo.storage_path] || '' }));
+
+      currentHighlightAd = adRes.data || null;
+      const defaultPhoto = highlightPhotos.find(photo => photo.is_cover) || highlightPhotos[0];
+      highlightSelectedPaths = currentHighlightAd?.photo_paths?.slice(0, 3)
+        || (defaultPhoto ? [defaultPhoto.storage_path] : []);
+
+      document.getElementById('adHeadline').value = currentHighlightAd?.headline || '';
+      document.getElementById('adDescription').value = currentHighlightAd?.description || '';
+      document.getElementById('adCta').value = currentHighlightAd?.cta_label || 'Ver perfil';
+      document.getElementById('adTargetUf').value = currentHighlightAd?.target_uf || currentProfile?.uf || '';
+      const startsInput = document.getElementById('adStartsAt');
+      startsInput.min = toLocalDateTimeInput(new Date());
+      startsInput.value = toLocalDateTimeInput(currentHighlightAd?.starts_at);
+
+      const stats = statsRes.data?.[0] || {};
+      const ratings = (reviewsRes.data || []).map(row => Number(row.rating)).filter(Number.isFinite);
+      const rating = ratings.length ? (ratings.reduce((sum, value) => sum + value, 0) / ratings.length).toFixed(1) : 'Nova';
+      document.getElementById('adPreviewRating').textContent = `★ ${rating}`;
+      document.getElementById('adPreviewFavs').textContent = `♥ ${Number(stats.favorites_count || 0).toLocaleString('pt-BR')} favoritas`;
+      document.getElementById('adPreviewViews').textContent = `◉ ${Number(stats.views_count || 0).toLocaleString('pt-BR')} visualizações`;
+
+      renderHighlightPhotoOptions();
+      renderHighlightPreview();
+      renderHighlightStatus();
+    }
+
+    function renderHighlightPhotoOptions() {
+      const list = document.getElementById('highlightPhotoList');
+      if (!list) return;
+      if (!highlightPhotos.length) {
+        list.innerHTML = '<div style="grid-column:1/-1;color:var(--text-muted);font-size:.8rem">Envie e aguarde a aprovação de pelo menos uma foto antes de criar o Destaque.</div>';
+        return;
+      }
+      list.innerHTML = highlightPhotos.map(photo => {
+        const selected = highlightSelectedPaths.includes(photo.storage_path);
+        return `<label class="highlight-photo-option ${selected ? 'selected' : ''}">
+          <img src="${cEscAttr(photo.signedUrl)}" alt="Foto aprovada">
+          <input type="checkbox" ${selected ? 'checked' : ''} onchange="toggleHighlightPhoto('${cEscAttr(photo.storage_path)}',this)">
+        </label>`;
+      }).join('');
+    }
+
+    function toggleHighlightPhoto(path, checkbox) {
+      if (checkbox.checked && !highlightSelectedPaths.includes(path)) {
+        if (highlightSelectedPaths.length >= 3) {
+          checkbox.checked = false;
+          showToast('Escolha no máximo 3 fotos.', 'error');
+          return;
+        }
+        highlightSelectedPaths.push(path);
+      } else if (!checkbox.checked) {
+        highlightSelectedPaths = highlightSelectedPaths.filter(item => item !== path);
+      }
+      renderHighlightPhotoOptions();
+      renderHighlightPreview();
+    }
+
+    function renderHighlightPreview() {
+      const headline = document.getElementById('adHeadline')?.value.trim();
+      const description = document.getElementById('adDescription')?.value.trim();
+      const cta = document.getElementById('adCta')?.value || 'Ver perfil';
+      const targetUf = document.getElementById('adTargetUf')?.value || '';
+      const selectedPhoto = highlightPhotos.find(photo => photo.storage_path === highlightSelectedPaths[0]);
+      document.getElementById('adPreviewName').textContent = headline || currentProfile?.nome_artistico || 'Seu nome artístico';
+      document.getElementById('adPreviewText').textContent = description || 'Sua propaganda vai aparecer aqui com uma apresentação moderna e envolvente.';
+      document.getElementById('adPreviewCta').textContent = cta;
+      document.getElementById('adPreviewUf').textContent = targetUf ? `⌖ ${targetUf}` : '⌖ Estado';
+      const previewPhoto = document.getElementById('adPreviewPhoto');
+      const previewMedia = document.getElementById('adPreviewMedia');
+      previewPhoto.src = selectedPhoto?.signedUrl || '';
+      previewPhoto.style.display = selectedPhoto?.signedUrl ? 'block' : 'none';
+      previewMedia.style.setProperty('--highlight-image', selectedPhoto?.signedUrl
+        ? `url("${selectedPhoto.signedUrl.replace(/"/g, '%22')}")`
+        : 'none');
+    }
+
+    function highlightPayload(status) {
+      return {
+        profile_id: currentUser.id,
+        headline: document.getElementById('adHeadline').value.trim(),
+        description: document.getElementById('adDescription').value.trim(),
+        cta_label: document.getElementById('adCta').value,
+        target_uf: document.getElementById('adTargetUf').value,
+        starts_at: new Date(document.getElementById('adStartsAt').value).toISOString(),
+        photo_paths: highlightSelectedPaths.slice(0, 3),
+        price_cents: 1990,
+        status,
+        payment_reference: status === 'payment_pending'
+          ? `VENUS-${currentUser.id.slice(0, 8).toUpperCase()}-${Date.now().toString().slice(-6)}`
+          : currentHighlightAd?.payment_reference || null,
+        payment_requested_at: status === 'payment_pending' ? new Date().toISOString() : currentHighlightAd?.payment_requested_at || null
+      };
+    }
+
+    function validateHighlight() {
+      const headline = document.getElementById('adHeadline').value.trim();
+      const description = document.getElementById('adDescription').value.trim();
+      const targetUf = document.getElementById('adTargetUf').value;
+      const startsAt = document.getElementById('adStartsAt').value;
+      if (headline.length < 3) { showToast('Escreva uma frase principal.', 'error'); return false; }
+      if (description.length < 10) { showToast('Descreva sua propaganda com pelo menos 10 caracteres.', 'error'); return false; }
+      if (!highlightSelectedPaths.length) { showToast('Escolha pelo menos uma foto aprovada.', 'error'); return false; }
+      if (!targetUf) { showToast('Escolha o estado onde o Destaque aparecerá.', 'error'); return false; }
+      if (!startsAt || !Number.isFinite(new Date(startsAt).getTime())) { showToast('Escolha a data e a hora de início.', 'error'); return false; }
+      return true;
+    }
+
+    function toLocalDateTimeInput(value) {
+      const date = value ? new Date(value) : new Date(Date.now() + 30 * 60000);
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+      return local.toISOString().slice(0, 16);
+    }
+
+    async function persistHighlight(status) {
+      if (!validateHighlight()) return false;
+      const approvedAndActive = currentHighlightAd?.status === 'approved'
+        && (!currentHighlightAd.expires_at || new Date(currentHighlightAd.expires_at) > new Date());
+      if (currentHighlightAd && (currentHighlightAd.status === 'payment_pending' || approvedAndActive)) {
+        showToast('Esta propaganda já está aguardando pagamento ou publicada.', 'error');
+        return false;
+      }
+      const payload = highlightPayload(status);
+      const query = currentHighlightAd && ['draft', 'rejected'].includes(currentHighlightAd.status)
+        ? sb.from('highlight_ads').update(payload).eq('id', currentHighlightAd.id).select().single()
+        : sb.from('highlight_ads').insert(payload).select().single();
+      const { data, error } = await query;
+      if (error) { showToast('Erro ao salvar propaganda: ' + error.message, 'error'); return false; }
+      currentHighlightAd = data;
+      renderHighlightStatus();
+      return true;
+    }
+
+    async function saveHighlightDraft() {
+      if (await persistHighlight('draft')) showToast('Rascunho salvo.');
+    }
+
+    async function requestHighlightPayment() {
+      if (!highlightPixKey) {
+        showToast('A chave Pix ainda precisa ser configurada pelo administrador.', 'error');
+        return;
+      }
+      if (await persistHighlight('payment_pending')) {
+        document.getElementById('highlightPixBox').classList.add('visible');
+        showToast('Solicitação criada. Faça o Pix de R$ 19,90.');
+      }
+    }
+
+    function renderHighlightStatus() {
+      const el = document.getElementById('highlightStatus');
+      if (!el) return;
+      if (!currentHighlightAd) {
+        el.textContent = 'Você ainda não criou uma propaganda.';
+        document.getElementById('highlightManageStatus').textContent = 'Nenhuma campanha';
+        document.getElementById('highlightManageStart').textContent = '—';
+        document.getElementById('highlightManageEnd').textContent = '—';
+        return;
+      }
+      const isExpired = currentHighlightAd.status === 'approved'
+        && currentHighlightAd.expires_at
+        && new Date(currentHighlightAd.expires_at) <= new Date();
+      const isScheduled = currentHighlightAd.status === 'approved'
+        && currentHighlightAd.starts_at
+        && new Date(currentHighlightAd.starts_at) > new Date();
+      const labels = {
+        draft: 'Rascunho salvo. Revise a prévia e solicite a publicação quando estiver pronta.',
+        payment_pending: 'Aguardando confirmação do pagamento pelo administrador.',
+        approved: `Propaganda publicada até ${currentHighlightAd.expires_at ? new Date(currentHighlightAd.expires_at).toLocaleString('pt-BR') : 'a data definida pelo administrador'}.`,
+        rejected: `Solicitação recusada${currentHighlightAd.rejection_reason ? ': ' + currentHighlightAd.rejection_reason : '.'}`,
+        expired: 'Este Destaque encerrou. Você pode criar uma nova campanha.'
+      };
+      const displayStatus = isExpired ? 'expired' : isScheduled ? 'scheduled' : currentHighlightAd.status;
+      const message = isScheduled
+        ? `Propaganda aprovada e agendada para ${new Date(currentHighlightAd.starts_at).toLocaleString('pt-BR')}.`
+        : (labels[displayStatus] || displayStatus);
+      el.innerHTML = `<strong>Status:</strong> ${cEsc(message)}`;
+      document.getElementById('highlightPixBox').classList.toggle('visible', currentHighlightAd.status === 'payment_pending');
+      document.getElementById('highlightManageStatus').textContent = displayStatus;
+      document.getElementById('highlightManageStart').textContent = currentHighlightAd.starts_at
+        ? new Date(currentHighlightAd.starts_at).toLocaleString('pt-BR')
+        : '—';
+      document.getElementById('highlightManageEnd').textContent = currentHighlightAd.expires_at
+        ? new Date(currentHighlightAd.expires_at).toLocaleString('pt-BR')
+        : '—';
+    }
+
+    function editCurrentHighlight() {
+      if (currentHighlightAd?.status === 'approved') {
+        currentHighlightAd = null;
+        showToast('Uma nova versão será criada como rascunho para não alterar a campanha que já está publicada.');
+      }
+      document.getElementById('adHeadline')?.focus();
+      document.querySelector('.highlight-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      renderHighlightStatus();
+    }
+
+    async function changeCurrentHighlightTime() {
+      if (!currentHighlightAd) {
+        showToast('Crie ou salve uma campanha primeiro.', 'error');
+        return;
+      }
+      const startsValue = document.getElementById('adStartsAt').value;
+      if (!startsValue || !Number.isFinite(new Date(startsValue).getTime())) {
+        showToast('Escolha uma data e hora válidas.', 'error');
+        document.getElementById('adStartsAt').focus();
+        return;
+      }
+      if (new Date(startsValue) <= new Date()) {
+        showToast('O novo horário precisa estar no futuro.', 'error');
+        return;
+      }
+      if (currentHighlightAd.status === 'approved' && new Date(currentHighlightAd.starts_at) <= new Date()) {
+        showToast('Campanhas que já começaram não podem ter o horário alterado.', 'error');
+        return;
+      }
+      const { data, error } = await sb.from('highlight_ads')
+        .update({ starts_at: new Date(startsValue).toISOString() })
+        .eq('id', currentHighlightAd.id)
+        .select()
+        .single();
+      if (error) {
+        showToast('Erro ao alterar horário: ' + error.message, 'error');
+        return;
+      }
+      currentHighlightAd = data;
+      renderHighlightStatus();
+      showToast('Horário atualizado.');
+    }
+
+    async function requestHighlightRepublish() {
+      if (!currentHighlightAd) {
+        showToast('Crie uma campanha antes de solicitar republicação.', 'error');
+        return;
+      }
+      if (!validateHighlight()) return;
+      if (!highlightPixKey) {
+        showToast('A chave Pix ainda não foi configurada.', 'error');
+        return;
+      }
+      const startsValue = document.getElementById('adStartsAt').value;
+      if (new Date(startsValue) <= new Date()) {
+        showToast('Escolha uma data e hora futura para republicar.', 'error');
+        document.getElementById('adStartsAt').focus();
+        return;
+      }
+      const payload = {
+        profile_id: currentUser.id,
+        headline: document.getElementById('adHeadline').value.trim(),
+        description: document.getElementById('adDescription').value.trim(),
+        cta_label: document.getElementById('adCta').value,
+        target_uf: document.getElementById('adTargetUf').value,
+        starts_at: new Date(startsValue).toISOString(),
+        photo_paths: highlightSelectedPaths.slice(0, 3),
+        price_cents: 1990,
+        status: 'payment_pending',
+        payment_reference: `VENUS-${currentUser.id.slice(0, 8).toUpperCase()}-${Date.now().toString().slice(-6)}`,
+        payment_requested_at: new Date().toISOString()
+      };
+      const { data, error } = await sb.from('highlight_ads').insert(payload).select().single();
+      if (error) {
+        showToast('Erro ao solicitar republicação: ' + error.message, 'error');
+        return;
+      }
+      currentHighlightAd = data;
+      document.getElementById('highlightPixBox').classList.add('visible');
+      renderHighlightStatus();
+      showToast('Republicação solicitada. Faça o Pix de R$ 19,90.');
+    }
+
+    function deleteCurrentHighlight() {
+      if (!currentHighlightAd) {
+        showToast('Nenhuma campanha para excluir.', 'error');
+        return;
+      }
+      openDashboardModal('highlightDeleteModal');
+    }
+
+    async function confirmDeleteCurrentHighlight() {
+      if (!currentHighlightAd) {
+        closeDashboardModal();
+        showToast('Nenhuma campanha para excluir.', 'error');
+        return;
+      }
+      const button = document.getElementById('confirmHighlightDeleteButton');
+      button.disabled = true;
+      button.innerHTML = '<i class="ti ti-loader-2"></i> Excluindo...';
+      const { error } = await sb.from('highlight_ads').delete().eq('id', currentHighlightAd.id);
+      button.disabled = false;
+      button.innerHTML = '<i class="ti ti-trash"></i> Excluir campanha';
+      if (error) {
+        showToast('Esta campanha ainda não pode ser excluída: ' + error.message, 'error');
+        return;
+      }
+      closeDashboardModal();
+      currentHighlightAd = null;
+      document.getElementById('adHeadline').value = '';
+      document.getElementById('adDescription').value = '';
+      document.getElementById('highlightManageStatus').textContent = 'Nenhuma campanha';
+      document.getElementById('highlightManageStart').textContent = '—';
+      document.getElementById('highlightManageEnd').textContent = '—';
+      renderHighlightPreview();
+      renderHighlightStatus();
+      showToast('Campanha excluída.');
+    }
+
+    async function copyHighlightPix() {
+      if (!highlightPixKey) return;
+      await navigator.clipboard.writeText(highlightPixKey);
+      showToast('Chave Pix copiada.');
+    }
+
+    // ============================================================
+    // CHAT — Profissional
+    // ============================================================
+    let cConvId = null;
+    let cConvData = null;
+    let cRtSub = null;
+    let cTimerInterval = null;
+    let cInitialized = false;
+    let cConvs = [];
+    let cOtherProfiles = {};
+
+    async function cInit() {
+      if (cInitialized) {
+        await cLoadConvs();
+        return;
+      }
+      cInitialized = true;
+      await cCleanupExpired();
+      await cLoadConvs();
+      // Realtime: notifica novas conversas
+      sb.channel('prof-convs-watcher')
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'chat_messages'
+        }, () => { cLoadConvs(); })
+        .subscribe();
+    }
+
+    async function cCleanupExpired() {
+      try {
+        await sb.rpc('delete_expired_chat_messages');
+      } catch (err) {
+        console.warn('Limpeza de mensagens indisponivel:', err);
+      }
+    }
+
+    async function cLoadConvs() {
+      const { data } = await sb
+        .from('chat_conversations')
+        .select('id,client_id,professional_id,created_at,expires_at,chat_messages(id,content,sender_id,created_at,read_at)')
+        .eq('professional_id', currentUser.id)
+        .order('created_at', { ascending: false });
+      cConvs = data || [];
+
+      // Busca dados reais dos clientes da conversa.
+      const ids = [...new Set(cConvs.map(c => c.client_id).filter(Boolean))];
+      cOtherProfiles = {};
+      if (ids.length) {
+        const { data: participants } = await sb.rpc('get_chat_participants', { p_ids: ids });
+        (participants || []).forEach(participant => {
+          cOtherProfiles[participant.id] = {
+            id: participant.id,
+            name: participant.name || null,
+            avatar_url: participant.avatar_url || null
+          };
+        });
+      }
+
+      cRenderList();
+      cUpdateNavBadge();
+    }
+
+    function cUpdateNavBadge() {
+      const total = cConvs.reduce((acc, c) => {
+        const msgs = c.chat_messages || [];
+        return acc + msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
+      }, 0);
+      const badge = document.getElementById('navUnreadBadge');
+      if (total > 0) { badge.style.display = ''; badge.textContent = total; }
+      else badge.style.display = 'none';
+    }
+
+    function cRenderList() {
+      const body = document.getElementById('cListBody');
+      if (!cConvs.length) {
+        body.innerHTML = '<div style="padding:24px;text-align:center;font-size:.78rem;color:var(--text-muted)">Nenhuma conversa ainda</div>';
+        return;
+      }
+      body.innerHTML = cConvs.map(c => {
+        const other = cOtherProfiles[c.client_id] || {};
+        const msgs = c.chat_messages || [];
+        const last = msgs[msgs.length - 1];
+        const unread = msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
+        const exp = new Date(c.expires_at) < new Date();
+        const otherName = other.name || 'Usuário sem nome';
+        const ini = cInitials(otherName);
+        return `
+          <div class="ci ${c.id === cConvId ? 'active' : ''}" onclick="cOpenConv('${c.id}')">
+            <div class="ci-ava">${other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : ini}</div>
+            <div class="ci-info">
+              <div class="ci-name">${cEsc(otherName)}</div>
+              <div class="ci-prev">${last ? cEsc(last.content).slice(0, 36) : 'Sem mensagens'}</div>
+            </div>
+            <div class="ci-side">
+              <span class="ci-time">${last ? cFmt(last.created_at) : ''}</span>
+              ${exp ? '<span class="ci-exp">Expirada</span>' : unread ? `<span class="ci-badge">${unread}</span>` : ''}
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function cOpenConv(convId) {
+      cConvId = convId;
+      cConvData = cConvs.find(c => c.id === convId);
+      if (!cConvData) return;
+      cRenderList();
+
+      // Mostra box
+      document.getElementById('cNoConv').style.display = 'none';
+      const box = document.getElementById('cBox');
+      box.style.display = 'flex';
+      box.style.flexDirection = 'column';
+      box.style.overflow = 'hidden';
+      box.style.flex = '1';
+
+      // Header
+      const other = cOtherProfiles[cConvData.client_id] || {};
+      const oName = other.name || 'Usuário sem nome';
+      const oIni = cInitials(oName);
+      document.getElementById('cHeadName').textContent = oName;
+      const headAva = document.getElementById('cHeadAva');
+      headAva.innerHTML = other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : oIni;
+      document.getElementById('customerReputationBtn').style.display = 'inline-flex';
+      loadCustomerReputation();
+
+      // Timer
+      cStartTimer(cConvData.expires_at);
+
+      // Lock se expirado
+      const exp = new Date(cConvData.expires_at) < new Date();
+      document.getElementById('cInputBar').classList.toggle('locked', exp);
+
+      // Mensagens
+      await cFetchMsgs();
+
+      // Marcar como lido
+      await sb.rpc('mark_messages_read', { p_conversation_id: convId });
+      await cLoadConvs();
+
+      // Realtime
+      cSubscribeRT();
+    }
+
+    async function cFetchMsgs() {
+      const { data } = await sb
+        .from('chat_messages').select('*')
+        .eq('conversation_id', cConvId)
+        .order('created_at', { ascending: true });
+      cPaintMsgs(data || []);
+    }
+
+    function cPaintMsgs(msgs) {
+      const area = document.getElementById('cMsgs');
+      if (!msgs.length) {
+        area.innerHTML = `<div class="cempty"><div style="font-size:2.5rem;opacity:.18">✉️</div><div style="font-size:.8rem;opacity:.3">Sem mensagens ainda</div></div>`;
+        return;
+      }
+      let html = ''; let lastDate = '';
+      msgs.forEach(m => {
+        const ds = new Date(m.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+        if (ds !== lastDate) { html += `<div class="cmsg-date">${ds}</div>`; lastDate = ds; }
+        html += cBubble(m);
+      });
+      area.innerHTML = html;
+      area.scrollTop = area.scrollHeight;
+    }
+
+    function cBubble(m) {
+      const sent = m.sender_id === currentUser.id;
+      const time = cFmt(m.created_at);
+      let statusHTML = '';
+      if (sent) {
+        if (m.read_at) statusHTML = `<span class="seal seal-read" title="Lido">${cDbl()}</span>`;
+        else if (m.delivered_at) statusHTML = `<span class="seal seal-deliv" title="Entregue">${cDbl()}</span>`;
+        else statusHTML = `<span class="seal seal-sent" title="Enviado">${cSgl()}</span>`;
+      }
+      const other = cConvData ? cOtherProfiles[cConvData.client_id] || {} : {};
+      const oName = other.name || 'Usuário sem nome';
+      const oIni = cInitials(oName);
+      return `
+        <div class="cmsg-row ${sent ? 'sent' : 'received'}" id="cm-${m.id}">
+          ${!sent ? `<div class="cmsg-mini-ava">${other.avatar_url ? `<img src="${cEscAttr(other.avatar_url)}">` : oIni}</div>` : ''}
+          <div class="cmsg-wrap">
+            <div class="cmsg-bub">${cEsc(m.content)}</div>
+            <div class="cmsg-foot">
+              <span class="seal seal-auth">✓ Auth</span>
+              <span>${time}</span>
+              ${statusHTML}
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function cSgl() { return `<svg viewBox="0 0 14 10"><polyline points="1,5 5,9 13,1"/></svg>`; }
+    function cDbl() { return `<svg viewBox="0 0 18 10"><polyline points="1,5 5,9 13,1"/><polyline points="5,5 9,9 17,1"/></svg>`; }
+
+    async function cSend() {
+      const input = document.getElementById('cInput');
+      const txt = input.value.trim();
+      if (!txt || !cConvId) return;
+      if (cConvData && new Date(cConvData.expires_at) < new Date()) { showToast('Conversa expirada (24h)'); return; }
+      input.value = ''; input.style.height = '';
+
+      const tmpId = 'tmp' + Date.now();
+      const tmpMsg = { id: tmpId, sender_id: currentUser.id, content: txt, created_at: new Date().toISOString(), sent_at: null, delivered_at: null, read_at: null };
+      cPushMsg(tmpMsg);
+
+      const { data, error } = await sb.from('chat_messages').insert({
+        conversation_id: cConvId, sender_id: currentUser.id, content: txt,
+        sent_at: new Date().toISOString(), delivered_at: new Date().toISOString()
+      }).select().single();
+
+      if (error) { document.getElementById('cm-' + tmpId)?.remove(); showToast('Erro ao enviar'); return; }
+      const el = document.getElementById('cm-' + tmpId);
+      if (el) el.outerHTML = cBubble(data);
+    }
+
+    function cPushMsg(m) {
+      const area = document.getElementById('cMsgs');
+      const empty = area.querySelector('.cempty');
+      if (empty) empty.remove();
+      area.insertAdjacentHTML('beforeend', cBubble(m));
+      area.scrollTop = area.scrollHeight;
+    }
+
+    function cSubscribeRT() {
+      if (cRtSub) cRtSub.unsubscribe();
+      cRtSub = sb.channel('prof-chat-' + cConvId)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'chat_messages',
+          filter: `conversation_id=eq.${cConvId}`
+        }, async (payload) => {
+          if (payload.new.sender_id === currentUser.id) return;
+          cPushMsg(payload.new);
+          await sb.from('chat_messages').update({ read_at: new Date().toISOString() }).eq('id', payload.new.id);
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'chat_messages',
+          filter: `conversation_id=eq.${cConvId}`
+        }, (payload) => {
+          const el = document.getElementById('cm-' + payload.new.id);
+          if (el) el.outerHTML = cBubble(payload.new);
+        })
+        .subscribe();
+    }
+
+    function cStartTimer(expiresAt) {
+      clearInterval(cTimerInterval);
+      const chip = document.getElementById('cTimer');
+      chip.style.display = 'flex';
+      function tick() {
+        const diff = new Date(expiresAt) - Date.now();
+        if (diff <= 0) { chip.classList.add('warn'); chip.textContent = 'Expirada'; document.getElementById('cInputBar').classList.add('locked'); clearInterval(cTimerInterval); return; }
+        chip.classList.toggle('warn', diff < 3600000);
+        const h = Math.floor(diff / 3600000);
+        const m2 = Math.floor((diff % 3600000) / 60000);
+        const s = Math.floor((diff % 60000) / 1000);
+        chip.textContent = h > 0 ? `⏱ ${h}h ${m2}m` : `⏱ ${m2}m ${s}s`;
+      }
+      tick(); cTimerInterval = setInterval(tick, 1000);
+    }
+
+    function cHandleKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); cSend(); } }
+    function cResize(el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 100) + 'px'; }
+    function cFmt(iso) { return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); }
+    let dueInteractionReview = null;
+
+    async function checkDueInteractionReviews() {
+      if (!currentUser || dueInteractionReview) return;
+      const { data, error } = await sb.from('contact_interactions')
+        .select('id,customer_id,channel,occurred_at,review_due_at,professional_review_status,snoozed_until')
+        .eq('professional_id', currentUser.id)
+        .in('professional_review_status', ['pending', 'snoozed'])
+        .order('review_due_at', { ascending: true })
+        .limit(20);
+      if (error) return;
+
+      const now = Date.now();
+      dueInteractionReview = (data || []).find(item => {
+        const due = item.professional_review_status === 'snoozed'
+          ? new Date(item.snoozed_until || item.review_due_at).getTime()
+          : new Date(item.review_due_at).getTime();
+        return due <= now;
+      }) || null;
+      if (!dueInteractionReview) return;
+
+      const { data: customer } = await sb.from('customers')
+        .select('nome').eq('id', dueInteractionReview.customer_id).maybeSingle();
+      const name = customer?.nome || 'este cliente';
+      cOtherProfiles[dueInteractionReview.customer_id] = {
+        ...(cOtherProfiles[dueInteractionReview.customer_id] || {}),
+        name
+      };
+      document.getElementById('evaluationReminderText').textContent =
+        `${name} iniciou contato por ${dueInteractionReview.channel === 'whatsapp' ? 'WhatsApp' : 'chat'} há pelo menos 15 minutos.`;
+      document.getElementById('evaluationReminderModal').classList.add('open');
+    }
+
+    async function evaluateInteractionNow() {
+      if (!dueInteractionReview) return;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      const conv = cConvs.find(item => item.client_id === dueInteractionReview.customer_id);
+      if (conv) {
+        await cOpenConv(conv.id);
+      } else {
+        cConvData = {
+          id: null,
+          client_id: dueInteractionReview.customer_id,
+          professional_id: currentUser.id
+        };
+      }
+      openCustomerReviewModal();
+    }
+
+    async function snoozeInteractionReview() {
+      if (!dueInteractionReview) return;
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'snoozed',
+        snoozed_until: new Date(Date.now() + 60 * 60 * 1000).toISOString()
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      showToast('Lembraremos novamente em 1 hora.');
+    }
+
+    async function dismissInteractionReview() {
+      if (!dueInteractionReview) return;
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'dismissed'
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
+      document.getElementById('evaluationReminderModal').classList.remove('open');
+      showToast('Interação marcada como atendimento não realizado.');
+    }
+
+    async function loadCustomerReputation() {
+      if (!cConvData?.client_id) return;
+      const { data, error } = await sb.from('customer_professional_reviews')
+        .select('id,professional_id,interaction_id,rating,tags,comment,created_at')
+        .eq('customer_id', cConvData.client_id)
+        .order('created_at', { ascending: false });
+
+      const reviews = error ? [] : (data || []);
+      const own = dueInteractionReview
+        ? reviews.find(review => review.interaction_id === dueInteractionReview.id)
+        : reviews.find(review => review.professional_id === currentUser.id);
+      const average = reviews.length
+        ? reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length
+        : 0;
+      const name = cOtherProfiles[cConvData.client_id]?.name || 'Cliente';
+
+      document.getElementById('customerReviewName').textContent = name;
+      document.getElementById('customerReviewAverage').textContent = reviews.length ? average.toFixed(1) : '—';
+      document.getElementById('customerReviewStars').textContent = reviews.length
+        ? '★'.repeat(Math.round(average)) + '☆'.repeat(5 - Math.round(average))
+        : '☆☆☆☆☆';
+      document.getElementById('customerReviewCount').textContent = reviews.length
+        ? `${reviews.length} avaliação${reviews.length === 1 ? '' : 'ões'} de profissionais`
+        : 'Nenhuma avaliação de profissionais';
+      document.getElementById('customerReputationBtn').innerHTML = reviews.length
+        ? `<i class="ti ti-user-star"></i> ★ ${average.toFixed(1)}`
+        : '<i class="ti ti-user-star"></i> Reputação';
+      document.getElementById('customerReviewList').innerHTML = reviews.length
+        ? reviews.map(review => `
+            <article class="customer-review-item">
+              <span>${'★'.repeat(Number(review.rating) || 0)}${'☆'.repeat(5 - (Number(review.rating) || 0))} · Profissional verificada</span>
+              ${review.tags?.length ? `<p>${review.tags.map(tag => cEsc(tag.replace(/_/g, ' '))).join(' · ')}</p>` : ''}
+              ${review.comment ? `<p>${cEsc(review.comment)}</p>` : ''}
+            </article>
+          `).join('')
+        : '<div style="color:var(--text-muted);font-size:.8rem;padding:8px 0">Este cliente ainda não foi avaliado.</div>';
+
+      document.getElementById('customerReviewRating').value = String(own?.rating || 5);
+      document.getElementById('customerReviewComment').value = own?.comment || '';
+      document.querySelectorAll('.customer-reputation-tags input').forEach(input => {
+        input.checked = (own?.tags || []).includes(input.value);
+      });
+      const saveBtn = document.getElementById('saveCustomerReviewBtn');
+      saveBtn.disabled = !dueInteractionReview;
+      saveBtn.textContent = dueInteractionReview
+        ? 'Salvar avaliação do cliente'
+        : 'Aguarde um lembrete de atendimento';
+    }
+
+    function openCustomerReviewModal() {
+      if (!cConvData?.client_id) return;
+      document.getElementById('customerReviewModal').classList.add('open');
+      loadCustomerReputation();
+    }
+
+    function closeCustomerReviewModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.getElementById('customerReviewModal').classList.remove('open');
+    }
+
+    async function saveCustomerReview() {
+      if (!cConvData?.client_id) return;
+      if (!dueInteractionReview) {
+        showToast('Esta avaliação precisa estar ligada a uma interação registrada pelo site.', 'error');
+        return;
+      }
+      const rating = Number(document.getElementById('customerReviewRating').value);
+      const tags = [...document.querySelectorAll('.customer-reputation-tags input:checked')].map(input => input.value);
+      const comment = document.getElementById('customerReviewComment').value.trim();
+      const payload = {
+        professional_id: currentUser.id,
+        customer_id: cConvData.client_id,
+        conversation_id: cConvId || null,
+        interaction_id: dueInteractionReview.id,
+        rating,
+        tags,
+        comment: comment || null,
+        updated_at: new Date().toISOString()
+      };
+      const { data: existing } = await sb.from('customer_professional_reviews')
+        .select('id').eq('interaction_id', dueInteractionReview.id).maybeSingle();
+      const result = existing
+        ? await sb.from('customer_professional_reviews').update(payload).eq('id', existing.id)
+        : await sb.from('customer_professional_reviews').insert(payload);
+      const { error } = result;
+
+      if (error) {
+        showToast('Erro ao avaliar cliente: ' + error.message, 'error');
+        return;
+      }
+      await sb.from('contact_interactions').update({
+        professional_review_status: 'completed',
+        completed_at: new Date().toISOString()
+      }).eq('id', dueInteractionReview.id);
+      dueInteractionReview = null;
+      showToast('Avaliação do cliente salva.');
+      await loadCustomerReputation();
+      closeCustomerReviewModal();
+      checkDueInteractionReviews();
+    }
+
+    function cInitials(name) { return (name || '?').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase(); }
+    function cEsc(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+    function cEscAttr(s) { return String(s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+  </script>
+  <script src="js/onboarding-tour.js" defer></script>
+  <script src="js/site.js" defer></script>
+</body>
+
+</html>
