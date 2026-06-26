@@ -1703,6 +1703,19 @@
     .oauth-welcome-checks { display:flex; flex-wrap:wrap; gap:12px; margin-top:12px; }
     .oauth-welcome-checks label { display:inline-flex; align-items:center; gap:7px; color:var(--text-muted); font-size:.76rem; cursor:pointer; }
     .oauth-welcome-checks input { accent-color:var(--gold); }
+    .peek-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+    .peek-card { overflow:hidden; border:1px solid rgba(255,255,255,.08); border-radius:16px; background:linear-gradient(145deg,rgba(31,31,43,.98),rgba(18,18,26,.98)); }
+    .peek-cover { height:82px; background:linear-gradient(135deg,rgba(201,168,76,.14),rgba(236,72,153,.12)); overflow:hidden; }
+    .peek-cover img { width:100%; height:100%; object-fit:cover; filter:saturate(.85); }
+    .peek-body { padding:0 14px 14px; }
+    .peek-avatar { width:58px; height:58px; margin-top:-29px; border:3px solid #171720; border-radius:18px; display:grid; place-items:center; overflow:hidden; color:var(--gold-light); background:var(--surface2); font-weight:900; }
+    .peek-avatar img { width:100%; height:100%; object-fit:cover; }
+    .peek-name { margin:10px 0 4px; font-weight:900; color:var(--text); }
+    .peek-meta { display:flex; flex-wrap:wrap; gap:7px; color:var(--text-muted); font-size:.76rem; }
+    .peek-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:13px; }
+    .peek-whatsapp { display:inline-flex; align-items:center; gap:7px; min-height:38px; padding:0 12px; border-radius:10px; color:#07130b; background:#4ade80; font-size:.78rem; font-weight:900; text-decoration:none; }
+    .peek-locked { display:inline-flex; align-items:center; gap:7px; min-height:38px; padding:0 12px; border:1px solid rgba(255,255,255,.08); border-radius:10px; color:var(--text-muted); background:rgba(255,255,255,.035); font-size:.78rem; font-weight:800; }
+    .peek-empty { padding:30px; border:1px dashed rgba(255,255,255,.14); border-radius:16px; color:var(--text-muted); text-align:center; }
     @media (max-width:760px) { .highlight-popup { grid-template-columns:1fr; } .highlight-popup-media { min-height:340px; } .highlight-schedule-grid { grid-template-columns:1fr; } }
     @media (max-width:1050px) { #page-dashboard .stat-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .dashboard-content-grid,.highlight-preview-row,.oauth-welcome.visible { grid-template-columns:1fr; } }
   </style>
@@ -1735,6 +1748,9 @@
       </button>
       <button onclick="goPage('destaque')" data-page="destaque">
         <span>✨</span> Criar Destaque
+      </button>
+      <button onclick="goPage('espiadas')" data-page="espiadas">
+        <span>👀</span> Espiadas
       </button>
       <button onclick="goPage('mensagens')" data-page="mensagens" id="navMensagens">
         <span>💬</span> Mensagens
@@ -1834,8 +1850,23 @@
             <button class="dashboard-tool" type="button" onclick="goPage('mensagens')"><i class="ti ti-message-circle"></i> Mensagens</button>
             <button class="dashboard-tool" type="button" onclick="goPage('disponibilidade')"><i class="ti ti-calendar-time"></i> Disponibilidade</button>
             <button class="dashboard-tool" type="button" onclick="goPage('fotos')"><i class="ti ti-photo"></i> Fotos</button>
+            <button class="dashboard-tool" type="button" onclick="window.open('perfil.html?story=novo','_blank')"><i class="ti ti-photo-plus"></i> Criar story</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ESPIADAS -->
+    <div class="page" id="page-espiadas">
+      <h1 class="page-title">Espiadas</h1>
+      <p class="page-sub">Veja clientes logados que visitaram seu perfil. O WhatsApp só aparece quando a pessoa autorizou contato.</p>
+      <div class="dashboard-tools">
+        <button class="dashboard-tool" type="button" onclick="loadEspiadas()">
+          <i class="ti ti-refresh"></i> Atualizar
+        </button>
+      </div>
+      <div class="peek-grid" id="peekGrid">
+        <div class="peek-empty">Carregando visitantes...</div>
       </div>
     </div>
 
@@ -2512,7 +2543,7 @@
 
     function openInitialPageFromHash() {
       const page = String(location.hash || '').replace('#', '');
-      const allowed = ['dashboard', 'perfil', 'fotos', 'servicos', 'localizacao', 'disponibilidade', 'destaque', 'mensagens'];
+      const allowed = ['dashboard', 'perfil', 'fotos', 'servicos', 'localizacao', 'disponibilidade', 'destaque', 'espiadas', 'mensagens'];
       if (allowed.includes(page)) goPage(page);
     }
 
@@ -2730,6 +2761,7 @@
       else if (page === 'disponibilidade') loadDisponibilidade();
       else if (page === 'perfil') loadSilicone();
       else if (page === 'destaque') loadHighlightBuilder();
+      else if (page === 'espiadas') loadEspiadas();
       else if (page === 'mensagens') cInit();
     }
 
@@ -2778,6 +2810,52 @@
     // ============================================================
     // DASHBOARD
     // ============================================================
+    async function loadEspiadas() {
+      const grid = document.getElementById('peekGrid');
+      if (!grid) return;
+      grid.innerHTML = '<div class="peek-empty">Carregando visitantes...</div>';
+
+      const { data, error } = await sb.rpc('get_professional_profile_visitors');
+      if (error) {
+        grid.innerHTML = `<div class="peek-empty">Execute o SQL <strong>supabase/professional-visitor-spy-consent.sql</strong> para ativar esta tela.</div>`;
+        console.warn('Erro ao carregar espiadas:', error.message);
+        return;
+      }
+
+      const visitors = data || [];
+      if (!visitors.length) {
+        grid.innerHTML = '<div class="peek-empty">Nenhuma visita autenticada ainda. Quando clientes logados abrirem seu perfil, eles aparecerão aqui.</div>';
+        return;
+      }
+
+      grid.innerHTML = visitors.map(visitor => {
+        const name = visitor.customer_name || 'Cliente';
+        const initials = cInitials(name);
+        const lastSeen = visitor.last_viewed_at ? timeAgo(visitor.last_viewed_at) : 'agora';
+        const visits = Number(visitor.visits_count || 0);
+        const digits = String(visitor.whatsapp || '').replace(/\D/g, '');
+        const wa = digits.length >= 10 ? `https://wa.me/55${digits}` : '';
+        return `
+          <article class="peek-card">
+            <div class="peek-cover">${visitor.cover_url ? `<img src="${cEscAttr(visitor.cover_url)}" alt="">` : ''}</div>
+            <div class="peek-body">
+              <div class="peek-avatar">${visitor.avatar_url ? `<img src="${cEscAttr(visitor.avatar_url)}" alt="">` : cEsc(initials)}</div>
+              <div class="peek-name">${cEsc(name)}</div>
+              <div class="peek-meta">
+                <span><i class="ti ti-eye"></i> ${visits} visita${visits === 1 ? '' : 's'}</span>
+                <span><i class="ti ti-clock"></i> ${cEsc(lastSeen)}</span>
+              </div>
+              <div class="peek-actions">
+                ${wa
+                  ? `<a class="peek-whatsapp" href="${wa}" target="_blank" rel="noopener"><i class="ti ti-brand-whatsapp"></i> Chamar no WhatsApp</a>`
+                  : `<span class="peek-locked"><i class="ti ti-lock"></i> WhatsApp não autorizado</span>`}
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
+    }
+
     async function loadDashboard() {
       // Analytics
       const since7 = new Date(Date.now() - 7 * 86400000).toISOString();
