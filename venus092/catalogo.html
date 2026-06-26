@@ -127,6 +127,50 @@
     }
 
     /* ── Navbar: chip de cliente logado ───────────────────── */
+    .profile-card.has-story {
+      position: relative;
+      border-color: rgba(244, 215, 127, .62);
+      box-shadow: 0 0 0 2px rgba(244, 215, 127, .75), 0 18px 48px rgba(201, 168, 76, .16);
+    }
+
+    .profile-card.has-story::before {
+      content: "";
+      position: absolute;
+      inset: -4px;
+      z-index: 0;
+      border-radius: inherit;
+      padding: 2px;
+      background: linear-gradient(135deg, #f4d77f, #ec4899, #8b5cf6, #f4d77f);
+      pointer-events: none;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+    }
+
+    .profile-card.has-story > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .story-card-pill {
+      position: absolute;
+      left: .75rem;
+      bottom: .75rem;
+      z-index: 4;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 30px;
+      padding: 0 10px;
+      border: 1px solid rgba(244, 215, 127, .38);
+      border-radius: 999px;
+      background: rgba(12, 9, 14, .7);
+      color: #f4d77f;
+      font-size: .7rem;
+      font-weight: 900;
+      backdrop-filter: blur(8px);
+    }
+
     .nav-cliente {
       display: flex;
       align-items: center;
@@ -889,6 +933,7 @@
       sort: 'recent',
       blockedProfileIds: [],
       coverUrls: {},      // cache profile_id -> signedUrl
+      storyProfileIds: new Set(),
       currentProfiles: [],
       compare: []
     };
@@ -1278,9 +1323,29 @@
       }
 
       state.currentProfiles = perfis;
+      await loadStoryIndicators(perfis);
       renderPerfis(perfis);
       renderPaginacao();
       atualizarContadores();
+    }
+
+    async function loadStoryIndicators(perfis) {
+      const ids = [...new Set((perfis || []).map(profile => profile.id).filter(Boolean))];
+      state.storyProfileIds = new Set();
+      if (!ids.length) return;
+
+      const { data, error } = await sb
+        .from('profile_stories')
+        .select('profile_id')
+        .in('profile_id', ids)
+        .gt('expires_at', new Date().toISOString());
+
+      if (error) {
+        console.warn('Erro ao carregar indicadores de stories:', error.message);
+        return;
+      }
+
+      state.storyProfileIds = new Set((data || []).map(story => story.profile_id));
     }
 
     function minPreco(p) {
@@ -1384,15 +1449,17 @@
         const availableNow = isAvailableNow(p);
         const selectedCompare = state.compare.some(item => item.id === p.id);
         const trustBadges = profileTrustBadges(p);
+        const hasStory = state.storyProfileIds?.has(p.id);
 
         return `
-    <div class="profile-card" onclick="location.href='perfil.html?id=${p.id}'">
+    <div class="profile-card ${hasStory ? 'has-story' : ''}" onclick="location.href='perfil.html?id=${p.id}'">
       <div class="profile-card-img" style="position:relative">
         ${url
             ? `<img class="cover-img" src="${url}" alt="${p.nome_artistico}" loading="lazy" />`
             : `<div class="placeholder-img-card" style="background:linear-gradient(135deg,#1e1820,#2a2232)"></div>`
           }
         <div class="card-overlay"></div>
+        ${hasStory ? '<span class="story-card-pill"><i class="ti ti-circle-dot"></i> Story</span>' : ''}
         <div class="card-badges">
           ${p.online_now ? '<span class="badge badge-green">● Online</span>' : ''}
           ${p.plano === 'premium' ? '<span class="badge badge-gold">★ Top</span>' : ''}
