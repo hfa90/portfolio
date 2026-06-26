@@ -31,7 +31,7 @@
     }
     if (!window.supabase?.createClient) return null;
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: { storageKey: 'venus-user-session' }
+      auth: { storageKey: location.pathname.endsWith('/admin.html') ? 'venus-admin-session' : 'venus-user-session' }
     });
     return sbClient;
   }
@@ -158,8 +158,6 @@
     const isCustomer = Boolean(customer);
     const displayName = customer?.nome || professional?.nome_artistico || user.email || 'Meu perfil';
     const panelUrl = isCustomer ? 'painel-cliente.html' : 'painel.html';
-    const messagesUrl = isCustomer ? 'painel-cliente.html#mensagens' : 'painel.html#mensagens';
-    const favoritesUrl = isCustomer ? 'painel-cliente.html#favoritos' : 'catalogo.html';
     const avatarUrl = customer?.avatar_url || '';
 
     ['navLinkCadastro', 'navBtnEntrar', 'navBtnAnuncie'].forEach(id => {
@@ -176,7 +174,6 @@
 
     const account = document.createElement('div');
     account.className = 'nav-account';
-    const roleLabel = isCustomer ? 'Cliente' : 'Profissional';
     account.innerHTML = `
       <button class="nav-account-btn" type="button" aria-expanded="false" aria-label="Abrir perfil">
         <span class="nav-account-avatar">
@@ -185,19 +182,15 @@
       </button>
       <div class="nav-account-menu" role="menu">
         <div class="nav-account-head">
-          <span>Nome</span>
           <strong>${displayName.split(' ')[0]}</strong>
-          <span>${roleLabel}</span>
+          <span>${isCustomer ? 'Cliente' : 'Profissional'}</span>
         </div>
-        <a href="${panelUrl}" role="menuitem"><i class="ti ti-user-circle"></i> Perfil</a>
-        <a href="${messagesUrl}" role="menuitem"><i class="ti ti-message-circle"></i> Mensagens</a>
-        ${isCustomer ? `<a href="${favoritesUrl}" role="menuitem"><i class="ti ti-heart"></i> Favoritos</a>` : ''}
+        <a href="${panelUrl}" role="menuitem"><i class="ti ti-user-circle"></i> Meu perfil</a>
+        <a href="catalogo.html" role="menuitem"><i class="ti ti-search"></i> Catalogo</a>
         <button type="button" role="menuitem" data-nav-logout><i class="ti ti-logout"></i> Sair</button>
       </div>
     `;
     nav.appendChild(account);
-    document.body.classList.add('venus-has-session');
-    window.dispatchEvent(new CustomEvent('venus:auth-menu-ready'));
 
     const button = account.querySelector('.nav-account-btn');
     const setOpen = open => {
@@ -289,10 +282,48 @@
     });
   }
 
+  function getPresenceKey() {
+    let key = localStorage.getItem('venus_presence_key');
+    if (!key) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      key = [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('venus_presence_key', key);
+    }
+    return key;
+  }
+
+  async function heartbeatPresence() {
+    const client = await getSupabaseClient();
+    if (!client) return;
+    const { data: { user } } = await client.auth.getUser();
+    let role = 'anon';
+    if (user) {
+      const [{ data: customer }, { data: professional }] = await Promise.all([
+        client.from('customers').select('id').eq('id', user.id).maybeSingle(),
+        client.from('profiles').select('id').eq('id', user.id).maybeSingle()
+      ]);
+      role = customer ? 'customer' : professional ? 'professional' : location.pathname.endsWith('/admin.html') ? 'admin' : 'anon';
+    }
+
+    client.rpc('track_site_presence', {
+      p_visitor_key: getPresenceKey(),
+      p_role: role,
+      p_page: location.pathname.split('/').pop() || 'index.html'
+    }).then(({ error }) => {
+      if (error && !window.__venusPresenceWarned) {
+        window.__venusPresenceWarned = true;
+        console.warn('Presenca online indisponivel:', error.message);
+      }
+    });
+  }
+
   function init() {
     initNavbarSearch();
     initHomeFilter();
     initAuthMenu();
+    heartbeatPresence();
+    setInterval(heartbeatPresence, 60000);
     waitForAgeGateThenCapture();
     updateLocationBadges(getStoredLocation() || {});
   }
