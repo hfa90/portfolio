@@ -12,6 +12,7 @@
         { id: 'servicos', icon: 'ti-list-details', label: 'Servicos', hint: 'Precos e atendimentos', save: 'addServico' },
         { id: 'localizacao', icon: 'ti-map-pin', label: 'Localizacao', hint: 'Cidade e locais de atendimento', save: 'saveLocalizacao' },
         { id: 'disponibilidade', icon: 'ti-calendar-time', label: 'Agenda', hint: 'Dias e horarios', save: 'saveDisponibilidade' },
+        { id: 'espiadas', icon: 'ti-eye-heart', label: 'Espiadas', hint: 'Clientes que visitaram seu perfil' },
         { id: 'mensagens', icon: 'ti-message-circle', label: 'Mensagens', hint: 'Conversas com clientes' }
       ],
       external: [
