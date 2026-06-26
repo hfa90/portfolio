@@ -286,6 +286,33 @@
       font-weight: 800;
     }
 
+    .trust-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .trust-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 24px;
+      padding: 0 8px;
+      border: 1px solid rgba(201, 168, 76, .2);
+      border-radius: 999px;
+      background: rgba(201, 168, 76, .08);
+      color: var(--text-muted);
+      font-size: .68rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .trust-badge i {
+      color: var(--gold);
+      font-size: .82rem;
+    }
+
     .card-compare {
       position: absolute;
       right: .75rem;
@@ -1124,7 +1151,7 @@
       let query = sb
         .from('profiles')
         .select(`
-      id, nome_artistico, categoria, cidade, bairro, uf,
+      id, nome_artistico, categoria, cidade, bairro, uf, bio,
       online_now, verificado, plano, engagement_points, engagement_score, created_at,
       services(nome, preco, local, ativo),
       attendance_locations(tipo),
@@ -1307,6 +1334,28 @@
       'Gay': 'badge-blue',
     };
 
+    function profileTrustBadges(profile) {
+      const photos = (profile.profile_photos || []).filter(photo => photo.status === 'approved');
+      const services = (profile.services || []).filter(service => service.ativo);
+      const locations = profile.attendance_locations || [];
+      const availability = profile.availability || [];
+      const complete = Boolean((profile.bio || '').trim().length >= 50)
+        && photos.length > 0
+        && services.length > 0
+        && locations.length > 0
+        && availability.length > 0;
+      const engagement = Number(profile.engagement_points || profile.engagement_score || 0);
+      const badges = [];
+
+      if (profile.online_now) badges.push({ icon: 'ti-bolt', label: 'Responde rapido' });
+      if (complete) badges.push({ icon: 'ti-circle-check', label: 'Perfil completo' });
+      if (profile.verificado) badges.push({ icon: 'ti-shield-check', label: 'Verificada' });
+      if (engagement >= 25) badges.push({ icon: 'ti-heart', label: 'Muito favoritada' });
+      if (engagement >= 60) badges.push({ icon: 'ti-repeat', label: 'Atendimento recorrente' });
+
+      return badges.slice(0, 4);
+    }
+
     function renderPerfis(perfis) {
       const grid = document.getElementById('profilesGrid');
 
@@ -1334,6 +1383,7 @@
         const catLabel = p.categoria || '';
         const availableNow = isAvailableNow(p);
         const selectedCompare = state.compare.some(item => item.id === p.id);
+        const trustBadges = profileTrustBadges(p);
 
         return `
     <div class="profile-card" onclick="location.href='perfil.html?id=${p.id}'">
@@ -1360,6 +1410,11 @@
         <p class="profile-card-meta">
           <i class="ti ti-map-pin"></i> ${loc || p.uf || '—'}
         </p>
+        ${trustBadges.length ? `
+          <div class="trust-badges">
+            ${trustBadges.map(item => `<span class="trust-badge"><i class="ti ${item.icon}"></i>${item.label}</span>`).join('')}
+          </div>
+        ` : ''}
         <div class="agenda-chip">
           <i class="ti ${availableNow ? 'ti-calendar-check' : 'ti-calendar-time'}"></i>
           ${availableNow ? 'Atendendo agora' : availabilitySummary(p)}
