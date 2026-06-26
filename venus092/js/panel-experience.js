@@ -43,6 +43,7 @@
 
   function init() {
     const role = document.body?.dataset?.onboardingRole;
+    if (role === 'cliente') return;
     activeConfig = configs[role];
     if (!activeConfig) return;
 
