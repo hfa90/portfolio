@@ -281,6 +281,31 @@
       transition: width 0.2s ease;
     }
 
+    .profile-guide-insight {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .profile-guide-insight span {
+      display: block;
+      padding: 10px 12px;
+      border: 1px solid rgba(201, 168, 76, 0.16);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.035);
+      color: var(--text-muted);
+      font-size: 0.74rem;
+      line-height: 1.35;
+    }
+
+    .profile-guide-insight strong {
+      display: block;
+      color: var(--gold-light);
+      font-size: 1rem;
+      margin-bottom: 2px;
+    }
+
     .profile-guide-list {
       display: grid;
       gap: 10px;
@@ -1305,6 +1330,51 @@
       pointer-events: none;
     }
 
+    .cquick-bar {
+      display: flex;
+      gap: 8px;
+      padding: 10px 14px 0;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+
+    .cquick-bar.locked {
+      opacity: .4;
+      pointer-events: none;
+    }
+
+    .cquick-bar::-webkit-scrollbar {
+      height: 4px;
+    }
+
+    .cquick-bar::-webkit-scrollbar-thumb {
+      background: rgba(201, 168, 76, .28);
+      border-radius: 999px;
+    }
+
+    .cquick-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 34px;
+      padding: 0 11px;
+      border: 1px solid rgba(201, 168, 76, .22);
+      border-radius: 999px;
+      background: rgba(201, 168, 76, .07);
+      color: var(--text-muted);
+      font-size: .74rem;
+      font-weight: 800;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    .cquick-btn:hover {
+      border-color: rgba(201, 168, 76, .5);
+      color: var(--gold-light);
+    }
+
     .cinput {
       flex: 1;
       background: var(--surface2);
@@ -1436,6 +1506,10 @@
         width: 100%;
         min-height: 44px;
       }
+
+      .profile-guide-insight {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 640px) {
@@ -1549,6 +1623,10 @@
 
       .cinput-bar {
         padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+      }
+
+      .cquick-bar {
+        padding: 9px 10px 0;
       }
     }
 
@@ -2219,6 +2297,8 @@
 
             <div class="cmsgs" id="cMsgs"></div>
 
+            <div class="cquick-bar" id="cQuickReplies" aria-label="Respostas rápidas"></div>
+
             <div class="cinput-bar" id="cInputBar">
               <textarea class="cinput" id="cInput" placeholder="Escreva uma mensagem…" rows="1"
                 onkeydown="cHandleKey(event)" oninput="cResize(this)"></textarea>
@@ -2541,6 +2621,10 @@
 
       const p = currentProfile;
       const phoneDigits = String(p.whatsapp || '').replace(/\D/g, '');
+      const photoCount = photos.count || 0;
+      const serviceCount = services.count || 0;
+      const locationCount = locations.count || 0;
+      const availabilityCount = availability.count || 0;
       const hasCoreProfile = Boolean((p.nome_artistico || '').trim())
         && Boolean(p.categoria)
         && phoneDigits.length >= 10
@@ -2549,29 +2633,29 @@
       const steps = [
         {
           label: 'Perfil completo',
-          detail: 'Nome, categoria, WhatsApp, bio e localizacao deixam voce mais forte no catalogo.',
+          detail: 'Nome, categoria, WhatsApp, bio com pelo menos 50 caracteres e cidade/UF deixam voce mais forte no catalogo.',
           done: hasCoreProfile,
           action: 'Completar perfil',
           page: 'perfil'
         },
         {
           label: 'Fotos aprovadas',
-          detail: 'Fotos aprovadas aumentam a confianca e melhoram o clique no perfil.',
-          done: (photos.count || 0) > 0,
+          detail: `${photoCount} foto${photoCount === 1 ? '' : 's'} aprovada${photoCount === 1 ? '' : 's'}. Fotos reais e claras aumentam a confianca antes do contato.`,
+          done: photoCount > 0,
           action: 'Enviar fotos',
           page: 'fotos'
         },
         {
           label: 'Servicos e valores',
-          detail: 'Clientes decidem mais rapido quando entendem servicos, valores e local de atendimento.',
-          done: (services.count || 0) > 0 && (locations.count || 0) > 0,
+          detail: `${serviceCount} servico${serviceCount === 1 ? '' : 's'} e ${locationCount} ${locationCount === 1 ? 'local' : 'locais'} de atendimento. Clientes decidem mais rapido com contexto.`,
+          done: serviceCount > 0 && locationCount > 0,
           action: 'Adicionar servicos',
           page: 'servicos'
         },
         {
           label: 'Disponibilidade ativa',
-          detail: 'Marque dias e horarios para aparecer nos filtros de atendimento agora.',
-          done: (availability.count || 0) > 0,
+          detail: `${availabilityCount} horario${availabilityCount === 1 ? '' : 's'} configurado${availabilityCount === 1 ? '' : 's'}. Marque dias e horarios para aparecer nos filtros de disponibilidade.`,
+          done: availabilityCount > 0,
           action: 'Marcar agenda',
           page: 'disponibilidade'
         },
@@ -2595,12 +2679,21 @@
 
       const completed = steps.filter(step => step.done).length;
       const pct = Math.round((completed / steps.length) * 100);
+      const nextStep = steps.find(step => !step.done);
       score.textContent = pct + '%';
       bar.style.width = pct + '%';
 
-      list.innerHTML = steps.map(step => `
+      const insight = `
+        <div class="profile-guide-insight">
+          <span><strong>${completed}/${steps.length}</strong> etapas concluidas</span>
+          <span><strong>${pct}%</strong> forca do perfil</span>
+          <span><strong>${nextStep ? cEsc(nextStep.label) : 'Pronto'}</strong> ${nextStep ? 'proximo passo sugerido' : 'perfil bem apresentado'}</span>
+        </div>
+      `;
+
+      list.innerHTML = insight + steps.map(step => `
         <div class="profile-guide-item ${step.done ? 'done' : ''}">
-          <div class="profile-guide-icon">${step.done ? 'OK' : '...'}</div>
+          <div class="profile-guide-icon"><i class="ti ${step.done ? 'ti-check' : 'ti-arrow-up-right'}"></i></div>
           <div>
             <div class="profile-guide-name">${cEsc(step.label)}</div>
             <div class="profile-guide-detail">${cEsc(step.detail)}</div>
@@ -3566,6 +3659,28 @@
     let cInitialized = false;
     let cConvs = [];
     let cOtherProfiles = {};
+    const cQuickReplies = [
+      {
+        icon: 'ti-clock',
+        label: 'Disponibilidade',
+        text: 'Oi! Tenho disponibilidade hoje. Me diga o melhor horario para voce e a regiao de atendimento.'
+      },
+      {
+        icon: 'ti-map-pin',
+        label: 'Local',
+        text: 'Atendo na regiao informada no perfil. Para confirmar o local exato, me diga o horario desejado.'
+      },
+      {
+        icon: 'ti-cash',
+        label: 'Valores',
+        text: 'Me fala qual servico voce procura e por quanto tempo, assim confirmo o valor certinho para voce.'
+      },
+      {
+        icon: 'ti-shield-check',
+        label: 'Combinado',
+        text: 'Para ficar tudo claro: combinamos horario, local, servico e valor antes de seguir para o atendimento.'
+      }
+    ];
 
     async function cInit() {
       if (cInitialized) {
@@ -3686,6 +3801,8 @@
       // Lock se expirado
       const exp = new Date(cConvData.expires_at) < new Date();
       document.getElementById('cInputBar').classList.toggle('locked', exp);
+      document.getElementById('cQuickReplies').classList.toggle('locked', exp);
+      cRenderQuickReplies();
 
       // Mensagens
       await cFetchMsgs();
@@ -3751,6 +3868,25 @@
     function cSgl() { return `<svg viewBox="0 0 14 10"><polyline points="1,5 5,9 13,1"/></svg>`; }
     function cDbl() { return `<svg viewBox="0 0 18 10"><polyline points="1,5 5,9 13,1"/><polyline points="5,5 9,9 17,1"/></svg>`; }
 
+    function cRenderQuickReplies() {
+      const bar = document.getElementById('cQuickReplies');
+      if (!bar) return;
+      bar.innerHTML = cQuickReplies.map((reply, index) => `
+        <button class="cquick-btn" type="button" onclick="cUseQuickReply(${index})">
+          <i class="ti ${reply.icon}"></i> ${cEsc(reply.label)}
+        </button>
+      `).join('');
+    }
+
+    function cUseQuickReply(index) {
+      const reply = cQuickReplies[index];
+      const input = document.getElementById('cInput');
+      if (!reply || !input || !cConvId) return;
+      input.value = reply.text;
+      cResize(input);
+      input.focus();
+    }
+
     async function cSend() {
       const input = document.getElementById('cInput');
       const txt = input.value.trim();
@@ -3807,7 +3943,14 @@
       chip.style.display = 'flex';
       function tick() {
         const diff = new Date(expiresAt) - Date.now();
-        if (diff <= 0) { chip.classList.add('warn'); chip.textContent = 'Expirada'; document.getElementById('cInputBar').classList.add('locked'); clearInterval(cTimerInterval); return; }
+        if (diff <= 0) {
+          chip.classList.add('warn');
+          chip.textContent = 'Expirada';
+          document.getElementById('cInputBar').classList.add('locked');
+          document.getElementById('cQuickReplies')?.classList.add('locked');
+          clearInterval(cTimerInterval);
+          return;
+        }
         chip.classList.toggle('warn', diff < 3600000);
         const h = Math.floor(diff / 3600000);
         const m2 = Math.floor((diff % 3600000) / 60000);

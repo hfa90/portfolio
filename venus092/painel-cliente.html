@@ -335,6 +335,71 @@
             margin-bottom: 32px;
         }
 
+        .privacy-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(201, 168, 76, .2);
+            border-radius: var(--radius);
+            background: rgba(201, 168, 76, .07);
+        }
+
+        .privacy-strip strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: .9rem;
+        }
+
+        .privacy-strip span {
+            color: var(--text-muted);
+            font-size: .78rem;
+            line-height: 1.35;
+        }
+
+        .privacy-toggle {
+            min-height: 38px;
+            padding: 0 13px;
+            border: 1px solid rgba(201, 168, 76, .28);
+            border-radius: 10px;
+            background: var(--surface2);
+            color: var(--text);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-weight: 800;
+            font-size: .78rem;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .privacy-toggle[aria-pressed="true"] {
+            color: #0d0d14;
+            background: var(--gold);
+        }
+
+        body.vc-discreet .profile-card-cover img,
+        body.vc-discreet .history-thumb img,
+        body.vc-discreet .vc-ava img,
+        body.vc-discreet .vc-head-ava img,
+        body.vc-discreet .vc-mini-ava img,
+        body.vc-discreet .sidebar-cover-wrap img,
+        body.vc-discreet .sidebar-avatar,
+        body.vc-discreet .topbar-avatar img {
+            filter: blur(14px) saturate(.35) brightness(.65);
+            transform: scale(1.04);
+        }
+
+        body.vc-discreet .profile-card-name,
+        body.vc-discreet .history-name,
+        body.vc-discreet .vc-conv-name,
+        body.vc-discreet .vc-head-name {
+            color: transparent !important;
+            text-shadow: 0 0 10px rgba(232, 232, 240, .7);
+        }
+
         /* ── Cards / Grid ────────────────────────────────────── */
         .stats-grid {
             display: grid;
@@ -1394,6 +1459,16 @@
                 padding: 24px 20px;
             }
 
+            .privacy-strip {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .privacy-toggle {
+                justify-content: center;
+                width: 100%;
+            }
+
             .profiles-grid {
                 grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
             }
@@ -1753,6 +1828,16 @@
                     <p>Use e-mail e senha ou o botão do Google na tela de login para acessar seu painel.</p>
                 </div>
 
+                <div class="privacy-strip">
+                    <div>
+                        <strong>Modo discreto</strong>
+                        <span>Oculta nomes e imagens sensiveis neste navegador.</span>
+                    </div>
+                    <button class="privacy-toggle" id="discreetToggle" type="button" aria-pressed="false" onclick="toggleDiscreetMode()">
+                        <i class="ti ti-eye-off"></i> Ativar
+                    </button>
+                </div>
+
                 <div class="client-guide" id="clientGuide">
                     <div class="client-guide-head">
                         <div>
@@ -1989,11 +2074,13 @@
         let vcRealtime = null;
         let vcTimerInterval = null;
         let vcInitialized = false;
+        const DISCREET_KEY = 'venus:client:discreet-mode';
 
         /* ═══════════════════════════════════════════════════════════
            INIT
         ═══════════════════════════════════════════════════════════ */
         async function init() {
+            applyDiscreetMode();
             const { data: { session } } = await sb.auth.getSession();
             if (!session) {
                 // Sem sessão → login (sem loop: login.html só redireciona se há sessão ativa)
@@ -2907,6 +2994,25 @@
             if (name === 'packs') loadClientPacks();
             // Mobile: fechar sidebar
             closeSidebar();
+        }
+
+        function applyDiscreetMode() {
+            const active = localStorage.getItem(DISCREET_KEY) === '1';
+            document.body.classList.toggle('vc-discreet', active);
+            const button = document.getElementById('discreetToggle');
+            if (button) {
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                button.innerHTML = active
+                    ? '<i class="ti ti-eye"></i> Desativar'
+                    : '<i class="ti ti-eye-off"></i> Ativar';
+            }
+        }
+
+        function toggleDiscreetMode() {
+            const next = localStorage.getItem(DISCREET_KEY) === '1' ? '0' : '1';
+            localStorage.setItem(DISCREET_KEY, next);
+            applyDiscreetMode();
+            toast(next === '1' ? 'Modo discreto ativado neste navegador.' : 'Modo discreto desativado.', 'ok');
         }
 
         function toggleSidebar() {
