@@ -749,6 +749,51 @@
             color: var(--gold)
         }
 
+        .subscription-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px
+        }
+
+        .subscription-actions input {
+            width: 76px;
+            min-height: 32px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface2);
+            color: var(--text);
+            padding: 0 8px;
+            font-size: .78rem
+        }
+
+        .subscription-actions button {
+            min-height: 32px;
+            padding: 0 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface2);
+            color: var(--text);
+            cursor: pointer;
+            font-size: .76rem;
+            font-weight: 700
+        }
+
+        .subscription-actions button:hover {
+            border-color: var(--gold);
+            color: var(--gold)
+        }
+
+        .subscription-actions .danger:hover {
+            border-color: rgba(248, 113, 113, .55);
+            color: var(--red)
+        }
+
+        .subscription-meta {
+            color: var(--muted);
+            font-size: .76rem;
+            line-height: 1.45
+        }
+
         /* MISC */
         .empty-state {
             grid-column: 1/-1;
@@ -1239,6 +1284,8 @@
                         id="navBadgeAds" style="display:none">0</span></button>
                 <button onclick="goPage('trafego')" data-page="trafego">🟢 Tráfego</button>
                 <button onclick="goPage('financeiro')" data-page="financeiro">💰 Financeiro</button>
+                <button onclick="goPage('mensalidades')" data-page="mensalidades">🧾 Mensalidades <span class="nav-badge"
+                        id="navBadgeSubscriptions" style="display:none">0</span></button>
                 <button onclick="goPage('comunicados')" data-page="comunicados">📣 Comunicados</button>
                 <button onclick="goPage('dashboard')" data-page="dashboard">📊 Dashboard</button>
             </nav>
@@ -1363,6 +1410,25 @@
                     <div class="stat-card"><div class="stat-label">Carregando...</div></div>
                 </div>
                 <div class="users-table" id="financeTable"></div>
+            </div>
+
+            <div class="page" id="page-mensalidades">
+                <h1 class="page-title">Mensalidades</h1>
+                <p class="page-sub">Controle os 30 dias grátis, renovações pagas e bloqueio de WhatsApp/chat.</p>
+                <div class="stats-grid" id="subscriptionStatsGrid">
+                    <div class="stat-card"><div class="stat-label">Carregando...</div></div>
+                </div>
+                <div class="filter-row">
+                    <button class="filter-btn active" onclick="setSubscriptionFilter('all')" data-sfilter="all">Todos <span class="filter-count" id="scnt-all">0</span></button>
+                    <button class="filter-btn" onclick="setSubscriptionFilter('expired')" data-sfilter="expired">Vencidos <span class="filter-count" id="scnt-expired">0</span></button>
+                    <button class="filter-btn" onclick="setSubscriptionFilter('soon')" data-sfilter="soon">Vencem em 3 dias <span class="filter-count" id="scnt-soon">0</span></button>
+                    <button class="filter-btn" onclick="setSubscriptionFilter('active')" data-sfilter="active">Ativos <span class="filter-count" id="scnt-active">0</span></button>
+                    <button class="filter-btn" onclick="setSubscriptionFilter('never')" data-sfilter="never">Sem trial <span class="filter-count" id="scnt-never">0</span></button>
+                    <div class="search-wrap">
+                        <input type="text" id="subscriptionSearchInput" placeholder="Buscar profissional..." oninput="renderSubscriptions()" />
+                    </div>
+                </div>
+                <div class="users-table" id="subscriptionsTable"></div>
             </div>
 
             <div class="page" id="page-comunicados">
@@ -1523,7 +1589,8 @@
             }
         });
 
-        let allFotos = [], allUsers = [], allReports = [], allReviews = [], allHighlightAds = [], allAnnouncements = [], announcementRecipients = [], currentFilter = 'pending';
+        let allFotos = [], allUsers = [], allReports = [], allReviews = [], allHighlightAds = [], allAnnouncements = [], announcementRecipients = [], allSubscriptions = [], currentFilter = 'pending';
+        let subscriptionFilter = 'all';
         let trafficRefreshTimer = null;
         let activeAdEditorId = null, activeAdEditorMode = 'edit';
 
@@ -1562,6 +1629,7 @@
             loadUsers(); // carrega em background para mostrar badge de pendentes
             loadModeration();
             loadHighlightAds();
+            loadSubscriptions(true);
         }
 
         // NAV
@@ -1569,6 +1637,7 @@
         pageTitles.destaques = 'Propagandas em Destaques';
         pageTitles.trafego = 'Tráfego ao vivo';
         pageTitles.financeiro = 'Financeiro';
+        pageTitles.mensalidades = 'Mensalidades';
         pageTitles.comunicados = 'Comunicados';
         function goPage(page) {
             clearInterval(trafficRefreshTimer);
@@ -1587,6 +1656,7 @@
                 trafficRefreshTimer = setInterval(loadTraffic, 30000);
             }
             if (page === 'financeiro') loadFinanceiro();
+            if (page === 'mensalidades') loadSubscriptions();
             if (page === 'comunicados') loadComunicados();
         }
 
@@ -2314,15 +2384,213 @@
             </table>`;
         }
 
+        async function loadSubscriptions(background = false) {
+            const statsGrid = document.getElementById('subscriptionStatsGrid');
+            const table = document.getElementById('subscriptionsTable');
+            if (!background) {
+                statsGrid.innerHTML = '<div class="stat-card"><div class="stat-label">Carregando...</div></div>';
+                table.innerHTML = '';
+            }
+
+            const { data, error } = await sb.rpc('admin_subscription_overview');
+            if (error) {
+                if (!background) {
+                    statsGrid.innerHTML = `<div class="stat-card"><div class="stat-label">Execute supabase/professional-trial-finance-and-conversion.sql</div><div class="stat-value">—</div></div>`;
+                    table.innerHTML = `<div class="empty-state"><p>${safeAdmin(error.message)}</p></div>`;
+                }
+                return;
+            }
+
+            allSubscriptions = data || [];
+            updateSubscriptionBadge();
+            if (!background) renderSubscriptions();
+        }
+
+        function updateSubscriptionBadge() {
+            const expired = allSubscriptions.filter(isSubscriptionExpired).length;
+            const badge = document.getElementById('navBadgeSubscriptions');
+            if (!badge) return;
+            badge.textContent = expired;
+            badge.style.display = expired ? '' : 'none';
+        }
+
+        function setSubscriptionFilter(filter) {
+            subscriptionFilter = filter;
+            document.querySelectorAll('[data-sfilter]').forEach(btn => btn.classList.toggle('active', btn.dataset.sfilter === filter));
+            renderSubscriptions();
+        }
+
+        function renderSubscriptions() {
+            const statsGrid = document.getElementById('subscriptionStatsGrid');
+            const table = document.getElementById('subscriptionsTable');
+            const rows = allSubscriptions || [];
+            const expired = rows.filter(isSubscriptionExpired);
+            const soon = rows.filter(isSubscriptionSoon);
+            const active = rows.filter(row => row.contact_access_active);
+            const never = rows.filter(row => !row.trial_expires_at && !row.paid_until);
+            const totalRevenue = rows.reduce((sum, row) => sum + Number(row.total_paid || 0), 0);
+            const contacts = rows.reduce((sum, row) => sum + Number(row.contacts_30d || 0), 0);
+
+            document.getElementById('scnt-all').textContent = rows.length;
+            document.getElementById('scnt-expired').textContent = expired.length;
+            document.getElementById('scnt-soon').textContent = soon.length;
+            document.getElementById('scnt-active').textContent = active.length;
+            document.getElementById('scnt-never').textContent = never.length;
+
+            const cards = [
+                { icon: '✅', label: 'Contato ativo', value: active.length, bg: 'var(--green-dim)', color: 'var(--green)' },
+                { icon: '⚠️', label: 'Vencidos', value: expired.length, bg: 'var(--red-dim)', color: 'var(--red)' },
+                { icon: '⏳', label: 'Vencem em 3 dias', value: soon.length, bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
+                { icon: '💬', label: 'Contatos 30 dias', value: contacts.toLocaleString('pt-BR'), bg: 'rgba(56,189,248,.12)', color: '#38BDF8' },
+                { icon: '💰', label: 'Mensalidades recebidas', value: moneyBR(totalRevenue), bg: 'var(--gold-dim)', color: 'var(--gold)' }
+            ];
+            statsGrid.innerHTML = cards.map(c => `
+                <div class="stat-card">
+                    <div class="stat-icon" style="background:${c.bg};color:${c.color}">${c.icon}</div>
+                    <div class="stat-label">${c.label}</div>
+                    <div class="stat-value">${c.value}</div>
+                </div>`).join('');
+
+            const search = (document.getElementById('subscriptionSearchInput')?.value || '').trim().toLowerCase();
+            const filtered = rows.filter(row => {
+                const haystack = [row.nome_artistico, row.email, row.cidade, row.uf, row.profile_id].join(' ').toLowerCase();
+                const matchSearch = !search || haystack.includes(search);
+                const matchFilter =
+                    subscriptionFilter === 'all' ||
+                    (subscriptionFilter === 'expired' && isSubscriptionExpired(row)) ||
+                    (subscriptionFilter === 'soon' && isSubscriptionSoon(row)) ||
+                    (subscriptionFilter === 'active' && row.contact_access_active) ||
+                    (subscriptionFilter === 'never' && !row.trial_expires_at && !row.paid_until);
+                return matchSearch && matchFilter;
+            });
+
+            if (!filtered.length) {
+                table.innerHTML = '<div class="empty-state"><p>Nenhuma profissional neste filtro.</p></div>';
+                return;
+            }
+
+            table.innerHTML = `<table>
+                <thead><tr><th>Profissional</th><th>Acesso</th><th>Métricas 30d</th><th>Pagamentos</th><th>Ações</th></tr></thead>
+                <tbody>${filtered.map(row => `
+                    <tr>
+                        <td>
+                            <strong>${safeAdmin(row.nome_artistico || 'Sem nome')}</strong>
+                            <div class="subscription-meta">${safeAdmin(row.email || '')}<br>${safeAdmin([row.cidade, row.uf].filter(Boolean).join(' / ') || '—')}</div>
+                        </td>
+                        <td>${subscriptionStatusBadge(row)}<div class="subscription-meta">${subscriptionAccessLabel(row)}</div></td>
+                        <td>
+                            <strong>${Number(row.contacts_30d || 0).toLocaleString('pt-BR')}</strong> contatos
+                            <div class="subscription-meta">${Number(row.views_30d || 0).toLocaleString('pt-BR')} visitas · ${Number(row.conversion_30d || 0).toLocaleString('pt-BR')}% conversão<br>WhatsApp ${row.whatsapp_30d || 0} · Chat ${row.chat_30d || 0}</div>
+                        </td>
+                        <td>
+                            <strong>${moneyBR(row.total_paid || 0)}</strong>
+                            <div class="subscription-meta">Último: ${row.last_payment_at ? formatDateTime(row.last_payment_at) : '—'}</div>
+                        </td>
+                        <td>${subscriptionActions(row)}</td>
+                    </tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        function isSubscriptionExpired(row) {
+            return Boolean((row.trial_expires_at || row.paid_until || row.contact_access_blocked) && !row.contact_access_active);
+        }
+
+        function isSubscriptionSoon(row) {
+            return Boolean(row.contact_access_active && Number(row.days_remaining) >= 0 && Number(row.days_remaining) <= 3);
+        }
+
+        function subscriptionStatusBadge(row) {
+            if (row.contact_access_blocked) return '<span class="pill pill-red">Bloqueado pelo admin</span>';
+            if (!row.trial_expires_at && !row.paid_until) return '<span class="pill pill-gray">Aguardando perfil completo</span>';
+            if (row.contact_access_active) return isSubscriptionSoon(row)
+                ? '<span class="pill pill-yellow">Vence em breve</span>'
+                : '<span class="pill pill-green">Contato ativo</span>';
+            return '<span class="pill pill-red">Contato bloqueado</span>';
+        }
+
+        function subscriptionAccessLabel(row) {
+            if (row.contact_access_blocked) return 'WhatsApp e chat pausados manualmente';
+            if (!row.access_expires_at) return 'Trial ainda não iniciado';
+            if (!row.contact_access_active) return `Expirou em ${formatDateTime(row.access_expires_at)}`;
+            const days = Math.max(0, Number(row.days_remaining || 0));
+            return `${days} dia${days === 1 ? '' : 's'} restantes · expira ${formatDateTime(row.access_expires_at)}`;
+        }
+
+        function subscriptionActions(row) {
+            const id = safeAdmin(row.profile_id);
+            return `<div class="subscription-actions">
+                <input id="subDays-${id}" type="number" min="1" max="365" value="30" title="Dias">
+                <input id="subAmount-${id}" type="number" min="0" step="0.01" value="0" title="Valor">
+                <button onclick="markSubscriptionPaid('${id}')">Marcar pago</button>
+                <button onclick="extendSubscription('${id}')">Adicionar dias</button>
+                ${row.contact_access_active
+                    ? `<button class="danger" onclick="setSubscriptionAccess('${id}', false)">Bloquear</button>`
+                    : `<button onclick="setSubscriptionAccess('${id}', true)">Liberar</button>`}
+            </div>`;
+        }
+
+        async function markSubscriptionPaid(profileId) {
+            const days = Number(document.getElementById(`subDays-${profileId}`)?.value || 30);
+            const amount = Number(document.getElementById(`subAmount-${profileId}`)?.value || 0);
+            const reference = prompt('Referência do pagamento (opcional):') || null;
+            const ok = await VenusSafety.confirmAction(`Confirmar pagamento e adicionar ${days} dia(s)?`, 'Confirmar mensalidade', 'Confirmar');
+            if (!ok) return;
+            const { error } = await sb.rpc('admin_mark_subscription_paid', {
+                p_profile_id: profileId,
+                p_days: days,
+                p_amount: amount,
+                p_reference: reference
+            });
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            toast('Mensalidade confirmada.');
+            loadSubscriptions();
+        }
+
+        async function extendSubscription(profileId) {
+            const days = Number(document.getElementById(`subDays-${profileId}`)?.value || 30);
+            const ok = await VenusSafety.confirmAction(`Adicionar ${days} dia(s) de contato ativo sem registrar valor?`, 'Adicionar dias', 'Adicionar');
+            if (!ok) return;
+            const { error } = await sb.rpc('admin_set_contact_access', {
+                p_profile_id: profileId,
+                p_active: true,
+                p_days: days
+            });
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            toast('Prazo atualizado.');
+            loadSubscriptions();
+        }
+
+        async function setSubscriptionAccess(profileId, active) {
+            const ok = await VenusSafety.confirmAction(
+                active ? 'Liberar WhatsApp e chat para esta profissional?' : 'Bloquear WhatsApp e chat desta profissional?',
+                active ? 'Liberar contato' : 'Bloquear contato',
+                active ? 'Liberar' : 'Bloquear'
+            );
+            if (!ok) return;
+            const { error } = await sb.rpc('admin_set_contact_access', {
+                p_profile_id: profileId,
+                p_active: active,
+                p_days: 30
+            });
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            toast(active ? 'Contato liberado.' : 'Contato bloqueado.', active ? 'ok' : 'err');
+            loadSubscriptions();
+        }
+
         async function loadFinanceiro() {
             const statsGrid = document.getElementById('financeStatsGrid');
             const table = document.getElementById('financeTable');
             statsGrid.innerHTML = '<div class="stat-card"><div class="stat-label">Carregando...</div></div>';
             table.innerHTML = '';
 
-            const { data, error } = await sb.from('highlight_ads')
-                .select('id,profile_id,headline,status,price_cents,payment_reference,payment_requested_at,approved_at,starts_at,expires_at,created_at,profiles(nome_artistico,email,cidade,uf)')
-                .order('created_at', { ascending: false });
+            const [{ data, error }, { data: subscriptionPayments, error: subPayError }] = await Promise.all([
+                sb.from('highlight_ads')
+                    .select('id,profile_id,headline,status,price_cents,payment_reference,payment_requested_at,approved_at,starts_at,expires_at,created_at,profiles(nome_artistico,email,cidade,uf)')
+                    .order('created_at', { ascending: false }),
+                sb.from('professional_subscription_payments')
+                    .select('amount,paid_at')
+                    .order('paid_at', { ascending: false })
+            ]);
 
             if (error) {
                 statsGrid.innerHTML = `<div class="stat-card"><div class="stat-label">Erro ao carregar</div><div class="stat-value">—</div></div>`;
@@ -2335,12 +2603,14 @@
             const pending = rows.filter(ad => ad.status === 'payment_pending');
             const expired = rows.filter(isExpiredAd);
             const revenue = paid.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
+            const subscriptionRevenue = subPayError ? 0 : (subscriptionPayments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
             const pendingValue = pending.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
             const cards = [
                 { icon: '✅', label: 'Pagos', value: paid.length, bg: 'var(--green-dim)', color: 'var(--green)' },
                 { icon: '⏳', label: 'Falta pagar', value: pending.length, bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
                 { icon: '⚠️', label: 'Vencidos / renovar', value: expired.length, bg: 'var(--red-dim)', color: 'var(--red)' },
-                { icon: '💰', label: 'Receita confirmada', value: moneyBR(revenue), bg: 'var(--gold-dim)', color: 'var(--gold)' },
+                { icon: '💰', label: 'Receita destaques', value: moneyBR(revenue), bg: 'var(--gold-dim)', color: 'var(--gold)' },
+                { icon: '🧾', label: 'Receita mensalidades', value: moneyBR(subscriptionRevenue), bg: 'rgba(168,85,247,.15)', color: '#c084fc' },
                 { icon: '📌', label: 'Pendente em aberto', value: moneyBR(pendingValue), bg: 'rgba(56,189,248,.12)', color: '#38BDF8' }
             ];
             statsGrid.innerHTML = cards.map(c => `
@@ -2574,7 +2844,7 @@
             const d7 = new Date(Date.now() - 7 * 86400000).toISOString();
             const [
                 { count: totalP }, { count: totalF }, { count: pend }, { count: approv }, { count: rej },
-                { count: views }, { count: wa }
+                { count: views }, { count: wa }, { data: subOverview }
             ] = await Promise.all([
                 sb.from('profiles').select('*', { count: 'exact', head: true }),
                 sb.from('profile_photos').select('*', { count: 'exact', head: true }),
@@ -2583,7 +2853,11 @@
                 sb.from('profile_photos').select('*', { count: 'exact', head: true }).eq('status', 'rejected'),
                 sb.from('profile_analytics').select('*', { count: 'exact', head: true }).eq('evento', 'view').gte('created_at', d7),
                 sb.from('profile_analytics').select('*', { count: 'exact', head: true }).eq('evento', 'whatsapp_click').gte('created_at', d7),
+                sb.rpc('admin_subscription_overview'),
             ]);
+            const subscriptionRows = subOverview || [];
+            const expiredSubscriptions = subscriptionRows.filter(isSubscriptionExpired).length;
+            const soonSubscriptions = subscriptionRows.filter(isSubscriptionSoon).length;
 
             const cards = [
                 { icon: '👥', label: 'Anunciantes', value: totalP || 0, bg: 'rgba(99,102,241,.15)', color: '#818CF8' },
@@ -2593,6 +2867,8 @@
                 { icon: '❌', label: 'Rejeitadas', value: rej || 0, bg: 'var(--red-dim)', color: 'var(--red)' },
                 { icon: '👁', label: 'Views (7 dias)', value: (views || 0).toLocaleString('pt-BR'), bg: 'rgba(56,189,248,.12)', color: '#38BDF8' },
                 { icon: '💬', label: 'WhatsApp (7d)', value: wa || 0, bg: 'var(--green-dim)', color: 'var(--green)' },
+                { icon: '🧾', label: 'Mensalidades vencidas', value: expiredSubscriptions, bg: 'var(--red-dim)', color: 'var(--red)' },
+                { icon: '⏳', label: 'Vencem em 3 dias', value: soonSubscriptions, bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
             ];
 
             document.getElementById('statsGrid').innerHTML = cards.map(c => `

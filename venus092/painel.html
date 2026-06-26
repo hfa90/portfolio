@@ -3020,6 +3020,7 @@
           trial_started_at: currentProfile?.trial_started_at,
           trial_expires_at: currentProfile?.trial_expires_at,
           paid_until: currentProfile?.paid_until,
+          contact_access_blocked: currentProfile?.contact_access_blocked,
           access_expires_at: currentProfile?.paid_until || currentProfile?.trial_expires_at || null,
           contact_access_active: false,
           revenue_month: 0,
@@ -3044,8 +3045,9 @@
 
       const expiresAt = businessSnapshot?.access_expires_at || businessSnapshot?.trial_expires_at || businessSnapshot?.paid_until;
       const expires = expiresAt ? new Date(expiresAt) : null;
-      const active = expires && expires.getTime() > Date.now();
-      banner.classList.toggle('expired', !active && Boolean(expiresAt));
+      const blocked = Boolean(businessSnapshot?.contact_access_blocked);
+      const active = !blocked && expires && expires.getTime() > Date.now();
+      banner.classList.toggle('expired', blocked || (!active && Boolean(expiresAt)));
 
       const title = document.getElementById('accessTitle');
       const text = document.getElementById('accessText');
@@ -3067,6 +3069,16 @@
         document.getElementById('accessCountdownLabel').textContent = 'aguardando perfil completo';
         badge.textContent = '30 DIAS GRATIS';
         sub.textContent = 'Complete o perfil para ativar';
+        return;
+      }
+
+      if (blocked) {
+        title.textContent = 'Contato pausado pelo administrador';
+        text.textContent = 'Seu perfil continua ativo no site, mas WhatsApp e chat estao desativados ate a regularizacao do pagamento.';
+        document.getElementById('accessCountdown').textContent = 'Bloqueado';
+        document.getElementById('accessCountdownLabel').textContent = 'contato desativado';
+        badge.textContent = 'CONTATO BLOQUEADO';
+        sub.textContent = 'Regularize o pagamento';
         return;
       }
 
