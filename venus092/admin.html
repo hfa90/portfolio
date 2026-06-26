@@ -794,6 +794,48 @@
             line-height: 1.45
         }
 
+        .admin-alerts {
+            display: grid;
+            gap: 10px;
+            margin-top: 18px
+        }
+
+        .admin-alert {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 12px;
+            align-items: center;
+            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--surface)
+        }
+
+        .admin-alert strong {
+            display: block;
+            margin-bottom: 3px
+        }
+
+        .admin-alert span {
+            color: var(--muted);
+            font-size: .8rem
+        }
+
+        .admin-alert button {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: var(--surface2);
+            color: var(--text);
+            padding: 8px 12px;
+            cursor: pointer;
+            font-weight: 700
+        }
+
+        .admin-alert button:hover {
+            border-color: var(--gold);
+            color: var(--gold)
+        }
+
         /* MISC */
         .empty-state {
             grid-column: 1/-1;
@@ -1392,6 +1434,9 @@
                         <div class="stat-label">Carregando…</div>
                     </div>
                 </div>
+                <div class="admin-alerts" id="adminAlerts">
+                    <div class="empty-state"><p>Carregando alertas...</p></div>
+                </div>
             </div>
 
             <div class="page" id="page-trafego">
@@ -1580,8 +1625,6 @@
         const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
         // ⚠️ Coloque aqui os e-mails dos admins autorizados
-        const ADMIN_EMAILS = ['admin@venus092.com.br'];
-
         const { createClient } = supabase;
         const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
             auth: {
@@ -1597,7 +1640,7 @@
         // AUTH
         async function init() {
             const { data: { session } } = await sb.auth.getSession();
-            if (session && ADMIN_EMAILS.includes(session.user.email)) showAdmin(session.user);
+            if (session && await isAdminUser(session.user)) showAdmin(session.user);
         }
 
         async function doLogin() {
@@ -1605,10 +1648,22 @@
             const pass = document.getElementById('loginPass').value;
             document.getElementById('loginErr').style.display = 'none';
             if (!email || !pass) { showLoginErr('Preencha e-mail e senha.'); return; }
-            if (!ADMIN_EMAILS.includes(email)) { showLoginErr('Acesso não autorizado.'); return; }
             const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
             if (error) { showLoginErr(error.message); return; }
+            if (!await isAdminUser(data.user)) {
+                await sb.auth.signOut();
+                showLoginErr('Acesso não autorizado para administrador.');
+                return;
+            }
             showAdmin(data.user);
+        }
+
+        async function isAdminUser(user) {
+            if (!user) return false;
+            if (user.app_metadata?.role === 'admin') return true;
+            const { data, error } = await sb.rpc('is_venus_admin');
+            if (!error && data === true) return true;
+            return false;
         }
 
         function showLoginErr(msg) {
@@ -2491,6 +2546,57 @@
             </table>`;
         }
 
+        function renderAdminAlerts(rows = []) {
+            const el = document.getElementById('adminAlerts');
+            if (!el) return;
+            const expired = rows.filter(isSubscriptionExpired);
+            const soon = rows.filter(isSubscriptionSoon);
+            const blocked = rows.filter(row => row.contact_access_blocked);
+            const hotLeads = rows
+                .filter(row => !row.contact_access_active && Number(row.contacts_30d || 0) >= 5)
+                .sort((a, b) => Number(b.contacts_30d || 0) - Number(a.contacts_30d || 0))
+                .slice(0, 3);
+
+            const alerts = [];
+            if (expired.length) alerts.push({
+                icon: '⚠️',
+                title: `${expired.length} mensalidade${expired.length === 1 ? '' : 's'} vencida${expired.length === 1 ? '' : 's'}`,
+                text: 'WhatsApp e chat ficam desativados até regularização.',
+                filter: 'expired'
+            });
+            if (soon.length) alerts.push({
+                icon: '⏳',
+                title: `${soon.length} profissional${soon.length === 1 ? '' : 'is'} vence${soon.length === 1 ? '' : 'm'} em até 3 dias`,
+                text: 'Boa hora para cobrar renovação antes de perder contato ativo.',
+                filter: 'soon'
+            });
+            if (blocked.length) alerts.push({
+                icon: '⛔',
+                title: `${blocked.length} contato${blocked.length === 1 ? '' : 's'} bloqueado${blocked.length === 1 ? '' : 's'} manualmente`,
+                text: 'Revise se o bloqueio ainda deve continuar.',
+                filter: 'expired'
+            });
+            hotLeads.forEach(row => alerts.push({
+                icon: '💬',
+                title: `${row.nome_artistico || 'Profissional'} teve ${row.contacts_30d || 0} contatos em 30 dias`,
+                text: 'Perfil com demanda, mas sem contato ativo. Pode valer uma cobrança prioritária.',
+                filter: 'expired'
+            }));
+
+            if (!alerts.length) {
+                el.innerHTML = `<div class="admin-alert"><div>✅</div><div><strong>Nenhum alerta administrativo crítico</strong><span>Mensalidades e contatos ativos estão sob controle.</span></div><button onclick="goPage('mensalidades')">Ver mensalidades</button></div>`;
+                return;
+            }
+
+            el.innerHTML = alerts.map(alert => `
+                <div class="admin-alert">
+                    <div>${alert.icon}</div>
+                    <div><strong>${safeAdmin(alert.title)}</strong><span>${safeAdmin(alert.text)}</span></div>
+                    <button onclick="goPage('mensalidades'); setSubscriptionFilter('${alert.filter}')">Resolver</button>
+                </div>
+            `).join('');
+        }
+
         function isSubscriptionExpired(row) {
             return Boolean((row.trial_expires_at || row.paid_until || row.contact_access_blocked) && !row.contact_access_active);
         }
@@ -2523,6 +2629,7 @@
                 <input id="subAmount-${id}" type="number" min="0" step="0.01" value="0" title="Valor">
                 <button onclick="markSubscriptionPaid('${id}')">Marcar pago</button>
                 <button onclick="extendSubscription('${id}')">Adicionar dias</button>
+                <button onclick="editSubscriptionDates('${id}')">Editar datas</button>
                 ${row.contact_access_active
                     ? `<button class="danger" onclick="setSubscriptionAccess('${id}', false)">Bloquear</button>`
                     : `<button onclick="setSubscriptionAccess('${id}', true)">Liberar</button>`}
@@ -2574,6 +2681,30 @@
             });
             if (error) { toast('Erro: ' + error.message, 'err'); return; }
             toast(active ? 'Contato liberado.' : 'Contato bloqueado.', active ? 'ok' : 'err');
+            loadSubscriptions();
+        }
+
+        async function editSubscriptionDates(profileId) {
+            const row = allSubscriptions.find(item => item.profile_id === profileId);
+            if (!row) return;
+            const trialDefault = row.trial_expires_at ? toAdminLocalDateTime(row.trial_expires_at) : '';
+            const paidDefault = row.paid_until ? toAdminLocalDateTime(row.paid_until) : '';
+            const trialValue = prompt('Trial expira em (YYYY-MM-DDTHH:mm). Deixe vazio para limpar:', trialDefault);
+            if (trialValue === null) return;
+            const paidValue = prompt('Pago até (YYYY-MM-DDTHH:mm). Deixe vazio para limpar:', paidDefault);
+            if (paidValue === null) return;
+            const keepBlocked = row.contact_access_blocked
+                ? confirm('Manter contato bloqueado manualmente?')
+                : false;
+
+            const { error } = await sb.rpc('admin_set_subscription_dates', {
+                p_profile_id: profileId,
+                p_trial_expires_at: trialValue ? new Date(trialValue).toISOString() : null,
+                p_paid_until: paidValue ? new Date(paidValue).toISOString() : null,
+                p_contact_access_blocked: keepBlocked
+            });
+            if (error) { toast('Erro: ' + error.message, 'err'); return; }
+            toast('Datas atualizadas.');
             loadSubscriptions();
         }
 
@@ -2858,6 +2989,7 @@
             const subscriptionRows = subOverview || [];
             const expiredSubscriptions = subscriptionRows.filter(isSubscriptionExpired).length;
             const soonSubscriptions = subscriptionRows.filter(isSubscriptionSoon).length;
+            renderAdminAlerts(subscriptionRows);
 
             const cards = [
                 { icon: '👥', label: 'Anunciantes', value: totalP || 0, bg: 'rgba(99,102,241,.15)', color: '#818CF8' },
