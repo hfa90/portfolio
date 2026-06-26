@@ -318,11 +318,135 @@
     });
   }
 
+  function injectAnnouncementStyles() {
+    if (document.getElementById('venus-announcement-style')) return;
+    const style = document.createElement('style');
+    style.id = 'venus-announcement-style';
+    style.textContent = `
+      .venus-announcement-backdrop{position:fixed;inset:0;z-index:16000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(3,3,8,.72);backdrop-filter:blur(10px)}
+      .venus-announcement-card{width:min(460px,100%);border:1px solid rgba(201,168,76,.34);border-radius:18px;background:#17151d;color:#f8f4ee;box-shadow:0 28px 80px rgba(0,0,0,.58);overflow:hidden}
+      .venus-announcement-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 20px 10px}
+      .venus-announcement-kicker{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;padding:4px 9px;border-radius:999px;background:rgba(201,168,76,.16);color:#d9b95d;font-size:.72rem;font-weight:800;text-transform:uppercase}
+      .venus-announcement-title{margin:0;font-size:1.35rem;line-height:1.15}
+      .venus-announcement-close{width:34px;height:34px;border:1px solid rgba(255,255,255,.14);border-radius:10px;background:rgba(255,255,255,.06);color:#fff;cursor:pointer}
+      .venus-announcement-body{padding:0 20px 20px;color:#d7d0dc;line-height:1.55;white-space:pre-line}
+      .venus-announcement-actions{display:flex;justify-content:flex-end;gap:10px;padding:0 20px 20px}
+      .venus-announcement-cta{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:0 16px;border-radius:12px;background:#c9a84c;color:#111;font-weight:900;text-decoration:none}
+      .venus-announcement-kind-promo .venus-announcement-kicker{background:rgba(45,212,191,.14);color:#2dd4bf}
+      .venus-announcement-kind-warning .venus-announcement-kicker{background:rgba(248,113,113,.15);color:#f87171}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function announcementKindText(kind) {
+    if (kind === 'promo') return 'Promocao';
+    if (kind === 'warning') return 'Atencao';
+    return 'Aviso';
+  }
+
+  function dismissAnnouncement(id) {
+    try {
+      localStorage.setItem(`venus:announcement:dismissed:${id}`, '1');
+    } catch {}
+    document.querySelector('.venus-announcement-backdrop')?.remove();
+  }
+
+  function showAnnouncementPopup(item) {
+    if (!item?.id || document.querySelector('.venus-announcement-backdrop')) return;
+    injectAnnouncementStyles();
+    const backdrop = document.createElement('div');
+    backdrop.className = 'venus-announcement-backdrop';
+    backdrop.setAttribute('role', 'presentation');
+
+    const card = document.createElement('section');
+    card.className = `venus-announcement-card venus-announcement-kind-${item.kind || 'info'}`;
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'venusAnnouncementTitle');
+
+    const head = document.createElement('div');
+    head.className = 'venus-announcement-head';
+    const titleWrap = document.createElement('div');
+    const kicker = document.createElement('span');
+    kicker.className = 'venus-announcement-kicker';
+    kicker.textContent = announcementKindText(item.kind);
+    const title = document.createElement('h2');
+    title.id = 'venusAnnouncementTitle';
+    title.className = 'venus-announcement-title';
+    title.textContent = item.title || 'Comunicado';
+    titleWrap.append(kicker, title);
+
+    const close = document.createElement('button');
+    close.className = 'venus-announcement-close';
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Fechar comunicado');
+    close.textContent = 'x';
+    close.addEventListener('click', () => dismissAnnouncement(item.id));
+    head.append(titleWrap, close);
+
+    const body = document.createElement('div');
+    body.className = 'venus-announcement-body';
+    body.textContent = item.body || '';
+    card.append(head, body);
+
+    if (item.cta_label && item.cta_url && /^https?:\/\//i.test(item.cta_url)) {
+      const actions = document.createElement('div');
+      actions.className = 'venus-announcement-actions';
+      const link = document.createElement('a');
+      link.className = 'venus-announcement-cta';
+      link.href = item.cta_url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = item.cta_label;
+      link.addEventListener('click', () => dismissAnnouncement(item.id));
+      actions.appendChild(link);
+      card.appendChild(actions);
+    }
+
+    backdrop.addEventListener('click', event => {
+      if (event.target === backdrop) dismissAnnouncement(item.id);
+    });
+    document.addEventListener('keydown', function onKey(event) {
+      if (event.key !== 'Escape' || !document.body.contains(backdrop)) return;
+      dismissAnnouncement(item.id);
+      document.removeEventListener('keydown', onKey);
+    });
+    backdrop.appendChild(card);
+    document.body.appendChild(backdrop);
+    close.focus();
+  }
+
+  async function loadAdminAnnouncements() {
+    if (location.pathname.endsWith('/admin.html')) return;
+    const client = await getSupabaseClient();
+    if (!client) return;
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await client.rpc('get_my_admin_announcements');
+    if (error) {
+      if (!window.__venusAnnouncementsWarned) {
+        window.__venusAnnouncementsWarned = true;
+        console.warn('Comunicados indisponiveis:', error.message);
+      }
+      return;
+    }
+    const unseen = (data || []).find(item => {
+      try {
+        return !localStorage.getItem(`venus:announcement:dismissed:${item.id}`);
+      } catch {
+        return true;
+      }
+    });
+    if (unseen) showAnnouncementPopup(unseen);
+  }
+
   function init() {
     initNavbarSearch();
     initHomeFilter();
     initAuthMenu();
     heartbeatPresence();
+    loadAdminAnnouncements();
     setInterval(heartbeatPresence, 60000);
     waitForAgeGateThenCapture();
     updateLocationBadges(getStoredLocation() || {});
