@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="css/global.css" />
   <link rel="stylesheet" href="css/home.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -59,66 +60,10 @@
           Perfis independentes, busca por região e contato discreto em um ambiente adulto com moderação, denúncias e ferramentas de bloqueio.
         </p>
 
-        <form class="hero-search home-filter" id="homeSmartFilter">
-          <div class="home-filter-main">
-            <label class="home-filter-field home-filter-field-lg">
-              <span>O que procura</span>
-              <i class="ti ti-search"></i>
-              <input type="search" id="homeQuery" placeholder="Nome, estilo ou palavra-chave" />
-            </label>
-            <label class="home-filter-field home-filter-field-lg">
-              <span>Região</span>
-              <i class="ti ti-map-pin"></i>
-              <input type="text" id="homeLocation" placeholder="Cidade, bairro ou CEP" />
-              <button class="home-location-btn" id="homeUseLocation" type="button" aria-label="Usar minha localização">
-                <i class="ti ti-current-location"></i>
-              </button>
-            </label>
-          </div>
-          <div class="home-filter-options">
-            <input type="text" id="heroCep" class="home-filter-hidden-cep" maxlength="9" aria-hidden="true" tabindex="-1" />
-            <label class="home-filter-field">
-              <span>Categoria</span>
-              <i class="ti ti-users"></i>
-              <select id="homeCategory">
-                <option value="">Todas</option>
-                <option>GP Feminina</option>
-                <option>GP Masculino</option>
-                <option>Trans</option>
-                <option>Travesti</option>
-                <option>Lésbica</option>
-                <option>Gay</option>
-              </select>
-            </label>
-            <label class="home-filter-field">
-              <span>Até</span>
-              <i class="ti ti-currency-real"></i>
-              <input type="number" id="homePrecoMax" min="0" placeholder="Preço" />
-            </label>
-            <label class="home-filter-field">
-              <span>Atendimento</span>
-              <i class="ti ti-home-heart"></i>
-              <select id="homeAtendimento">
-                <option value="">Qualquer</option>
-                <option>Local próprio</option>
-                <option>A domicílio</option>
-                <option>Motel / Hotel</option>
-                <option>Online</option>
-              </select>
-            </label>
-            <label class="home-toggle">
-              <input type="checkbox" id="homeOnline" />
-              <span>Online</span>
-            </label>
-            <label class="home-toggle">
-              <input type="checkbox" id="homeVerificado" />
-              <span>Verificadas</span>
-            </label>
-            <button class="btn btn-gold btn-lg hero-search-btn" type="submit">
-              <i class="ti ti-adjustments-search"></i> Filtrar
-            </button>
-          </div>
-        </form>
+        <div class="hero-actions">
+          <a href="catalogo.html" class="btn btn-gold btn-lg"><i class="ti ti-sparkles"></i> Ver catalogo</a>
+          <a href="cadastro.html" class="btn btn-outline btn-lg"><i class="ti ti-user-plus"></i> Anunciar gratis</a>
+        </div>
 
         <div class="hero-stats">
           <div class="hero-stat"><strong>3.200+</strong><span>Perfis ativos</span></div>
@@ -188,7 +133,7 @@
   </section>
 
   <!-- DESTAQUES -->
-  <section class="section-featured">
+  <section class="section-featured" id="homeHighlightsSection">
     <div class="container">
       <div class="section-header">
         <div>
@@ -197,7 +142,7 @@
         </div>
         <a href="catalogo.html" class="btn btn-outline">Ver todos <i class="ti ti-arrow-right"></i></a>
       </div>
-      <div class="grid-profiles">
+      <div class="home-highlight-grid" id="homeHighlightCards">
         <!-- Cards gerados via JS em produção -->
         <div class="profile-card" onclick="location.href='perfil.html'">
           <div class="profile-card-img">
@@ -475,14 +420,105 @@
 
 <script src="js/agegate.js"></script>
 <script>
-  // CEP mask
-  const cepInput = document.getElementById('heroCep');
-  if(cepInput) {
-    cepInput.addEventListener('input', function() {
-      let v = this.value.replace(/\D/g,'');
-      if(v.length > 5) v = v.slice(0,5) + '-' + v.slice(5,8);
-      this.value = v;
-    });
+  const HOME_SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+  const HOME_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+
+  function homeEsc(value) {
+    return String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
+    }[char]));
+  }
+
+  function homeHighlightLocation(ad) {
+    return [ad.bairro, ad.cidade, ad.uf || ad.target_uf].filter(Boolean).join(', ');
+  }
+
+  async function fetchHomeHighlights(sb) {
+    const now = new Date().toISOString();
+    let { data: ads, error } = await sb
+      .from('active_highlight_ads')
+      .select('*')
+      .order('starts_at', { ascending: true })
+      .limit(6);
+
+    if (error || !ads?.length) {
+      const fallback = await sb
+        .from('highlight_ads')
+        .select('id,profile_id,headline,description,cta_label,photo_paths,target_uf,starts_at,expires_at,profiles(nome_artistico,categoria,cidade,bairro,uf,verificado,online_now,status)')
+        .eq('status', 'approved')
+        .lte('starts_at', now)
+        .gt('expires_at', now)
+        .order('starts_at', { ascending: true })
+        .limit(6);
+
+      if (fallback.error) throw fallback.error;
+      ads = (fallback.data || []).map(ad => ({ ...ad, ...(ad.profiles || {}) }));
+    }
+
+    return ads || [];
+  }
+
+  async function loadHomeHighlights() {
+    const section = document.getElementById('homeHighlightsSection');
+    const cards = document.getElementById('homeHighlightCards');
+    if (!section || !cards) return;
+
+    try {
+      if (!window.supabase?.createClient) throw new Error('Supabase indisponivel');
+      const sb = window.supabase.createClient(HOME_SUPABASE_URL, HOME_SUPABASE_ANON_KEY, {
+        auth: { storageKey: 'venus-user-session' }
+      });
+
+      const ads = await fetchHomeHighlights(sb);
+      if (!ads.length) {
+        section.style.display = 'none';
+        return;
+      }
+
+      const coverPaths = ads.map(ad => ad.photo_paths?.[0]).filter(Boolean);
+      const signedMap = {};
+      if (coverPaths.length) {
+        const { data: signed } = await sb.storage.from('fotos').createSignedUrls(coverPaths, 3600);
+        (signed || []).forEach(item => { signedMap[item.path] = item.signedUrl; });
+      }
+
+      cards.innerHTML = ads.map(ad => {
+        const photo = signedMap[ad.photo_paths?.[0]] || '';
+        const title = ad.headline || ad.nome_artistico || 'Perfil em destaque';
+        const description = ad.description || 'Profissional em destaque na Venus.';
+        const location = homeHighlightLocation(ad);
+        return `<article class="home-highlight-card" onclick="location.href='perfil.html?id=${encodeURIComponent(ad.profile_id)}'">
+          <div class="home-highlight-media" ${photo ? `style="--highlight-image:url('${homeEsc(photo)}')"` : ''}>
+            ${photo
+              ? `<img class="home-highlight-photo" src="${homeEsc(photo)}" alt="Destaque de ${homeEsc(ad.nome_artistico || title)}" loading="lazy">`
+              : '<div class="home-highlight-placeholder"><i class="ti ti-sparkles"></i></div>'}
+          </div>
+          <div class="home-highlight-content">
+            <div class="home-highlight-badge"><i class="ti ti-star"></i> Diferenciada</div>
+            <h3 class="home-highlight-title">${homeEsc(title)}</h3>
+            <p class="home-highlight-text">${homeEsc(description)}</p>
+            <div class="home-highlight-meta">
+              ${ad.nome_artistico ? `<span><i class="ti ti-user-heart"></i>${homeEsc(ad.nome_artistico)}</span>` : ''}
+              ${location ? `<span><i class="ti ti-map-pin"></i>${homeEsc(location)}</span>` : ''}
+              ${ad.categoria ? `<span><i class="ti ti-tag"></i>${homeEsc(ad.categoria)}</span>` : ''}
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+    } catch (error) {
+      console.warn('Destaques da home indisponiveis:', error.message);
+      section.style.display = 'none';
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadHomeHighlights);
+  } else {
+    loadHomeHighlights();
   }
 </script>
   <script src="js/site.js" defer></script>
