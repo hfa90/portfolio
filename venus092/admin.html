@@ -1120,6 +1120,73 @@
             margin-top: 20px;
         }
 
+        .announcement-form {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            background: var(--surface);
+        }
+
+        .announcement-field {
+            display: grid;
+            gap: 7px;
+        }
+
+        .announcement-field.full {
+            grid-column: 1 / -1;
+        }
+
+        .announcement-field label {
+            color: var(--muted);
+            font-size: .75rem;
+            font-weight: 800;
+        }
+
+        .announcement-field input,
+        .announcement-field select,
+        .announcement-field textarea {
+            width: 100%;
+            padding: 11px 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            outline: none;
+            color: var(--text);
+            background: var(--surface2);
+        }
+
+        .announcement-field textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        .announcement-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            justify-content: flex-end;
+            grid-column: 1 / -1;
+        }
+
+        .announcement-target {
+            display: none;
+        }
+
+        .announcement-target.open {
+            display: grid;
+        }
+
+        .announcement-body-preview {
+            max-width: 420px;
+            color: var(--muted);
+            font-size: .8rem;
+            line-height: 1.45;
+        }
+
         @media (max-width:900px) {
             .ads-admin-grid {
                 grid-template-columns: 1fr;
@@ -1130,6 +1197,10 @@
             }
 
             .ad-editor-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .announcement-form {
                 grid-template-columns: 1fr;
             }
         }
@@ -1168,6 +1239,7 @@
                         id="navBadgeAds" style="display:none">0</span></button>
                 <button onclick="goPage('trafego')" data-page="trafego">🟢 Tráfego</button>
                 <button onclick="goPage('financeiro')" data-page="financeiro">💰 Financeiro</button>
+                <button onclick="goPage('comunicados')" data-page="comunicados">📣 Comunicados</button>
                 <button onclick="goPage('dashboard')" data-page="dashboard">📊 Dashboard</button>
             </nav>
             <div class="sidebar-bottom">
@@ -1293,6 +1365,62 @@
                 <div class="users-table" id="financeTable"></div>
             </div>
 
+            <div class="page" id="page-comunicados">
+                <h1 class="page-title">Comunicados</h1>
+                <p class="page-sub">Envie avisos, promocoes ou recados em popup para clientes, profissionais ou uma pessoa especifica.</p>
+                <section class="announcement-form">
+                    <div class="announcement-field">
+                        <label for="announcementTitle">Titulo</label>
+                        <input id="announcementTitle" maxlength="90" placeholder="Ex: Promocao de fim de semana">
+                    </div>
+                    <div class="announcement-field">
+                        <label for="announcementKind">Tipo</label>
+                        <select id="announcementKind">
+                            <option value="info">Aviso</option>
+                            <option value="promo">Promocao</option>
+                            <option value="warning">Atencao</option>
+                        </select>
+                    </div>
+                    <div class="announcement-field full">
+                        <label for="announcementBody">Mensagem</label>
+                        <textarea id="announcementBody" maxlength="600" placeholder="Escreva a mensagem que aparecera no popup."></textarea>
+                    </div>
+                    <div class="announcement-field">
+                        <label for="announcementAudience">Publico</label>
+                        <select id="announcementAudience" onchange="toggleAnnouncementTarget()">
+                            <option value="all">Todos</option>
+                            <option value="customers">Clientes</option>
+                            <option value="professionals">Profissionais</option>
+                            <option value="specific">Pessoa especifica</option>
+                        </select>
+                    </div>
+                    <div class="announcement-field announcement-target" id="announcementTargetWrap">
+                        <label for="announcementRecipientSearch">Destinatario</label>
+                        <input id="announcementRecipientSearch" list="announcementRecipientList" placeholder="Buscar por nome ou e-mail" oninput="searchAnnouncementRecipients()">
+                        <datalist id="announcementRecipientList"></datalist>
+                        <input type="hidden" id="announcementTargetUserId">
+                    </div>
+                    <div class="announcement-field">
+                        <label for="announcementCtaLabel">Texto do botao (opcional)</label>
+                        <input id="announcementCtaLabel" maxlength="40" placeholder="Ex: Falar no WhatsApp">
+                    </div>
+                    <div class="announcement-field">
+                        <label for="announcementCtaUrl">Link do botao (opcional)</label>
+                        <input id="announcementCtaUrl" placeholder="https://... ou https://wa.me/...">
+                    </div>
+                    <div class="announcement-field">
+                        <label for="announcementExpiresAt">Expira em (opcional)</label>
+                        <input id="announcementExpiresAt" type="datetime-local">
+                    </div>
+                    <div class="announcement-actions">
+                        <button class="btn-login" style="width:auto;padding:11px 18px" onclick="createAnnouncement()">Enviar comunicado</button>
+                    </div>
+                </section>
+                <div class="users-table" id="announcementsTable">
+                    <div class="empty-state"><p>Carregando comunicados...</p></div>
+                </div>
+            </div>
+
             <!-- SEGURANCA -->
             <div class="page" id="page-seguranca">
                 <h1 class="page-title">SeguranÃ§a</h1>
@@ -1395,7 +1523,7 @@
             }
         });
 
-        let allFotos = [], allUsers = [], allReports = [], allReviews = [], allHighlightAds = [], currentFilter = 'pending';
+        let allFotos = [], allUsers = [], allReports = [], allReviews = [], allHighlightAds = [], allAnnouncements = [], announcementRecipients = [], currentFilter = 'pending';
         let trafficRefreshTimer = null;
         let activeAdEditorId = null, activeAdEditorMode = 'edit';
 
@@ -1441,6 +1569,7 @@
         pageTitles.destaques = 'Propagandas em Destaques';
         pageTitles.trafego = 'Tráfego ao vivo';
         pageTitles.financeiro = 'Financeiro';
+        pageTitles.comunicados = 'Comunicados';
         function goPage(page) {
             clearInterval(trafficRefreshTimer);
             trafficRefreshTimer = null;
@@ -1458,6 +1587,7 @@
                 trafficRefreshTimer = setInterval(loadTraffic, 30000);
             }
             if (page === 'financeiro') loadFinanceiro();
+            if (page === 'comunicados') loadComunicados();
         }
 
         // TOAST
@@ -2268,6 +2398,172 @@
 
         function moneyBR(value) {
             return Number(value || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function toggleAnnouncementTarget() {
+            const audience = document.getElementById('announcementAudience')?.value;
+            const wrap = document.getElementById('announcementTargetWrap');
+            if (!wrap) return;
+            wrap.classList.toggle('open', audience === 'specific');
+            if (audience !== 'specific') {
+                document.getElementById('announcementRecipientSearch').value = '';
+                document.getElementById('announcementTargetUserId').value = '';
+            }
+        }
+
+        function announcementAudienceLabel(value) {
+            const labels = {
+                all: 'Todos',
+                customers: 'Clientes',
+                professionals: 'Profissionais',
+                specific: 'Pessoa especifica'
+            };
+            return labels[value] || value || '-';
+        }
+
+        function announcementKindLabel(value) {
+            const labels = { info: 'Aviso', promo: 'Promocao', warning: 'Atencao' };
+            return labels[value] || value || '-';
+        }
+
+        function announcementTargetLabel(item) {
+            return `${item.name || item.email || item.id} - ${item.kind === 'professional' ? 'Profissional' : 'Cliente'}${item.email ? ' - ' + item.email : ''}`;
+        }
+
+        function resolveAnnouncementTarget() {
+            const input = document.getElementById('announcementRecipientSearch');
+            const hidden = document.getElementById('announcementTargetUserId');
+            const typed = (input?.value || '').trim().toLowerCase();
+            const match = announcementRecipients.find(item => announcementTargetLabel(item).toLowerCase() === typed);
+            if (hidden) hidden.value = match?.id || '';
+            return match?.id || hidden?.value || '';
+        }
+
+        let announcementSearchTimer = null;
+        function searchAnnouncementRecipients() {
+            clearTimeout(announcementSearchTimer);
+            announcementSearchTimer = setTimeout(async () => {
+                const q = document.getElementById('announcementRecipientSearch')?.value.trim() || '';
+                const list = document.getElementById('announcementRecipientList');
+                if (!list) return;
+                if (q.length < 2) {
+                    announcementRecipients = [];
+                    list.innerHTML = '';
+                    document.getElementById('announcementTargetUserId').value = '';
+                    return;
+                }
+                const { data, error } = await sb.rpc('admin_search_recipients', { p_query: q });
+                if (error) {
+                    console.warn('Busca de destinatarios indisponivel:', error.message);
+                    return;
+                }
+                announcementRecipients = data || [];
+                list.innerHTML = announcementRecipients
+                    .map(item => `<option value="${safeAdmin(announcementTargetLabel(item))}"></option>`)
+                    .join('');
+                resolveAnnouncementTarget();
+            }, 260);
+        }
+
+        async function loadComunicados() {
+            const table = document.getElementById('announcementsTable');
+            if (!table) return;
+            table.innerHTML = '<div class="empty-state"><p>Carregando comunicados...</p></div>';
+            const { data, error } = await sb.from('admin_announcements')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(80);
+            if (error) {
+                table.innerHTML = `<div class="empty-state"><p>Execute supabase/admin-announcements.sql. Erro: ${safeAdmin(error.message)}</p></div>`;
+                return;
+            }
+            allAnnouncements = data || [];
+            renderAnnouncementsAdmin();
+        }
+
+        function renderAnnouncementsAdmin() {
+            const table = document.getElementById('announcementsTable');
+            if (!table) return;
+            if (!allAnnouncements.length) {
+                table.innerHTML = '<div class="empty-state"><p>Nenhum comunicado criado ainda.</p></div>';
+                return;
+            }
+            table.innerHTML = `<table>
+                <thead><tr><th>Comunicado</th><th>Publico</th><th>Status</th><th>Validade</th><th>Acoes</th></tr></thead>
+                <tbody>${allAnnouncements.map(item => `
+                    <tr>
+                        <td>
+                            <strong>${safeAdmin(item.title)}</strong>
+                            <div class="announcement-body-preview">${safeAdmin(item.body)}</div>
+                            ${item.cta_label ? `<span style="color:var(--gold);font-size:.76rem">Botao: ${safeAdmin(item.cta_label)}</span>` : ''}
+                        </td>
+                        <td>${safeAdmin(announcementAudienceLabel(item.audience))}${item.target_user_id ? `<br><span style="color:var(--muted);font-size:.76rem">${safeAdmin(item.target_user_id)}</span>` : ''}</td>
+                        <td><span class="pill ${item.active ? 'pill-green' : 'pill-gray'}">${item.active ? 'Ativo' : 'Pausado'}</span><br><span style="color:var(--muted);font-size:.76rem">${safeAdmin(announcementKindLabel(item.kind))}</span></td>
+                        <td>${item.expires_at ? formatDateTime(item.expires_at) : 'Sem expirar'}<br><span style="color:var(--muted);font-size:.76rem">Criado: ${formatDateTime(item.created_at)}</span></td>
+                        <td>
+                            <button class="mod-btn" onclick="toggleAnnouncementActive('${item.id}', ${!item.active})">${item.active ? 'Pausar' : 'Ativar'}</button>
+                            <button class="mod-btn reject" onclick="deleteAnnouncement('${item.id}')">Excluir</button>
+                        </td>
+                    </tr>`).join('')}</tbody>
+            </table>`;
+        }
+
+        async function createAnnouncement() {
+            const title = document.getElementById('announcementTitle').value.trim();
+            const body = document.getElementById('announcementBody').value.trim();
+            const kind = document.getElementById('announcementKind').value;
+            const audience = document.getElementById('announcementAudience').value;
+            const cta_label = document.getElementById('announcementCtaLabel').value.trim() || null;
+            const cta_url = document.getElementById('announcementCtaUrl').value.trim() || null;
+            const expiresValue = document.getElementById('announcementExpiresAt').value;
+            const target_user_id = audience === 'specific' ? resolveAnnouncementTarget() : null;
+
+            if (!title || !body) { toast('Preencha titulo e mensagem.', 'err'); return; }
+            if (audience === 'specific' && !target_user_id) { toast('Escolha um destinatario valido.', 'err'); return; }
+            if (cta_label && !cta_url) { toast('Informe o link do botao.', 'err'); return; }
+
+            const { data: { user } } = await sb.auth.getUser();
+            const payload = {
+                title,
+                body,
+                kind,
+                audience,
+                target_user_id,
+                cta_label,
+                cta_url,
+                expires_at: expiresValue ? new Date(expiresValue).toISOString() : null,
+                active: true,
+                created_by: user?.id || null
+            };
+
+            const { error } = await sb.from('admin_announcements').insert(payload);
+            if (error) { toast('Erro ao enviar: ' + error.message, 'err'); return; }
+            ['announcementTitle', 'announcementBody', 'announcementCtaLabel', 'announcementCtaUrl', 'announcementExpiresAt', 'announcementRecipientSearch', 'announcementTargetUserId'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            document.getElementById('announcementAudience').value = 'all';
+            toggleAnnouncementTarget();
+            toast('Comunicado enviado.');
+            loadComunicados();
+        }
+
+        async function toggleAnnouncementActive(id, active) {
+            const { error } = await sb.from('admin_announcements').update({ active }).eq('id', id);
+            if (error) { toast('Erro ao atualizar: ' + error.message, 'err'); return; }
+            toast(active ? 'Comunicado ativado.' : 'Comunicado pausado.');
+            loadComunicados();
+        }
+
+        async function deleteAnnouncement(id) {
+            const ok = window.VenusSafety?.confirmAction
+                ? await VenusSafety.confirmAction('Excluir este comunicado?', 'Confirmar exclusao', 'Excluir')
+                : confirm('Excluir este comunicado?');
+            if (!ok) return;
+            const { error } = await sb.from('admin_announcements').delete().eq('id', id);
+            if (error) { toast('Erro ao excluir: ' + error.message, 'err'); return; }
+            toast('Comunicado excluido.');
+            loadComunicados();
         }
 
         // DASHBOARD
