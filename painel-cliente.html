@@ -1,0 +1,3116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Meu painel — Vênus</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/safety-tools.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0d0d14;
+            --surface: #13131c;
+            --surface2: #1a1a26;
+            --surface3: #22223a;
+            --border: #262636;
+            --border2: #2e2e45;
+            --gold: #c9a84c;
+            --gold-light: #e8c97a;
+            --gold-dim: rgba(201, 168, 76, .15);
+            --text: #e8e8f0;
+            --text-muted: #7a7a95;
+            --danger: #c0392b;
+            --success: #2ecc71;
+            --radius: 12px;
+            --sidebar-w: 260px;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Georgia', serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ════════════════════════════════════════════════════
+       TOP NAVBAR
+    ════════════════════════════════════════════════════ */
+        .topbar {
+            height: 60px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 24px;
+            gap: 16px;
+            position: sticky;
+            top: 0;
+            z-index: 200;
+        }
+
+        .topbar-brand {
+            font-size: 1.35rem;
+            font-style: italic;
+            color: var(--gold);
+            text-decoration: none;
+            letter-spacing: .04em;
+            margin-right: auto;
+        }
+
+        .topbar-badge {
+            background: var(--gold-dim);
+            border: 1px solid var(--gold);
+            color: var(--gold);
+            font-size: .72rem;
+            padding: 3px 10px;
+            border-radius: 20px;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            font-family: sans-serif;
+        }
+
+        .topbar-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--border2);
+            cursor: pointer;
+            background: var(--surface3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .topbar-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .topbar-avatar .avatar-placeholder {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        /* ════════════════════════════════════════════════════
+       LAYOUT: sidebar + main
+    ════════════════════════════════════════════════════ */
+        .layout {
+            display: flex;
+            flex: 1;
+            min-height: 0;
+        }
+
+        /* ── Sidebar ────────────────────────────────────────── */
+        .sidebar {
+            width: var(--sidebar-w);
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            padding: 24px 0;
+            position: sticky;
+            top: 60px;
+            height: calc(100vh - 60px);
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .sidebar-profile {
+            padding: 0 20px 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .sidebar-cover-wrap {
+            position: relative;
+            width: 100%;
+            height: 72px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--surface3);
+            margin-bottom: -28px;
+            cursor: pointer;
+        }
+
+        .sidebar-cover-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .sidebar-cover-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: .75rem;
+            gap: 6px;
+        }
+
+        .cover-edit-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 0, 0, .5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: .75rem;
+            gap: 4px;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+
+        .sidebar-cover-wrap:hover .cover-edit-overlay {
+            opacity: 1;
+        }
+
+        .sidebar-avatar-wrap {
+            position: relative;
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 10px;
+        }
+
+        .sidebar-avatar {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 3px solid var(--surface);
+            background: var(--surface3);
+            object-fit: cover;
+            display: block;
+        }
+
+        .sidebar-name {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .sidebar-email {
+            font-size: .78rem;
+            color: var(--text-muted);
+            word-break: break-all;
+        }
+
+        /* Nav links */
+        .sidebar-nav {
+            flex: 1;
+        }
+
+        .nav-section {
+            padding: 0 12px;
+            margin-bottom: 4px;
+        }
+
+        .nav-section-label {
+            font-size: .68rem;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--text-muted);
+            padding: 8px 8px 6px;
+            font-family: sans-serif;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background .15s, color .15s;
+            font-size: .9rem;
+            border: none;
+            background: transparent;
+            width: 100%;
+            text-align: left;
+        }
+
+        .nav-item:hover {
+            background: var(--surface2);
+            color: var(--text);
+        }
+
+        .nav-item.active {
+            background: var(--gold-dim);
+            color: var(--gold);
+        }
+
+        .nav-item i {
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+
+        .nav-badge {
+            margin-left: auto;
+            background: var(--surface3);
+            color: var(--text-muted);
+            font-size: .72rem;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-family: sans-serif;
+        }
+
+        .nav-item.active .nav-badge {
+            background: var(--gold);
+            color: #0d0d14;
+        }
+
+        .sidebar-logout {
+            padding: 16px 12px 0;
+            border-top: 1px solid var(--border);
+            margin: 0 0;
+        }
+
+        .btn-logout {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 10px 12px;
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 8px;
+            font-size: .9rem;
+            transition: background .15s, color .15s;
+        }
+
+        .btn-logout:hover {
+            background: rgba(192, 57, 43, .15);
+            color: #e74c3c;
+        }
+
+        /* ── Main content ────────────────────────────────────── */
+        .main {
+            flex: 1;
+            padding: 36px 40px;
+            overflow-y: auto;
+            min-width: 0;
+        }
+
+        .panel {
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .panel-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .panel-subtitle {
+            color: var(--text-muted);
+            font-size: .9rem;
+            margin-bottom: 32px;
+        }
+
+        .privacy-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(201, 168, 76, .2);
+            border-radius: var(--radius);
+            background: rgba(201, 168, 76, .07);
+        }
+
+        .privacy-strip strong {
+            display: block;
+            margin-bottom: 3px;
+            font-size: .9rem;
+        }
+
+        .privacy-strip span {
+            color: var(--text-muted);
+            font-size: .78rem;
+            line-height: 1.35;
+        }
+
+        .privacy-toggle {
+            min-height: 38px;
+            padding: 0 13px;
+            border: 1px solid rgba(201, 168, 76, .28);
+            border-radius: 10px;
+            background: var(--surface2);
+            color: var(--text);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            font-weight: 800;
+            font-size: .78rem;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        .privacy-toggle[aria-pressed="true"] {
+            color: #0d0d14;
+            background: var(--gold);
+        }
+
+        .contact-consent-box {
+            display: grid;
+            gap: 12px;
+            padding: 14px;
+            border: 1px solid rgba(201, 168, 76, .2);
+            border-radius: var(--radius);
+            background: rgba(201, 168, 76, .06);
+        }
+
+        .contact-consent-box label {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            color: var(--text);
+            font-size: .86rem;
+            line-height: 1.45;
+            cursor: pointer;
+        }
+
+        .contact-consent-box input[type="checkbox"] {
+            margin-top: 3px;
+            accent-color: var(--gold);
+        }
+
+        .contact-consent-box small {
+            color: var(--text-muted);
+            line-height: 1.45;
+        }
+
+        body.vc-discreet .profile-card-cover img,
+        body.vc-discreet .history-thumb img,
+        body.vc-discreet .vc-ava img,
+        body.vc-discreet .vc-head-ava img,
+        body.vc-discreet .vc-mini-ava img,
+        body.vc-discreet .sidebar-cover-wrap img,
+        body.vc-discreet .sidebar-avatar,
+        body.vc-discreet .topbar-avatar img {
+            filter: blur(14px) saturate(.35) brightness(.65);
+            transform: scale(1.04);
+        }
+
+        body.vc-discreet .profile-card-name,
+        body.vc-discreet .history-name,
+        body.vc-discreet .vc-conv-name,
+        body.vc-discreet .vc-head-name {
+            color: transparent !important;
+            text-shadow: 0 0 10px rgba(232, 232, 240, .7);
+        }
+
+        /* ── Cards / Grid ────────────────────────────────────── */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .stat-card i {
+            font-size: 1.4rem;
+            color: var(--gold);
+        }
+
+        .client-guide {
+            background: var(--surface2);
+            border: 1px solid rgba(201, 168, 76, .22);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 28px;
+        }
+
+        .client-guide-head {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 14px;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .client-guide-title {
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+            font-family: sans-serif;
+        }
+
+        .client-guide-sub {
+            color: var(--text-muted);
+            font-size: .86rem;
+            line-height: 1.45;
+            font-family: sans-serif;
+        }
+
+        .client-guide-score {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            background: var(--surface);
+            border: 1px solid rgba(201, 168, 76, .34);
+            color: var(--gold-light);
+            font-weight: 900;
+            font-family: sans-serif;
+        }
+
+        .client-guide-bar {
+            height: 8px;
+            border-radius: 99px;
+            background: var(--surface);
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+
+        .client-guide-bar span {
+            display: block;
+            width: 0;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, var(--gold), var(--success));
+            transition: width .2s ease;
+        }
+
+        .client-guide-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 10px;
+        }
+
+        .client-guide-item {
+            display: grid;
+            grid-template-columns: 32px 1fr;
+            gap: 10px;
+            align-items: start;
+            padding: 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, .03);
+            border: 1px solid var(--border);
+            min-width: 0;
+        }
+
+        .client-guide-item.done {
+            background: rgba(46, 204, 113, .08);
+            border-color: rgba(46, 204, 113, .22);
+        }
+
+        .client-guide-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: var(--surface);
+            color: var(--gold);
+            font-size: .72rem;
+            font-weight: 900;
+            font-family: sans-serif;
+        }
+
+        .client-guide-item.done .client-guide-icon {
+            color: var(--success);
+        }
+
+        .client-guide-name {
+            font-size: .9rem;
+            font-weight: 800;
+            font-family: sans-serif;
+            margin-bottom: 3px;
+        }
+
+        .client-guide-detail {
+            color: var(--text-muted);
+            font-size: .78rem;
+            line-height: 1.35;
+            font-family: sans-serif;
+            margin-bottom: 10px;
+        }
+
+        .client-guide-action {
+            min-height: 40px;
+            width: 100%;
+            justify-content: center;
+            font-size: .78rem;
+            padding: 8px 12px;
+        }
+
+        .stat-num {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .stat-label {
+            font-size: .8rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        /* ── Favorites grid ──────────────────────────────────── */
+        .profiles-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .profile-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            transition: border-color .2s, transform .2s;
+            cursor: pointer;
+        }
+
+        .profile-card:hover {
+            border-color: var(--gold);
+            transform: translateY(-2px);
+        }
+
+        .profile-card-cover {
+            height: 140px;
+            background: var(--surface3);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .profile-card-cover img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .profile-card-cover-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 2rem;
+        }
+
+        .badge-online {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--success);
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            border: 2px solid var(--surface2);
+        }
+
+        .profile-card-body {
+            padding: 14px;
+        }
+
+        .profile-card-name {
+            font-size: .95rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .profile-card-cat {
+            font-size: .78rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            font-family: sans-serif;
+        }
+
+        .profile-card-loc {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: .78rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+        }
+
+        .profile-card-actions {
+            display: flex;
+            gap: 8px;
+            padding: 0 14px 14px;
+        }
+
+        .btn-card {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: none;
+            font-size: .8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            transition: opacity .2s;
+        }
+
+        .btn-card:hover {
+            opacity: .85;
+        }
+
+        .btn-card-primary {
+            background: var(--gold);
+            color: #0d0d14;
+            font-weight: 600;
+        }
+
+        .btn-card-ghost {
+            background: var(--surface3);
+            color: var(--text-muted);
+        }
+
+        /* ── History list ────────────────────────────────────── */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .history-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            transition: border-color .2s;
+            cursor: pointer;
+        }
+
+        .history-item:hover {
+            border-color: var(--border2);
+        }
+
+        .history-thumb {
+            width: 52px;
+            height: 52px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: var(--surface3);
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 1.2rem;
+            overflow: hidden;
+        }
+
+        .history-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .history-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .history-name {
+            font-size: .95rem;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .history-meta {
+            font-size: .8rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+            margin-top: 3px;
+        }
+
+        .history-time {
+            font-size: .78rem;
+            color: var(--text-muted);
+            font-family: sans-serif;
+            flex-shrink: 0;
+        }
+
+        /* ── Edit profile form ───────────────────────────────── */
+        .edit-card {
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 28px;
+            max-width: 560px;
+        }
+
+        .edit-section {
+            margin-bottom: 28px;
+        }
+
+        .edit-section-title {
+            font-size: .8rem;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            font-family: sans-serif;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: .8rem;
+            font-weight: 600;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            font-family: sans-serif;
+        }
+
+        .form-input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: .95rem;
+            transition: border-color .2s, box-shadow .2s;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .form-input:focus {
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 168, 76, .12);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-input[readonly] {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        .form-hint {
+            font-size: .78rem;
+            color: var(--text-muted);
+            margin-top: 5px;
+            font-family: sans-serif;
+        }
+
+        /* Cover upload in edit */
+        .cover-upload-wrap {
+            position: relative;
+            width: 100%;
+            height: 120px;
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--bg);
+            border: 2px dashed var(--border);
+            cursor: pointer;
+            transition: border-color .2s;
+            margin-bottom: 12px;
+        }
+
+        .cover-upload-wrap:hover {
+            border-color: var(--gold);
+        }
+
+        .cover-upload-wrap img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .cover-upload-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            color: var(--text-muted);
+            font-size: .85rem;
+            background: rgba(0, 0, 0, .4);
+        }
+
+        .cover-upload-overlay i {
+            font-size: 1.5rem;
+        }
+
+        #coverFileInput,
+        #avatarFileInput {
+            display: none;
+        }
+
+        .avatar-upload-wrap {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+
+        .avatar-preview {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--bg);
+            border: 2px solid var(--border);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            font-size: 1.4rem;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .avatar-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: .9rem;
+            cursor: pointer;
+            transition: opacity .2s, transform .15s;
+            font-family: inherit;
+        }
+
+        .btn:hover {
+            opacity: .88;
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-gold {
+            background: var(--gold);
+            color: #0d0d14;
+            font-weight: 700;
+        }
+
+        .btn-ghost {
+            background: var(--surface3);
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+        }
+
+        .btn-danger {
+            background: rgba(192, 57, 43, .18);
+            color: #e74c3c;
+            border: 1px solid rgba(192, 57, 43, .3);
+        }
+
+        /* ── Empty states ────────────────────────────────────── */
+        .empty-state {
+            text-align: center;
+            padding: 60px 24px;
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            color: var(--text-muted);
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .empty-state h3 {
+            font-size: 1.1rem;
+            margin-bottom: 8px;
+        }
+
+        .empty-state p {
+            color: var(--text-muted);
+            font-size: .9rem;
+        }
+
+        /* ── Loading ─────────────────────────────────────────── */
+        .loading-spinner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px;
+            color: var(--text-muted);
+            gap: 12px;
+            font-size: .95rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        /* ── Toast ───────────────────────────────────────────── */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--surface2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 14px 20px;
+            border-radius: 10px;
+            font-size: .9rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, .5);
+            z-index: 9999;
+            max-width: 320px;
+            animation: toastIn .3s ease;
+        }
+
+        .toast.ok {
+            border-color: var(--success);
+        }
+
+        .toast.erro {
+            border-color: var(--danger);
+        }
+
+        @keyframes toastIn {
+            from {
+                transform: translateX(40px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* ── Mobile sidebar ──────────────────────────────────── */
+        .mob-menu-btn {
+            display: none;
+            background: none;
+            border: none;
+            color: var(--text);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        /* Chat do cliente */
+        .vc-chat-panel {
+            height: calc(100vh - 108px);
+            min-height: 560px;
+            display: flex;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            border-radius: 10px;
+        }
+
+        .vc-chat-list {
+            width: 300px;
+            min-width: 260px;
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: rgba(0, 0, 0, .08);
+        }
+
+        .vc-chat-list-head {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            font-family: sans-serif;
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .vc-chat-list-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .vc-conv {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            padding: 10px;
+            border: 0;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .vc-conv:hover {
+            background: var(--surface2);
+        }
+
+        .vc-conv.active {
+            background: var(--gold-dim);
+        }
+
+        .vc-ava,
+        .vc-head-ava,
+        .vc-mini-ava {
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--gold), #6b4c0f);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: sans-serif;
+            font-weight: 700;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .vc-ava {
+            width: 40px;
+            height: 40px;
+            font-size: .85rem;
+        }
+
+        .vc-head-ava {
+            width: 38px;
+            height: 38px;
+            font-size: .85rem;
+        }
+
+        .vc-mini-ava {
+            width: 26px;
+            height: 26px;
+            font-size: .6rem;
+            margin-bottom: 16px;
+        }
+
+        .vc-ava img,
+        .vc-head-ava img,
+        .vc-mini-ava img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .vc-conv-info {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .vc-conv-name {
+            font-size: .88rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .vc-conv-preview {
+            margin-top: 2px;
+            color: var(--text-muted);
+            font-size: .74rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .vc-conv-side {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        .vc-time {
+            color: var(--text-muted);
+            font-size: .68rem;
+        }
+
+        .vc-unread,
+        .vc-nav-badge {
+            min-width: 18px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            background: var(--gold);
+            color: #100b00;
+            font-family: sans-serif;
+            font-size: .68rem;
+            font-weight: 800;
+            text-align: center;
+        }
+
+        .vc-nav-badge {
+            margin-left: auto;
+        }
+
+        .vc-expired {
+            padding: 2px 6px;
+            border: 1px solid rgba(192, 57, 43, .35);
+            border-radius: 5px;
+            color: #ff8f83;
+            font-size: .62rem;
+        }
+
+        .vc-chat-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .vc-empty-chat {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            text-align: center;
+            color: var(--text-muted);
+            padding: 24px;
+        }
+
+        .vc-empty-chat i {
+            font-size: 3rem;
+            opacity: .28;
+        }
+
+        .vc-chat-box {
+            flex: 1;
+            min-height: 0;
+            display: none;
+            flex-direction: column;
+        }
+
+        .vc-chat-head {
+            min-height: 64px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0 18px;
+            background: var(--surface);
+            flex-shrink: 0;
+        }
+
+        .vc-head-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .vc-head-name {
+            font-size: .95rem;
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .vc-head-sub {
+            margin-top: 2px;
+            font-family: sans-serif;
+            color: var(--text-muted);
+            font-size: .75rem;
+        }
+
+        .vc-chip {
+            border: 1px solid rgba(201, 168, 76, .22);
+            border-radius: 999px;
+            background: var(--gold-dim);
+            color: var(--gold);
+            font-family: sans-serif;
+            font-size: .68rem;
+            font-weight: 700;
+            padding: 3px 8px;
+            white-space: nowrap;
+        }
+
+        .vc-chip.warn {
+            border-color: rgba(192, 57, 43, .35);
+            color: #ff8f83;
+            background: rgba(192, 57, 43, .1);
+        }
+
+        .vc-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 18px 20px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .vc-date {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            color: var(--text-muted);
+            font-family: sans-serif;
+            font-size: .68rem;
+        }
+
+        .vc-date::before,
+        .vc-date::after {
+            content: "";
+            height: 1px;
+            background: var(--border);
+            flex: 1;
+        }
+
+        .vc-msg {
+            display: flex;
+            align-items: flex-end;
+            gap: 7px;
+        }
+
+        .vc-msg.sent {
+            flex-direction: row-reverse;
+        }
+
+        .vc-msg-wrap {
+            max-width: min(68%, 620px);
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .vc-msg.sent .vc-msg-wrap {
+            align-items: flex-end;
+        }
+
+        .vc-bubble {
+            padding: 9px 13px;
+            border-radius: 16px;
+            background: var(--surface2);
+            line-height: 1.45;
+            font-size: .9rem;
+            word-break: break-word;
+        }
+
+        .vc-msg.sent .vc-bubble {
+            background: linear-gradient(135deg, #7a5210, var(--gold));
+            color: #160f00;
+            font-weight: 600;
+        }
+
+        .vc-foot {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-family: sans-serif;
+            color: var(--text-muted);
+            font-size: .66rem;
+        }
+
+        .vc-auth {
+            color: var(--gold);
+            background: var(--gold-dim);
+            border: 1px solid rgba(201, 168, 76, .18);
+            border-radius: 8px;
+            padding: 1px 5px;
+            font-weight: 700;
+        }
+
+        .vc-check svg {
+            width: 15px;
+            height: 10px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2.2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .vc-check.read {
+            color: #60a5fa;
+        }
+
+        .vc-input-bar {
+            border-top: 1px solid var(--border);
+            background: var(--surface);
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+            padding: 13px 16px;
+            flex-shrink: 0;
+        }
+
+        .vc-input-bar.locked {
+            opacity: .45;
+            pointer-events: none;
+        }
+
+        .vc-input {
+            flex: 1;
+            resize: none;
+            max-height: 110px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: var(--surface2);
+            color: var(--text);
+            outline: none;
+            padding: 10px 15px;
+            line-height: 1.4;
+            font: inherit;
+        }
+
+        .vc-input:focus {
+            border-color: rgba(201, 168, 76, .45);
+        }
+
+        .vc-send {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 0;
+            background: var(--gold);
+            color: #130d00;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .vc-send:hover {
+            background: var(--gold-light);
+        }
+
+        .vc-send i {
+            font-size: 1.2rem;
+        }
+
+        @media (max-width: 768px) {
+            .mob-menu-btn {
+                display: block;
+            }
+
+            .sidebar {
+                position: fixed;
+                left: -100%;
+                top: 60px;
+                height: calc(100vh - 60px);
+                z-index: 300;
+                transition: left .3s ease;
+                width: 280px;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .sidebar-overlay {
+                display: none;
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, .6);
+                z-index: 299;
+                top: 60px;
+            }
+
+            .sidebar-overlay.visible {
+                display: block;
+            }
+
+            .main {
+                padding: 24px 20px;
+            }
+
+            .privacy-strip {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .privacy-toggle {
+                justify-content: center;
+                width: 100%;
+            }
+
+            .profiles-grid {
+                grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            }
+
+            .vc-chat-panel {
+                height: auto;
+                min-height: 680px;
+                flex-direction: column;
+            }
+
+            .vc-chat-list {
+                width: 100%;
+                min-width: 0;
+                max-height: 220px;
+                border-right: 0;
+                border-bottom: 1px solid var(--border);
+            }
+
+            .vc-msg-wrap {
+                max-width: 82%;
+            }
+
+            .vc-chat-head {
+                align-items: flex-start;
+                padding: 14px;
+            }
+        }
+
+        /* ════════════════════════════════════════════════════
+           BANNER CATÁLOGO
+        ════════════════════════════════════════════════════ */
+        .catalog-banner {
+            position: relative;
+            overflow: hidden;
+            border-radius: var(--radius);
+            background: linear-gradient(135deg, #1a0a2e 0%, #2d1052 40%, #1a0a2e 100%);
+            border: 1px solid rgba(201, 168, 76, .25);
+            padding: 40px 36px;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            cursor: pointer;
+            transition: transform .2s, box-shadow .2s;
+            text-decoration: none;
+        }
+
+        .catalog-banner::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background:
+                radial-gradient(ellipse 60% 80% at 80% 50%, rgba(201, 168, 76, .12) 0%, transparent 70%),
+                radial-gradient(ellipse 40% 60% at 10% 20%, rgba(160, 80, 200, .15) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .catalog-banner::after {
+            content: '✦ ✦ ✦';
+            position: absolute;
+            top: 14px;
+            right: 40px;
+            font-size: .75rem;
+            color: rgba(201, 168, 76, .3);
+            letter-spacing: 8px;
+        }
+
+        .catalog-banner:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 16px 48px rgba(201, 168, 76, .18);
+        }
+
+        .catalog-banner-text {
+            position: relative;
+            z-index: 1;
+        }
+
+        .catalog-banner-eyebrow {
+            font-size: .72rem;
+            text-transform: uppercase;
+            letter-spacing: .18em;
+            color: var(--gold);
+            font-family: sans-serif;
+            margin-bottom: 10px;
+            opacity: .85;
+        }
+
+        .catalog-banner-title {
+            font-size: 1.65rem;
+            font-style: italic;
+            color: #fff;
+            line-height: 1.25;
+            margin-bottom: 10px;
+        }
+
+        .catalog-banner-title em {
+            color: var(--gold-light);
+            font-style: normal;
+        }
+
+        .catalog-banner-sub {
+            font-size: .88rem;
+            color: rgba(232, 232, 240, .65);
+            max-width: 360px;
+            line-height: 1.55;
+            font-family: sans-serif;
+        }
+
+        .catalog-banner-cta {
+            position: relative;
+            z-index: 1;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-catalog {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            background: linear-gradient(135deg, var(--gold) 0%, #e8b84b 100%);
+            color: #0d0d14;
+            font-weight: 800;
+            font-size: 1rem;
+            padding: 14px 28px;
+            border-radius: 50px;
+            border: none;
+            cursor: pointer;
+            white-space: nowrap;
+            letter-spacing: .02em;
+            box-shadow: 0 4px 24px rgba(201, 168, 76, .45);
+            transition: box-shadow .2s, transform .15s;
+            font-family: sans-serif;
+        }
+
+        .btn-catalog:hover {
+            box-shadow: 0 8px 36px rgba(201, 168, 76, .6);
+            transform: scale(1.04);
+        }
+
+        .catalog-banner-hint {
+            font-size: .75rem;
+            color: rgba(201, 168, 76, .6);
+            font-family: sans-serif;
+            letter-spacing: .04em;
+        }
+
+        @media (max-width: 600px) {
+            .topbar {
+                padding: 0 12px;
+                gap: 8px;
+            }
+
+            .topbar-brand {
+                font-size: 1.35rem;
+            }
+
+            .topbar-badge {
+                display: none;
+            }
+
+            .main {
+                padding: 20px 14px;
+            }
+
+            .panel-title {
+                font-size: 1.55rem;
+                line-height: 1.15;
+            }
+
+            .stats-grid,
+            .profiles-grid,
+            .client-guide-head,
+            .client-guide-list {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .panel-card,
+            .profile-card,
+            .stat-card,
+            .client-guide {
+                border-radius: 14px;
+            }
+
+            .client-guide {
+                padding: 16px;
+                margin-bottom: 22px;
+            }
+
+            .client-guide-score {
+                width: 68px;
+                height: 68px;
+            }
+
+            .vc-chat-panel {
+                min-height: calc(100dvh - 132px);
+                border-radius: 12px;
+            }
+
+            .vc-chat-list {
+                max-height: 238px;
+            }
+
+            .vc-chat-main {
+                min-height: 430px;
+            }
+
+            .vc-chat-head {
+                min-height: 58px;
+                align-items: center;
+                padding: 10px 12px;
+                gap: 8px;
+            }
+
+            .vc-chip {
+                display: none;
+            }
+
+            .vc-messages {
+                padding: 14px 12px;
+            }
+
+            .vc-msg-wrap {
+                max-width: 84%;
+            }
+
+            .vc-mini-ava {
+                display: none;
+            }
+
+            .vc-input-bar {
+                padding: 10px 10px calc(10px + env(safe-area-inset-bottom));
+                gap: 8px;
+            }
+
+            .vc-input {
+                min-height: 42px;
+                border-radius: 16px;
+            }
+
+            .catalog-banner {
+                flex-direction: column;
+                align-items: flex-start;
+                padding: 28px 22px;
+            }
+
+            .catalog-banner::after {
+                display: none;
+            }
+
+            .catalog-banner-title {
+                font-size: 1.3rem;
+            }
+
+            .catalog-banner-cta {
+                width: 100%;
+            }
+
+            .btn-catalog {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+
+<body data-onboarding-role="cliente">
+
+    <!-- Topbar -->
+    <header class="topbar">
+        <button class="mob-menu-btn" onclick="toggleSidebar()"><i class="ti ti-menu-2"></i></button>
+        <a href="index.html" class="topbar-brand"><em>Vênus</em></a>
+        <span class="topbar-badge"><i class="ti ti-user"></i> Cliente</span>
+        <div class="topbar-avatar" id="topAvatarWrap">
+            <span class="avatar-placeholder"><i class="ti ti-user"></i></span>
+        </div>
+    </header>
+
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
+
+    <div class="layout">
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Mini profile card -->
+            <div class="sidebar-profile">
+                <div class="sidebar-cover-wrap" id="sidebarCoverWrap" onclick="openPanel('perfil')">
+                    <div class="sidebar-cover-placeholder" id="sidebarCoverPlaceholder">
+                        <i class="ti ti-photo"></i> <span>Adicionar capa</span>
+                    </div>
+                    <img src="" id="sidebarCoverImg" style="display:none;" />
+                    <div class="cover-edit-overlay"><i class="ti ti-pencil"></i> Editar</div>
+                </div>
+                <div class="sidebar-avatar-wrap">
+                    <img src="" class="sidebar-avatar" id="sidebarAvatar" style="display:none;" />
+                    <div class="sidebar-avatar" id="sidebarAvatarPlaceholder"
+                        style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:1.2rem;">
+                        <i class="ti ti-user"></i>
+                    </div>
+                </div>
+                <div class="sidebar-name" id="sidebarName">Carregando…</div>
+                <div class="sidebar-email" id="sidebarEmail"></div>
+            </div>
+
+            <!-- Nav -->
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-label">Principal</div>
+                    <button class="nav-item active" data-panel="inicio" onclick="openPanel('inicio')">
+                        <i class="ti ti-home"></i> Início
+                    </button>
+                    <button class="nav-item" data-panel="favoritos" onclick="openPanel('favoritos')">
+                        <i class="ti ti-heart"></i> Favoritos
+                        <span class="nav-badge" id="favBadge">0</span>
+                    </button>
+                    <button class="nav-item" data-panel="historico" onclick="openPanel('historico')">
+                        <i class="ti ti-history"></i> Histórico
+                        <span class="nav-badge" id="histBadge">0</span>
+                    </button>
+                    <button class="nav-item" data-panel="mensagens" onclick="openPanel('mensagens')">
+                        <i class="ti ti-message-circle"></i> Mensagens
+                        <span class="vc-nav-badge" id="chatBadge" style="display:none;">0</span>
+                    </button>
+                    <button class="nav-item" data-panel="packs" onclick="openPanel('packs')">
+                        <i class="ti ti-gift"></i> Meus packs
+                    </button>
+                </div>
+                <div class="nav-section">
+                    <div class="nav-section-label">Conta</div>
+                    <button class="nav-item" data-panel="perfil" onclick="openPanel('perfil')">
+                        <i class="ti ti-user-edit"></i> Editar perfil
+                    </button>
+                </div>
+            </nav>
+
+            <div class="sidebar-logout">
+                <button class="btn-logout" onclick="logout()">
+                    <i class="ti ti-logout"></i> Sair da conta
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main content -->
+        <main class="main">
+
+            <!-- ════ INÍCIO ════ -->
+            <div class="panel active" id="panel-inicio">
+                <h1 class="panel-title">Olá, <span id="welcomeName">…</span> 👋</h1>
+                <p class="panel-subtitle">Bem-vindo(a) ao seu painel. Aqui você gerencia tudo.</p>
+
+
+                <div class="privacy-strip">
+                    <div>
+                        <strong>Modo discreto</strong>
+                        <span>Oculta nomes e imagens sensiveis neste navegador.</span>
+                    </div>
+                    <button class="privacy-toggle" id="discreetToggle" type="button" aria-pressed="false"
+                        onclick="toggleDiscreetMode()">
+                        <i class="ti ti-eye-off"></i> Ativar
+                    </button>
+                </div>
+
+                <div class="client-guide" id="clientGuide">
+                    <div class="client-guide-head">
+                        <div>
+                            <div class="client-guide-title">Comece em poucos toques</div>
+                            <div class="client-guide-sub">Sua conta ja esta pronta. Use estes atalhos para deixar o
+                                painel util sem preencher cadastro longo.</div>
+                        </div>
+                        <div class="client-guide-score" id="clientGuideScore">0%</div>
+                    </div>
+                    <div class="client-guide-bar"><span id="clientGuideBar"></span></div>
+                    <div class="client-guide-list" id="clientGuideList">
+                        <div class="client-guide-detail">Carregando atalhos...</div>
+                    </div>
+                </div>
+
+                <a href="catalogo.html" class="catalog-banner" id="catalogBanner">
+                    <div class="catalog-banner-text">
+                        <div class="catalog-banner-eyebrow">Exclusivo para você</div>
+                        <div class="catalog-banner-title">
+                            Descubra profissionais <em>incríveis</em> perto de você
+                        </div>
+                        <div class="catalog-banner-sub">
+                            Explore nosso catálogo completo. Filtre por categoria, localização e muito mais.
+                        </div>
+                    </div>
+                    <div class="catalog-banner-cta">
+                        <button class="btn-catalog">
+                            <i class="ti ti-sparkles"></i> Ver catálogo
+                        </button>
+                        <span class="catalog-banner-hint">Acesso instantâneo</span>
+                    </div>
+                </a>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <i class="ti ti-heart"></i>
+                        <div class="stat-num" id="statFavs">–</div>
+                        <div class="stat-label">Favoritos salvos</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="ti ti-eye"></i>
+                        <div class="stat-num" id="statViews">–</div>
+                        <div class="stat-label">Perfis visitados</div>
+                    </div>
+                    <div class="stat-card">
+                        <i class="ti ti-calendar"></i>
+                        <div class="stat-num" id="statMember">–</div>
+                        <div class="stat-label">Dias como membro</div>
+                    </div>
+                </div>
+
+                <h2 style="font-size:1.1rem;margin-bottom:16px;">Vistos recentemente</h2>
+                <div id="recentList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════ FAVORITOS ════ -->
+            <div class="panel" id="panel-favoritos">
+                <h1 class="panel-title">Meus favoritos</h1>
+                <p class="panel-subtitle">Perfis que você salvou para acessar rapidamente.</p>
+                <div id="favGrid">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- ════ HISTÓRICO ════ -->
+            <div class="panel" id="panel-historico">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                    <h1 class="panel-title" style="margin-bottom:0;">Histórico de visitas</h1>
+                    <button class="btn btn-ghost" style="font-size:.8rem;padding:7px 14px;" onclick="clearHistory()">
+                        <i class="ti ti-trash"></i> Limpar
+                    </button>
+                </div>
+                <p class="panel-subtitle">Perfis que você visualizou.</p>
+                <div id="histList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando…
+                    </div>
+                </div>
+            </div>
+
+            <!-- PACKS -->
+            <div class="panel" id="panel-packs">
+                <h1 class="panel-title">Meus packs</h1>
+                <p class="panel-subtitle">Acompanhe comprovantes enviados e acessos liberados pelas profissionais.</p>
+                <div id="clientPacksList">
+                    <div class="loading-spinner">
+                        <i class="ti ti-loader-2 spin"></i> Carregando...
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHAT / MENSAGENS -->
+            <div class="panel" id="panel-mensagens">
+                <h1 class="panel-title">Mensagens</h1>
+                <p class="panel-subtitle">Converse com profissionais. As mensagens ficam disponiveis por 24h.</p>
+
+                <div class="vc-chat-panel">
+                    <aside class="vc-chat-list">
+                        <div class="vc-chat-list-head">Conversas</div>
+                        <div class="vc-chat-list-body" id="vcChatList">
+                            <div class="loading-spinner">
+                                <i class="ti ti-loader-2 spin"></i> Carregando...
+                            </div>
+                        </div>
+                    </aside>
+
+                    <section class="vc-chat-main">
+                        <div class="vc-empty-chat" id="vcNoChat">
+                            <i class="ti ti-message-circle"></i>
+                            <strong>Nenhuma conversa selecionada</strong>
+                            <span>Abra um perfil no catalogo e clique em enviar mensagem.</span>
+                        </div>
+
+                        <div class="vc-chat-box" id="vcChatBox">
+                            <div class="vc-chat-head">
+                                <div class="vc-head-ava" id="vcHeadAva">?</div>
+                                <div class="vc-head-info">
+                                    <div class="vc-head-name" id="vcHeadName">Carregando...</div>
+                                    <div class="vc-head-sub">Conversa autenticada</div>
+                                </div>
+                                <span class="vc-chip" id="vcTimer">24h</span>
+                                <button class="vc-send"
+                                    style="width:auto;height:36px;padding:0 11px;gap:6px;background:#2a2020;color:#ffb4a8;border:1px solid rgba(248,113,113,.35)"
+                                    title="Denunciar ou bloquear" onclick="vcReportSafety()"><i
+                                        class="ti ti-shield-exclamation"></i><span
+                                        style="font-size:.75rem;font-weight:800">Seguranca</span></button>
+                            </div>
+
+                            <div class="vc-messages" id="vcMessages"></div>
+
+                            <div class="vc-input-bar" id="vcInputBar">
+                                <textarea class="vc-input" id="vcInput" rows="1" placeholder="Escreva uma mensagem..."
+                                    onkeydown="vcHandleKey(event)" oninput="vcResize(this)"></textarea>
+                                <button class="vc-send" onclick="vcSend()" title="Enviar mensagem">
+                                    <i class="ti ti-send"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- ════ EDITAR PERFIL ════ -->
+            <div class="panel" id="panel-perfil">
+                <h1 class="panel-title">Editar perfil</h1>
+                <p class="panel-subtitle">Personalize sua conta de cliente.</p>
+
+                <div class="edit-card">
+                    <!-- Foto de capa -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-photo"></i> Foto de capa</div>
+                        <div class="cover-upload-wrap" id="coverUploadWrap"
+                            onclick="document.getElementById('coverFileInput').click()">
+                            <img src="" id="coverPreviewImg" style="display:none;" />
+                            <div class="cover-upload-overlay" id="coverOverlay">
+                                <i class="ti ti-cloud-upload"></i>
+                                <span>Clique para fazer upload da capa</span>
+                                <span style="font-size:.75rem;color:var(--text-muted);">Recomendado: 1200×400px</span>
+                            </div>
+                        </div>
+                        <input type="file" id="coverFileInput" accept="image/*" onchange="previewCover(event)" />
+                        <button class="btn btn-ghost" style="font-size:.8rem;"
+                            onclick="document.getElementById('coverFileInput').click()">
+                            <i class="ti ti-upload"></i> Selecionar imagem
+                        </button>
+                    </div>
+
+                    <!-- Avatar -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-user-circle"></i> Foto de perfil</div>
+                        <div class="avatar-upload-wrap">
+                            <div class="avatar-preview" id="avatarPreview"
+                                onclick="document.getElementById('avatarFileInput').click()">
+                                <i class="ti ti-user"></i>
+                            </div>
+                            <div>
+                                <button class="btn btn-ghost" style="font-size:.8rem;"
+                                    onclick="document.getElementById('avatarFileInput').click()">
+                                    <i class="ti ti-upload"></i> Alterar foto
+                                </button>
+                                <div class="form-hint" style="margin-top:6px;">JPG ou PNG, máx. 2 MB</div>
+                            </div>
+                        </div>
+                        <input type="file" id="avatarFileInput" accept="image/*" onchange="previewAvatar(event)" />
+                    </div>
+
+                    <!-- Dados pessoais -->
+                    <div class="edit-section">
+                        <div class="edit-section-title"><i class="ti ti-info-circle"></i> Dados pessoais</div>
+                        <div class="form-group">
+                            <label class="form-label">Nome *</label>
+                            <input type="text" class="form-input" id="editNome" placeholder="Seu nome" />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-input" id="editEmail" readonly />
+                            <div class="form-hint">O e-mail nÃ£o pode ser alterado por aqui.</div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">WhatsApp para contato autorizado</label>
+                            <input type="tel" class="form-input" id="editWhatsapp" placeholder="Ex: 92999990000" />
+                            <div class="form-hint">Este número só aparece para profissionais quando você autorizar.</div>
+                        </div>
+                        <div class="contact-consent-box">
+                            <label>
+                                <input type="checkbox" id="allowProfessionalContact" />
+                                <span>Permitir que profissionais cujo perfil eu visitei entrem em contato comigo pelo WhatsApp.</span>
+                            </label>
+                            <small>Quando desligado, profissionais ainda podem saber que houve uma visita autenticada, mas não verão seu WhatsApp.</small>
+                        </div>
+                        <div class="form-group" style="display:none">
+                            <div class="form-hint">O e-mail não pode ser alterado por aqui.</div>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+                        <button class="btn btn-gold" id="saveProfileBtn" onclick="saveProfile()">
+                            <i class="ti ti-device-floppy"></i> Salvar alterações
+                        </button>
+                        <button class="btn btn-ghost" onclick="loadProfileData()">
+                            <i class="ti ti-refresh"></i> Descartar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div><!-- .layout -->
+
+    <script>
+        /* ═══════════════════════════════════════════════════════════
+           CONFIG
+        ═══════════════════════════════════════════════════════════ */
+        const SUPABASE_URL = 'https://wykmukfohehtpoezojwg.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5a211a2ZvaGVodHBvZXpvandnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxNTc0NjcsImV4cCI6MjA5NTczMzQ2N30.mlfxsXSirX-0MXOreyShuS2kn5JDh_nMEp1onsBL9-0';
+        const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { storageKey: 'venus-user-session' }
+        });
+
+        let currentUser = null;
+        let customerData = null;
+        let pendingCoverFile = null;
+        let pendingAvatarFile = null;
+        let vcConvs = [];
+        let vcProfiles = {};
+        let vcActiveId = null;
+        let vcActiveConv = null;
+        let vcRealtime = null;
+        let vcTimerInterval = null;
+        let vcInitialized = false;
+        const DISCREET_KEY = 'venus:client:discreet-mode';
+
+        /* ═══════════════════════════════════════════════════════════
+           INIT
+        ═══════════════════════════════════════════════════════════ */
+        async function init() {
+            applyDiscreetMode();
+            const { data: { session } } = await sb.auth.getSession();
+            if (!session) {
+                // Sem sessão → login (sem loop: login.html só redireciona se há sessão ativa)
+                window.location.replace('login.html');
+                return;
+            }
+            currentUser = session.user;
+
+            // 1. Verificar se é profissional
+            const { data: profile } = await sb.from('profiles').select('id').eq('id', currentUser.id).maybeSingle();
+            if (profile) {
+                window.location.replace('painel.html');
+                return;
+            }
+
+            // 2. Verificar se existe registro em customers
+            //    (evita loop quando RLS bloqueia ou registro não foi criado)
+            const { data: customer, error: custErr } = await sb
+                .from('customers').select('id').eq('id', currentUser.id).maybeSingle();
+
+            if (custErr) {
+                // RLS ou erro de rede — mostrar aviso e aguardar, NÃO redirecionar
+                console.error('Erro ao verificar customers:', custErr.message);
+                document.body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0d0d14;color:#e8e8f0;flex-direction:column;gap:16px;font-family:Georgia,serif;">
+                    <i class="ti ti-alert-circle" style="font-size:2.5rem;color:#c9a84c;"></i>
+                    <p style="font-size:1.1rem;">Erro ao carregar seu perfil.</p>
+                    <p style="color:#7a7a95;font-size:.9rem;">${custErr.message}</p>
+                    <button onclick="location.reload()" style="padding:10px 24px;background:#c9a84c;color:#0d0d14;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;">Tentar novamente</button>
+                    <a href="login.html" onclick="supabase&&supabase.createClient&&void 0" style="color:#7a7a95;font-size:.85rem;">Sair e fazer login novamente</a>
+                </div>`;
+                return;
+            }
+
+            if (!customer) {
+                // Autenticado mas sem registro em customers → deslogar e ir para login limpo
+                await sb.auth.signOut();
+                window.location.replace('login.html');
+                return;
+            }
+
+            // Tudo OK — carregar dados do painel
+            await loadCustomerData();
+            await loadStats();
+            await loadFavorites();
+            await loadHistory();
+            await loadClientPacks();
+            await vcInit();
+            await loadClientGuide();
+            openInitialPanelFromHash();
+        }
+
+        function openInitialPanelFromHash() {
+            const panel = String(location.hash || '').replace('#', '');
+            const allowed = ['inicio', 'favoritos', 'historico', 'mensagens', 'packs', 'perfil'];
+            if (allowed.includes(panel)) openPanel(panel);
+        }
+
+        async function loadCustomerData() {
+            const { data, error } = await sb.from('customers').select('*').eq('id', currentUser.id).maybeSingle();
+            if (error) {
+                // Erro real de banco (ex.: RLS bloqueando) — mostrar mensagem e NÃO redirecionar
+                console.error('Erro ao carregar customers:', error.message);
+                toast('Erro ao carregar dados do perfil: ' + error.message, 'erro');
+                return;
+            }
+            if (!data) {
+                // Registro não existe na tabela customers → não é cliente válido
+                // Redirecionar para login SEM disparar redirectByRole (evita loop)
+                await sb.auth.signOut();
+                window.location.replace('login.html');
+                return;
+            }
+            customerData = data;
+            applyCustomerToUI(data);
+        }
+
+        function applyCustomerToUI(data) {
+            // Sidebar
+            document.getElementById('sidebarName').textContent = data.nome || 'Sem nome';
+            document.getElementById('sidebarEmail').textContent = data.email || '';
+            document.getElementById('welcomeName').textContent = data.nome?.split(' ')[0] || 'você';
+
+            // Edit form
+            document.getElementById('editNome').value = data.nome || '';
+            document.getElementById('editEmail').value = data.email || '';
+            document.getElementById('editWhatsapp').value = data.whatsapp || '';
+            document.getElementById('allowProfessionalContact').checked = Boolean(data.allow_professional_contact);
+
+            // Avatar
+            if (data.avatar_url) {
+                updateAvatarUI(data.avatar_url);
+            }
+            // Cover
+            if (data.cover_url) {
+                updateCoverUI(data.cover_url);
+            }
+        }
+
+        async function loadClientGuide() {
+            const list = document.getElementById('clientGuideList');
+            if (!list || !currentUser || !customerData) return;
+
+            const [fav, hist, chats, packs] = await Promise.all([
+                sb.from('favorites').select('id', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+                sb.from('customer_history').select('id', { count: 'exact', head: true }).eq('customer_id', currentUser.id),
+                sb.from('chat_conversations').select('id', { count: 'exact', head: true }).eq('client_id', currentUser.id),
+                sb.from('profile_pack_orders').select('id', { count: 'exact', head: true }).eq('customer_id', currentUser.id)
+            ]);
+
+            const steps = [
+                {
+                    label: 'Conta pronta',
+                    detail: 'Nome salvo e acesso por e-mail ou Google disponivel.',
+                    done: Boolean((customerData.nome || '').trim()),
+                    action: 'Editar conta',
+                    panel: 'perfil'
+                },
+                {
+                    label: 'Foto do cliente',
+                    detail: 'Adicione avatar ou capa para reconhecer sua conta.',
+                    done: Boolean(customerData.avatar_url || customerData.cover_url),
+                    action: 'Adicionar foto',
+                    panel: 'perfil'
+                },
+                {
+                    label: 'Abrir catalogo',
+                    detail: 'Veja profissionais perto de voce.',
+                    done: (hist.count || 0) > 0,
+                    action: 'Ver catalogo',
+                    href: 'catalogo.html'
+                },
+                {
+                    label: 'Salvar favoritos',
+                    detail: 'Guarde perfis para voltar rapido depois.',
+                    done: (fav.count || 0) > 0,
+                    action: 'Favoritos',
+                    panel: 'favoritos'
+                },
+                {
+                    label: 'Enviar mensagem',
+                    detail: 'Converse com uma profissional pelo perfil dela.',
+                    done: (chats.count || 0) > 0,
+                    action: 'Mensagens',
+                    panel: 'mensagens'
+                },
+                {
+                    label: 'Acompanhar packs',
+                    detail: 'Pedidos e comprovantes aparecem nesta area.',
+                    done: (packs.count || 0) > 0,
+                    action: 'Meus packs',
+                    panel: 'packs'
+                }
+            ];
+
+            renderClientGuide(steps);
+        }
+
+        function renderClientGuide(steps) {
+            const list = document.getElementById('clientGuideList');
+            const score = document.getElementById('clientGuideScore');
+            const bar = document.getElementById('clientGuideBar');
+            if (!list || !score || !bar) return;
+
+            const completed = steps.filter(step => step.done).length;
+            const pct = Math.round((completed / steps.length) * 100);
+            score.textContent = pct + '%';
+            bar.style.width = pct + '%';
+
+            list.innerHTML = steps.map((step) => {
+                const target = step.href
+                    ? `window.location.href='${step.href}'`
+                    : `openPanel('${step.panel}')`;
+                return `
+                    <div class="client-guide-item ${step.done ? 'done' : ''}">
+                        <div class="client-guide-icon">${step.done ? 'OK' : '...'}</div>
+                        <div>
+                            <div class="client-guide-name">${vcEsc(step.label)}</div>
+                            <div class="client-guide-detail">${vcEsc(step.detail)}</div>
+                            <button class="btn btn-ghost client-guide-action" type="button" onclick="${target}">
+                                <i class="ti ti-arrow-right"></i> ${step.done ? 'Abrir' : vcEsc(step.action)}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateAvatarUI(url) {
+            // Sidebar avatar
+            const sidebarAvatar = document.getElementById('sidebarAvatar');
+            const sidebarAvatarPlaceholder = document.getElementById('sidebarAvatarPlaceholder');
+            sidebarAvatar.src = url;
+            sidebarAvatar.style.display = 'block';
+            sidebarAvatarPlaceholder.style.display = 'none';
+
+            // Topbar avatar
+            const topWrap = document.getElementById('topAvatarWrap');
+            topWrap.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;" />`;
+
+            // Edit form avatar
+            const avatarPreview = document.getElementById('avatarPreview');
+            avatarPreview.innerHTML = `<img src="${url}" style="width:100%;height:100%;object-fit:cover;" />`;
+        }
+
+        function updateCoverUI(url) {
+            // Sidebar cover
+            const sidebarCoverImg = document.getElementById('sidebarCoverImg');
+            const sidebarCoverPlaceholder = document.getElementById('sidebarCoverPlaceholder');
+            sidebarCoverImg.src = url;
+            sidebarCoverImg.style.display = 'block';
+            sidebarCoverPlaceholder.style.display = 'none';
+
+            // Edit form cover
+            const coverPreviewImg = document.getElementById('coverPreviewImg');
+            const coverOverlay = document.getElementById('coverOverlay');
+            coverPreviewImg.src = url;
+            coverPreviewImg.style.display = 'block';
+            coverOverlay.style.background = 'rgba(0,0,0,.35)';
+            coverOverlay.innerHTML = `<i class="ti ti-pencil"></i><span>Trocar capa</span>`;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           STATS
+        ═══════════════════════════════════════════════════════════ */
+        async function loadStats() {
+            // Contagem de favoritos
+            const { count: favCount } = await sb
+                .from('favorites').select('*', { count: 'exact', head: true })
+                .eq('user_id', currentUser.id);
+
+            // Contagem de histórico
+            const { count: histCount } = await sb
+                .from('customer_history').select('*', { count: 'exact', head: true })
+                .eq('customer_id', currentUser.id);
+
+            document.getElementById('statFavs').textContent = favCount ?? 0;
+            document.getElementById('statViews').textContent = histCount ?? 0;
+            document.getElementById('favBadge').textContent = favCount ?? 0;
+            document.getElementById('histBadge').textContent = histCount ?? 0;
+
+            // Dias como membro
+            if (customerData?.created_at) {
+                const days = Math.floor((Date.now() - new Date(customerData.created_at)) / 86400000);
+                document.getElementById('statMember').textContent = days === 0 ? 'Hoje' : days;
+            }
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           FAVORITES
+        ═══════════════════════════════════════════════════════════ */
+        async function loadFavorites() {
+            const { data, error } = await sb
+                .from('customer_favorites_view')
+                .select('*')
+                .eq('customer_id', currentUser.id)
+                .order('favorited_at', { ascending: false });
+
+            renderFavorites(data || []);
+            renderRecentSection(data?.slice(0, 4) || []);
+        }
+
+        function renderFavorites(items) {
+            const grid = document.getElementById('favGrid');
+            if (!items.length) {
+                grid.innerHTML = `
+          <div class="empty-state">
+            <i class="ti ti-heart-off"></i>
+            <h3>Nenhum favorito ainda</h3>
+            <p>Explore o catálogo e salve os perfis que você curtir.</p>
+          </div>`;
+                return;
+            }
+            grid.innerHTML = '';
+            const profilesGrid = document.createElement('div');
+            profilesGrid.className = 'profiles-grid';
+            items.forEach(item => profilesGrid.appendChild(buildProfileCard(item)));
+            grid.appendChild(profilesGrid);
+        }
+
+        function renderRecentSection(items) {
+            const wrap = document.getElementById('recentList');
+            if (!items.length) {
+                wrap.innerHTML = `<p style="color:var(--text-muted);font-size:.9rem;">Você ainda não salvou nenhum favorito.</p>`;
+                return;
+            }
+            wrap.innerHTML = '';
+            const grid = document.createElement('div');
+            grid.className = 'profiles-grid';
+            items.forEach(item => grid.appendChild(buildProfileCard(item)));
+            wrap.appendChild(grid);
+        }
+
+        function buildProfileCard(item) {
+            const div = document.createElement('div');
+            div.className = 'profile-card';
+            div.innerHTML = `
+        <div class="profile-card-cover">
+          ${item.cover_photo_url
+                    ? `<img src="${item.cover_photo_url}" alt="${item.nome_artistico}" loading="lazy" />`
+                    : `<div class="profile-card-cover-placeholder"><i class="ti ti-user"></i></div>`}
+          ${item.online_now ? '<div class="badge-online"></div>' : ''}
+        </div>
+        <div class="profile-card-body">
+          <div class="profile-card-name">${item.nome_artistico}</div>
+          <div class="profile-card-cat">${item.categoria}</div>
+          <div class="profile-card-loc">
+            <i class="ti ti-map-pin" style="font-size:.85rem;"></i>
+            ${item.bairro ? item.bairro + ', ' : ''}${item.cidade} – ${item.uf}
+          </div>
+        </div>
+        <div class="profile-card-actions">
+          <button class="btn-card btn-card-primary" onclick="viewProfile('${item.profile_id}')">
+            <i class="ti ti-eye"></i> Ver
+          </button>
+          <button class="btn-card btn-card-ghost" onclick="removeFavorite('${item.profile_id}', this)" title="Remover favorito">
+            <i class="ti ti-heart-filled" style="color:#e74c3c;"></i>
+          </button>
+        </div>`;
+            return div;
+        }
+
+        async function removeFavorite(profileId, btn) {
+            btn.disabled = true;
+            const { error } = await sb.from('favorites')
+                .delete()
+                .eq('user_id', currentUser.id)
+                .eq('profile_id', profileId);
+            if (error) { toast('Erro ao remover favorito.', 'erro'); btn.disabled = false; return; }
+            toast('Removido dos favoritos.', 'ok');
+            await loadFavorites();
+            await loadStats();
+            await loadClientGuide();
+        }
+
+        function viewProfile(profileId) {
+            window.location.href = `perfil.html?id=${profileId}`;
+        }
+
+        async function loadClientPacks() {
+            const list = document.getElementById('clientPacksList');
+            if (!list || !currentUser) return;
+            const { data, error } = await sb
+                .from('profile_pack_orders')
+                .select('*, profile_packs(title,description), profiles(nome_artistico,cidade,uf)')
+                .eq('customer_id', currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                list.innerHTML = '<div class="empty-state"><i class="ti ti-alert-circle"></i><h3>Erro ao carregar packs</h3><p>' + vcEsc(error.message) + '</p></div>';
+                return;
+            }
+
+            if (!data?.length) {
+                list.innerHTML = '<div class="empty-state"><i class="ti ti-gift"></i><h3>Nenhum pack comprado</h3><p>Quando voce enviar um comprovante Pix, o pedido aparecera aqui.</p></div>';
+                return;
+            }
+
+            const statusText = { pending: 'Aguardando aprovacao', approved: 'Acesso liberado', rejected: 'Comprovante rejeitado' };
+            list.innerHTML = data.map(order => {
+                const status = statusText[order.status] || order.status;
+                const date = new Date(order.updated_at || order.created_at).toLocaleDateString('pt-BR');
+                const profileName = order.profiles?.nome_artistico || 'Profissional';
+                const packTitle = order.profile_packs?.title || 'Pack';
+                const profileArg = JSON.stringify(order.profile_id);
+                const action = order.status === 'approved'
+                    ? '<button class="btn btn-primary" onclick="viewProfile(' + profileArg + ')"><i class="ti ti-lock-open"></i> Ver pack</button>'
+                    : '<button class="btn btn-ghost" onclick="viewProfile(' + profileArg + ')"><i class="ti ti-eye"></i> Abrir perfil</button>';
+                return '<div class="history-item" style="align-items:flex-start;cursor:default;"><div class="history-thumb" style="display:flex;align-items:center;justify-content:center;"><i class="ti ti-gift" style="font-size:1.7rem;color:var(--gold);"></i></div><div class="history-info"><div class="history-name">' + vcEsc(packTitle) + '</div><div class="history-meta">' + vcEsc(profileName) + ' - R$ ' + Number(order.amount).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '</div><div class="history-date">' + vcEsc(status) + ' - atualizado em ' + date + '</div></div><div style="display:flex;align-items:center;gap:8px;">' + action + '</div></div>';
+            }).join('');
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           HISTORY
+        ═══════════════════════════════════════════════════════════ */
+        async function loadHistory() {
+            const { data, error } = await sb
+                .from('customer_history')
+                .select(`
+          id, viewed_at,
+          profiles:profile_id (
+            id, nome_artistico, categoria, cidade, uf, bairro,
+            profile_photos ( url, is_cover, status )
+          )
+        `)
+                .eq('customer_id', currentUser.id)
+                .order('viewed_at', { ascending: false })
+                .limit(50);
+
+            renderHistory(data || []);
+        }
+
+        function renderHistory(items) {
+            const list = document.getElementById('histList');
+            if (!items.length) {
+                list.innerHTML = `
+          <div class="empty-state">
+            <i class="ti ti-history"></i>
+            <h3>Histórico vazio</h3>
+            <p>Os perfis que você visitar aparecerão aqui.</p>
+          </div>`;
+                return;
+            }
+            list.innerHTML = '';
+            const ul = document.createElement('div');
+            ul.className = 'history-list';
+            items.forEach(item => {
+                const p = item.profiles;
+                if (!p) return;
+                const coverPhoto = p.profile_photos?.find(ph => ph.is_cover && ph.status === 'approved');
+                const when = timeAgo(item.viewed_at);
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.onclick = () => viewProfile(p.id);
+                div.innerHTML = `
+          <div class="history-thumb">
+            ${coverPhoto?.url
+                        ? `<img src="${coverPhoto.url}" alt="${p.nome_artistico}" loading="lazy" />`
+                        : `<i class="ti ti-user"></i>`}
+          </div>
+          <div class="history-info">
+            <div class="history-name">${p.nome_artistico}</div>
+            <div class="history-meta">${p.categoria} · ${p.bairro ? p.bairro + ', ' : ''}${p.cidade} – ${p.uf}</div>
+          </div>
+          <div class="history-time">${when}</div>`;
+                ul.appendChild(div);
+            });
+            list.appendChild(ul);
+        }
+
+        async function clearHistory() {
+            if (!await VenusSafety.confirmAction('Deseja limpar todo o historico de visitas?', 'Limpar historico', 'Limpar')) return;
+            const { error } = await sb.from('customer_history').delete().eq('customer_id', currentUser.id);
+            if (error) { toast('Erro ao limpar histórico.', 'erro'); return; }
+            toast('Histórico apagado.', 'ok');
+            await loadHistory();
+            await loadStats();
+            await loadClientGuide();
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           EDIT PROFILE
+        ═══════════════════════════════════════════════════════════ */
+        function previewCover(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            pendingCoverFile = file;
+            const url = URL.createObjectURL(file);
+            updateCoverUI(url);
+        }
+
+        function previewAvatar(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            pendingAvatarFile = file;
+            const url = URL.createObjectURL(file);
+            updateAvatarUI(url);
+        }
+
+        async function saveProfile() {
+            const btn = document.getElementById('saveProfileBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ti ti-loader-2 spin"></i> Salvando…';
+
+            try {
+                const updates = {
+                    nome: document.getElementById('editNome').value.trim(),
+                    whatsapp: document.getElementById('editWhatsapp').value.trim(),
+                    allow_professional_contact: document.getElementById('allowProfessionalContact').checked,
+                    updated_at: new Date().toISOString(),
+                };
+
+                if (!updates.nome || updates.nome.length < 2) {
+                    throw new Error('Nome deve ter ao menos 2 caracteres.');
+                }
+                if (updates.allow_professional_contact && updates.whatsapp.replace(/\D/g, '').length < 10) {
+                    throw new Error('Informe um WhatsApp válido para autorizar contato.');
+                }
+
+                // Upload foto de capa
+                if (pendingCoverFile) {
+                    const ext = pendingCoverFile.name.split('.').pop();
+                    const path = `customers/${currentUser.id}/cover.${ext}`;
+                    const { error: upErr } = await sb.storage
+                        .from('customer-media')
+                        .upload(path, pendingCoverFile, { upsert: true });
+                    if (upErr) throw new Error('Falha ao fazer upload da capa: ' + upErr.message);
+                    const { data: urlData } = sb.storage.from('customer-media').getPublicUrl(path);
+                    updates.cover_url = urlData.publicUrl;
+                    pendingCoverFile = null;
+                }
+
+                // Upload avatar
+                if (pendingAvatarFile) {
+                    const ext = pendingAvatarFile.name.split('.').pop();
+                    const path = `customers/${currentUser.id}/avatar.${ext}`;
+                    const { error: upErr } = await sb.storage
+                        .from('customer-media')
+                        .upload(path, pendingAvatarFile, { upsert: true });
+                    if (upErr) throw new Error('Falha ao fazer upload do avatar: ' + upErr.message);
+                    const { data: urlData } = sb.storage.from('customer-media').getPublicUrl(path);
+                    updates.avatar_url = urlData.publicUrl;
+                    pendingAvatarFile = null;
+                }
+
+                const { error: dbErr } = await sb.from('customers').update(updates).eq('id', currentUser.id);
+                if (dbErr) throw new Error(dbErr.message);
+
+                // Atualiza estado local
+                customerData = { ...customerData, ...updates };
+                applyCustomerToUI(customerData);
+                await loadClientGuide();
+
+                toast('Perfil atualizado com sucesso!', 'ok');
+            } catch (err) {
+                toast(err.message, 'erro');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ti ti-device-floppy"></i> Salvar alterações';
+            }
+        }
+
+        function loadProfileData() {
+            if (customerData) applyCustomerToUI(customerData);
+            pendingCoverFile = null;
+            pendingAvatarFile = null;
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           NAVIGATION
+        ═══════════════════════════════════════════════════════════ */
+        async function vcInit() {
+            if (!currentUser) return;
+            if (vcInitialized) {
+                await vcLoadConversations();
+                return;
+            }
+            vcInitialized = true;
+            await vcCleanupExpired();
+            await vcLoadConversations();
+
+            const params = new URLSearchParams(location.search);
+            const profId = params.get('profissional');
+            if (profId) await vcOpenOrCreate(profId);
+
+            sb.channel('client-convs-watcher-' + currentUser.id)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, async () => {
+                    await vcLoadConversations();
+                    if (vcActiveId) await vcFetchMessages();
+                })
+                .subscribe();
+        }
+
+        async function vcCleanupExpired() {
+            try {
+                await sb.rpc('delete_expired_chat_messages');
+            } catch (err) {
+                console.warn('Limpeza de mensagens indisponivel:', err);
+            }
+        }
+
+        async function vcLoadConversations() {
+            const { data, error } = await sb
+                .from('chat_conversations')
+                .select('id,client_id,professional_id,created_at,expires_at,chat_messages(id,content,sender_id,created_at,read_at)')
+                .eq('client_id', currentUser.id)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                toast('Erro ao carregar mensagens: ' + error.message, 'erro');
+                return;
+            }
+
+            vcConvs = data || [];
+            const ids = [...new Set(vcConvs.map(c => c.professional_id).filter(Boolean))];
+            vcProfiles = {};
+            if (ids.length) {
+                // Busca nome artístico em profiles (fonte principal)
+                const { data: profs } = await sb.from('profiles').select('id,nome_artistico,email,avatar_url').in('id', ids);
+                (profs || []).forEach(p => {
+                    vcProfiles[p.id] = {
+                        id: p.id,
+                        name: p.nome_artistico || p.email || null,
+                        avatar_url: p.avatar_url || null
+                    };
+                });
+
+                // Fallback para IDs sem nome: re-tenta buscando email direto do profiles
+                const missingIds = ids.filter(id => !vcProfiles[id]?.name);
+                if (missingIds.length) {
+                    const { data: missingProfs } = await sb.from('profiles').select('id,email').in('id', missingIds);
+                    (missingProfs || []).forEach(p => {
+                        if (!vcProfiles[p.id]) vcProfiles[p.id] = { id: p.id };
+                        if (!vcProfiles[p.id].name) vcProfiles[p.id].name = p.email || null;
+                    });
+                }
+            }
+
+            vcRenderConversations();
+            vcUpdateBadge();
+        }
+
+        function vcRenderConversations() {
+            const list = document.getElementById('vcChatList');
+            if (!list) return;
+
+            if (!vcConvs.length) {
+                list.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted);font-size:.85rem;">Nenhuma conversa ainda</div>';
+                return;
+            }
+
+            list.innerHTML = vcConvs.map(conv => {
+                const prof = vcProfiles[conv.professional_id] || {};
+                const msgs = conv.chat_messages || [];
+                const last = msgs[msgs.length - 1];
+                const unread = msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
+                const expired = new Date(conv.expires_at) < new Date();
+                const name = prof.name || 'Usuário sem nome';
+                const initials = vcInitials(name);
+
+                return `
+                    <button class="vc-conv ${conv.id === vcActiveId ? 'active' : ''}" onclick="vcOpenConversation('${conv.id}')">
+                        <span class="vc-ava">${prof.avatar_url ? `<img src="${vcEscAttr(prof.avatar_url)}" alt="">` : initials}</span>
+                        <span class="vc-conv-info">
+                            <span class="vc-conv-name">${vcEsc(name)}</span>
+                            <span class="vc-conv-preview">${last ? vcEsc(last.content).slice(0, 42) : 'Sem mensagens'}</span>
+                        </span>
+                        <span class="vc-conv-side">
+                            <span class="vc-time">${last ? vcFmt(last.created_at) : ''}</span>
+                            ${expired ? '<span class="vc-expired">Expirada</span>' : unread ? `<span class="vc-unread">${unread}</span>` : ''}
+                        </span>
+                    </button>`;
+            }).join('');
+        }
+
+        function vcUpdateBadge() {
+            const total = vcConvs.reduce((sum, conv) => {
+                const msgs = conv.chat_messages || [];
+                return sum + msgs.filter(m => m.sender_id !== currentUser.id && !m.read_at).length;
+            }, 0);
+            const badge = document.getElementById('chatBadge');
+            if (!badge) return;
+            badge.style.display = total > 0 ? '' : 'none';
+            badge.textContent = total;
+        }
+
+        async function vcOpenOrCreate(profId) {
+            const { data: convId, error } = await sb.rpc('get_or_create_conversation', { p_professional_id: profId });
+            if (error || !convId) {
+                toast('Erro ao iniciar conversa.', 'erro');
+                return;
+            }
+            await vcLoadConversations();
+            openPanel('mensagens');
+            await vcOpenConversation(convId);
+        }
+
+        async function vcOpenConversation(convId) {
+            vcActiveId = convId;
+            vcActiveConv = vcConvs.find(c => c.id === convId);
+            if (!vcActiveConv) {
+                await vcLoadConversations();
+                vcActiveConv = vcConvs.find(c => c.id === convId);
+            }
+            if (!vcActiveConv) return;
+
+            vcRenderConversations();
+            document.getElementById('vcNoChat').style.display = 'none';
+            document.getElementById('vcChatBox').style.display = 'flex';
+
+            const prof = vcProfiles[vcActiveConv.professional_id] || {};
+            const name = prof.name || 'Usuário sem nome';
+            document.getElementById('vcHeadName').textContent = name;
+            document.getElementById('vcHeadAva').innerHTML = prof.avatar_url
+                ? `<img src="${vcEscAttr(prof.avatar_url)}" alt="">`
+                : vcInitials(name);
+
+            vcStartTimer(vcActiveConv.expires_at);
+            await vcFetchMessages();
+            await sb.rpc('mark_messages_read', { p_conversation_id: convId });
+            await vcLoadConversations();
+            vcSubscribe();
+
+            const expired = new Date(vcActiveConv.expires_at) < new Date();
+            document.getElementById('vcInputBar').classList.toggle('locked', expired);
+        }
+
+        async function vcFetchMessages() {
+            if (!vcActiveId) return;
+            const { data, error } = await sb
+                .from('chat_messages')
+                .select('*')
+                .eq('conversation_id', vcActiveId)
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                toast('Erro ao carregar conversa.', 'erro');
+                return;
+            }
+            vcPaintMessages(data || []);
+        }
+
+        function vcPaintMessages(messages) {
+            const area = document.getElementById('vcMessages');
+            if (!messages.length) {
+                area.innerHTML = '<div class="vc-empty-chat"><i class="ti ti-message"></i><strong>Sem mensagens ainda</strong><span>Envie a primeira mensagem.</span></div>';
+                return;
+            }
+
+            let html = '';
+            let lastDate = '';
+            messages.forEach(msg => {
+                const date = new Date(msg.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+                if (date !== lastDate) {
+                    html += `<div class="vc-date">${date}</div>`;
+                    lastDate = date;
+                }
+                html += vcBubble(msg);
+            });
+            area.innerHTML = html;
+            area.scrollTop = area.scrollHeight;
+        }
+
+        function vcBubble(msg) {
+            const sent = msg.sender_id === currentUser.id;
+            const prof = vcActiveConv ? vcProfiles[vcActiveConv.professional_id] || {} : {};
+            const name = prof.name || 'Usuário sem nome';
+            const status = sent
+                ? `<span class="vc-check ${msg.read_at ? 'read' : ''}" title="${msg.read_at ? 'Lido' : 'Enviado'}">${msg.read_at || msg.delivered_at ? vcDoubleCheck() : vcSingleCheck()}</span>`
+                : '';
+
+            return `
+                <div class="vc-msg ${sent ? 'sent' : 'received'}" id="vcMsg-${msg.id}">
+                    ${sent ? '' : `<span class="vc-mini-ava">${prof.avatar_url ? `<img src="${vcEscAttr(prof.avatar_url)}" alt="">` : vcInitials(name)}</span>`}
+                    <span class="vc-msg-wrap">
+                        <span class="vc-bubble">${vcEsc(msg.content)}</span>
+                        <span class="vc-foot">
+                            <span class="vc-auth">${sent ? 'Você' : vcEsc(name)}</span>
+                            <span>${vcFmt(msg.created_at)}</span>
+                            ${status}
+                        </span>
+                    </span>
+                </div>`;
+        }
+
+        async function vcReportSafety() {
+            if (!vcActiveConv) return;
+            const report = await VenusSafety.openReport({
+                title: 'Seguranca da conversa',
+                subtitle: 'Sua denuncia sera enviada ao administrador. Se bloquear, o chat trava e o perfil sai do seu catalogo.'
+            });
+            if (!report) return;
+            const { error } = await sb.rpc('submit_safety_report', {
+                p_reported_user_id: vcActiveConv.professional_id,
+                p_reason: report.reason,
+                p_details: report.details,
+                p_profile_id: vcActiveConv.professional_id,
+                p_conversation_id: vcActiveId,
+                p_block_user: report.blockUser
+            });
+            if (error) { await VenusSafety.notice('Erro ao enviar denuncia: ' + error.message, 'Erro', 'error'); return; }
+            toast(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada.', 'ok');
+            if (report.blockUser) {
+                document.getElementById('vcInputBar').classList.add('locked');
+                vcConvs = vcConvs.filter(c => c.id !== vcActiveId);
+                vcActiveId = null;
+                vcActiveConv = null;
+                vcRenderConversations();
+                document.getElementById('vcChatBox').style.display = 'none';
+                document.getElementById('vcNoChat').style.display = 'flex';
+            }
+            await VenusSafety.notice(report.blockUser ? 'Denuncia enviada e contato bloqueado.' : 'Denuncia enviada para analise.', 'Denuncia enviada');
+        }
+
+        async function vcSend() {
+            const input = document.getElementById('vcInput');
+            const content = input.value.trim();
+            if (!content || !vcActiveId) return;
+            if (vcActiveConv && new Date(vcActiveConv.expires_at) < new Date()) {
+                toast('Conversa expirada (24h).', 'erro');
+                return;
+            }
+
+            input.value = '';
+            input.style.height = '';
+
+            const tempId = 'tmp-' + Date.now();
+            const tempMsg = {
+                id: tempId,
+                sender_id: currentUser.id,
+                content,
+                created_at: new Date().toISOString(),
+                sent_at: null,
+                delivered_at: null,
+                read_at: null
+            };
+            vcPushMessage(tempMsg);
+
+            const { data, error } = await sb.from('chat_messages').insert({
+                conversation_id: vcActiveId,
+                sender_id: currentUser.id,
+                content,
+                sent_at: new Date().toISOString(),
+                delivered_at: new Date().toISOString()
+            }).select().single();
+
+            if (error) {
+                document.getElementById('vcMsg-' + tempId)?.remove();
+                toast('Erro ao enviar mensagem.', 'erro');
+                return;
+            }
+
+            const temp = document.getElementById('vcMsg-' + tempId);
+            if (temp) temp.outerHTML = vcBubble(data);
+            await vcLoadConversations();
+        }
+
+        function vcPushMessage(msg) {
+            const area = document.getElementById('vcMessages');
+            area.querySelector('.vc-empty-chat')?.remove();
+            area.insertAdjacentHTML('beforeend', vcBubble(msg));
+            area.scrollTop = area.scrollHeight;
+        }
+
+        function vcSubscribe() {
+            if (vcRealtime) vcRealtime.unsubscribe();
+            vcRealtime = sb.channel('client-chat-' + vcActiveId)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'chat_messages',
+                    filter: `conversation_id=eq.${vcActiveId}`
+                }, async payload => {
+                    if (payload.new.sender_id === currentUser.id) return;
+                    vcPushMessage(payload.new);
+                    await sb.from('chat_messages').update({ read_at: new Date().toISOString() }).eq('id', payload.new.id);
+                    await vcLoadConversations();
+                })
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'chat_messages',
+                    filter: `conversation_id=eq.${vcActiveId}`
+                }, payload => {
+                    const el = document.getElementById('vcMsg-' + payload.new.id);
+                    if (el) el.outerHTML = vcBubble(payload.new);
+                })
+                .subscribe();
+        }
+
+        function vcStartTimer(expiresAt) {
+            clearInterval(vcTimerInterval);
+            const chip = document.getElementById('vcTimer');
+            const bar = document.getElementById('vcInputBar');
+
+            function tick() {
+                const diff = new Date(expiresAt) - Date.now();
+                if (diff <= 0) {
+                    chip.textContent = 'Expirada';
+                    chip.classList.add('warn');
+                    bar.classList.add('locked');
+                    clearInterval(vcTimerInterval);
+                    return;
+                }
+                chip.classList.toggle('warn', diff < 3600000);
+                const hours = Math.floor(diff / 3600000);
+                const minutes = Math.floor((diff % 3600000) / 60000);
+                chip.textContent = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+            }
+
+            tick();
+            vcTimerInterval = setInterval(tick, 30000);
+        }
+
+        function vcHandleKey(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                vcSend();
+            }
+        }
+
+        function vcResize(el) {
+            el.style.height = 'auto';
+            el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+        }
+
+        function vcFmt(iso) {
+            return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function vcInitials(name) {
+            return (name || '?').split(' ').map(part => part[0]).join('').slice(0, 2).toUpperCase();
+        }
+
+        function vcEsc(value) {
+            return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+        }
+
+        function vcEscAttr(value) {
+            return String(value || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+        }
+
+        function vcSingleCheck() {
+            return '<svg viewBox="0 0 14 10"><polyline points="1,5 5,9 13,1"/></svg>';
+        }
+
+        function vcDoubleCheck() {
+            return '<svg viewBox="0 0 18 10"><polyline points="1,5 5,9 13,1"/><polyline points="5,5 9,9 17,1"/></svg>';
+        }
+
+        function openPanel(name) {
+            // Desativa todos
+            document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            // Ativa o alvo
+            document.getElementById('panel-' + name)?.classList.add('active');
+            document.querySelector(`.nav-item[data-panel="${name}"]`)?.classList.add('active');
+            if (name === 'mensagens') vcInit();
+            if (name === 'packs') loadClientPacks();
+            // Mobile: fechar sidebar
+            closeSidebar();
+        }
+
+        function applyDiscreetMode() {
+            const active = localStorage.getItem(DISCREET_KEY) === '1';
+            document.body.classList.toggle('vc-discreet', active);
+            const button = document.getElementById('discreetToggle');
+            if (button) {
+                button.setAttribute('aria-pressed', active ? 'true' : 'false');
+                button.innerHTML = active
+                    ? '<i class="ti ti-eye"></i> Desativar'
+                    : '<i class="ti ti-eye-off"></i> Ativar';
+            }
+        }
+
+        function toggleDiscreetMode() {
+            const next = localStorage.getItem(DISCREET_KEY) === '1' ? '0' : '1';
+            localStorage.setItem(DISCREET_KEY, next);
+            applyDiscreetMode();
+            toast(next === '1' ? 'Modo discreto ativado neste navegador.' : 'Modo discreto desativado.', 'ok');
+        }
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('sidebarOverlay').classList.toggle('visible');
+        }
+        function closeSidebar() {
+            document.getElementById('sidebar').classList.remove('open');
+            document.getElementById('sidebarOverlay').classList.remove('visible');
+        }
+
+        async function logout() {
+            await sb.auth.signOut();
+            window.location.href = 'login.html';
+        }
+
+        /* ═══════════════════════════════════════════════════════════
+           UTILITIES
+        ═══════════════════════════════════════════════════════════ */
+        function timeAgo(dateStr) {
+            const diff = Date.now() - new Date(dateStr);
+            const mins = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            if (mins < 1) return 'Agora';
+            if (mins < 60) return `${mins}min atrás`;
+            if (hours < 24) return `${hours}h atrás`;
+            if (days < 7) return `${days}d atrás`;
+            return new Date(dateStr).toLocaleDateString('pt-BR');
+        }
+
+        function toast(msg, tipo = 'info') {
+            const el = document.createElement('div');
+            el.className = `toast ${tipo}`;
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 4500);
+        }
+
+        /* ── Boot ─────────────────────────────────────────────── */
+        init();
+    </script>
+    <script src="js/panel-experience.js" defer></script>
+    <script src="js/onboarding-tour.js" defer></script>
+    <script src="js/site.js" defer></script>
+</body>
+
+</html>
