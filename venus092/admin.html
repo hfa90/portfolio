@@ -2715,13 +2715,14 @@
             statsGrid.innerHTML = '<div class="stat-card"><div class="stat-label">Carregando...</div></div>';
             table.innerHTML = '';
 
-            const [{ data, error }, { data: subscriptionPayments, error: subPayError }] = await Promise.all([
+            const [{ data, error }, { data: subscriptionPayments, error: subPayError }, { data: subscriptions, error: subError }] = await Promise.all([
                 sb.from('highlight_ads')
                     .select('id,profile_id,headline,status,price_cents,payment_reference,payment_requested_at,approved_at,starts_at,expires_at,created_at,profiles(nome_artistico,email,cidade,uf)')
                     .order('created_at', { ascending: false }),
                 sb.from('professional_subscription_payments')
-                    .select('amount,paid_at')
-                    .order('paid_at', { ascending: false })
+                    .select('profile_id,amount,days_added,reference,paid_at,profiles(nome_artistico,email,cidade,uf)')
+                    .order('paid_at', { ascending: false }),
+                sb.rpc('admin_subscription_overview')
             ]);
 
             if (error) {
@@ -2731,19 +2732,29 @@
             }
 
             const rows = data || [];
+            const subRows = subError ? [] : (subscriptions || []);
+            const subPayments = subPayError ? [] : (subscriptionPayments || []);
             const paid = rows.filter(isPaidAd);
             const pending = rows.filter(ad => ad.status === 'payment_pending');
             const expired = rows.filter(isExpiredAd);
-            const revenue = paid.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
-            const subscriptionRevenue = subPayError ? 0 : (subscriptionPayments || []).reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
-            const pendingValue = pending.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
+            const highlightRevenue = paid.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
+            const subscriptionRevenue = subPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+            const pendingHighlightValue = pending.reduce((sum, ad) => sum + Number(ad.price_cents || 0), 0) / 100;
+            const expiredSubs = subRows.filter(isSubscriptionExpired);
+            const due7 = subRows.filter(row => subscriptionDueWithin(row, 7));
+            const due30 = subRows.filter(row => subscriptionDueWithin(row, 30));
+            const monthlyPrice = estimateMonthlySubscriptionPrice(subPayments);
+            const forecast7 = due7.length * monthlyPrice;
+            const forecast30 = due30.length * monthlyPrice;
+            const totalRevenue = highlightRevenue + subscriptionRevenue;
+            const grouped = buildFinanceByProfessional(rows, subPayments, subRows, monthlyPrice);
             const cards = [
-                { icon: '✅', label: 'Pagos', value: paid.length, bg: 'var(--green-dim)', color: 'var(--green)' },
-                { icon: '⏳', label: 'Falta pagar', value: pending.length, bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
-                { icon: '⚠️', label: 'Vencidos / renovar', value: expired.length, bg: 'var(--red-dim)', color: 'var(--red)' },
-                { icon: '💰', label: 'Receita destaques', value: moneyBR(revenue), bg: 'var(--gold-dim)', color: 'var(--gold)' },
+                { icon: '💰', label: 'Receita total', value: moneyBR(totalRevenue), bg: 'var(--green-dim)', color: 'var(--green)' },
                 { icon: '🧾', label: 'Receita mensalidades', value: moneyBR(subscriptionRevenue), bg: 'rgba(168,85,247,.15)', color: '#c084fc' },
-                { icon: '📌', label: 'Pendente em aberto', value: moneyBR(pendingValue), bg: 'rgba(56,189,248,.12)', color: '#38BDF8' }
+                { icon: '✨', label: 'Receita destaques', value: moneyBR(highlightRevenue), bg: 'var(--gold-dim)', color: 'var(--gold)' },
+                { icon: '📌', label: 'Pendências abertas', value: moneyBR(pendingHighlightValue + expiredSubs.length * monthlyPrice), bg: 'var(--yellow-dim)', color: 'var(--yellow)' },
+                { icon: '⏱', label: 'Previsão 7 dias', value: moneyBR(forecast7), bg: 'rgba(56,189,248,.12)', color: '#38BDF8' },
+                { icon: '🗓', label: 'Previsão 30 dias', value: moneyBR(forecast30), bg: 'rgba(99,102,241,.15)', color: '#818CF8' }
             ];
             statsGrid.innerHTML = cards.map(c => `
                 <div class="stat-card">
@@ -2752,24 +2763,120 @@
                     <div class="stat-value">${c.value}</div>
                 </div>`).join('');
 
-            if (!rows.length) {
+            if (!grouped.length) {
                 table.innerHTML = '<div class="empty-state"><p>Nenhuma cobrança encontrada.</p></div>';
                 return;
             }
 
             table.innerHTML = `<table>
-                <thead><tr><th>Profissional</th><th>Status</th><th>Valor</th><th>Referência</th><th>Próximo pagamento</th></tr></thead>
-                <tbody>${rows.map(ad => {
-                    const status = financeStatus(ad);
+                <thead><tr><th>Profissional</th><th>Receita</th><th>Pendências</th><th>Próximo pagamento</th><th>Histórico</th></tr></thead>
+                <tbody>${grouped.map(item => {
                     return `<tr>
-                        <td><strong>${safeAdmin(ad.profiles?.nome_artistico || ad.headline || ad.profile_id)}</strong><br><span style="color:var(--muted);font-size:.76rem">${safeAdmin([ad.profiles?.cidade, ad.profiles?.uf].filter(Boolean).join(' / ') || '—')}</span></td>
-                        <td>${status}</td>
-                        <td>${moneyBR(Number(ad.price_cents || 0) / 100)}</td>
-                        <td>${safeAdmin(ad.payment_reference || '—')}<br><span style="color:var(--muted);font-size:.76rem">Solicitado: ${formatDateTime(ad.payment_requested_at || ad.created_at)}</span></td>
-                        <td>${nextPaymentLabel(ad)}</td>
+                        <td><strong>${safeAdmin(item.name)}</strong><br><span style="color:var(--muted);font-size:.76rem">${safeAdmin(item.location || '—')}</span></td>
+                        <td>
+                            <strong>${moneyBR(item.totalRevenue)}</strong>
+                            <div class="subscription-meta">Mensalidades ${moneyBR(item.subscriptionRevenue)} · Destaques ${moneyBR(item.highlightRevenue)}</div>
+                        </td>
+                        <td>
+                            ${item.pendingBadges || '<span class="pill pill-green">Sem pendências</span>'}
+                            <div class="subscription-meta">${item.pendingText || 'Tudo em dia'}</div>
+                        </td>
+                        <td>${item.nextPaymentLabel}</td>
+                        <td><div class="subscription-meta">${item.historyHtml}</div></td>
                     </tr>`;
                 }).join('')}</tbody>
             </table>`;
+        }
+
+        function estimateMonthlySubscriptionPrice(payments) {
+            const paid = (payments || []).map(p => Number(p.amount || 0)).filter(v => v > 0);
+            if (!paid.length) return 0;
+            const sorted = paid.sort((a, b) => a - b);
+            return sorted[Math.floor(sorted.length / 2)] || sorted[0] || 0;
+        }
+
+        function subscriptionDueWithin(row, days) {
+            if (!row?.access_expires_at || row.contact_access_blocked) return false;
+            const diff = new Date(row.access_expires_at).getTime() - Date.now();
+            return diff >= 0 && diff <= days * 86400000;
+        }
+
+        function buildFinanceByProfessional(ads, payments, subscriptions, monthlyPrice) {
+            const map = new Map();
+            const ensure = (profileId, profile = {}) => {
+                const id = profileId || 'sem-id';
+                if (!map.has(id)) {
+                    map.set(id, {
+                        profileId: id,
+                        name: profile.nome_artistico || profile.email || id,
+                        location: [profile.cidade, profile.uf].filter(Boolean).join(' / '),
+                        subscriptionRevenue: 0,
+                        highlightRevenue: 0,
+                        pendingHighlight: 0,
+                        pendingSubscription: 0,
+                        nextPaymentAt: null,
+                        history: [],
+                        subscription: null
+                    });
+                }
+                const item = map.get(id);
+                if (profile.nome_artistico && item.name === id) item.name = profile.nome_artistico;
+                if (!item.location && (profile.cidade || profile.uf)) item.location = [profile.cidade, profile.uf].filter(Boolean).join(' / ');
+                return item;
+            };
+
+            (subscriptions || []).forEach(row => {
+                const item = ensure(row.profile_id, row);
+                item.subscription = row;
+                if (isSubscriptionExpired(row)) item.pendingSubscription = monthlyPrice;
+                if (row.access_expires_at && row.contact_access_active) item.nextPaymentAt = row.access_expires_at;
+            });
+
+            (payments || []).forEach(payment => {
+                const item = ensure(payment.profile_id, payment.profiles || {});
+                const amount = Number(payment.amount || 0);
+                item.subscriptionRevenue += amount;
+                item.history.push({
+                    at: payment.paid_at,
+                    label: `Mensalidade ${moneyBR(amount)}${payment.days_added ? ` · ${payment.days_added} dias` : ''}`
+                });
+            });
+
+            (ads || []).forEach(ad => {
+                const item = ensure(ad.profile_id, ad.profiles || {});
+                const amount = Number(ad.price_cents || 0) / 100;
+                if (isPaidAd(ad)) {
+                    item.highlightRevenue += amount;
+                    item.history.push({ at: ad.approved_at || ad.created_at, label: `Destaque ${moneyBR(amount)}` });
+                }
+                if (ad.status === 'payment_pending') item.pendingHighlight += amount;
+            });
+
+            return [...map.values()].map(item => {
+                item.totalRevenue = item.subscriptionRevenue + item.highlightRevenue;
+                const pendingParts = [];
+                const badges = [];
+                if (item.pendingSubscription > 0) {
+                    pendingParts.push(`Mensalidade estimada ${moneyBR(item.pendingSubscription)}`);
+                    badges.push('<span class="pill pill-red">Mensalidade vencida</span>');
+                }
+                if (item.pendingHighlight > 0) {
+                    pendingParts.push(`Destaques ${moneyBR(item.pendingHighlight)}`);
+                    badges.push('<span class="pill pill-yellow">Destaque pendente</span>');
+                }
+                item.pendingBadges = badges.join(' ');
+                item.pendingText = pendingParts.join(' · ');
+                item.nextPaymentLabel = item.nextPaymentAt
+                    ? subscriptionAccessLabel({ ...item.subscription, access_expires_at: item.nextPaymentAt, contact_access_active: true })
+                    : (item.pendingSubscription > 0 ? 'Renovação pendente' : 'Sem previsão');
+                item.historyHtml = item.history
+                    .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+                    .slice(0, 3)
+                    .map(h => `${safeAdmin(h.label)}<br><span style="color:var(--muted)">${formatDateTime(h.at)}</span>`)
+                    .join('<br>');
+                if (!item.historyHtml) item.historyHtml = 'Sem pagamentos registrados';
+                return item;
+            }).sort((a, b) => (b.pendingSubscription + b.pendingHighlight) - (a.pendingSubscription + a.pendingHighlight) || b.totalRevenue - a.totalRevenue);
         }
 
         function isPaidAd(ad) {
