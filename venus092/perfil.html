@@ -188,6 +188,7 @@
                   <span class="badge badge-green" id="mobileOnline" style="display:none">● Online agora</span>
                   <span class="badge badge-blue" id="mobileVerif" style="display:none">Verificada ✓</span>
                 </div>
+                <div class="perfil-trust-badges" id="mobileTrustBadges"></div>
                 <div class="perfil-mobile-actions">
                   <div class="perfil-mobile-price" id="mobilePriceBox" style="display:none">
                     <span>A partir de</span>
@@ -273,6 +274,7 @@
                   <span class="badge badge-gold" id="desktopCategoria">—</span>
                   <span class="badge badge-green" id="desktopOnline" style="display:none">● Online</span>
                 </div>
+                <div class="perfil-trust-badges" id="desktopTrustBadges"></div>
               </div>
               <button class="perfil-fav-btn" onclick="toggleFav()">
                 <i class="ti ti-heart"></i>
@@ -308,7 +310,7 @@
                   <i class="ti ti-arrow-right"></i>
                 </a>
               </div>
-              <p class="perfil-contact-note"><i class="ti ti-shield-lock"></i> Seus dados de contato permanecem protegidos.</p>
+              <p class="perfil-contact-note" id="contactAccessNote"><i class="ti ti-shield-lock"></i> Seus dados de contato permanecem protegidos.</p>
             </div>
 
             <!-- STATS -->
@@ -594,9 +596,22 @@
 
       el.style.pointerEvents = '';
       el.style.opacity = '';
-      el.classList.toggle('is-locked', !visitorCanContact);
+      const lockedByVisitor = !visitorCanContact;
+      const lockedByPayment = !professionalContactActive;
+      el.classList.toggle('is-locked', lockedByVisitor || lockedByPayment);
 
-      if (!visitorCanContact) {
+      if (lockedByPayment) {
+        el.href = '#';
+        el.removeAttribute('target');
+        el.title = 'Contato indisponivel ate a profissional renovar a mensalidade';
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          recordProfileEvent(profileId, `${evento}_blocked`);
+        }, { once: true });
+        return;
+      }
+
+      if (lockedByVisitor) {
         el.href = loginRedirectUrl();
         el.removeAttribute('target');
         el.title = 'Cadastre-se ou entre para falar com a profissional';
@@ -620,6 +635,33 @@
       });
     }
 
+    async function loadProfessionalContactAccess(profileId) {
+      professionalContactActive = true;
+      const { data, error } = await sb
+        .from('profiles')
+        .select('trial_expires_at,paid_until')
+        .eq('id', profileId)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('Controle de acesso profissional ainda nao aplicado:', error.message);
+        return;
+      }
+
+      const accessExpiry = [data?.paid_until, data?.trial_expires_at]
+        .filter(Boolean)
+        .map(value => new Date(value).getTime())
+        .filter(Number.isFinite)
+        .sort((a, b) => b - a)[0];
+      professionalContactActive = Boolean(accessExpiry && accessExpiry > Date.now());
+
+      const contactNote = document.getElementById('contactAccessNote');
+      if (contactNote && !professionalContactActive) {
+        contactNote.innerHTML = '<i class="ti ti-alert-triangle"></i> Perfil ativo, mas WhatsApp e chat estao temporariamente desativados ate a renovacao da mensalidade.';
+        contactNote.style.color = '#fca5a5';
+      }
+    }
+
     // ============================================================
     // CONFIG SUPABASE
     // ============================================================
@@ -631,6 +673,7 @@
     });
     let visitorSession = null;
     let visitorCanContact = false;
+    let professionalContactActive = true;
     let activePix = null;
     let activePack = null;
     let activePixCode = '';
@@ -642,6 +685,8 @@
     let storyTimer = null;
     let isStoryOwner = false;
     let storyProfileName = 'Profissional';
+    let activeProfileId = null;
+    let storyCreateAutoOpened = false;
 
     function removeCustomerUploadLeak() {
       const markers = [
@@ -728,9 +773,9 @@
     // HELPERS
     // ============================================================
     function getProfileId() {
-      // Aceita ?id=UUID na URL ou usa o usuário logado como fallback
+      // Aceita ?id=UUID na URL, o perfil em exibição ou o usuário logado como fallback.
       const params = new URLSearchParams(window.location.search);
-      return params.get('id') || null;
+      return params.get('id') || activeProfileId || visitorSession?.user?.id || null;
     }
 
     function fmt(val, suffix = '') {
@@ -815,6 +860,30 @@
       const date = new Date(value);
       const month = date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
       return `${month}/${String(date.getFullYear()).slice(-2)}`;
+    }
+
+    function renderProfileTrustBadges(profile, stats, services, locations, availability) {
+      const complete = Boolean((profile.bio || '').trim().length >= 50)
+        && photos.length > 0
+        && (services || []).length > 0
+        && (locations || []).length > 0
+        && (availability || []).length > 0;
+      const favorites = Number(stats?.favorites_count || 0);
+      const badges = [];
+
+      if (profile.online_now) badges.push({ icon: 'ti-bolt', label: 'Responde rapido' });
+      if (complete) badges.push({ icon: 'ti-circle-check', label: 'Perfil completo' });
+      if (profile.verificado) badges.push({ icon: 'ti-shield-check', label: 'Verificada' });
+      if (favorites >= 10) badges.push({ icon: 'ti-heart', label: 'Muito favoritada' });
+      if (professionalReviews.length >= 3) badges.push({ icon: 'ti-repeat', label: 'Atendimento recorrente' });
+
+      const html = badges.map(item => `
+        <span class="perfil-trust-badge"><i class="ti ${item.icon}"></i>${item.label}</span>
+      `).join('');
+      ['mobileTrustBadges', 'desktopTrustBadges'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = html;
+      });
     }
 
     function initMobileAccordions() {
@@ -1228,6 +1297,7 @@
         document.getElementById('loadingOverlay').style.display = 'none';
         return;
       }
+      activeProfileId = profileId;
 
       // Busca perfil + silicone + serviços + locais + disponibilidade em paralelo
       const [
@@ -1245,6 +1315,7 @@
       ]);
 
       if (!p) { document.getElementById('loadingOverlay').style.display = 'none'; return; }
+      await loadProfessionalContactAccess(profileId);
 
       // Carrega fotos (bucket privado — URLs assinadas)
       await loadFotos(profileId);
@@ -1290,6 +1361,7 @@
       if (p.verificado) {
         document.getElementById('mobileVerif').style.display = '';
       }
+      renderProfileTrustBadges(p, publicStats, servicos || [], locais || [], disponib || []);
 
       // Bio
       if (p.bio) {
@@ -1445,6 +1517,11 @@
       initMobileAccordions();
       refreshExpandableText();
       document.getElementById('loadingOverlay').style.display = 'none';
+      const wantsStoryCreate = new URLSearchParams(window.location.search).get('story') === 'novo';
+      if (wantsStoryCreate && isStoryOwner && !storyCreateAutoOpened) {
+        storyCreateAutoOpened = true;
+        setTimeout(openStoryCreateModal, 120);
+      }
     }
 
     async function loadPacks(profileId) {
