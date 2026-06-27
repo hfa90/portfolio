@@ -6,7 +6,8 @@
             }
 
             getUserIdFromUrl() {
-                // Se URL for /perfil/5, retorna 5. Se for /perfil, retorna null (backend entende como 'meu perfil')
+                const queryId = new URLSearchParams(window.location.search).get('id');
+                if (queryId) return parseInt(queryId);
                 const parts = window.location.pathname.split('/');
                 const last = parts[parts.length - 1];
                 return (!isNaN(last) && last !== '') ? last : null;
@@ -59,7 +60,7 @@
                         }
                     } else {
                         alert('Usuário não encontrado');
-                        window.location.href = '/vibeconecta';
+                        window.location.href = 'vibeconecta.html';
                     }
                 } catch (e) {
                     console.error("Erro perfil:", e);

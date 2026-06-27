@@ -268,11 +268,11 @@ async function abrirCalculadora() {
     await verificarUsuarioLogado();
     if (!estado.usuarioLogado) {
         mostrarToast("Faça login para usar a calculadora!", "error");
-        setTimeout(() => window.location.href = '/login', 1500);
+        setTimeout(() => window.location.href = 'login.html', 1500);
         return;
     }
     toggleMobileMenu(); // Fecha o menu mobile
-    window.location.href = '/calculadora.html';
+    window.location.href = 'calculadora.html';
 }
 
 // --- GEOLOCALIZAÇÃO HÍBRIDA (GPS + ENDEREÇO) ---
@@ -390,7 +390,7 @@ async function verificarUsuarioLogado() {
                             </span>
                         </div>
                         <div class="dropdown-divider"></div>
-                        <a href="/meuperfil.html" class="dropdown-item"><i class="fas fa-user-circle"></i> Meu Perfil</a>
+                        <a href="meuperfil.html" class="dropdown-item"><i class="fas fa-user-circle"></i> Meu Perfil</a>
                         
                         <div class="dropdown-divider"></div>
                         
@@ -409,7 +409,7 @@ async function verificarUsuarioLogado() {
                         </a>
 
                         <div class="dropdown-divider"></div>
-                        <a href="/api/logout" class="dropdown-item" style="color:var(--danger)"><i class="fas fa-sign-out-alt"></i> Sair</a>
+                        <a href="#" onclick="fetch('/api/logout'); return false;" class="dropdown-item" style="color:var(--danger)"><i class="fas fa-sign-out-alt"></i> Sair</a>
                     </div>
                 </div>`;
             }
@@ -420,7 +420,7 @@ async function verificarUsuarioLogado() {
                 const primeiroNome = data.usuario.nome.split(' ')[0];
 
                 mobileProfileArea.innerHTML = `
-                <div class="user-profile-card" onclick="window.location.href='/meuperfil.html'">
+                <div class="user-profile-card" onclick="window.location.href='meuperfil.html'">
                     <div class="user-avatar-circle">${primeiraLetra}</div>
                     <div class="user-info-text">
                         <span class="user-name">Olá, ${primeiroNome}</span>
@@ -432,7 +432,7 @@ async function verificarUsuarioLogado() {
             // 3. MOBILE: Botão Sair
             if (mobileAuthArea) {
                 mobileAuthArea.innerHTML = `
-                <a href="/api/logout" class="mobile-menu-item" style="color: var(--danger);">
+                <a href="#" onclick="fetch('/api/logout'); return false;" class="mobile-menu-item" style="color: var(--danger);">
                     <i class="fas fa-sign-out-alt"></i>
                     <span>Sair da conta</span>
                 </a>`;
@@ -451,14 +451,14 @@ async function verificarUsuarioLogado() {
             if (userActions) {
                 userActions.innerHTML = `
                 <span id="location-status" style="font-size: 0.8rem; color: #999; margin-right: 10px;"></span>
-                <a href="/login" class="nav-link" id="btn-login-nav"><i class="fas fa-user"></i> Entrar</a>`;
+                <a href="login.html" class="nav-link" id="btn-login-nav"><i class="fas fa-user"></i> Entrar</a>`;
             }
 
             // Mobile fallback
             if (mobileProfileArea) mobileProfileArea.innerHTML = '';
             if (mobileAuthArea) {
                 mobileAuthArea.innerHTML = `
-                <a href="/login" class="mobile-menu-item">
+                <a href="login.html" class="mobile-menu-item">
                     <i class="fas fa-user"></i>
                     <span>Entrar</span>
                 </a>`;
@@ -1081,7 +1081,7 @@ async function guardarLista() {
     await verificarUsuarioLogado();
     if (!estado.usuarioLogado) {
         mostrarToast("Faça login para salvar sua lista!", "error");
-        setTimeout(() => window.location.href = '/login', 1500);
+        setTimeout(() => window.location.href = 'login.html', 1500);
         return;
     }
     if (estado.listaCompras.length === 0) {
@@ -1960,7 +1960,7 @@ async function validarPreco(precoId, tipo, btnElement) {
         } else {
             if (data.message.includes('login')) {
                 mostrarToast("Faça login para votar.", "error");
-                setTimeout(() => window.location.href = '/login', 1500);
+                setTimeout(() => window.location.href = 'login.html', 1500);
             } else {
                 mostrarToast("Erro ao votar.", "error");
             }

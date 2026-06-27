@@ -510,12 +510,12 @@
 
             verPerfil(usuarioId) {
                 if (usuarioId && !this.posts.find(p => p.id === usuarioId)?.anonimato) {
-                    window.location.href = `/perfil/${usuarioId}`;
+                    window.location.href = `perfil.html?id=${encodeURIComponent(usuarioId)}`;
                 }
             }
 
             verMeusPosts() {
-                window.location.href = '/perfil';
+                window.location.href = 'meuperfil.html';
             }
 
             // --- Utilitários ---

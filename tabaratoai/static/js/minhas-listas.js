@@ -90,7 +90,7 @@
                         <i class="fas fa-shopping-basket" style="font-size: 3rem; color: #cbd5e1; margin-bottom: 1rem;"></i>
                         <h3>Nenhuma lista encontrada</h3>
                         <p style="color: var(--text-sec); margin-bottom: 1.5rem;">Comece a economizar criando sua primeira lista hoje.</p>
-                        <a href="/compareaqui.html" class="btn btn-primary" style="display:inline-flex;">Criar Lista Agora</a>
+                        <a href="compareaqui.html" class="btn btn-primary" style="display:inline-flex;">Criar Lista Agora</a>
                     </div>`;
                 return;
             }
@@ -212,7 +212,7 @@
                     }));
 
                     localStorage.setItem('listaComprasTemp', JSON.stringify(itensParaCarrinho));
-                    window.location.href = '/compareaqui.html';
+                    window.location.href = 'compareaqui.html';
                 }
             } catch (e) { alert("Erro ao clonar lista"); }
         }

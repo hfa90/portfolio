@@ -7,6 +7,8 @@
 
             obterUsuarioIdDaURL() {
                 const path = window.location.pathname;
+                const queryId = new URLSearchParams(window.location.search).get('id');
+                if (queryId) return parseInt(queryId);
                 const match = path.match(/\/perfil\/(\d+)/);
                 return match ? parseInt(match[1]) : null;
             }
@@ -14,7 +16,7 @@
             async init() {
                 if (!this.usuarioId) {
                     alert('Usuário não encontrado');
-                    window.location.href = '/vibeconecta';
+                    window.location.href = 'vibeconecta.html';
                     return;
                 }
                 await this.carregarPerfil();
@@ -41,7 +43,7 @@
                         this.renderizarPostsPopulares(data.posts_populares);
                     } else {
                         alert('Perfil não encontrado');
-                        window.location.href = '/vibeconecta';
+                        window.location.href = 'vibeconecta.html';
                     }
                 } catch (e) {
                     console.error('Erro ao carregar perfil:', e);

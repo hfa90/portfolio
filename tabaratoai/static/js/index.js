@@ -15,7 +15,7 @@
         function pesquisarAgora() {
             const termo = document.getElementById('hero-search').value;
             // Redireciona para o comparador com o termo na URL (mesmo que peça login depois, a intenção foi capturada)
-            window.location.href = `/compareaqui?search=${encodeURIComponent(termo)}`;
+            window.location.href = `compareaqui.html?search=${encodeURIComponent(termo)}`;
         }
 
         document.getElementById('hero-search').addEventListener('keypress', function (e) {

@@ -46,7 +46,18 @@
     const user = await currentUser();
     if (!user) return null;
     const { data } = await client.from("profiles").select("*").eq("id", user.id).maybeSingle();
-    return data ? { ...data, user } : { id: user.id, nome: user.email, email: user.email, user };
+    if (data) return { ...data, user };
+
+    const metadata = user.user_metadata || {};
+    const nome = metadata.full_name || metadata.name || user.email || "Usuário";
+    const profile = {
+      id: user.id,
+      nome,
+      email: user.email || null,
+      telefone: metadata.phone || null
+    };
+    await client.from("profiles").upsert(profile, { onConflict: "id" });
+    return { ...profile, user };
   }
 
   function normalizeProduct(row) {
@@ -461,7 +472,7 @@
     if (path === "/api/perfil/dados") return profileData(init);
     if (path === "/api/meus-dispositivos") return response({ success: true, devices: JSON.parse(localStorage.getItem("tbl_devices") || "[]") });
     if (path === "/api/remover-dispositivo") return response({ success: true });
-    if (path === "/api/telegram-login") return unsupported("Login com Telegram");
+    if (path === "/api/telegram-login") return unsupported("Login social legado");
     if (path === "/api/gerar-senha") return unsupported("Recuperacao de senha por telefone");
 
     if (path === "/api/produtos") return getProducts(params);
