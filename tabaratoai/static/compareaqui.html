@@ -1,0 +1,561 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" />
+    <title>
+        Comparador de PreÃ§os | TÃ¡ Barato LÃ¡?
+    </title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11">
+    </script>
+    <link href="css/compareaqui.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.108.2/dist/umd/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/supabase-api.js"></script> </head>
+
+<body>
+    <div id="tinder-overlay" class="tinder-overlay">
+        <button onclick="fecharTinder()" class="btn-pular-discreto">Pular <i class="fas fa-chevron-right"></i></button>
+
+        <div class="tinder-container">
+            <div class="tinder-header">
+                <div class="tinder-brand">
+                    <i class="fas fa-fire"></i>
+                    <span>Match de Ofertas</span>
+                </div>
+            </div>
+
+            <div id="tinder-card-stack" class="tinder-card-stack"></div>
+
+            <div id="tinder-finish-screen" style="display: none; text-align: center; color: white; padding: 20px;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">ðŸŽ‰</div>
+                <h2 style="font-size: 1.8rem; margin-bottom: 10px;">Pilha Limpa!</h2>
+                <p style="font-size: 1.1rem; opacity: 0.9; margin-bottom: 2rem;">
+                    Encontramos <span id="resumo-matches" style="font-weight: 800; color: var(--success);">0</span>
+                    ofertas para vocÃª.
+                </p>
+                <button onclick="fecharTinderVerLista()" class="btn-ios" style="background: var(--success);">
+                    Ver Minha Lista <i class="fas fa-shopping-basket"></i>
+                </button>
+            </div>
+
+            <div class="tinder-controls" id="tinder-controls-area">
+                <button class="tinder-btn dislike" id="btn-tinder-dislike" onclick="swipeLeft()"><i
+                        class="fas fa-times"></i></button>
+                <button class="tinder-btn like" id="btn-tinder-like" onclick="swipeRight()"><i
+                        class="fas fa-heart"></i></button>
+            </div>
+
+            <div class="tinder-progress" id="tinder-progress-wrapper">
+                <div id="tinder-bar" class="tinder-progress-bar"></div>
+            </div>
+
+            <div class="tinder-tip" id="tinder-tip-text">Arraste para comparar!</div>
+        </div>
+    </div>
+
+
+    <div class="smart-notify-container" id="smart-notify">
+        <div class="smart-card" id="smart-card-content">
+            <button class="smart-close" onclick="fecharNotificacao()">
+                Ã—
+            </button>
+            <div class="smart-header">
+                <div class="smart-avatar">
+                    <i class="fas fa-robot">
+                    </i>
+                </div>
+                <span>
+                    Assistente de PreÃ§os
+                </span>
+            </div>
+            <div class="smart-body" id="smart-msg">
+            </div>
+            <button class="smart-action" id="smart-btn-action">
+                Ver Produto
+                <i class="fas fa-arrow-right">
+                </i>
+            </button>
+        </div>
+    </div>
+    <header class="header">
+        <nav class="nav">
+            <div class="logo">
+                <i class="fas fa-leaf">
+                </i>
+                TÃ¡ Barato LÃ¡?
+            </div>
+            <div class="nav-menu">
+                <a class="nav-link active" href="compareaqui.html">
+                    Comparador
+                </a>
+                <a class="nav-link" href="minhas-listas.html">
+                    Minhas Listas
+                </a>
+                <a class="nav-link" href="/vibeconecta">
+                    <i class="fas fa-broadcast-tower">
+                    </i>
+                    VibeConecta
+                    <span class="badge-new">
+                        Novo
+                    </span>
+                </a>
+            </div>
+            <div id="user-actions">
+                <button class="theme-toggle-btn" onclick="toggleTheme()" title="Mudar Tema">
+                    <i class="fas fa-moon">
+                    </i>
+                </button>
+                <div class="location-status" id="location-status">
+                    <i class="fas fa-location-dot pulsating-gps">
+                    </i>
+                </div>
+                <a class="nav-link" href="cadastrar_produtos.html">
+                    <i class="fas fa-plus-circle">
+                    </i>
+                    Cadastrar
+                    Produtos
+                </a>
+                <a class="nav-link" href="/login" id="btn-login-nav">
+                    <i class="fas fa-user">
+                    </i>
+                    Entrar
+                </a>
+            </div>
+            <button class="mobile-menu-btn" id="mobile-menu-btn">
+                <i class="fas fa-bars">
+                </i>
+            </button>
+        </nav>
+
+        <div class="notification-wrapper" onclick="abrirModalAvisos()">
+            <i class="fas fa-bell"></i>
+            <span id="notif-badge" class="badge-dot hidden"></span>
+        </div>
+
+        <div id="modal-avisos" class="modal-overlay">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3 class="modal-title"><i class="fas fa-bullhorn me-2"></i> Avisos e PromoÃ§Ãµes</h3>
+                    <button onclick="fecharModalAvisos()" class="btn-fechar-modal">&times;</button>
+                </div>
+                <div id="lista-avisos-usuario" class="avisos-container">
+                </div>
+            </div>
+        </div>
+
+    </header>
+    <!-- NOVO: Menu Lateral Mobile -->
+    <div class="mobile-menu-overlay" id="mobile-menu-overlay">
+    </div>
+    <div class="mobile-menu-sidebar" id="mobile-menu-sidebar">
+        <div class="mobile-menu-header">
+            <div class="logo">
+                <i class="fas fa-leaf">
+                </i>
+                TÃ¡ Barato LÃ¡?
+            </div>
+            <button class="mobile-menu-close" id="mobile-menu-close">
+                <i class="fas fa-times">
+                </i>
+            </button>
+        </div>
+        <div class="mobile-menu-body">
+            <div id="mobile-profile-area">
+            </div>
+            <a class="mobile-menu-item" href="/">
+                <i class="fas fa-home">
+                </i>
+                <span>
+                    InÃ­cio
+                </span>
+            </a>
+            <a class="mobile-menu-item active" href="compareaqui.html">
+                <i class="fas fa-balance-scale">
+                </i>
+                <span>
+                    Comparador
+                </span>
+            </a>
+            <a class="mobile-menu-item" href="/ferramentas">
+                <i class="fas fa-tools">
+                </i>
+                <span>
+                    UtilitÃ¡rios
+                </span>
+                <span class="badge-new">
+                    Novo
+                </span>
+            </a>
+            <a class="mobile-menu-item" href="/historico-precos">
+                <i class="fas fa-chart-line">
+                </i>
+                <span>
+                    HistÃ³rico
+                </span>
+            </a>
+            <a class="mobile-menu-item" href="minhas-listas.html">
+                <i class="fas fa-list">
+                </i>
+                <span>
+                    Minhas Listas
+                </span>
+            </a>
+            <a class="mobile-menu-item" href="/vibeconecta">
+                <i class="fas fa-broadcast-tower">
+                </i>
+                <span>
+                    VibeConecta
+                </span>
+                <span class="badge-new">
+                    Novo
+                </span>
+            </a>
+            <a class="mobile-menu-item" href="cadastrar_produtos.html">
+                <i class="fas fa-plus-circle">
+                </i>
+                <span>
+                    Cadastrar Produtos
+                </span>
+            </a>
+            <div class="mobile-menu-divider">
+            </div>
+            <div id="mobile-auth-area">
+                <a class="mobile-menu-item" href="/login">
+                    <i class="fas fa-user">
+                    </i>
+                    <span>
+                        Entrar
+                    </span>
+                </a>
+            </div>
+        </div>
+        <div class="mobile-menu-footer">
+            <button class="btn-calculadora-menu" onclick="abrirCalculadora()">
+                <i class="fas fa-calculator">
+                </i>
+                Calculadora do Rancho
+            </button>
+            <button class="btn-chef-ia" onclick="toggleChat()">
+                <i class="fas fa-hat-chef">
+                </i>
+                ðŸ§‘â€ðŸ³ Chef IA
+            </button>
+        </div>
+    </div>
+    <section class="hero-section">
+        <h1 style="font-size: 2rem; font-weight: 800; margin-bottom: 0.5rem; color: var(--primary-dark);">
+            Compare e
+            Economize
+        </h1>
+        <p style="color: var(--text-sec); margin-bottom: 2rem;">
+            Encontre os melhores preÃ§os nos supermercados de
+            Manaus
+        </p>
+        <div class="search-wrapper">
+            <div class="search-container">
+                <i class="fas fa-search search-icon">
+                </i>
+                <input class="search-input" id="busca-produto-destaque"
+                    placeholder="Procure por texto ou tire uma foto..." type="text" />
+                <button class="btn-camera-search" onclick="document.getElementById('input-camera-search').click()">
+                    <i class="fas fa-camera">
+                    </i>
+                </button>
+                <input accept="image/*" capture="environment" id="input-camera-search"
+                    onchange="processarFotoPesquisa(this)" style="display: none;" type="file" />
+            </div>
+            <div class="sugestoes-lista" id="sugestoes-lista">
+            </div>
+        </div>
+    </section>
+    <div class="stories-container">
+        <h3 class="section-title">
+            Escolha um Supermercado
+        </h3>
+        <div class="supermarket-filter-wrapper" id="supermarket-filters">
+            <div class="loading-spinner" style="width:30px; height:30px; border-width:3px">
+            </div>
+        </div>
+    </div>
+    <div class="filters-bar">
+        <div class="filters-scroll">
+            <label class="filter-chip active" id="chip-todos">
+                <input checked="" onchange="limparFiltrosCategoria(this)" type="checkbox" />
+                <span>
+                    Todos
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Alimentos" />
+                <span>
+                    <i class="fas fa-utensils">
+                    </i>
+                    Alimentos
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Bebidas" />
+                <span>
+                    <i class="fas fa-wine-bottle">
+                    </i>
+                    Bebidas
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Limpeza" />
+                <span>
+                    <i class="fas fa-broom">
+                    </i>
+                    Limpeza
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Higiene" />
+                <span>
+                    <i class="fas fa-pump-soap">
+                    </i>
+                    Higiene
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Carnes" />
+                <span>
+                    <i class="fas fa-drumstick-bite">
+                    </i>
+                    Carnes
+                </span>
+            </label>
+            <label class="filter-chip">
+                <input onchange="aplicarFiltros()" type="checkbox" value="Hortifruti" />
+                <span>
+                    <i class="fas fa-carrot">
+                    </i>
+                    Hortifruti
+                </span>
+            </label>
+        </div>
+        <select class="sort-select" id="ordenacao" onchange="aplicarFiltros()">
+            <option value="menor-preco">
+                Menor PreÃ§o
+            </option>
+            <option value="maior-economia">
+                Maior Economia
+            </option>
+            <option value="nome">
+                Nome (A-Z)
+            </option>
+        </select>
+    </div>
+    <div class="produtos-container" id="produtos-container">
+        <div class="loading-spinner">
+        </div>
+    </div>
+    <button class="fab-lista" id="btn-minha-lista">
+        <div class="fab-icon-area">
+            <i class="fas fa-shopping-basket">
+            </i>
+            <span class="fab-badge" id="contador-lista">
+                0
+            </span>
+        </div>
+        <div class="fab-info-area">
+            <span class="fab-label">
+                Minha Lista
+            </span>
+            <span class="fab-total" id="fab-total-display">
+                R$ 0,00
+            </span>
+        </div>
+        <div class="fab-arrow">
+            <i class="fas fa-chevron-up">
+            </i>
+        </div>
+    </button>
+    <!-- REMOVIDO: BotÃ£o flutuante da calculadora -->
+    <div class="modal-overlay" id="modal-lista">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title">
+                    Lista de Compras
+                </div>
+                <button id="btn-fechar-lista"
+                    style="background:none; border:none; font-size:1.2rem; cursor:pointer; color:var(--text-sec)">
+                    Ã—
+                </button>
+            </div>
+            <div class="modal-body" id="lista-compras">
+                <div style="text-align:center; padding:2rem; color:var(--text-sec)">
+                    <i class="fas fa-shopping-basket" style="font-size:3rem; opacity:0.3; margin-bottom:1rem">
+                    </i>
+                    <p>
+                        Sua lista estÃ¡ vazia.
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div
+                    style="display:flex; justify-content:space-between; margin-bottom:1rem; font-weight:700; font-size:1.2rem">
+                    <span>
+                        Total Estimado:
+                    </span>
+                    <span id="total-lista" style="color:var(--primary)">
+                        R$ 0,00
+                    </span>
+                </div>
+                <button class="btn-comparar-full" onclick="simularRancho()">
+                    <i class="fas fa-search-dollar">
+                    </i>
+                    Onde fica mais barato?
+                </button>
+                <button class="btn-primary-full" id="btn-guardar-lista">
+                    <i class="fas fa-save">
+                    </i>
+                    Salvar Lista no HistÃ³rico
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="modal-ranking">
+        <div class="modal-rank-card">
+            <div class="rank-header">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <h3 style="font-size:1.2rem">
+                        <i class="fas fa-trophy">
+                        </i>
+                        Melhor OpÃ§Ã£o
+                    </h3>
+                    <button onclick="fecharRanking()"
+                        style="background:none; border:none; color:white; font-size:1.5rem; cursor:pointer">
+                        Ã—
+                    </button>
+                </div>
+                <p style="font-size:0.9rem; opacity:0.9; margin-top:5px">
+                    Calculamos o total da sua lista
+                    em cada
+                    mercado.
+                </p>
+            </div>
+            <div class="rank-list" id="lista-ranking">
+                <div style="text-align:center; padding:2rem">
+                    <i class="fas fa-circle-notch fa-spin" style="font-size:2rem; color:var(--primary)">
+                    </i>
+                    <p>
+                        Analisando preÃ§os...
+                    </p>
+                </div>
+            </div>
+            <div style="padding:1rem; text-align:center; font-size:0.8rem; color:var(--text-sec); background:white">
+                * Itens nÃ£o encontrados em um mercado sÃ£o calculados usando o preÃ§o mÃ©dio da regiÃ£o.
+            </div>
+        </div>
+    </div>
+    <div class="toast" id="toast">
+        <i class="fas fa-check-circle" style="color: var(--success)">
+        </i>
+        <span id="toast-message">
+            Produto adicionado!
+        </span>
+    </div>
+    <div class="chat-window" id="chef-window">
+        <div class="chat-header">
+            <span>
+                <i class="fas fa-utensils">
+                </i>
+                Chef TÃ¡ Barato LÃ¡?
+            </span>
+            <button onclick="toggleChat()"
+                style="background:none; border:none; color:white; font-size:1.2rem; cursor:pointer">
+                Ã—
+            </button>
+        </div>
+        <div class="chat-body" id="chat-content">
+            <div class="msg-bot">
+                OlÃ¡! Sou seu assistente culinÃ¡rio. ðŸ¥—
+                <br />
+                Monte sua lista de compras e clique no botÃ£o abaixo para eu sugerir receitas com o que
+                vocÃª escolheu!
+            </div>
+        </div>
+        <div class="chat-footer">
+            <button class="btn-ask-chef" onclick="pedirReceita()">
+                <i class="fas fa-magic">
+                </i>
+                Sugerir Receita com Minha Lista
+            </button>
+        </div>
+    </div>
+    <!-- REMOVIDO: BotÃ£o de AÃ§Ã£o Flutuante (FAB) de Alerta de PreÃ§o -->
+    <div class="modal-overlay" id="modal-detalhes-produto" onclick="fecharDetalhesProduto(event)">
+        <div class="modal-content-produto">
+            <div class="modal-header-produto">
+                <h3 id="modal-produto-nome">
+                    Detalhes do Produto
+                </h3>
+                <button class="modal-close" onclick="fecharDetalhesProduto()">
+                    <i class="fas fa-times">
+                    </i>
+                </button>
+            </div>
+            <div class="modal-details-body">
+                <div class="product-info-section">
+                    <div class="product-info-img">
+                        <i class="fas fa-shopping-basket">
+                        </i>
+                    </div>
+                    <div class="product-info-text">
+                        <h4 id="modal-prod-unidade">
+                        </h4>
+                        <p id="modal-prod-categoria">
+                        </p>
+                        <p id="modal-prod-codbarra" style="font-size:0.8rem;">
+                        </p>
+                    </div>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 0.8rem; font-size: 1.1rem;">
+                        ComparaÃ§Ã£o de PreÃ§os em
+                        Supermercados
+                    </h4>
+                    <div class="market-list" id="market-list-container">
+                    </div>
+                </div>
+                <div class="anti-gimmick-tools">
+                    <h5>
+                        Ferramentas Ãšteis (Anti-Pegadinha)
+                    </h5>
+                    <div class="tools-btn-group">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal-overlay" id="modal-select-filial">
+        <div class="modal-card" style="max-width: 400px; text-align: center;">
+            <div class="modal-header" style="justify-content: center; border: none; padding-bottom: 0;">
+                <h3 class="modal-title" id="titulo-rede-selecao">
+                    Selecione a Unidade
+                </h3>
+            </div>
+            <p style="color:var(--text-sec); margin-bottom: 1.5rem;">
+                Escolha qual loja desta rede vocÃª
+                deseja comparar.
+            </p>
+            <div id="lista-filiais-selecao" style="display: flex; flex-direction: column; gap: 10px;">
+            </div>
+            <button onclick="document.getElementById('modal-select-filial').classList.remove('ativo')"
+                style="margin-top: 1.5rem; background: none; border: none; color: var(--text-sec); cursor: pointer;">
+                Cancelar
+            </button>
+        </div>
+    </div>
+    <script src="js/compareaqui.js">
+    </script>
+</body>
+
+</html>
+
