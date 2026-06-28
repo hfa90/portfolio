@@ -2,7 +2,7 @@
 
 ## Visao geral
 
-Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `index.html`, usa `styles.css` para o visual e concentra as regras em `app.js`. O estado operacional e salvo no `localStorage` do navegador, com autenticacao Supabase obrigatoria na tela inicial e um `schema.sql` preparado para evolucao do backend.
+Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `index.html`, usa `styles.css` para o visual e concentra as regras em `app.js`. O Supabase e a fonte principal dos dados operacionais, com autenticacao obrigatoria na tela inicial e um `schema.sql` preparado para evolucao do backend.
 
 ## Arquivos principais
 
@@ -55,7 +55,7 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 
 ## Persistencia
 
-O app usa `localStorage` com a chave `clinicou_state_v3` como cache local e fallback. Quando existe sessao Supabase e as tabelas estao criadas/expostas pela Data API, os formularios gravam no banco e recarregam os dados remotos.
+O app usa o Supabase como fonte principal dos dados operacionais da clinica. O `localStorage` guarda apenas metadados de sessao nao sensiveis, como a clinica ativa e dados basicos do tenant, na chave `clinicou_session_v1`. Chaves locais antigas com dados completos sao removidas na inicializacao.
 
 ## Supabase
 

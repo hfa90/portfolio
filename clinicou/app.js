@@ -1,6 +1,7 @@
 const SUPABASE_URL = "https://yhftbfpkuchxfblhfvva.supabase.co";
 const SUPABASE_KEY = "sb_publishable_paT5SW04fvUuJzui4t5COQ_nVI9gJxY";
-const STORAGE_KEY = "clinicou_state_v3";
+const SESSION_KEY = "clinicou_session_v1";
+const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
 
 const statusLabel = {
   scheduled: "Agendado",
@@ -175,6 +176,8 @@ let activeClinicId = "";
 let siteDialogResolve = null;
 let signaturePad = null;
 let currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
+let availableClinics = [];
+let currentMembership = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -189,12 +192,45 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function loadState() {
   try {
-    const savedV3 = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (savedV3) return normalizeState(savedV3);
-    const savedV2 = JSON.parse(localStorage.getItem("clinicou_state_v2"));
-    return normalizeState(savedV2 || {});
+    LEGACY_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || "{}");
+    activeClinicId = isUuid(session.activeClinicId) ? session.activeClinicId : "";
+    return normalizeState({
+      tenant: {
+        id: session.tenant?.id || "",
+        name: session.tenant?.name || "Clinicou",
+        plan: session.tenant?.plan || "basic",
+        settings: session.tenant?.settings || {}
+      },
+      insurancePlans: [],
+      patients: [],
+      employees: [],
+      professionals: [],
+      services: [],
+      appointments: [],
+      finance: [],
+      records: [],
+      campaigns: [],
+      audit: [],
+      commissions: [],
+      guides: []
+    });
   } catch {
-    return structuredClone(seedState);
+    return normalizeState({
+      tenant: { id: "", name: "Clinicou", plan: "basic" },
+      insurancePlans: [],
+      patients: [],
+      employees: [],
+      professionals: [],
+      services: [],
+      appointments: [],
+      finance: [],
+      records: [],
+      campaigns: [],
+      audit: [],
+      commissions: [],
+      guides: []
+    });
   }
 }
 
@@ -278,7 +314,13 @@ function normalizeEmployees(employees, professionals) {
 }
 
 function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const tenant = {
+    id: state.tenant.id,
+    name: state.tenant.name,
+    plan: state.tenant.plan,
+    settings: state.tenant.settings
+  };
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ activeClinicId: currentClinicId(), tenant }));
 }
 
 function addDays(days) {
@@ -391,6 +433,21 @@ function wireEvents() {
   byId("availabilityDoctor")?.addEventListener("change", loadAvailabilityForm);
 
   byId("tenantForm")?.addEventListener("submit", submitTenantName);
+  byId("clinicSwitcher")?.addEventListener("change", async (event) => {
+    const selected = availableClinics.find((item) => item.clinic.id === event.target.value);
+    if (!selected) return;
+    activeClinicId = selected.clinic.id;
+    currentMembership = selected.membership;
+    state.tenant = {
+      ...state.tenant,
+      ...selected.clinic,
+      settings: { ...seedState.tenant.settings, ...(selected.clinic.settings || {}) }
+    };
+    await loadClinicTables();
+    saveState();
+    renderAll();
+    toast("Clinica ativa alterada.");
+  });
   byId("financeSettingsForm")?.addEventListener("submit", submitFinanceSettings);
   byId("exportBackup")?.addEventListener("click", exportBackup);
   byId("importBackupButton")?.addEventListener("click", () => byId("importBackupFile").click());
@@ -403,6 +460,15 @@ function wireEvents() {
   byId("openWhatsappMessage")?.addEventListener("click", openWhatsappMessage);
   byId("messageForm")?.addEventListener("submit", submitMessage);
   byId("loginButton")?.addEventListener("click", () => auth());
+  byId("setupClinicName")?.addEventListener("input", (event) => {
+    const slug = byId("setupClinicSlug");
+    if (slug && !slug.dataset.touched) slug.value = slugify(event.target.value);
+  });
+  byId("setupClinicSlug")?.addEventListener("input", (event) => {
+    event.target.dataset.touched = "true";
+    event.target.value = slugify(event.target.value);
+  });
+  byId("createClinicButton")?.addEventListener("click", createClinicFromSetup);
 
   byId("guideForm")?.addEventListener("submit", submitGuide);
   byId("guideProcedure")?.addEventListener("input", () => renderSmartSuggestions("guideProcedure"));
@@ -432,18 +498,17 @@ async function enforceAuth() {
   const { data } = await supabaseClient.auth.getSession();
   if (data?.session) {
     currentUser.email = data.session.user?.email || "";
-    unlockAuth();
-    await loadRemoteSnapshot();
+    const loaded = await loadRemoteSnapshot();
+    if (loaded) unlockAuth();
     return;
   }
 
   lockAuth("Entre com uma conta autorizada para acessar o sistema.");
-  supabaseClient.auth.onAuthStateChange((_event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     if (session) {
       currentUser.email = session.user?.email || "";
-      unlockAuth();
-      resolveCurrentUser();
-      applyAccessControl();
+      const loaded = await loadRemoteSnapshot();
+      if (loaded) unlockAuth();
     }
   });
 }
@@ -451,6 +516,8 @@ async function enforceAuth() {
 function lockAuth(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
+  byId("authForm").hidden = false;
+  byId("clinicSetupForm").hidden = true;
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Acesso Supabase obrigatorio";
 }
@@ -458,7 +525,18 @@ function lockAuth(message) {
 function unlockAuth() {
   document.body.classList.remove("auth-locked");
   byId("authModal").classList.remove("open");
+  byId("authForm").hidden = false;
+  byId("clinicSetupForm").hidden = true;
   byId("syncState").textContent = "Online com Supabase";
+}
+
+function lockClinicSetup(message) {
+  document.body.classList.add("auth-locked");
+  byId("authModal").classList.add("open");
+  byId("authForm").hidden = true;
+  byId("clinicSetupForm").hidden = false;
+  byId("authFeedback").textContent = message;
+  byId("syncState").textContent = "Criar clinica inicial";
 }
 
 function openView(view) {
@@ -507,6 +585,7 @@ function applyAccessControl() {
 
 function resolveCurrentUser() {
   const email = currentUser.email || "";
+  const membershipUser = accessFromMembership(currentMembership);
   const employee = state.employees.find((item) => item.email && item.email.toLowerCase() === email.toLowerCase());
   if (employee) {
     const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
@@ -518,9 +597,26 @@ function resolveCurrentUser() {
       professionalId: employee.professionalId || "",
       permissions: Array.isArray(employee.permissions) ? employee.permissions : rolePerms
     };
+  } else if (email && membershipUser) {
+    currentUser = { email, ...membershipUser };
   } else if (!email) {
     currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
   }
+}
+
+function accessFromMembership(membership) {
+  if (!membership) return null;
+  const role = membership.role || "receptionist";
+  const appRole = role === "professional" ? "medical" : role === "owner" || role === "admin" ? "admin" : "receptionist";
+  const rolePerms = state.tenant.settings?.rolePermissions?.[appRole] || [];
+  const customScreens = membership.permissions?.screens;
+  const fallbackScreens = role === "billing" ? ["financeiro"] : rolePerms;
+  return {
+    accessRole: appRole,
+    employeeId: "",
+    professionalId: "",
+    permissions: Array.isArray(customScreens) ? customScreens : fallbackScreens
+  };
 }
 
 function canAccess(view) {
@@ -536,6 +632,7 @@ function firstAllowedView() {
 
 function renderAll() {
   byId("tenantName").textContent = state.tenant.name;
+  renderClinicSwitcher();
   syncProfessionalsFromEmployees();
   resolveCurrentUser();
   populateSelects();
@@ -571,6 +668,16 @@ function renderAll() {
   updateEmployeeCrmRequirement();
   applyAccessControl();
   lucide.createIcons();
+}
+
+function renderClinicSwitcher() {
+  const switcher = byId("clinicSwitcher");
+  if (!switcher) return;
+  switcher.innerHTML = availableClinics
+    .map((item) => `<option value="${escapeAttr(item.clinic.id)}">${escapeHtml(item.clinic.name)}</option>`)
+    .join("");
+  switcher.value = currentClinicId();
+  switcher.hidden = availableClinics.length <= 1;
 }
 
 function populateSelects() {
@@ -1648,32 +1755,74 @@ async function auth() {
     const { data: sessionData } = await supabaseClient.auth.getSession();
     currentUser.email = sessionData?.session?.user?.email || data.email;
     feedback.textContent = "Acesso confirmado.";
-    await loadRemoteSnapshot();
-    unlockAuth();
-    toast("Autenticacao Supabase concluida.");
+    const loaded = await loadRemoteSnapshot();
+    if (loaded) {
+      unlockAuth();
+      toast("Autenticacao Supabase concluida.");
+    }
   } catch (error) {
     feedback.textContent = error.message || "Nao foi possivel autenticar.";
   }
 }
 
 async function loadRemoteSnapshot() {
-  if (!supabaseClient) return;
-  const { data: clinics, error } = await supabaseClient.from("clinics").select("id,name,plan,settings").limit(1);
+  if (!supabaseClient) return false;
+  const { data: memberships, error } = await supabaseClient
+    .from("clinic_memberships")
+    .select("clinic_id,role,status,permissions,clinics(id,name,slug,plan,status,settings)")
+    .eq("status", "active");
   if (error) {
     toast(`Nao foi possivel carregar a clinica: ${error.message}`);
+    return false;
+  }
+  availableClinics = (memberships || []).map((membership) => ({
+    membership,
+    clinic: Array.isArray(membership.clinics) ? membership.clinics[0] : membership.clinics
+  })).filter((item) => item.clinic?.id);
+
+  if (!availableClinics.length) {
+    remoteReady = false;
+    lockClinicSetup("Sua conta ainda nao esta vinculada a uma clinica. Crie a clinica inicial para continuar.");
+    return false;
+  }
+
+  const selected = availableClinics.find((item) => item.clinic.id === activeClinicId) || availableClinics[0];
+  activeClinicId = selected.clinic.id;
+  currentMembership = selected.membership;
+  state.tenant = {
+    ...state.tenant,
+    ...selected.clinic,
+    settings: { ...state.tenant.settings, ...(selected.clinic.settings || {}) }
+  };
+  remoteReady = true;
+  await loadClinicTables();
+  saveState();
+  renderAll();
+  return true;
+}
+
+async function createClinicFromSetup() {
+  if (!supabaseClient) return;
+  const name = byId("setupClinicName")?.value.trim();
+  const slug = slugify(byId("setupClinicSlug")?.value || name);
+  const feedback = byId("authFeedback");
+  if (!name || !slug) {
+    feedback.textContent = "Informe o nome da clinica e um identificador valido.";
     return;
   }
-  if (clinics?.[0]) {
-    activeClinicId = clinics[0].id;
-    state.tenant = {
-      ...state.tenant,
-      ...clinics[0],
-      settings: { ...state.tenant.settings, ...(clinics[0].settings || {}) }
-    };
-    remoteReady = true;
-    await loadClinicTables();
-    saveState();
-    renderAll();
+
+  feedback.textContent = "Criando clinica...";
+  const { data, error } = await supabaseClient.rpc("create_clinic", { p_name: name, p_slug: slug });
+  if (error) {
+    feedback.textContent = error.message || "Nao foi possivel criar a clinica.";
+    return;
+  }
+
+  activeClinicId = data?.id || "";
+  const loaded = await loadRemoteSnapshot();
+  if (loaded) {
+    unlockAuth();
+    toast("Clinica criada e vinculada a sua conta.");
   }
 }
 
@@ -2610,6 +2759,10 @@ function digitsOnly(value) {
 
 function normalizeName(value) {
   return String(value || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+}
+
+function slugify(value) {
+  return normalizeName(value).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
 }
 
 function normalizeSearch(value) {
