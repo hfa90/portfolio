@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://yhftbfpkuchxfblhfvva.supabase.co";
 const SUPABASE_KEY = "sb_publishable_paT5SW04fvUuJzui4t5COQ_nVI9gJxY";
 const SESSION_KEY = "clinicou_session_v1";
 const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
+const TRIAL_DAYS = 30;
 const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
 
 const statusLabel = {
@@ -180,8 +181,10 @@ let currentUser = { email: "", accessRole: "admin", employeeId: "", professional
 let availableClinics = [];
 let currentMembership = null;
 let currentSubscription = null;
-let trialWarningTimer = null;
 let currentSignupMetadata = {};
+let currentAuthUser = null;
+let trialCountdownTimer = null;
+let trialWarningTimer = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -464,7 +467,19 @@ function wireEvents() {
   byId("copyMessageTemplate")?.addEventListener("click", () => copyTextFrom("messagePreview"));
   byId("openWhatsappMessage")?.addEventListener("click", openWhatsappMessage);
   byId("messageForm")?.addEventListener("submit", submitMessage);
+  byId("authForm")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const mode = byId("signupButton")?.hidden ? "login" : "signup";
+    mode === "signup" ? signUpTrial() : auth();
+  });
   byId("loginButton")?.addEventListener("click", () => auth());
+  byId("signupButton")?.addEventListener("click", signUpTrial);
+  byId("resendConfirmationButton")?.addEventListener("click", resendConfirmationEmail);
+  byId("logoutButton")?.addEventListener("click", signOut);
+  byId("authPhone")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
+    button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
+  });
   byId("setupClinicName")?.addEventListener("input", (event) => {
     const slug = byId("setupClinicSlug");
     if (slug && !slug.dataset.touched) slug.value = slugify(event.target.value);
@@ -500,24 +515,37 @@ async function enforceAuth() {
     return;
   }
 
-  const { data } = await supabaseClient.auth.getSession();
-  if (data?.session) {
-    currentUser.email = data.session.user?.email || "";
-    currentSignupMetadata = data.session.user?.user_metadata || {};
-    const loaded = await loadRemoteSnapshot();
-    if (loaded) unlockAuth();
-    return;
-  }
-
-  lockAuth("Entre com uma conta autorizada para acessar o sistema.");
-  supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+    if (event === "SIGNED_OUT") {
+      currentAuthUser = null;
+      currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
+      currentSignupMetadata = {};
+      currentSubscription = null;
+      remoteReady = false;
+      stopTrialTimers();
+      lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
+      return;
+    }
     if (session) {
+      currentAuthUser = session.user || null;
       currentUser.email = session.user?.email || "";
       currentSignupMetadata = session.user?.user_metadata || {};
       const loaded = await loadRemoteSnapshot();
       if (loaded) unlockAuth();
     }
   });
+
+  const { data } = await supabaseClient.auth.getSession();
+  if (data?.session) {
+    currentAuthUser = data.session.user || null;
+    currentUser.email = currentAuthUser?.email || "";
+    currentSignupMetadata = currentAuthUser?.user_metadata || {};
+    const loaded = await loadRemoteSnapshot();
+    if (loaded) unlockAuth();
+    return;
+  }
+
+  lockAuth("Entre com uma conta autorizada para acessar o sistema.");
 }
 
 function lockAuth(message) {
@@ -527,6 +555,8 @@ function lockAuth(message) {
   byId("clinicSetupForm").hidden = true;
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Acesso Supabase obrigatorio";
+  setAuthMode("login");
+  stopTrialTimers();
 }
 
 function unlockAuth() {
@@ -535,6 +565,7 @@ function unlockAuth() {
   byId("authForm").hidden = false;
   byId("clinicSetupForm").hidden = true;
   byId("syncState").textContent = "Online com Supabase";
+  startTrialTimers();
 }
 
 function lockClinicSetup(message) {
@@ -550,6 +581,7 @@ function lockClinicSetup(message) {
   }
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Criar clinica inicial";
+  stopTrialTimers();
 }
 
 function openView(view) {
@@ -671,6 +703,7 @@ function renderAll() {
   renderFinanceSettings();
   renderAccessControl();
   renderDoctorPortal();
+  renderTrialStatus();
   renderSmartSuggestions("complaint");
   renderSmartSuggestions("vitals");
   renderSmartSuggestions("conduct");
@@ -680,37 +713,7 @@ function renderAll() {
   updateCommissionPreview();
   updateEmployeeCrmRequirement();
   applyAccessControl();
-  scheduleTrialWarning();
   lucide.createIcons();
-}
-
-function scheduleTrialWarning() {
-  if (trialWarningTimer) {
-    clearInterval(trialWarningTimer);
-    trialWarningTimer = null;
-  }
-  if (!shouldWarnTrialEnding()) return;
-  maybeShowTrialWarning();
-  trialWarningTimer = setInterval(maybeShowTrialWarning, TRIAL_WARNING_INTERVAL_MS);
-}
-
-function shouldWarnTrialEnding() {
-  if (!currentSubscription || currentSubscription.status !== "trialing" || !currentSubscription.trialEndsAt) return false;
-  const remaining = new Date(currentSubscription.trialEndsAt).getTime() - Date.now();
-  return remaining > 0 && remaining <= 24 * 60 * 60 * 1000;
-}
-
-function maybeShowTrialWarning() {
-  if (!shouldWarnTrialEnding()) return;
-  const key = `clinicou_trial_warning_${currentClinicId()}`;
-  const lastShown = Number(localStorage.getItem(key) || 0);
-  if (Date.now() - lastShown < TRIAL_WARNING_INTERVAL_MS) return;
-  localStorage.setItem(key, String(Date.now()));
-  const remainingHours = Math.max(1, Math.ceil((new Date(currentSubscription.trialEndsAt).getTime() - Date.now()) / 3600000));
-  siteAlert(
-    `Seu trial do Clinicou termina em aproximadamente ${remainingHours} hora(s). Escolha um plano mensal ou anual em planos.html para manter o acesso da clinica sem interrupcao.`,
-    "Trial terminando"
-  );
 }
 
 function renderClinicSwitcher() {
@@ -1791,13 +1794,18 @@ async function auth() {
   const form = byId("authForm");
   const data = Object.fromEntries(new FormData(form));
   const feedback = byId("authFeedback");
+  if (!data.email || !data.password) {
+    feedback.textContent = "Informe e-mail e senha para entrar.";
+    return;
+  }
   feedback.textContent = "Conectando...";
   try {
     const { error } = await supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password });
     if (error) throw error;
     const { data: sessionData } = await supabaseClient.auth.getSession();
-    currentUser.email = sessionData?.session?.user?.email || data.email;
-    currentSignupMetadata = sessionData?.session?.user?.user_metadata || {};
+    currentAuthUser = sessionData?.session?.user || null;
+    currentUser.email = currentAuthUser?.email || data.email;
+    currentSignupMetadata = currentAuthUser?.user_metadata || {};
     feedback.textContent = "Acesso confirmado.";
     const loaded = await loadRemoteSnapshot();
     if (loaded) {
@@ -1805,8 +1813,107 @@ async function auth() {
       toast("Autenticacao Supabase concluida.");
     }
   } catch (error) {
-    feedback.textContent = error.message || "Nao foi possivel autenticar.";
+    const message = error.message || "Nao foi possivel autenticar.";
+    feedback.textContent = message.includes("Email not confirmed")
+      ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
+      : message;
   }
+}
+
+async function signUpTrial() {
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = byId("authForm");
+  const data = Object.fromEntries(new FormData(form));
+  const feedback = byId("authFeedback");
+  if (!data.email || !data.password || !data.clinicName || !data.ownerName) {
+    feedback.textContent = "Preencha clinica, seu nome, e-mail e senha para iniciar o trial.";
+    return;
+  }
+  feedback.textContent = "Criando trial e enviando confirmacao...";
+  const emailRedirectTo = new URL("./index.html", window.location.href).toString();
+  const { error } = await supabaseClient.auth.signUp({
+    email: data.email,
+    password: data.password,
+    options: {
+      emailRedirectTo,
+      data: {
+        full_name: data.ownerName,
+        clinic_name: data.clinicName,
+        phone: data.phone || "",
+        trial_days: TRIAL_DAYS,
+        source: "clinicou_app"
+      }
+    }
+  });
+  if (error) {
+    feedback.textContent = error.message || "Nao foi possivel criar o trial.";
+    return;
+  }
+  feedback.textContent = "Cadastro criado. Confirme o e-mail para liberar o acesso. Se nao chegar em alguns minutos, use Reenviar e-mail.";
+  toast("Enviamos o e-mail de confirmacao do trial.");
+}
+
+async function resendConfirmationEmail() {
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = byId("authForm");
+  const data = Object.fromEntries(new FormData(form));
+  const feedback = byId("authFeedback");
+  if (!data.email) {
+    feedback.textContent = "Informe o e-mail para reenviar a confirmacao.";
+    return;
+  }
+  feedback.textContent = "Reenviando confirmacao...";
+  const emailRedirectTo = new URL("./index.html", window.location.href).toString();
+  const { error } = await supabaseClient.auth.resend({
+    type: "signup",
+    email: data.email,
+    options: { emailRedirectTo }
+  });
+  feedback.textContent = error
+    ? (error.message || "Nao foi possivel reenviar. Confira as configuracoes de Auth/SMTP no Supabase.")
+    : "E-mail reenviado. Confira a caixa de entrada, spam e promocoes.";
+}
+
+async function signOut() {
+  if (!supabaseClient) return;
+  const confirmed = await siteConfirm("Deseja sair do Clinicou e voltar para a tela de login?", "Sair");
+  if (!confirmed) return;
+  await supabaseClient.auth.signOut();
+  localStorage.removeItem(SESSION_KEY);
+  activeClinicId = "";
+  currentMembership = null;
+  currentSubscription = null;
+  availableClinics = [];
+  remoteReady = false;
+  stopTrialTimers();
+  window.location.hash = "login";
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  lockAuth("Voce saiu. Entre novamente para acessar o sistema.");
+}
+
+function setAuthMode(mode = "login") {
+  const signup = mode === "signup";
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.authMode === mode);
+  });
+  if (byId("signupFields")) byId("signupFields").hidden = !signup;
+  if (byId("loginButton")) byId("loginButton").hidden = signup;
+  if (byId("signupButton")) byId("signupButton").hidden = !signup;
+  if (byId("authTitle")) byId("authTitle").textContent = signup ? "Comece seu trial" : "Entre na sua clinica";
+  const password = byId("authForm")?.elements?.password;
+  if (password) password.autocomplete = signup ? "new-password" : "current-password";
+  if (byId("authFeedback")) {
+    byId("authFeedback").textContent = signup
+      ? "Crie o acesso e confirme o e-mail para liberar o trial de 30 dias."
+      : "Entre com uma conta confirmada. Se o e-mail nao chegou, use o reenvio.";
+  }
+  lucide.createIcons();
 }
 
 async function loadRemoteSnapshot() {
@@ -1871,32 +1978,6 @@ async function createClinicFromSetup() {
   }
 }
 
-async function loadSubscriptionStatus() {
-  currentSubscription = null;
-  const clinicId = currentClinicId();
-  if (!supabaseClient || !clinicId) return;
-  const { data, error } = await supabaseClient
-    .from("clinic_subscriptions")
-    .select("id,plan_id,status,trial_ends_at,current_period_ends_at")
-    .eq("clinic_id", clinicId)
-    .maybeSingle();
-  if (error) {
-    toast(`Nao foi possivel carregar o trial: ${error.message}`);
-    return;
-  }
-  currentSubscription = data ? fromRemoteSubscription(data) : null;
-}
-
-function fromRemoteSubscription(row) {
-  return {
-    id: row.id,
-    planId: row.plan_id,
-    status: row.status,
-    trialEndsAt: row.trial_ends_at,
-    currentPeriodEndsAt: row.current_period_ends_at
-  };
-}
-
 async function loadClinicTables() {
   const clinicId = currentClinicId();
   if (!clinicId) return;
@@ -1933,6 +2014,134 @@ async function loadClinicTables() {
   if (records) state.records = records.map(fromRemoteRecord);
   if (commissions) state.commissions = commissions.map(fromRemoteCommission);
   if (guides) state.guides = guides.map(fromRemoteGuide);
+}
+
+async function loadSubscriptionStatus() {
+  currentSubscription = null;
+  const clinicId = currentClinicId();
+  if (!supabaseClient || !clinicId) return;
+  const { data, error } = await supabaseClient
+    .from("clinic_subscriptions")
+    .select("id,plan_id,status,trial_ends_at,current_period_ends_at")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) {
+    currentSubscription = fallbackTrialSubscription();
+    renderTrialStatus(currentSubscription ? "" : "Trial indisponivel");
+    return;
+  }
+  currentSubscription = data ? fromRemoteSubscription(data) : fallbackTrialSubscription();
+}
+
+function fromRemoteSubscription(row) {
+  return {
+    id: row.id,
+    planId: row.plan_id,
+    status: row.status,
+    trialEndsAt: row.trial_ends_at,
+    currentPeriodEndsAt: row.current_period_ends_at
+  };
+}
+
+function fallbackTrialSubscription() {
+  const createdAt = currentAuthUser?.created_at ? new Date(currentAuthUser.created_at) : null;
+  if (!createdAt || Number.isNaN(createdAt.getTime())) return null;
+  const days = Number(currentSignupMetadata.trial_days || TRIAL_DAYS);
+  return {
+    id: "",
+    planId: currentSignupMetadata.selected_plan || "trial",
+    status: "trialing",
+    trialEndsAt: new Date(createdAt.getTime() + days * 24 * 60 * 60 * 1000).toISOString(),
+    currentPeriodEndsAt: ""
+  };
+}
+
+function startTrialTimers() {
+  stopTrialTimers();
+  renderTrialStatus();
+  trialCountdownTimer = setInterval(renderTrialStatus, 1000);
+  scheduleTrialWarning();
+}
+
+function stopTrialTimers() {
+  if (trialCountdownTimer) {
+    clearInterval(trialCountdownTimer);
+    trialCountdownTimer = null;
+  }
+  if (trialWarningTimer) {
+    clearInterval(trialWarningTimer);
+    trialWarningTimer = null;
+  }
+}
+
+function renderTrialStatus(fallbackText = "") {
+  const wrapper = byId("trialStatus");
+  const countdown = byId("trialCountdown");
+  if (!wrapper || !countdown) return;
+
+  const remaining = trialRemainingMs();
+  wrapper.classList.remove("trial-ok", "trial-warning", "trial-ended", "trial-active");
+
+  if (!currentSubscription) {
+    countdown.textContent = fallbackText || "Sem trial ativo";
+    wrapper.classList.add("trial-ended");
+    return;
+  }
+
+  if (currentSubscription.status === "active") {
+    countdown.textContent = "Plano ativo";
+    wrapper.classList.add("trial-active");
+    return;
+  }
+
+  if (currentSubscription.status !== "trialing" || remaining <= 0) {
+    countdown.textContent = "Trial encerrado";
+    wrapper.classList.add("trial-ended");
+    return;
+  }
+
+  countdown.textContent = formatTrialRemaining(remaining);
+  wrapper.classList.add(remaining <= 24 * 60 * 60 * 1000 ? "trial-warning" : "trial-ok");
+}
+
+function trialRemainingMs() {
+  if (!currentSubscription?.trialEndsAt) return 0;
+  return new Date(currentSubscription.trialEndsAt).getTime() - Date.now();
+}
+
+function formatTrialRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function scheduleTrialWarning() {
+  if (trialWarningTimer) {
+    clearInterval(trialWarningTimer);
+    trialWarningTimer = null;
+  }
+  if (!shouldWarnTrialEnding()) return;
+  maybeShowTrialWarning();
+  trialWarningTimer = setInterval(maybeShowTrialWarning, TRIAL_WARNING_INTERVAL_MS);
+}
+
+function shouldWarnTrialEnding() {
+  const remaining = trialRemainingMs();
+  return currentSubscription?.status === "trialing" && remaining > 0 && remaining <= 24 * 60 * 60 * 1000;
+}
+
+function maybeShowTrialWarning() {
+  if (!shouldWarnTrialEnding()) return;
+  const key = `clinicou_trial_warning_${currentClinicId() || currentUser.email}`;
+  const lastShown = Number(localStorage.getItem(key) || 0);
+  if (Date.now() - lastShown < TRIAL_WARNING_INTERVAL_MS) return;
+  localStorage.setItem(key, String(Date.now()));
+  const remainingHours = Math.max(1, Math.ceil(trialRemainingMs() / 3600000));
+  siteAlert(`Seu trial termina em aproximadamente ${remainingHours} hora(s). Escolha um plano para manter o acesso sem interrupcao.`, "Trial terminando");
 }
 
 async function remoteSelect(table, columns, clinicId) {
