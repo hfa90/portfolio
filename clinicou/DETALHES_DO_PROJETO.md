@@ -10,6 +10,9 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 - `styles.css`: design system, layout responsivo, tabelas, cards, formularios, modais e estados visuais.
 - `app.js`: dados iniciais, persistencia local, renderizacao das telas, mascaras, regras de cadastro, templates e exportacoes.
 - `supabase/schema.sql`: modelo de banco, RLS, grants, auditoria, storage e tabelas principais para Supabase.
+- `package.json`: scripts de verificacao local e testes.
+- `.github/workflows/verify.yml`: CI inicial para validar JavaScript e testes estaticos.
+- `docs/`: guias de ambientes, migrations e roadmap SaaS.
 
 ## Modulos existentes
 
@@ -61,6 +64,8 @@ O app usa o Supabase como fonte principal dos dados operacionais da clinica. O `
 
 O arquivo `supabase/schema.sql` contem tabelas para clinicas, membros, pacientes, profissionais, funcionarios, servicos, agenda, prontuarios, financeiro, comissoes, templates de notificacao, auditoria e storage privado de documentos.
 
+Tambem ha base inicial para SaaS escalavel: planos, assinaturas, tarefas de onboarding, conexoes de integracao, regras de automacao, templates de documentos e eventos analiticos.
+
 Mudancas recentes no schema:
 
 - `patients.cpf` e `patients.whatsapp`.
@@ -73,6 +78,8 @@ Mudancas recentes no schema:
 - `medical_records.payload` guarda documentos gerados no prontuario.
 - `commissions.settled_at` registra baixa de comissao.
 - RLS, grants, gatilho de `updated_at` e auditoria para `staff_members`.
+- Tabelas `billing_plans`, `clinic_subscriptions`, `onboarding_tasks`, `integration_connections`, `automation_rules`, `document_templates` e `analytics_events`.
+- Edge Functions iniciais para billing webhook, envio WhatsApp, renderizacao de documentos e ingestao de analytics.
 
 ## Observacoes importantes
 
