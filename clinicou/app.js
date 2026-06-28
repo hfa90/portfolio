@@ -19,6 +19,12 @@ const statusLabel = {
   expense: "Saida",
   active: "Ativo",
   suspended: "Suspenso",
+  pending: "Pendente",
+  settled: "Pago",
+  document: "Documento",
+  certificate: "Atestado",
+  prescription: "Receita",
+  guide: "Guia",
   doctor: "Medico",
   nurse: "Enfermeiro",
   assistant: "Assistente",
@@ -31,7 +37,17 @@ const dateFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-dig
 const todayIso = new Date().toISOString().slice(0, 10);
 
 const seedState = {
-  tenant: { id: "clinic", name: "Clinica Aurora", plan: "Premium", mrr: 1290 },
+  tenant: {
+    id: "clinic",
+    name: "Clinica Aurora",
+    plan: "Premium",
+    mrr: 1290,
+    settings: {
+      commissionEnabled: true,
+      commissionRule: "paid_on_settlement",
+      defaultCommission: 30
+    }
+  },
   insurancePlans: [
     { id: "ip1", name: "Particular", contact: "", active: true },
     { id: "ip2", name: "Unimed", contact: "(92) 3000-1000", active: true },
@@ -44,9 +60,9 @@ const seedState = {
     { id: "p4", name: "Joao Pedro", cpf: "092.538.160-80", phone: "(92) 98422-7764", email: "joao@email.com", risk: "low", insurance: "Particular", noShow: 7 }
   ],
   employees: [
-    { id: "e1", professionalId: "dr1", name: "Dra. Ana Beatriz", role: "doctor", crm: "CRM-AM 12345", specialty: "Clinica geral", phone: "(92) 98800-1100", email: "ana@clinica.com", commission: 35, start: "08:00", end: "17:00", status: "active" },
-    { id: "e2", professionalId: "dr2", name: "Dr. Marcos Lima", role: "doctor", crm: "CRM-AM 22334", specialty: "Odontologia", phone: "(92) 98800-2200", email: "marcos@clinica.com", commission: 40, start: "09:00", end: "18:00", status: "active" },
-    { id: "e3", professionalId: "dr3", name: "Dra. Helena Costa", role: "doctor", crm: "CRM-AM 33445", specialty: "Estetica", phone: "(92) 98800-3300", email: "helena@clinica.com", commission: 30, start: "10:00", end: "19:00", status: "active" },
+    { id: "e1", professionalId: "dr1", name: "Dra. Ana Beatriz", role: "doctor", crm: "CRM-AM 12345", specialty: "Clinica geral", phone: "(92) 98800-1100", email: "ana@clinica.com", commission: 35, start: "08:00", end: "17:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00" }] },
+    { id: "e2", professionalId: "dr2", name: "Dr. Marcos Lima", role: "doctor", crm: "CRM-AM 22334", specialty: "Odontologia", phone: "(92) 98800-2200", email: "marcos@clinica.com", commission: 40, start: "09:00", end: "18:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }] },
+    { id: "e3", professionalId: "dr3", name: "Dra. Helena Costa", role: "doctor", crm: "CRM-AM 33445", specialty: "Estetica", phone: "(92) 98800-3300", email: "helena@clinica.com", commission: 30, start: "10:00", end: "19:00", status: "active", availability: [{ days: [2, 3, 4, 5], start: "10:00", end: "19:00" }] },
     { id: "e4", name: "Beatriz Souza", role: "secretary", crm: "", specialty: "Recepcao", phone: "(92) 98800-4400", email: "recepcao@clinica.com", commission: 0, start: "08:00", end: "17:00", status: "active" }
   ],
   professionals: [
@@ -94,7 +110,9 @@ const seedState = {
   audit: [
     { id: "lg1", action: "Visualizacao de prontuario", actor: "Dra. Ana Beatriz", target: "Marina Lopes", at: "Hoje 08:14" },
     { id: "lg2", action: "Alteracao financeira", actor: "Admin", target: "Limpeza Rafael Nunes", at: "Hoje 09:02" }
-  ]
+  ],
+  commissions: [],
+  guides: []
 };
 
 let state = loadState();
@@ -106,6 +124,10 @@ let currentFinanceSearch = "";
 let editingPatientId = null;
 let editingEmployeeId = null;
 let editingInsurancePlanId = null;
+let remoteReady = false;
+let activeClinicId = "";
+let siteDialogResolve = null;
+let signaturePad = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -113,6 +135,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setDefaultDates();
   syncProfessionalsFromEmployees();
   renderAll();
+  initSignaturePad();
   lucide.createIcons();
   await enforceAuth();
 });
@@ -130,7 +153,11 @@ function loadState() {
 
 function normalizeState(saved) {
   const merged = { ...structuredClone(seedState), ...saved };
-  merged.tenant = { ...seedState.tenant, ...(saved.tenant || {}) };
+  merged.tenant = {
+    ...seedState.tenant,
+    ...(saved.tenant || {}),
+    settings: { ...seedState.tenant.settings, ...((saved.tenant || {}).settings || {}) }
+  };
   merged.insurancePlans = normalizeInsurancePlans(saved.insurancePlans);
   merged.patients = normalizePatients(saved.patients);
   merged.professionals = Array.isArray(saved.professionals) ? saved.professionals : seedState.professionals;
@@ -141,6 +168,8 @@ function normalizeState(saved) {
   merged.records = Array.isArray(saved.records) ? saved.records : seedState.records;
   merged.campaigns = Array.isArray(saved.campaigns) ? saved.campaigns : seedState.campaigns;
   merged.audit = Array.isArray(saved.audit) ? saved.audit : seedState.audit;
+  merged.commissions = Array.isArray(saved.commissions) ? saved.commissions : seedState.commissions;
+  merged.guides = Array.isArray(saved.guides) ? saved.guides : seedState.guides;
   return merged;
 }
 
@@ -169,6 +198,7 @@ function normalizeEmployees(employees, professionals) {
       start: "08:00",
       end: "18:00",
       status: "active",
+      availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "18:00" }],
       ...employee,
       phone: formatPhone(employee.phone || "")
     }));
@@ -186,7 +216,8 @@ function normalizeEmployees(employees, professionals) {
     commission: Number(pro.commission || pro.commission_percent || 0),
     start: pro.start || "08:00",
     end: pro.end || "18:00",
-    status: "active"
+    status: "active",
+    availability: [{ days: [1, 2, 3, 4, 5], start: pro.start || "08:00", end: pro.end || "18:00" }]
   }));
 }
 
@@ -253,6 +284,8 @@ function wireEvents() {
   });
   byId("generateCertificate")?.addEventListener("click", generateCertificate);
   byId("generatePrescription")?.addEventListener("click", generatePrescription);
+  byId("saveCertificateRecord")?.addEventListener("click", () => saveGeneratedDocument("certificate"));
+  byId("savePrescriptionRecord")?.addEventListener("click", () => saveGeneratedDocument("prescription"));
   document.querySelectorAll("[data-copy-target]").forEach((button) => {
     button.addEventListener("click", () => copyTextFrom(button.dataset.copyTarget));
   });
@@ -269,6 +302,7 @@ function wireEvents() {
   byId("financeAmount")?.addEventListener("input", updateCommissionPreview);
   byId("financeProfessional")?.addEventListener("change", updateCommissionPreview);
   byId("exportFinance")?.addEventListener("click", exportFinanceCsv);
+  byId("exportCommissions")?.addEventListener("click", exportCommissionsCsv);
 
   byId("insurancePlanForm")?.addEventListener("submit", submitInsurancePlan);
 
@@ -277,8 +311,11 @@ function wireEvents() {
   byId("employeeWhatsapp")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
   byId("employeeSearch")?.addEventListener("input", renderEmployees);
   byId("resetEmployeeForm")?.addEventListener("click", resetEmployeeForm);
+  byId("availabilityForm")?.addEventListener("submit", submitAvailability);
+  byId("availabilityDoctor")?.addEventListener("change", loadAvailabilityForm);
 
   byId("tenantForm")?.addEventListener("submit", submitTenantName);
+  byId("financeSettingsForm")?.addEventListener("submit", submitFinanceSettings);
   byId("exportBackup")?.addEventListener("click", exportBackup);
   byId("importBackupButton")?.addEventListener("click", () => byId("importBackupFile").click());
   byId("importBackupFile")?.addEventListener("change", importBackup);
@@ -290,11 +327,18 @@ function wireEvents() {
   byId("openWhatsappMessage")?.addEventListener("click", openWhatsappMessage);
   byId("messageForm")?.addEventListener("submit", submitMessage);
   byId("loginButton")?.addEventListener("click", () => auth());
+
+  byId("guideForm")?.addEventListener("submit", submitGuide);
+  byId("clearSignature")?.addEventListener("click", clearSignature);
+  byId("downloadGuide")?.addEventListener("click", downloadCurrentGuide);
+  byId("siteDialogCancel")?.addEventListener("click", () => closeSiteDialog(false));
+  byId("siteDialogConfirm")?.addEventListener("click", () => closeSiteDialog(true));
 }
 
 function setDefaultDates() {
   if (byId("appointmentDate")) byId("appointmentDate").value = todayIso;
   if (byId("scheduleDateFilter")) byId("scheduleDateFilter").value = todayIso;
+  if (byId("guideDate")) byId("guideDate").value = todayIso;
   if (document.querySelector("[name='dueDate']")) document.querySelector("[name='dueDate']").value = todayIso;
 }
 
@@ -339,6 +383,7 @@ function openView(view) {
     agenda: ["Agenda inteligente", "Consultas e encaixes"],
     pacientes: ["CRM clinico", "Pacientes"],
     prontuario: ["Prontuario eletronico", "Historico e evolucao"],
+    guia: ["Atendimento profissional", "Guia com assinatura"],
     financeiro: ["Controle financeiro", "Receitas, despesas e repasses"],
     convenios: ["Cadastro", "Planos de saude"],
     funcionarios: ["Gestao de equipe", "Funcionarios"],
@@ -366,11 +411,15 @@ function renderAll() {
   renderRecordSearchResults();
   renderRecords();
   renderFinance();
+  renderCommissions();
   renderInsurancePlans();
   renderEmployees();
+  renderAvailability();
+  renderGuides();
   renderCampaigns();
   renderMessagePatientOptions();
   renderMessagePreview();
+  renderFinanceSettings();
   updateCommissionPreview();
   updateEmployeeCrmRequirement();
   lucide.createIcons();
@@ -380,8 +429,11 @@ function populateSelects() {
   fillSelect("appointmentPatient", state.patients, "name");
   fillSelect("recordPatient", state.patients, "name");
   fillSelect("messagePatient", state.patients, "name");
+  fillSelect("guidePatient", state.patients, "name");
   fillSelect("appointmentProfessional", state.professionals, "name");
   fillSelect("financeProfessional", [{ id: "", name: "Sem repasse" }, ...state.professionals], "name");
+  fillSelect("guideProfessional", state.professionals, "name");
+  fillSelect("availabilityDoctor", state.professionals, "name");
   fillSelect("appointmentService", state.services, "name");
   fillInsuranceSelect("patientInsurance");
 }
@@ -414,7 +466,8 @@ function syncProfessionalsFromEmployees() {
       license: employee.crm || "",
       commission: Number(employee.commission || 0),
       start: employee.start || "08:00",
-      end: employee.end || "18:00"
+      end: employee.end || "18:00",
+      availability: employee.availability || [{ days: [1, 2, 3, 4, 5], start: employee.start || "08:00", end: employee.end || "18:00" }]
     }));
 }
 
@@ -576,9 +629,9 @@ function renderRecords() {
   byId("recordsList").innerHTML = records.map((r) => `<div class="record-item">
     <i data-lucide="file-heart"></i>
     <div>
-      <p class="item-title">${formatDateTime(r.createdAt)} - ${escapeHtml(r.diagnosis || "Evolucao registrada")}</p>
+      <p class="item-title">${formatDateTime(r.createdAt)} - ${escapeHtml(statusLabel[r.type] || r.diagnosis || "Evolucao registrada")}</p>
       <p class="item-sub">${escapeHtml(r.complaint || "Sem queixa informada")}</p>
-      <p class="item-sub">${escapeHtml(r.conduct || r.prescription || "")}</p>
+      <p class="item-sub">${escapeHtml(r.documentText || r.conduct || r.prescription || "")}</p>
     </div>
     <button class="icon-button" onclick="openRecordHistory('${r.id}')" aria-label="Visualizar historico"><i data-lucide="eye"></i></button>
   </div>`).join("") || emptyState("Nenhuma evolucao registrada para este paciente.");
@@ -615,6 +668,60 @@ function renderFinanceSummary() {
   byId("financeBalance").textContent = money.format(income - expense);
   byId("financeOpen").textContent = money.format(open);
   byId("financePaid").textContent = money.format(paid);
+}
+
+function renderCommissions() {
+  const summary = byId("commissionSummary");
+  const table = byId("commissionTable");
+  if (!summary || !table) return;
+
+  if (!state.tenant.settings?.commissionEnabled) {
+    summary.innerHTML = `<div><span>Status</span><strong>Desativado</strong></div>`;
+    table.innerHTML = emptyState("A clinica nao esta configurada para comissoes medicas. Ative em Admin > Financeiro.");
+    return;
+  }
+
+  const rows = commissionRows();
+  const pending = rows.filter((row) => row.status !== "settled").reduce((sum, row) => sum + row.amount, 0);
+  const settled = rows.filter((row) => row.status === "settled").reduce((sum, row) => sum + row.amount, 0);
+  summary.innerHTML = `
+    <div><span>Comissoes</span><strong>${rows.length}</strong></div>
+    <div><span>Pendente</span><strong>${money.format(pending)}</strong></div>
+    <div><span>Pago</span><strong>${money.format(settled)}</strong></div>
+  `;
+  table.innerHTML = rows.map((row) => `<div class="table-row commission-row">
+    <div><strong>${escapeHtml(row.professionalName)}</strong><div class="table-label">${escapeHtml(row.description)}</div></div>
+    <div>${money.format(row.amount)}<div class="table-label">${row.percent}% sobre ${money.format(row.baseAmount)}</div></div>
+    <div><span class="badge ${row.status}">${statusLabel[row.status]}</span></div>
+    <button class="icon-button" onclick="settleCommission('${row.transactionId}')" aria-label="Pagar comissao"><i data-lucide="check"></i></button>
+  </div>`).join("") || emptyState("Nenhuma comissao calculada para os filtros atuais.");
+  lucide.createIcons();
+}
+
+function commissionRows() {
+  if (!state.tenant.settings?.commissionEnabled) return [];
+  const rule = state.tenant.settings.commissionRule || "paid_on_settlement";
+  return state.finance
+    .filter((item) => item.type === "income" && item.professionalId)
+    .filter((item) => rule !== "paid_on_settlement" || item.status === "paid")
+    .map((item) => {
+      const pro = professionalById(item.professionalId);
+      const existing = state.commissions.find((commission) => commission.transactionId === item.id);
+      const percent = Number(existing?.percent ?? pro.commission ?? state.tenant.settings.defaultCommission ?? 0);
+      const amount = Number(item.amount || 0) * percent / 100;
+      return {
+        id: existing?.id || "",
+        transactionId: item.id,
+        professionalId: item.professionalId,
+        professionalName: pro.name,
+        description: item.description,
+        baseAmount: Number(item.amount || 0),
+        percent,
+        amount,
+        status: existing?.status || "pending"
+      };
+    })
+    .filter((row) => row.amount > 0);
 }
 
 function renderInsurancePlans() {
@@ -656,6 +763,45 @@ function renderEmployees() {
   lucide.createIcons();
 }
 
+function renderAvailability() {
+  const list = byId("availabilityList");
+  if (!list) return;
+  loadAvailabilityForm();
+  const doctors = state.professionals;
+  list.innerHTML = doctors.map((doctor) => {
+    const availability = doctor.availability || [];
+    const text = availability.map((item) => `${formatWeekdays(item.days)} - ${item.start} as ${item.end}`).join("; ") || "Sem disponibilidade configurada";
+    return `<div class="record-item">
+      <i data-lucide="calendar-clock"></i>
+      <div><p class="item-title">${escapeHtml(doctor.name)}</p><p class="item-sub">${escapeHtml(text)}</p></div>
+      <span class="badge active">Agenda</span>
+    </div>`;
+  }).join("") || emptyState("Cadastre medicos ativos para configurar disponibilidade.");
+  lucide.createIcons();
+}
+
+function renderGuides() {
+  const list = byId("guidesList");
+  if (!list) return;
+  const guides = state.guides.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  list.innerHTML = guides.map((guide) => `<div class="record-item">
+    <i data-lucide="file-signature"></i>
+    <div>
+      <p class="item-title">${formatDate(guide.date)} - ${escapeHtml(patientById(guide.patientId).name)}</p>
+      <p class="item-sub">${escapeHtml(guide.procedure || "Guia de atendimento")} com ${escapeHtml(professionalById(guide.professionalId).name)}</p>
+    </div>
+    <button class="icon-button" onclick="downloadGuideById('${guide.id}')" aria-label="Baixar guia"><i data-lucide="download"></i></button>
+  </div>`).join("") || emptyState("Nenhuma guia assinada salva.");
+  lucide.createIcons();
+}
+
+function renderFinanceSettings() {
+  if (!byId("financeSettingsForm")) return;
+  byId("commissionEnabled").checked = !!state.tenant.settings?.commissionEnabled;
+  byId("commissionRule").value = state.tenant.settings?.commissionRule || "paid_on_settlement";
+  byId("defaultCommission").value = Number(state.tenant.settings?.defaultCommission || 0);
+}
+
 function renderCampaigns() {
   byId("campaignList").innerHTML = state.campaigns.map((c) => `<div class="campaign-item">
     <i data-lucide="radio"></i>
@@ -675,16 +821,18 @@ function renderMessagePatientOptions() {
   renderMessagePreview();
 }
 
-function submitAppointment(event) {
+async function submitAppointment(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
   if (!data.patientId || !data.professionalId || !data.serviceId) {
     toast("Selecione paciente, medico e servico.");
     return;
   }
-  state.appointments.push({ id: uid("a"), ...data });
+  let appointment = { id: uid("a"), ...data };
+  appointment = await saveAppointmentRemote(appointment);
+  state.appointments.push(appointment);
   const service = serviceById(data.serviceId);
-  state.finance.push({
+  let financeItem = {
     id: uid("f"),
     description: `${service.name} - ${patientById(data.patientId).name}`,
     amount: service.price,
@@ -692,8 +840,12 @@ function submitAppointment(event) {
     dueDate: data.date,
     status: "open",
     professionalId: data.professionalId,
+    patientId: data.patientId,
+    appointmentId: appointment.id,
     paymentMethod: "A definir"
-  });
+  };
+  financeItem = await saveFinanceRemote(financeItem);
+  state.finance.push(financeItem);
   currentScheduleDate = data.date;
   byId("scheduleDateFilter").value = data.date;
   state.audit.unshift({ id: uid("lg"), action: "Consulta agendada", actor: "Usuario atual", target: patientById(data.patientId).name, at: "Agora" });
@@ -702,7 +854,7 @@ function submitAppointment(event) {
   toast("Consulta agendada e lancamento financeiro criado.");
 }
 
-function submitPatient(event) {
+async function submitPatient(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
   data.name = data.name.trim();
@@ -724,9 +876,12 @@ function submitPatient(event) {
   if (editingPatientId) {
     const patient = state.patients.find((p) => p.id === editingPatientId);
     Object.assign(patient, data);
+    const saved = await savePatientRemote(patient);
+    Object.assign(patient, saved);
     toast("Paciente atualizado.");
   } else {
-    state.patients.push({ id: uid("p"), noShow: 0, ...data });
+    const saved = await savePatientRemote({ id: uid("p"), noShow: 0, ...data });
+    state.patients.push(saved);
     toast("Paciente cadastrado.");
   }
   saveState();
@@ -734,7 +889,7 @@ function submitPatient(event) {
   renderAll();
 }
 
-function submitRecord(event) {
+async function submitRecord(event) {
   event.preventDefault();
   const record = {
     id: uid("r"),
@@ -752,7 +907,8 @@ function submitRecord(event) {
     toast("Selecione um paciente para salvar o prontuario.");
     return;
   }
-  state.records.push(record);
+  const saved = await saveRecordRemote(record);
+  state.records.push(saved);
   state.audit.unshift({ id: uid("lg"), action: "Evolucao clinica registrada", actor: "Usuario atual", target: patientById(record.patientId).name, at: "Agora" });
   saveState();
   event.target.reset();
@@ -761,10 +917,11 @@ function submitRecord(event) {
   toast("Prontuario atualizado com historico do paciente.");
 }
 
-function submitFinance(event) {
+async function submitFinance(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
-  state.finance.push({ id: uid("f"), amount: Number(data.amount), ...data });
+  const saved = await saveFinanceRemote({ id: uid("f"), amount: Number(data.amount), ...data });
+  state.finance.push(saved);
   saveState();
   event.target.reset();
   setDefaultDates();
@@ -772,7 +929,7 @@ function submitFinance(event) {
   toast("Movimentacao financeira lancada.");
 }
 
-function submitInsurancePlan(event) {
+async function submitInsurancePlan(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
   const name = data.name.trim();
@@ -787,12 +944,15 @@ function submitInsurancePlan(event) {
     const plan = state.insurancePlans.find((item) => item.id === editingInsurancePlanId);
     const oldName = plan.name;
     Object.assign(plan, { name, contact: data.contact, active: plan.active });
+    const saved = await savePlanRemote(plan);
+    Object.assign(plan, saved);
     state.patients.forEach((patient) => {
       if (patient.insurance === oldName) patient.insurance = name;
     });
     toast("Plano de saude atualizado.");
   } else {
-    state.insurancePlans.push({ id: uid("ip"), active: true, name, contact: data.contact });
+    const saved = await savePlanRemote({ id: uid("ip"), active: true, name, contact: data.contact });
+    state.insurancePlans.push(saved);
     toast("Plano de saude cadastrado.");
   }
   editingInsurancePlanId = null;
@@ -803,7 +963,7 @@ function submitInsurancePlan(event) {
   renderPatients();
 }
 
-function submitEmployee(event) {
+async function submitEmployee(event) {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(event.target));
   data.name = data.name.trim();
@@ -818,13 +978,16 @@ function submitEmployee(event) {
     const employee = state.employees.find((item) => item.id === editingEmployeeId);
     const professionalId = employee.professionalId || uid("dr");
     Object.assign(employee, data, { professionalId: data.role === "doctor" ? professionalId : employee.professionalId });
+    const saved = await saveEmployeeRemote(employee);
+    Object.assign(employee, saved);
     toast("Funcionario atualizado.");
   } else {
-    state.employees.push({
+    const saved = await saveEmployeeRemote({
       id: uid("e"),
       professionalId: data.role === "doctor" ? uid("dr") : "",
       ...data
     });
+    state.employees.push(saved);
     toast("Funcionario cadastrado.");
   }
 
@@ -834,14 +997,124 @@ function submitEmployee(event) {
   renderAll();
 }
 
-function submitTenantName(event) {
+async function submitTenantName(event) {
   event.preventDefault();
   const name = new FormData(event.target).get("clinicName")?.trim();
   if (!name) return;
   state.tenant.name = name;
   saveState();
+  await saveTenantRemote();
   renderAll();
   toast("Nome da clinica atualizado.");
+}
+
+async function submitFinanceSettings(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  state.tenant.settings = {
+    ...state.tenant.settings,
+    commissionEnabled: byId("commissionEnabled").checked,
+    commissionRule: data.commissionRule || "paid_on_settlement",
+    defaultCommission: Number(data.defaultCommission || 0)
+  };
+  saveState();
+  await saveTenantRemote();
+  renderAll();
+  toast("Configuracao financeira salva.");
+}
+
+async function saveGeneratedDocument(type) {
+  const patientId = byId("recordPatient").value;
+  const outputId = type === "certificate" ? "certificateOutput" : "prescriptionOutput";
+  const text = byId(outputId).value.trim();
+  if (!patientId || !text) {
+    await siteAlert("Gere o documento antes de gravar no prontuario.", "Documento vazio");
+    return;
+  }
+  const record = {
+    id: uid("r"),
+    patientId,
+    type,
+    complaint: statusLabel[type],
+    vitals: "",
+    diagnosis: statusLabel[type],
+    conduct: text,
+    prescription: type === "prescription" ? text : "",
+    followUp: "",
+    notes: "Documento gerado pelo Clinicou",
+    documentText: text,
+    createdAt: new Date().toISOString()
+  };
+  const saved = await saveRecordRemote(record);
+  state.records.push(saved);
+  saveState();
+  renderAll();
+  toast(`${statusLabel[type]} gravado no historico do prontuario.`);
+}
+
+async function submitAvailability(event) {
+  event.preventDefault();
+  const doctorId = byId("availabilityDoctor").value;
+  const employee = state.employees.find((item) => item.professionalId === doctorId || item.id === doctorId);
+  if (!employee) {
+    await siteAlert("Selecione um medico para configurar a disponibilidade.", "Agenda medica");
+    return;
+  }
+  const days = [...event.target.querySelectorAll("[name='days']:checked")].map((input) => Number(input.value));
+  if (!days.length) {
+    await siteAlert("Escolha pelo menos um dia da semana.", "Agenda medica");
+    return;
+  }
+  employee.availability = [{ days, start: byId("availabilityStart").value || "08:00", end: byId("availabilityEnd").value || "18:00" }];
+  employee.start = employee.availability[0].start;
+  employee.end = employee.availability[0].end;
+  syncProfessionalsFromEmployees();
+  saveState();
+  await saveEmployeeRemote(employee);
+  renderAll();
+  toast("Disponibilidade do medico salva.");
+}
+
+async function submitGuide(event) {
+  event.preventDefault();
+  const signatureData = getSignatureData();
+  if (!signatureData) {
+    await siteAlert("O paciente precisa assinar escrevendo no campo de assinatura.", "Assinatura obrigatoria");
+    return;
+  }
+  const data = Object.fromEntries(new FormData(event.target));
+  const guide = {
+    id: uid("g"),
+    patientId: data.patientId,
+    professionalId: data.professionalId,
+    date: data.date || todayIso,
+    procedure: data.procedure || "Atendimento profissional",
+    description: byId("guideDescription").value,
+    signatureData,
+    createdAt: new Date().toISOString()
+  };
+  const saved = await saveGuideRemote(guide);
+  state.guides.unshift(saved);
+  const guideRecord = await saveRecordRemote({
+    id: uid("r"),
+    patientId: saved.patientId,
+    type: "guide",
+    complaint: "Guia de atendimento assinada",
+    diagnosis: saved.procedure,
+    conduct: saved.description,
+    prescription: "",
+    followUp: "",
+    notes: "Guia assinada digitalmente pelo paciente",
+    documentText: saved.description,
+    createdAt: new Date().toISOString()
+  });
+  state.records.push(guideRecord);
+  saveState();
+  clearSignature();
+  event.target.reset();
+  setDefaultDates();
+  renderAll();
+  toast("Guia assinada salva e vinculada ao prontuario.");
 }
 
 function submitMessage(event) {
@@ -857,9 +1130,14 @@ function suggestSlot() {
   const professional = professionalById(byId("appointmentProfessional").value);
   const service = serviceById(byId("appointmentService").value);
   const date = byId("appointmentDate").value || todayIso;
+  const availability = availabilityForDate(professional, date);
+  if (!availability) {
+    byId("slotSuggestion").textContent = `${professional.name} nao esta disponivel para atendimento em ${formatDate(date)}.`;
+    return;
+  }
   const busy = state.appointments.filter((a) => a.professionalId === professional.id && a.date === date).map((a) => a.time);
-  const startHour = Number((professional.start || "08:00").slice(0, 2));
-  const endHour = Number((professional.end || "18:00").slice(0, 2));
+  const startHour = Number((availability.start || professional.start || "08:00").slice(0, 2));
+  const endHour = Number((availability.end || professional.end || "18:00").slice(0, 2));
   let suggestion = "";
   for (let hour = startHour; hour < endHour; hour += 1) {
     for (const minute of ["00", "30"]) {
@@ -943,6 +1221,10 @@ function generatePrescription() {
 function updateCommissionPreview() {
   const amount = Number(byId("financeAmount")?.value || 0);
   const pro = professionalById(byId("financeProfessional")?.value || "");
+  if (!state.tenant.settings?.commissionEnabled) {
+    if (byId("commissionPreview")) byId("commissionPreview").textContent = "Comissoes medicas estao desativadas nas configuracoes financeiras da clinica.";
+    return;
+  }
   const commission = pro.id ? amount * Number(pro.commission || 0) / 100 : 0;
   if (byId("commissionPreview")) {
     byId("commissionPreview").textContent = pro.id
@@ -983,17 +1265,397 @@ async function auth() {
 
 async function loadRemoteSnapshot() {
   if (!supabaseClient) return;
-  const { data: clinics } = await supabaseClient.from("clinics").select("id,name,plan").limit(1);
+  const { data: clinics, error } = await supabaseClient.from("clinics").select("id,name,plan,settings").limit(1);
+  if (error) {
+    toast(`Nao foi possivel carregar a clinica: ${error.message}`);
+    return;
+  }
   if (clinics?.[0]) {
-    state.tenant = { ...state.tenant, ...clinics[0] };
+    activeClinicId = clinics[0].id;
+    state.tenant = {
+      ...state.tenant,
+      ...clinics[0],
+      settings: { ...state.tenant.settings, ...(clinics[0].settings || {}) }
+    };
+    remoteReady = true;
+    await loadClinicTables();
     saveState();
     renderAll();
   }
 }
 
-function markPaid(id) {
+async function loadClinicTables() {
+  const clinicId = currentClinicId();
+  if (!clinicId) return;
+  const [
+    plans,
+    patients,
+    staff,
+    services,
+    appointments,
+    finance,
+    records,
+    commissions,
+    guides
+  ] = await Promise.all([
+    remoteSelect("insurance_plans", "id,name,contact,active", clinicId),
+    remoteSelect("patients", "id,full_name,phone,whatsapp,email,cpf,document,insurance,risk,no_show_score,insurance_plan_id", clinicId),
+    remoteSelect("staff_members", "id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,status", clinicId),
+    remoteSelect("services", "id,name,specialty,duration_minutes,price,active", clinicId),
+    remoteSelect("appointments", "id,patient_id,professional_id,service_id,starts_at,ends_at,status", clinicId),
+    remoteSelect("financial_transactions", "id,description,type,amount,due_date,status,payment_method,professional_id,patient_id,appointment_id", clinicId),
+    remoteSelect("medical_records", "id,patient_id,professional_id,template,complaint,payload,signed_at,created_at", clinicId),
+    remoteSelect("commissions", "id,professional_id,transaction_id,percent,amount,status,settled_at,created_at", clinicId),
+    remoteSelect("attendance_guides", "id,patient_id,professional_id,service_date,procedure,description,signature_data,created_at", clinicId)
+  ]);
+
+  if (plans) state.insurancePlans = plans.map(fromRemotePlan);
+  if (patients) state.patients = patients.map(fromRemotePatient);
+  if (staff) state.employees = staff.map(fromRemoteStaff);
+  if (services?.length) state.services = services.map(fromRemoteService);
+  syncProfessionalsFromEmployees();
+  if (appointments) state.appointments = appointments.map(fromRemoteAppointment);
+  if (finance) state.finance = finance.map(fromRemoteFinance);
+  if (records) state.records = records.map(fromRemoteRecord);
+  if (commissions) state.commissions = commissions.map(fromRemoteCommission);
+  if (guides) state.guides = guides.map(fromRemoteGuide);
+}
+
+async function remoteSelect(table, columns, clinicId) {
+  if (!supabaseClient || !clinicId) return null;
+  const { data, error } = await supabaseClient.from(table).select(columns).eq("clinic_id", clinicId);
+  if (error) {
+    toast(`Tabela ${table} nao carregou: ${error.message}`);
+    return null;
+  }
+  return data || [];
+}
+
+function currentClinicId() {
+  return activeClinicId || (isUuid(state.tenant.id) ? state.tenant.id : "");
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+async function upsertRemote(table, payload, id) {
+  const clinicId = currentClinicId();
+  if (!remoteReady || !supabaseClient || !clinicId) return null;
+  const body = { ...payload, clinic_id: clinicId };
+  if (isUuid(id)) body.id = id;
+  const query = isUuid(id)
+    ? supabaseClient.from(table).upsert(body).select().single()
+    : supabaseClient.from(table).insert(body).select().single();
+  const { data, error } = await query;
+  if (error) {
+    toast(`Nao foi possivel gravar em ${table}: ${error.message}`);
+    return null;
+  }
+  return data;
+}
+
+async function deleteRemote(table, id) {
+  if (!remoteReady || !supabaseClient || !isUuid(id)) return;
+  const { error } = await supabaseClient.from(table).delete().eq("id", id);
+  if (error) toast(`Nao foi possivel excluir em ${table}: ${error.message}`);
+}
+
+async function saveTenantRemote() {
+  if (!remoteReady || !supabaseClient || !currentClinicId()) return;
+  const { data, error } = await supabaseClient
+    .from("clinics")
+    .update({ name: state.tenant.name, settings: state.tenant.settings || {} })
+    .eq("id", currentClinicId())
+    .select("id,name,plan,settings")
+    .single();
+  if (error) {
+    toast(`Nome salvo localmente, mas nao gravou no Supabase: ${error.message}`);
+    return;
+  }
+  state.tenant = { ...state.tenant, ...data, settings: { ...state.tenant.settings, ...(data.settings || {}) } };
+}
+
+function fromRemotePlan(row) {
+  return { id: row.id, name: row.name, contact: row.contact || "", active: row.active };
+}
+
+function toRemotePlan(plan) {
+  return { name: plan.name, contact: plan.contact || "", active: plan.active !== false };
+}
+
+function fromRemotePatient(row) {
+  return {
+    id: row.id,
+    name: row.full_name,
+    cpf: formatCpf(row.cpf || row.document || ""),
+    phone: formatPhone(row.whatsapp || row.phone || ""),
+    email: row.email || "",
+    risk: row.risk || "low",
+    insurance: row.insurance || "Particular",
+    noShow: Number(row.no_show_score || 0)
+  };
+}
+
+function toRemotePatient(patient) {
+  return {
+    full_name: patient.name,
+    phone: patient.phone,
+    whatsapp: patient.phone,
+    email: patient.email || "",
+    cpf: patient.cpf || "",
+    document: digitsOnly(patient.cpf),
+    insurance: patient.insurance || "Particular",
+    risk: patient.risk || "low",
+    no_show_score: Number(patient.noShow || 0)
+  };
+}
+
+function fromRemoteStaff(row) {
+  const hours = row.working_hours || {};
+  return {
+    id: row.id,
+    professionalId: row.professional_id || row.id,
+    name: row.full_name,
+    role: row.role,
+    crm: row.crm || "",
+    specialty: row.specialty || "",
+    phone: formatPhone(row.whatsapp || row.phone || ""),
+    email: row.email || "",
+    commission: Number(row.commission_percent || 0),
+    start: hours.start || "08:00",
+    end: hours.end || "18:00",
+    availability: hours.availability || [{ days: [1, 2, 3, 4, 5], start: hours.start || "08:00", end: hours.end || "18:00" }],
+    status: row.status || "active"
+  };
+}
+
+function toRemoteStaff(employee) {
+  return {
+    professional_id: isUuid(employee.professionalId) ? employee.professionalId : null,
+    full_name: employee.name,
+    role: employee.role,
+    crm: employee.crm || "",
+    specialty: employee.specialty || "",
+    phone: employee.phone || "",
+    whatsapp: employee.phone || "",
+    email: employee.email || "",
+    commission_percent: Number(employee.commission || 0),
+    working_hours: { start: employee.start || "08:00", end: employee.end || "18:00", availability: employee.availability || [] },
+    status: employee.status || "active"
+  };
+}
+
+function toRemoteProfessional(employee) {
+  return {
+    full_name: employee.name,
+    specialty: employee.specialty || "Medicina",
+    license: employee.crm || "",
+    commission_percent: Number(employee.commission || 0),
+    working_hours: { start: employee.start || "08:00", end: employee.end || "18:00", availability: employee.availability || [] },
+    active: employee.status === "active"
+  };
+}
+
+function fromRemoteService(row) {
+  return { id: row.id, name: row.name, specialty: row.specialty || "", duration: Number(row.duration_minutes || 30), price: Number(row.price || 0), active: row.active };
+}
+
+function fromRemoteAppointment(row) {
+  const start = new Date(row.starts_at);
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    professionalId: row.professional_id,
+    serviceId: row.service_id,
+    date: start.toISOString().slice(0, 10),
+    time: start.toTimeString().slice(0, 5),
+    status: row.status
+  };
+}
+
+function toRemoteAppointment(appointment) {
+  const service = serviceById(appointment.serviceId);
+  const startsAt = new Date(`${appointment.date}T${appointment.time || "08:00"}:00`);
+  const endsAt = new Date(startsAt.getTime() + Number(service.duration || 30) * 60000);
+  return {
+    patient_id: appointment.patientId,
+    professional_id: appointment.professionalId,
+    service_id: isUuid(appointment.serviceId) ? appointment.serviceId : null,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    status: appointment.status || "scheduled",
+    source: "manual"
+  };
+}
+
+function fromRemoteFinance(row) {
+  return {
+    id: row.id,
+    description: row.description,
+    amount: Number(row.amount || 0),
+    type: row.type,
+    dueDate: row.due_date,
+    status: row.status,
+    professionalId: row.professional_id || "",
+    patientId: row.patient_id || "",
+    appointmentId: row.appointment_id || "",
+    paymentMethod: row.payment_method || ""
+  };
+}
+
+function toRemoteFinance(item) {
+  return {
+    description: item.description,
+    amount: Number(item.amount || 0),
+    type: item.type,
+    due_date: item.dueDate || todayIso,
+    status: item.status || "open",
+    payment_method: item.paymentMethod || "",
+    professional_id: isUuid(item.professionalId) ? item.professionalId : null,
+    patient_id: isUuid(item.patientId) ? item.patientId : null,
+    appointment_id: isUuid(item.appointmentId) ? item.appointmentId : null
+  };
+}
+
+function fromRemoteRecord(row) {
+  const payload = row.payload || {};
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    professionalId: row.professional_id || "",
+    type: row.template || "geral",
+    complaint: row.complaint || "",
+    vitals: payload.vitals || "",
+    diagnosis: payload.diagnosis || "",
+    conduct: payload.conduct || payload.documentText || "",
+    prescription: payload.prescription || "",
+    followUp: payload.followUp || "",
+    notes: payload.notes || "",
+    documentText: payload.documentText || "",
+    createdAt: row.created_at
+  };
+}
+
+function toRemoteRecord(record) {
+  return {
+    patient_id: record.patientId,
+    professional_id: isUuid(record.professionalId) ? record.professionalId : null,
+    template: record.type || "geral",
+    complaint: record.complaint || "",
+    payload: {
+      vitals: record.vitals || "",
+      diagnosis: record.diagnosis || "",
+      conduct: record.conduct || "",
+      prescription: record.prescription || "",
+      followUp: record.followUp || "",
+      notes: record.notes || "",
+      documentText: record.documentText || ""
+    },
+    signed_at: null
+  };
+}
+
+function fromRemoteCommission(row) {
+  return {
+    id: row.id,
+    professionalId: row.professional_id,
+    transactionId: row.transaction_id,
+    percent: Number(row.percent || 0),
+    amount: Number(row.amount || 0),
+    status: row.status || "pending",
+    settledAt: row.settled_at || "",
+    createdAt: row.created_at
+  };
+}
+
+function toRemoteCommission(commission) {
+  return {
+    professional_id: commission.professionalId,
+    transaction_id: commission.transactionId,
+    percent: Number(commission.percent || 0),
+    amount: Number(commission.amount || 0),
+    status: commission.status || "pending",
+    settled_at: commission.settledAt || null
+  };
+}
+
+function fromRemoteGuide(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    professionalId: row.professional_id,
+    date: row.service_date,
+    procedure: row.procedure || "",
+    description: row.description || "",
+    signatureData: row.signature_data || "",
+    createdAt: row.created_at
+  };
+}
+
+function toRemoteGuide(guide) {
+  return {
+    patient_id: guide.patientId,
+    professional_id: guide.professionalId,
+    service_date: guide.date || todayIso,
+    procedure: guide.procedure || "",
+    description: guide.description || "",
+    signature_data: guide.signatureData || ""
+  };
+}
+
+async function savePatientRemote(patient) {
+  const row = await upsertRemote("patients", toRemotePatient(patient), patient.id);
+  return row ? fromRemotePatient(row) : patient;
+}
+
+async function savePlanRemote(plan) {
+  const row = await upsertRemote("insurance_plans", toRemotePlan(plan), plan.id);
+  return row ? fromRemotePlan(row) : plan;
+}
+
+async function saveEmployeeRemote(employee) {
+  if (employee.role === "doctor") {
+    const proRow = await upsertRemote("professionals", toRemoteProfessional(employee), employee.professionalId);
+    if (proRow) employee.professionalId = proRow.id;
+  }
+  const row = await upsertRemote("staff_members", toRemoteStaff(employee), employee.id);
+  return row ? fromRemoteStaff(row) : employee;
+}
+
+async function saveAppointmentRemote(appointment) {
+  if (!isUuid(appointment.patientId) || !isUuid(appointment.professionalId)) return appointment;
+  const row = await upsertRemote("appointments", toRemoteAppointment(appointment), appointment.id);
+  return row ? fromRemoteAppointment(row) : appointment;
+}
+
+async function saveFinanceRemote(item) {
+  const row = await upsertRemote("financial_transactions", toRemoteFinance(item), item.id);
+  return row ? fromRemoteFinance(row) : item;
+}
+
+async function saveRecordRemote(record) {
+  if (!isUuid(record.patientId)) return record;
+  const row = await upsertRemote("medical_records", toRemoteRecord(record), record.id);
+  return row ? fromRemoteRecord(row) : record;
+}
+
+async function saveCommissionRemote(commission) {
+  if (!isUuid(commission.professionalId) || !isUuid(commission.transactionId)) return commission;
+  const row = await upsertRemote("commissions", toRemoteCommission(commission), commission.id);
+  return row ? fromRemoteCommission(row) : commission;
+}
+
+async function saveGuideRemote(guide) {
+  if (!isUuid(guide.patientId) || !isUuid(guide.professionalId)) return guide;
+  const row = await upsertRemote("attendance_guides", toRemoteGuide(guide), guide.id);
+  return row ? fromRemoteGuide(row) : guide;
+}
+
+async function markPaid(id) {
   const item = state.finance.find((f) => f.id === id);
   if (item) item.status = "paid";
+  if (item) Object.assign(item, await saveFinanceRemote(item));
   saveState();
   renderAll();
   toast("Titulo marcado como pago.");
@@ -1013,9 +1675,10 @@ function editPatient(id) {
   openView("pacientes");
 }
 
-function deletePatient(id) {
+async function deletePatient(id) {
   const patient = patientById(id);
-  if (!confirm(`Excluir ${patient.name}? Esta acao remove agenda e prontuario vinculados no app local.`)) return;
+  if (!await siteConfirm(`Excluir ${patient.name}? Esta acao remove agenda e prontuario vinculados.`, "Excluir paciente")) return;
+  await deleteRemote("patients", id);
   state.patients = state.patients.filter((p) => p.id !== id);
   state.appointments = state.appointments.filter((a) => a.patientId !== id);
   state.records = state.records.filter((r) => r.patientId !== id);
@@ -1058,24 +1721,26 @@ function editInsurancePlan(id) {
   toast("Edite os dados do plano e salve.");
 }
 
-function toggleInsurancePlan(id) {
+async function toggleInsurancePlan(id) {
   const plan = state.insurancePlans.find((item) => item.id === id);
   if (!plan) return;
   plan.active = !plan.active;
+  Object.assign(plan, await savePlanRemote(plan));
   saveState();
   populateSelects();
   renderInsurancePlans();
   toast(plan.active ? "Plano reativado." : "Plano suspenso.");
 }
 
-function deleteInsurancePlan(id) {
+async function deleteInsurancePlan(id) {
   const plan = state.insurancePlans.find((item) => item.id === id);
   if (!plan) return;
   if (state.patients.some((patient) => patient.insurance === plan.name)) {
     toast("Este plano esta vinculado a pacientes. Altere os pacientes antes de excluir.");
     return;
   }
-  if (!confirm(`Excluir plano ${plan.name}?`)) return;
+  if (!await siteConfirm(`Excluir plano ${plan.name}?`, "Excluir plano")) return;
+  await deleteRemote("insurance_plans", id);
   state.insurancePlans = state.insurancePlans.filter((item) => item.id !== id);
   if (editingInsurancePlanId === id) editingInsurancePlanId = null;
   saveState();
@@ -1104,17 +1769,18 @@ function editEmployee(id) {
   openView("funcionarios");
 }
 
-function toggleEmployeeStatus(id) {
+async function toggleEmployeeStatus(id) {
   const employee = employeeById(id);
   if (!employee.id) return;
   employee.status = employee.status === "active" ? "suspended" : "active";
+  Object.assign(employee, await saveEmployeeRemote(employee));
   syncProfessionalsFromEmployees();
   saveState();
   renderAll();
   toast(employee.status === "active" ? "Funcionario reativado." : "Funcionario suspenso.");
 }
 
-function deleteEmployee(id) {
+async function deleteEmployee(id) {
   const employee = employeeById(id);
   if (!employee.id) return;
   const hasAppointments = employee.professionalId && state.appointments.some((appointment) => appointment.professionalId === employee.professionalId);
@@ -1122,7 +1788,8 @@ function deleteEmployee(id) {
     toast("Funcionario possui consultas vinculadas. Suspenda em vez de excluir.");
     return;
   }
-  if (!confirm(`Excluir funcionario ${employee.name}?`)) return;
+  if (!await siteConfirm(`Excluir funcionario ${employee.name}?`, "Excluir funcionario")) return;
+  await deleteRemote("staff_members", id);
   state.employees = state.employees.filter((item) => item.id !== id);
   syncProfessionalsFromEmployees();
   saveState();
@@ -1172,9 +1839,9 @@ function historyRecordItem(record, highlighted) {
   return `<div class="record-item ${highlighted ? "highlight" : ""}">
     <i data-lucide="file-heart"></i>
     <div>
-      <p class="item-title">${formatDateTime(record.createdAt)} - ${escapeHtml(record.diagnosis || "Evolucao")}</p>
+      <p class="item-title">${formatDateTime(record.createdAt)} - ${escapeHtml(statusLabel[record.type] || record.diagnosis || "Evolucao")}</p>
       <p class="item-sub">Queixa: ${escapeHtml(record.complaint || "Nao informada")}</p>
-      <p class="item-sub">Conduta: ${escapeHtml(record.conduct || "Nao informada")}</p>
+      <p class="item-sub">Conduta: ${escapeHtml(record.documentText || record.conduct || "Nao informada")}</p>
       <p class="item-sub">Prescricao: ${escapeHtml(record.prescription || "Nao informada")}</p>
       ${record.followUp ? `<p class="item-sub">Retorno: ${escapeHtml(record.followUp)}</p>` : ""}
     </div>
@@ -1204,10 +1871,158 @@ function openWhatsappMessage() {
   window.open(`https://wa.me/${phone}?text=${message}`, "_blank", "noopener");
 }
 
+function initSignaturePad() {
+  const canvas = byId("signatureCanvas");
+  if (!canvas) return;
+  const context = canvas.getContext("2d");
+  context.lineWidth = 2.4;
+  context.lineCap = "round";
+  context.strokeStyle = "#0b1a30";
+  signaturePad = { drawing: false, dirty: false, context };
+
+  const point = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const touch = event.touches?.[0];
+    return {
+      x: (touch?.clientX ?? event.clientX) - rect.left,
+      y: (touch?.clientY ?? event.clientY) - rect.top
+    };
+  };
+  const start = (event) => {
+    event.preventDefault();
+    const p = point(event);
+    signaturePad.drawing = true;
+    context.beginPath();
+    context.moveTo(p.x, p.y);
+  };
+  const move = (event) => {
+    if (!signaturePad.drawing) return;
+    event.preventDefault();
+    const p = point(event);
+    context.lineTo(p.x, p.y);
+    context.stroke();
+    signaturePad.dirty = true;
+  };
+  const end = () => {
+    signaturePad.drawing = false;
+  };
+  canvas.addEventListener("mousedown", start);
+  canvas.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", end);
+  canvas.addEventListener("touchstart", start, { passive: false });
+  canvas.addEventListener("touchmove", move, { passive: false });
+  canvas.addEventListener("touchend", end);
+}
+
+function clearSignature() {
+  const canvas = byId("signatureCanvas");
+  if (!canvas || !signaturePad) return;
+  signaturePad.context.clearRect(0, 0, canvas.width, canvas.height);
+  signaturePad.dirty = false;
+}
+
+function getSignatureData() {
+  const canvas = byId("signatureCanvas");
+  if (!canvas || !signaturePad?.dirty) return "";
+  return canvas.toDataURL("image/png");
+}
+
+function downloadCurrentGuide() {
+  const guide = {
+    id: "",
+    patientId: byId("guidePatient").value,
+    professionalId: byId("guideProfessional").value,
+    date: byId("guideDate").value || todayIso,
+    procedure: byId("guideProcedure").value || "Atendimento profissional",
+    description: byId("guideDescription").value,
+    signatureData: getSignatureData(),
+    createdAt: new Date().toISOString()
+  };
+  downloadGuideFile(guide);
+}
+
+function downloadGuideById(id) {
+  const guide = state.guides.find((item) => item.id === id);
+  if (guide) downloadGuideFile(guide);
+}
+
+function downloadGuideFile(guide) {
+  const patient = patientById(guide.patientId);
+  const pro = professionalById(guide.professionalId);
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Guia de atendimento</title><style>body{font-family:Arial,sans-serif;color:#111;padding:32px;line-height:1.5}h1{font-size:22px}.box{border:1px solid #ccc;padding:14px;margin:12px 0}.signature{max-width:420px;border-bottom:1px solid #111}</style></head><body><h1>${escapeHtml(state.tenant.name)} - Guia de atendimento</h1><div class="box"><strong>Paciente:</strong> ${escapeHtml(patient.name)}<br><strong>CPF:</strong> ${escapeHtml(patient.cpf || "Nao informado")}<br><strong>Profissional:</strong> ${escapeHtml(pro.name)}<br><strong>Data:</strong> ${formatDate(guide.date)}<br><strong>Procedimento:</strong> ${escapeHtml(guide.procedure)}</div><div class="box">${escapeHtml(guide.description || "Sem descricao.").replace(/\n/g, "<br>")}</div><p><strong>Assinatura do paciente</strong></p>${guide.signatureData ? `<img class="signature" src="${guide.signatureData}" alt="Assinatura do paciente">` : "<p>Sem assinatura capturada.</p>"}</body></html>`;
+  downloadBlob(html, `guia-atendimento-${normalizeName(patient.name).replace(/\s/g, "-") || "paciente"}.html`, "text/html;charset=utf-8");
+}
+
+function siteAlert(message, title = "Aviso") {
+  return showSiteDialog({ title, message, confirmText: "Entendi", hideCancel: true });
+}
+
+function siteConfirm(message, title = "Confirmar acao") {
+  return showSiteDialog({ title, message, confirmText: "Confirmar", cancelText: "Cancelar", hideCancel: false });
+}
+
+function showSiteDialog({ title, message, confirmText, cancelText = "Cancelar", hideCancel = false }) {
+  byId("siteDialogTitle").textContent = title;
+  byId("siteDialogMessage").textContent = message;
+  byId("siteDialogConfirm").querySelector("span").textContent = confirmText;
+  byId("siteDialogCancel").querySelector("span").textContent = cancelText;
+  byId("siteDialogCancel").style.display = hideCancel ? "none" : "inline-flex";
+  byId("siteDialog").classList.add("open");
+  lucide.createIcons();
+  return new Promise((resolve) => {
+    siteDialogResolve = resolve;
+  });
+}
+
+function closeSiteDialog(result) {
+  byId("siteDialog").classList.remove("open");
+  if (siteDialogResolve) siteDialogResolve(result);
+  siteDialogResolve = null;
+}
+
 function exportFinanceCsv() {
   const header = "descricao,tipo,valor,vencimento,status,metodo\n";
   const body = state.finance.map((f) => [f.description, f.type, f.amount, f.dueDate, f.status, f.paymentMethod || ""].join(",")).join("\n");
   downloadBlob(header + body, "clinicou-financeiro.csv", "text/csv;charset=utf-8");
+}
+
+function exportCommissionsCsv() {
+  const header = "profissional,lancamento,base,percentual,comissao,status\n";
+  const body = commissionRows().map((row) => [row.professionalName, row.description, row.baseAmount, row.percent, row.amount, row.status].join(",")).join("\n");
+  downloadBlob(header + body, "clinicou-comissoes.csv", "text/csv;charset=utf-8");
+}
+
+async function settleCommission(transactionId) {
+  const row = commissionRows().find((item) => item.transactionId === transactionId);
+  if (!row) return;
+  const existing = state.commissions.find((commission) => commission.transactionId === transactionId);
+  const commission = {
+    id: existing?.id || uid("cm"),
+    transactionId,
+    professionalId: row.professionalId,
+    percent: row.percent,
+    amount: row.amount,
+    status: "settled",
+    settledAt: new Date().toISOString()
+  };
+  const target = existing || commission;
+  if (existing) Object.assign(existing, commission);
+  else state.commissions.push(commission);
+  const saved = await saveCommissionRemote(commission);
+  Object.assign(target, saved);
+  saveState();
+  renderCommissions();
+  toast("Comissao marcada como paga.");
+}
+
+function loadAvailabilityForm() {
+  const doctor = professionalById(byId("availabilityDoctor")?.value || state.professionals[0]?.id);
+  const availability = doctor.availability?.[0] || { days: [1, 2, 3, 4, 5], start: doctor.start || "08:00", end: doctor.end || "18:00" };
+  document.querySelectorAll("#availabilityForm [name='days']").forEach((input) => {
+    input.checked = availability.days.includes(Number(input.value));
+  });
+  if (byId("availabilityStart")) byId("availabilityStart").value = availability.start || "08:00";
+  if (byId("availabilityEnd")) byId("availabilityEnd").value = availability.end || "18:00";
 }
 
 function exportBackup() {
@@ -1293,6 +2108,16 @@ function formatDate(value) {
 function formatDateTime(value) {
   if (!value) return "";
   return new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function availabilityForDate(professional, date) {
+  const day = new Date(`${date}T12:00:00`).getDay();
+  return (professional.availability || []).find((item) => (item.days || []).includes(day));
+}
+
+function formatWeekdays(days = []) {
+  const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
+  return days.slice().sort((a, b) => a - b).map((day) => names[day]).join(", ");
 }
 
 function formatCpf(value) {

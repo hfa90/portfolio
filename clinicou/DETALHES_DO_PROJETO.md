@@ -20,8 +20,10 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 - Financeiro: receitas, despesas, status, repasse por profissional, CSV, resumo financeiro e marcacao de pagamento.
 - Planos de saude: cadastro, edicao, suspensao/reativacao e exclusao quando nao houver pacientes vinculados.
 - Funcionarios: cadastro de medicos, enfermeiros, assistentes, servicos gerais e secretarios. Medicos ativos aparecem no campo Profissional ao agendar consulta.
+- Disponibilidade medica: configuracao individual de dias e horarios em que cada medico atende na clinica.
+- Guia de atendimento: formulario com paciente, profissional, procedimento, descricao, assinatura manuscrita em canvas e download em HTML.
 - CRM: templates personalizados para WhatsApp, busca de paciente, copia manual, abertura do WhatsApp e registro de envio.
-- Admin: exportacao/importacao de backup JSON e alteracao do nome da clinica.
+- Admin: exportacao/importacao de backup JSON, alteracao do nome da clinica e configuracao financeira de comissoes medicas.
 
 ## Regras implementadas
 
@@ -32,14 +34,19 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 - Busca inteligente no prontuario considera nome, CPF e WhatsApp.
 - Historico de prontuario abre em popup com evolucoes e consultas do paciente.
 - Atestado e receita sao gerados a partir do paciente selecionado e dos textos informados, sempre com aviso de revisao profissional.
+- Atestado e receita podem ser gravados no prontuario e passam a aparecer no historico clinico.
 - Medico exige CRM no cadastro de funcionario.
 - Funcionarios suspensos deixam de aparecer na lista de profissionais da agenda.
+- A disponibilidade individual do medico limita a sugestao de horarios da agenda.
 - Planos suspensos deixam de aparecer como opcao ativa para novos pacientes.
 - Templates de CRM sao personalizados com nome do paciente, proxima consulta, servico e profissional quando disponiveis.
+- Comissoes sao calculadas quando a configuracao financeira da clinica estiver ativa.
+- Guias de atendimento assinadas sao salvas e tambem vinculadas ao historico do prontuario.
+- Avisos e confirmacoes usam modal proprio do Clinicou, sem `alert`/`confirm` nativos do navegador.
 
 ## Persistencia
 
-O app usa `localStorage` com a chave `clinicou_state_v3`. Se existir um backup antigo em `clinicou_state_v2`, o app tenta migrar automaticamente para o novo formato, adicionando CPF, WhatsApp e funcionarios quando necessario.
+O app usa `localStorage` com a chave `clinicou_state_v3` como cache local e fallback. Quando existe sessao Supabase e as tabelas estao criadas/expostas pela Data API, os formularios gravam no banco e recarregam os dados remotos.
 
 ## Supabase
 
@@ -50,11 +57,15 @@ Mudancas recentes no schema:
 - `patients.cpf` e `patients.whatsapp`.
 - Indice unico parcial para evitar duplicidade por `clinic_id + nome + CPF`.
 - Tabela `staff_members` para funcionarios com cargo, CRM, contato, comissao, horario e status.
+- Tabela `attendance_guides` para guias assinadas.
+- `clinics.settings` guarda configuracao de comissoes.
+- `staff_members.working_hours` guarda disponibilidade individual dos medicos.
+- `medical_records.payload` guarda documentos gerados no prontuario.
+- `commissions.settled_at` registra baixa de comissao.
 - RLS, grants, gatilho de `updated_at` e auditoria para `staff_members`.
 
 ## Observacoes importantes
 
-- A aplicacao ainda nao grava pacientes, agenda, funcionarios ou prontuarios no Supabase pelo front-end; hoje esses dados sao persistidos localmente no navegador.
-- O login Supabase e usado como barreira de acesso e o app carrega remotamente apenas dados basicos da clinica.
-- Para producao, o proximo passo natural e conectar os CRUDs do `app.js` as tabelas Supabase ja descritas no schema.
+- Para gravacao remota funcionar, execute `supabase/schema.sql` no Supabase e confirme que as tabelas novas estao expostas para a Data API.
+- Se alguma tabela remota ainda nao existir, o app mostra aviso e mantem o funcionamento local.
 - Os documentos inteligentes sao auxiliares de texto e precisam de revisao, assinatura e carimbo de profissional habilitado antes do uso.
