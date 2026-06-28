@@ -29,12 +29,53 @@ const statusLabel = {
   nurse: "Enfermeiro",
   assistant: "Assistente",
   cleaning: "Servicos gerais",
-  secretary: "Secretario"
+  secretary: "Secretario",
+  admin: "Administrador",
+  medical: "Medico",
+  receptionist: "Secretaria"
 };
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const dateFmt = new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" });
 const todayIso = new Date().toISOString().slice(0, 10);
+
+const smartCatalog = {
+  complaint: [
+    "Cefaleia persistente", "Dor lombar", "Dor toracica", "Dor abdominal", "Febre ha 3 dias", "Tosse seca", "Tosse produtiva", "Dispneia aos esforcos",
+    "Nauseas e vomitos", "Diarreia", "Tontura", "Palpitacoes", "Ansiedade", "Insônia", "Dor de garganta", "Congestao nasal", "Dor articular",
+    "Ferida em pele", "Retorno com exames", "Acompanhamento de hipertensao", "Acompanhamento de diabetes", "Queixa odontologica", "Dor em dente",
+    "Sangramento gengival", "Avaliacao estetica", "Pos-procedimento"
+  ],
+  vitals: [
+    "PA 120x80 mmHg, FC 72 bpm, FR 16 irpm, Temp 36,5 C, SatO2 98%",
+    "PA 130x85 mmHg, FC 82 bpm, FR 18 irpm, Temp 36,8 C, SatO2 97%",
+    "PA 140x90 mmHg, FC 88 bpm, FR 18 irpm, Temp 37,2 C, SatO2 96%",
+    "PA 110x70 mmHg, FC 68 bpm, FR 16 irpm, Temp 36,4 C, SatO2 99%",
+    "Glicemia capilar 98 mg/dL", "Peso 70 kg, altura 1,70 m, IMC 24,2", "Dor 0/10", "Dor 5/10", "Dor 8/10"
+  ],
+  conduct: [
+    "Paciente avaliado, orientado quanto aos sinais de alerta e retorno se houver piora.",
+    "Solicitados exames complementares para melhor elucidacao diagnostica.",
+    "Mantida conduta atual, reforcadas orientacoes e agendado retorno.",
+    "Realizado procedimento sem intercorrencias, paciente orientado sobre cuidados domiciliares.",
+    "Encaminhado para avaliacao especializada conforme quadro clinico."
+  ],
+  prescription: [
+    "Dipirona 500 mg: tomar 1 comprimido de 6/6h se dor ou febre, por ate 3 dias.",
+    "Paracetamol 750 mg: tomar 1 comprimido de 8/8h se dor ou febre.",
+    "Ibuprofeno 400 mg: tomar 1 comprimido de 8/8h apos alimentacao, se nao houver contraindicacao.",
+    "Soro fisiologico nasal: aplicar conforme necessidade.",
+    "Hidratacao oral, repouso relativo e retorno se sinais de alarme."
+  ],
+  guideProcedure: [
+    "Consulta medica", "Retorno medico", "Procedimento ambulatorial", "Avaliacao clinica", "Atendimento odontologico", "Atendimento estetico"
+  ],
+  guideDescription: [
+    "Declaro que recebi atendimento, fui informado(a) sobre conduta, orientacoes, riscos habituais e necessidade de retorno em caso de piora.",
+    "Paciente orientado(a) sobre procedimento proposto, cuidados pos-atendimento, sinais de alerta e canais de contato da clinica.",
+    "Guia emitida para registro do atendimento profissional realizado nesta data, com ciencia e assinatura do paciente."
+  ]
+};
 
 const seedState = {
   tenant: {
@@ -45,7 +86,12 @@ const seedState = {
     settings: {
       commissionEnabled: true,
       commissionRule: "paid_on_settlement",
-      defaultCommission: 30
+      defaultCommission: 30,
+      rolePermissions: {
+        admin: ["dashboard", "agenda", "pacientes", "prontuario", "guia", "medico", "financeiro", "convenios", "funcionarios", "crm", "admin"],
+        medical: ["medico", "prontuario", "guia"],
+        receptionist: ["dashboard", "agenda", "pacientes", "prontuario", "guia", "convenios", "crm"]
+      }
     }
   },
   insurancePlans: [
@@ -60,10 +106,10 @@ const seedState = {
     { id: "p4", name: "Joao Pedro", cpf: "092.538.160-80", phone: "(92) 98422-7764", email: "joao@email.com", risk: "low", insurance: "Particular", noShow: 7 }
   ],
   employees: [
-    { id: "e1", professionalId: "dr1", name: "Dra. Ana Beatriz", role: "doctor", crm: "CRM-AM 12345", specialty: "Clinica geral", phone: "(92) 98800-1100", email: "ana@clinica.com", commission: 35, start: "08:00", end: "17:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00" }] },
-    { id: "e2", professionalId: "dr2", name: "Dr. Marcos Lima", role: "doctor", crm: "CRM-AM 22334", specialty: "Odontologia", phone: "(92) 98800-2200", email: "marcos@clinica.com", commission: 40, start: "09:00", end: "18:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }] },
-    { id: "e3", professionalId: "dr3", name: "Dra. Helena Costa", role: "doctor", crm: "CRM-AM 33445", specialty: "Estetica", phone: "(92) 98800-3300", email: "helena@clinica.com", commission: 30, start: "10:00", end: "19:00", status: "active", availability: [{ days: [2, 3, 4, 5], start: "10:00", end: "19:00" }] },
-    { id: "e4", name: "Beatriz Souza", role: "secretary", crm: "", specialty: "Recepcao", phone: "(92) 98800-4400", email: "recepcao@clinica.com", commission: 0, start: "08:00", end: "17:00", status: "active" }
+    { id: "e1", professionalId: "dr1", name: "Dra. Ana Beatriz", role: "doctor", accessRole: "medical", crm: "CRM-AM 12345", specialty: "Clinica geral", phone: "(92) 98800-1100", email: "ana@clinica.com", commission: 35, start: "08:00", end: "17:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00" }] },
+    { id: "e2", professionalId: "dr2", name: "Dr. Marcos Lima", role: "doctor", accessRole: "medical", crm: "CRM-AM 22334", specialty: "Odontologia", phone: "(92) 98800-2200", email: "marcos@clinica.com", commission: 40, start: "09:00", end: "18:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "09:00", end: "18:00" }] },
+    { id: "e3", professionalId: "dr3", name: "Dra. Helena Costa", role: "doctor", accessRole: "medical", crm: "CRM-AM 33445", specialty: "Estetica", phone: "(92) 98800-3300", email: "helena@clinica.com", commission: 30, start: "10:00", end: "19:00", status: "active", availability: [{ days: [2, 3, 4, 5], start: "10:00", end: "19:00" }] },
+    { id: "e4", name: "Beatriz Souza", role: "secretary", accessRole: "receptionist", crm: "", specialty: "Recepcao", phone: "(92) 98800-4400", email: "recepcao@clinica.com", commission: 0, start: "08:00", end: "17:00", status: "active" }
   ],
   professionals: [
     { id: "dr1", employeeId: "e1", name: "Dra. Ana Beatriz", specialty: "Clinica geral", commission: 35, start: "08:00", end: "17:00" },
@@ -128,6 +174,7 @@ let remoteReady = false;
 let activeClinicId = "";
 let siteDialogResolve = null;
 let signaturePad = null;
+let currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -156,7 +203,14 @@ function normalizeState(saved) {
   merged.tenant = {
     ...seedState.tenant,
     ...(saved.tenant || {}),
-    settings: { ...seedState.tenant.settings, ...((saved.tenant || {}).settings || {}) }
+    settings: {
+      ...seedState.tenant.settings,
+      ...((saved.tenant || {}).settings || {}),
+      rolePermissions: {
+        ...seedState.tenant.settings.rolePermissions,
+        ...(((saved.tenant || {}).settings || {}).rolePermissions || {})
+      }
+    }
   };
   merged.insurancePlans = normalizeInsurancePlans(saved.insurancePlans);
   merged.patients = normalizePatients(saved.patients);
@@ -198,6 +252,7 @@ function normalizeEmployees(employees, professionals) {
       start: "08:00",
       end: "18:00",
       status: "active",
+      accessRole: employee.role === "doctor" ? "medical" : "receptionist",
       availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "18:00" }],
       ...employee,
       phone: formatPhone(employee.phone || "")
@@ -209,6 +264,7 @@ function normalizeEmployees(employees, professionals) {
     professionalId: pro.id,
     name: pro.name,
     role: "doctor",
+    accessRole: "medical",
     crm: pro.license || "",
     specialty: pro.specialty || "Clinica geral",
     phone: "",
@@ -263,6 +319,17 @@ function wireEvents() {
   });
   byId("suggestSlotButton")?.addEventListener("click", suggestSlot);
   byId("appointmentForm")?.addEventListener("submit", submitAppointment);
+  byId("appointmentProfessional")?.addEventListener("change", () => {
+    renderSchedule();
+    updateSlotAvailabilityPreview();
+  });
+  byId("appointmentService")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("appointmentDate")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("appointmentTime")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("closeSlotModal")?.addEventListener("click", closeSlotModal);
+  byId("slotModal")?.addEventListener("click", (event) => {
+    if (event.target.id === "slotModal") closeSlotModal();
+  });
 
   byId("patientForm")?.addEventListener("submit", submitPatient);
   byId("resetPatientForm")?.addEventListener("click", resetPatientForm);
@@ -271,6 +338,15 @@ function wireEvents() {
   byId("patientWhatsapp")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
 
   byId("recordForm")?.addEventListener("submit", submitRecord);
+  byId("recordComplaint")?.addEventListener("input", () => renderSmartSuggestions("complaint"));
+  byId("recordComplaint")?.addEventListener("focus", () => renderSmartSuggestions("complaint"));
+  byId("recordVitals")?.addEventListener("input", () => renderSmartSuggestions("vitals"));
+  byId("recordVitals")?.addEventListener("focus", () => renderSmartSuggestions("vitals"));
+  byId("recordConduct")?.addEventListener("input", () => renderSmartSuggestions("conduct"));
+  byId("recordConduct")?.addEventListener("focus", () => renderSmartSuggestions("conduct"));
+  byId("recordPrescription")?.addEventListener("input", () => renderSmartSuggestions("prescription"));
+  byId("recordPrescription")?.addEventListener("focus", () => renderSmartSuggestions("prescription"));
+  byId("suggestConduct")?.addEventListener("click", suggestConductText);
   byId("recordPatient")?.addEventListener("change", () => {
     renderRecordPatientSummary();
     renderRecords();
@@ -329,8 +405,13 @@ function wireEvents() {
   byId("loginButton")?.addEventListener("click", () => auth());
 
   byId("guideForm")?.addEventListener("submit", submitGuide);
+  byId("guideProcedure")?.addEventListener("input", () => renderSmartSuggestions("guideProcedure"));
+  byId("guideProcedure")?.addEventListener("focus", () => renderSmartSuggestions("guideProcedure"));
+  byId("guideDescription")?.addEventListener("input", () => renderSmartSuggestions("guideDescription"));
+  byId("guideDescription")?.addEventListener("focus", () => renderSmartSuggestions("guideDescription"));
   byId("clearSignature")?.addEventListener("click", clearSignature);
   byId("downloadGuide")?.addEventListener("click", downloadCurrentGuide);
+  byId("doctorPeriod")?.addEventListener("change", renderDoctorPortal);
   byId("siteDialogCancel")?.addEventListener("click", () => closeSiteDialog(false));
   byId("siteDialogConfirm")?.addEventListener("click", () => closeSiteDialog(true));
 }
@@ -350,6 +431,7 @@ async function enforceAuth() {
 
   const { data } = await supabaseClient.auth.getSession();
   if (data?.session) {
+    currentUser.email = data.session.user?.email || "";
     unlockAuth();
     await loadRemoteSnapshot();
     return;
@@ -357,7 +439,12 @@ async function enforceAuth() {
 
   lockAuth("Entre com uma conta autorizada para acessar o sistema.");
   supabaseClient.auth.onAuthStateChange((_event, session) => {
-    if (session) unlockAuth();
+    if (session) {
+      currentUser.email = session.user?.email || "";
+      unlockAuth();
+      resolveCurrentUser();
+      applyAccessControl();
+    }
   });
 }
 
@@ -375,6 +462,10 @@ function unlockAuth() {
 }
 
 function openView(view) {
+  if (!canAccess(view)) {
+    siteAlert("Seu perfil nao tem acesso a esta tela.", "Acesso restrito");
+    return;
+  }
   document.querySelectorAll(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   document.querySelectorAll(".view-panel").forEach((panel) => panel.classList.toggle("active", panel.id === view));
   document.querySelector(".sidebar").classList.remove("open");
@@ -384,6 +475,7 @@ function openView(view) {
     pacientes: ["CRM clinico", "Pacientes"],
     prontuario: ["Prontuario eletronico", "Historico e evolucao"],
     guia: ["Atendimento profissional", "Guia com assinatura"],
+    medico: ["Portal medico", "Atendimentos e comissoes"],
     financeiro: ["Controle financeiro", "Receitas, despesas e repasses"],
     convenios: ["Cadastro", "Planos de saude"],
     funcionarios: ["Gestao de equipe", "Funcionarios"],
@@ -396,9 +488,56 @@ function openView(view) {
   lucide.createIcons();
 }
 
+function applyAccessControl() {
+  resolveCurrentUser();
+  document.querySelectorAll(".nav-item").forEach((button) => {
+    button.hidden = !canAccess(button.dataset.view);
+  });
+  const active = document.querySelector(".view-panel.active");
+  if (active && !canAccess(active.id)) {
+    openView(firstAllowedView());
+  }
+  const appointmentForm = byId("appointmentForm");
+  if (appointmentForm) {
+    appointmentForm.querySelectorAll("input,select,button").forEach((node) => {
+      node.disabled = currentUser.accessRole === "medical";
+    });
+  }
+}
+
+function resolveCurrentUser() {
+  const email = currentUser.email || "";
+  const employee = state.employees.find((item) => item.email && item.email.toLowerCase() === email.toLowerCase());
+  if (employee) {
+    const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
+    const rolePerms = state.tenant.settings?.rolePermissions?.[accessRole] || [];
+    currentUser = {
+      email,
+      accessRole,
+      employeeId: employee.id,
+      professionalId: employee.professionalId || "",
+      permissions: Array.isArray(employee.permissions) ? employee.permissions : rolePerms
+    };
+  } else if (!email) {
+    currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
+  }
+}
+
+function canAccess(view) {
+  if (!view) return false;
+  if (currentUser.accessRole === "admin") return true;
+  return (currentUser.permissions || []).includes(view);
+}
+
+function firstAllowedView() {
+  const order = ["medico", "dashboard", "agenda", "pacientes", "prontuario", "guia", "financeiro", "convenios", "funcionarios", "crm", "admin"];
+  return order.find((view) => canAccess(view)) || "dashboard";
+}
+
 function renderAll() {
   byId("tenantName").textContent = state.tenant.name;
   syncProfessionalsFromEmployees();
+  resolveCurrentUser();
   populateSelects();
   renderMetrics();
   renderTimeline();
@@ -420,22 +559,41 @@ function renderAll() {
   renderMessagePatientOptions();
   renderMessagePreview();
   renderFinanceSettings();
+  renderAccessControl();
+  renderDoctorPortal();
+  renderSmartSuggestions("complaint");
+  renderSmartSuggestions("vitals");
+  renderSmartSuggestions("conduct");
+  renderSmartSuggestions("prescription");
+  renderSmartSuggestions("guideProcedure");
+  renderSmartSuggestions("guideDescription");
   updateCommissionPreview();
   updateEmployeeCrmRequirement();
+  applyAccessControl();
   lucide.createIcons();
 }
 
 function populateSelects() {
-  fillSelect("appointmentPatient", state.patients, "name");
-  fillSelect("recordPatient", state.patients, "name");
+  const visiblePatients = visiblePatientsForCurrentUser();
+  fillSelect("appointmentPatient", currentUser.accessRole === "medical" ? visiblePatients : state.patients, "name");
+  fillSelect("recordPatient", visiblePatients, "name");
   fillSelect("messagePatient", state.patients, "name");
-  fillSelect("guidePatient", state.patients, "name");
+  fillSelect("guidePatient", visiblePatients, "name");
   fillSelect("appointmentProfessional", state.professionals, "name");
   fillSelect("financeProfessional", [{ id: "", name: "Sem repasse" }, ...state.professionals], "name");
   fillSelect("guideProfessional", state.professionals, "name");
   fillSelect("availabilityDoctor", state.professionals, "name");
   fillSelect("appointmentService", state.services, "name");
   fillInsuranceSelect("patientInsurance");
+}
+
+function visiblePatientsForCurrentUser() {
+  if (currentUser.accessRole !== "medical") return state.patients;
+  const professionalId = currentDoctorProfessionalId();
+  const patientIds = new Set(state.appointments
+    .filter((appointment) => appointment.professionalId === professionalId)
+    .map((appointment) => appointment.patientId));
+  return state.patients.filter((patient) => patientIds.has(patient.id));
 }
 
 function fillSelect(id, items, field) {
@@ -715,6 +873,7 @@ function commissionRows() {
         professionalId: item.professionalId,
         professionalName: pro.name,
         description: item.description,
+        dueDate: item.dueDate || todayIso,
         baseAmount: Number(item.amount || 0),
         percent,
         amount,
@@ -802,6 +961,161 @@ function renderFinanceSettings() {
   byId("defaultCommission").value = Number(state.tenant.settings?.defaultCommission || 0);
 }
 
+function renderAccessControl() {
+  const node = byId("accessControlList");
+  if (!node) return;
+  const screens = [
+    ["dashboard", "Visao geral"], ["agenda", "Agenda"], ["pacientes", "Pacientes"], ["prontuario", "Prontuario"],
+    ["guia", "Guia"], ["medico", "Portal medico"], ["financeiro", "Financeiro"], ["convenios", "Planos"],
+    ["funcionarios", "Funcionarios"], ["crm", "CRM"], ["admin", "Admin"]
+  ];
+  node.innerHTML = state.employees.map((employee) => {
+    const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
+    const permissions = employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || [];
+    return `<div class="access-item">
+      <div>
+        <strong>${escapeHtml(employee.name)}</strong>
+        <span>${escapeHtml(employee.email || "Sem e-mail")} - ${statusLabel[accessRole]}</span>
+      </div>
+      <label>Nivel<select onchange="updateEmployeeAccessRole('${employee.id}', this.value)">
+        <option value="admin" ${accessRole === "admin" ? "selected" : ""}>Administrador</option>
+        <option value="medical" ${accessRole === "medical" ? "selected" : ""}>Medico</option>
+        <option value="receptionist" ${accessRole === "receptionist" ? "selected" : ""}>Secretaria</option>
+      </select></label>
+      <div class="permission-grid">${screens.map(([view, label]) => `<label><input type="checkbox" ${permissions.includes(view) ? "checked" : ""} onchange="toggleEmployeePermission('${employee.id}', '${view}', this.checked)"> ${label}</label>`).join("")}</div>
+    </div>`;
+  }).join("") || emptyState("Cadastre funcionarios para controlar acessos.");
+}
+
+async function updateEmployeeAccessRole(id, accessRole) {
+  const employee = state.employees.find((item) => item.id === id);
+  if (!employee) return;
+  employee.accessRole = accessRole;
+  employee.permissions = [...(state.tenant.settings?.rolePermissions?.[accessRole] || [])];
+  await saveEmployeeRemote(employee);
+  saveState();
+  resolveCurrentUser();
+  renderAll();
+  toast("Nivel de acesso atualizado.");
+}
+
+async function toggleEmployeePermission(id, view, checked) {
+  const employee = state.employees.find((item) => item.id === id);
+  if (!employee) return;
+  const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
+  const permissions = new Set(employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || []);
+  if (checked) permissions.add(view);
+  else permissions.delete(view);
+  employee.permissions = [...permissions];
+  await saveEmployeeRemote(employee);
+  saveState();
+  resolveCurrentUser();
+  applyAccessControl();
+  toast("Permissao de tela atualizada.");
+}
+
+function renderDoctorPortal() {
+  const list = byId("doctorAppointmentsList");
+  if (!list) return;
+  const period = byId("doctorPeriod")?.value || "today";
+  const professionalId = currentDoctorProfessionalId();
+  const appointments = state.appointments
+    .filter((appt) => !professionalId || appt.professionalId === professionalId)
+    .filter((appt) => inDoctorPeriod(appt.date, period))
+    .sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const finished = appointments.filter((appt) => appt.status === "finished");
+  const doctorCommissions = commissionRows()
+    .filter((row) => !professionalId || row.professionalId === professionalId)
+    .filter((row) => inDoctorPeriod(row.dueDate || todayIso, period));
+  const commissionTotal = doctorCommissions.reduce((sum, row) => sum + row.amount, 0);
+  byId("doctorMetricPatients").textContent = appointments.length;
+  byId("doctorMetricFinished").textContent = finished.length;
+  byId("doctorMetricCommission").textContent = money.format(commissionTotal);
+  list.innerHTML = appointments.map((appt) => `<div class="record-item">
+    <i data-lucide="user-round-check"></i>
+    <div>
+      <p class="item-title">${formatDate(appt.date)} ${appt.time} - ${escapeHtml(patientById(appt.patientId).name)}</p>
+      <p class="item-sub">${escapeHtml(serviceById(appt.serviceId).name)} - ${escapeHtml(patientById(appt.patientId).phone || "")}</p>
+    </div>
+    <button class="icon-button" onclick="selectPatient('${appt.patientId}')" aria-label="Atender paciente"><i data-lucide="clipboard-plus"></i></button>
+  </div>`).join("") || emptyState("Nenhum paciente agendado para este periodo.");
+  byId("doctorFinanceList").innerHTML = doctorCommissions
+    .map((row) => `<div class="record-item">
+      <i data-lucide="badge-dollar-sign"></i>
+      <div><p class="item-title">${escapeHtml(row.description)}</p><p class="item-sub">${money.format(row.amount)} - ${row.percent}%</p></div>
+      <span class="badge ${row.status}">${statusLabel[row.status]}</span>
+    </div>`).join("") || emptyState("Nenhuma comissao calculada para este periodo.");
+  lucide.createIcons();
+}
+
+function currentDoctorProfessionalId() {
+  if (currentUser.accessRole === "medical") return currentUser.professionalId;
+  return "";
+}
+
+function inDoctorPeriod(date, period) {
+  const target = new Date(`${date}T12:00:00`);
+  const today = new Date(`${todayIso}T12:00:00`);
+  if (period === "today") return date === todayIso;
+  if (period === "week") {
+    const diff = (target - today) / 86400000;
+    return diff >= 0 && diff <= 6;
+  }
+  if (period === "month") return target.getFullYear() === today.getFullYear() && target.getMonth() === today.getMonth();
+  return true;
+}
+
+function renderSmartSuggestions(kind) {
+  const map = {
+    complaint: ["recordComplaint", "complaintSuggestions"],
+    vitals: ["recordVitals", "vitalsSuggestions"],
+    conduct: ["recordConduct", "conductSuggestions"],
+    prescription: ["recordPrescription", "prescriptionSuggestions"],
+    guideProcedure: ["guideProcedure", "guideProcedureSuggestions"],
+    guideDescription: ["guideDescription", "guideDescriptionSuggestions"]
+  };
+  const [fieldId, containerId] = map[kind] || [];
+  const field = byId(fieldId);
+  const container = byId(containerId);
+  if (!field || !container) return;
+  const query = normalizeSearch(field.value).split(" ").filter(Boolean).pop() || "";
+  const suggestions = (smartCatalog[kind] || [])
+    .filter((item) => !query || normalizeSearch(item).includes(query))
+    .slice(0, 8);
+  container.innerHTML = suggestions.map((item) => `<button type="button" onclick="applySmartSuggestion('${kind}', '${escapeAttr(item)}')">${escapeHtml(item)}</button>`).join("");
+}
+
+function applySmartSuggestion(kind, value) {
+  const fieldId = {
+    complaint: "recordComplaint",
+    vitals: "recordVitals",
+    conduct: "recordConduct",
+    prescription: "recordPrescription",
+    guideProcedure: "guideProcedure",
+    guideDescription: "guideDescription"
+  }[kind];
+  const field = byId(fieldId);
+  if (!field) return;
+  const separator = field.value.trim() ? "\n" : "";
+  field.value = `${field.value.trim()}${separator}${value}`;
+  renderSmartSuggestions(kind);
+}
+
+function suggestConductText() {
+  const complaint = byId("recordComplaint").value.trim();
+  const vitals = byId("recordVitals").value.trim();
+  const diagnosis = byId("recordDiagnosis").value.trim();
+  const text = [
+    "Paciente avaliado em consulta.",
+    complaint ? `Queixa principal: ${complaint}.` : "",
+    vitals ? `Sinais vitais registrados: ${vitals}.` : "",
+    diagnosis ? `Hipotese diagnostica/avaliacao: ${diagnosis}.` : "",
+    "Conduta: orientacoes fornecidas, sinais de alerta explicados, tratamento conforme prescricao e retorno programado conforme evolucao."
+  ].filter(Boolean).join("\n");
+  byId("recordConduct").value = text;
+  renderSmartSuggestions("conduct");
+}
+
 function renderCampaigns() {
   byId("campaignList").innerHTML = state.campaigns.map((c) => `<div class="campaign-item">
     <i data-lucide="radio"></i>
@@ -823,9 +1137,19 @@ function renderMessagePatientOptions() {
 
 async function submitAppointment(event) {
   event.preventDefault();
+  if (currentUser.accessRole === "medical") {
+    await siteAlert("Medicos nao podem agendar atendimentos. Use o Portal medico para realizar o atendimento.", "Acesso restrito");
+    return;
+  }
   const data = Object.fromEntries(new FormData(event.target));
   if (!data.patientId || !data.professionalId || !data.serviceId) {
     toast("Selecione paciente, medico e servico.");
+    return;
+  }
+  const validation = validateAppointmentSlot(data.professionalId, data.date, data.time, data.serviceId);
+  if (!validation.ok) {
+    await siteAlert(validation.message, "Horario indisponivel");
+    openSlotModal(data.professionalId, data.date, data.serviceId);
     return;
   }
   let appointment = { id: uid("a"), ...data };
@@ -977,14 +1301,17 @@ async function submitEmployee(event) {
   if (editingEmployeeId) {
     const employee = state.employees.find((item) => item.id === editingEmployeeId);
     const professionalId = employee.professionalId || uid("dr");
-    Object.assign(employee, data, { professionalId: data.role === "doctor" ? professionalId : employee.professionalId });
+    const accessRole = employee.accessRole || (data.role === "doctor" ? "medical" : "receptionist");
+    Object.assign(employee, data, { accessRole, professionalId: data.role === "doctor" ? professionalId : employee.professionalId });
     const saved = await saveEmployeeRemote(employee);
     Object.assign(employee, saved);
     toast("Funcionario atualizado.");
   } else {
+    const accessRole = data.role === "doctor" ? "medical" : "receptionist";
     const saved = await saveEmployeeRemote({
       id: uid("e"),
       professionalId: data.role === "doctor" ? uid("dr") : "",
+      accessRole,
       ...data
     });
     state.employees.push(saved);
@@ -1130,31 +1457,95 @@ function suggestSlot() {
   const professional = professionalById(byId("appointmentProfessional").value);
   const service = serviceById(byId("appointmentService").value);
   const date = byId("appointmentDate").value || todayIso;
-  const availability = availabilityForDate(professional, date);
-  if (!availability) {
-    byId("slotSuggestion").textContent = `${professional.name} nao esta disponivel para atendimento em ${formatDate(date)}.`;
+  const slots = availableSlots(professional.id, date, service.id, 14);
+  if (!slots.length) {
+    byId("slotSuggestion").textContent = "Nao encontrei horarios livres para este medico nos proximos 14 dias.";
     return;
   }
-  const busy = state.appointments.filter((a) => a.professionalId === professional.id && a.date === date).map((a) => a.time);
-  const startHour = Number((availability.start || professional.start || "08:00").slice(0, 2));
-  const endHour = Number((availability.end || professional.end || "18:00").slice(0, 2));
-  let suggestion = "";
-  for (let hour = startHour; hour < endHour; hour += 1) {
-    for (const minute of ["00", "30"]) {
-      const slot = `${String(hour).padStart(2, "0")}:${minute}`;
-      if (!busy.includes(slot)) {
-        suggestion = slot;
-        break;
+  byId("slotSuggestion").textContent = `${slots.length} horario(s) disponiveis encontrados para ${professional.name}.`;
+  openSlotModal(professional.id, date, service.id);
+}
+
+function updateSlotAvailabilityPreview() {
+  const proId = byId("appointmentProfessional")?.value;
+  const date = byId("appointmentDate")?.value;
+  const time = byId("appointmentTime")?.value;
+  const serviceId = byId("appointmentService")?.value;
+  if (!proId || !date || !time) return;
+  const validation = validateAppointmentSlot(proId, date, time, serviceId);
+  byId("slotSuggestion").textContent = validation.ok
+    ? "Horario disponivel para este medico."
+    : validation.message;
+}
+
+function validateAppointmentSlot(professionalId, date, time, serviceId) {
+  const professional = professionalById(professionalId);
+  const service = serviceById(serviceId);
+  const availability = availabilityForDate(professional, date);
+  if (!availability) return { ok: false, message: `${professional.name} nao atende em ${formatDate(date)}.` };
+  if (!time) return { ok: false, message: "Informe um horario para validar a disponibilidade." };
+  const start = toMinutes(time);
+  const end = start + Number(service.duration || 30);
+  const availStart = toMinutes(availability.start);
+  const availEnd = toMinutes(availability.end);
+  if (start < availStart || end > availEnd) {
+    return { ok: false, message: `${professional.name} atende neste dia de ${availability.start} as ${availability.end}.` };
+  }
+  const conflict = state.appointments.some((appt) => {
+    if (appt.professionalId !== professionalId || appt.date !== date) return false;
+    const apptStart = toMinutes(appt.time);
+    const apptEnd = apptStart + Number(serviceById(appt.serviceId).duration || 30);
+    return start < apptEnd && end > apptStart;
+  });
+  if (conflict) return { ok: false, message: "Este horario conflita com outra consulta do mesmo medico." };
+  return { ok: true, message: "Horario disponivel." };
+}
+
+function availableSlots(professionalId, fromDate, serviceId, daysAhead = 14) {
+  const service = serviceById(serviceId);
+  const professional = professionalById(professionalId);
+  const slots = [];
+  const base = new Date(`${fromDate || todayIso}T12:00:00`);
+  for (let d = 0; d < daysAhead; d += 1) {
+    const date = new Date(base);
+    date.setDate(base.getDate() + d);
+    const iso = date.toISOString().slice(0, 10);
+    const availability = availabilityForDate(professional, iso);
+    if (!availability) continue;
+    for (let minutes = toMinutes(availability.start); minutes + Number(service.duration || 30) <= toMinutes(availability.end); minutes += 30) {
+      const time = fromMinutes(minutes);
+      if (validateAppointmentSlot(professionalId, iso, time, serviceId).ok) {
+        slots.push({ date: iso, time, professionalId, serviceId });
       }
     }
-    if (suggestion) break;
   }
-  if (!suggestion) {
-    byId("slotSuggestion").textContent = "Agenda cheia para este medico na data escolhida.";
-    return;
-  }
-  byId("appointmentTime").value = suggestion;
-  byId("slotSuggestion").textContent = `${suggestion} e o melhor encaixe: ${professional.name} tem janela livre e o servico dura ${service.duration} minutos.`;
+  return slots.slice(0, 24);
+}
+
+function openSlotModal(professionalId, date, serviceId) {
+  const professional = professionalById(professionalId);
+  const slots = availableSlots(professionalId, date || todayIso, serviceId, 21);
+  byId("slotModalTitle").textContent = `${professional.name} - horarios disponiveis`;
+  byId("slotOptions").innerHTML = slots.map((slot) => `<button type="button" onclick="chooseSlot('${slot.date}','${slot.time}')">
+    <strong>${formatDate(slot.date)}</strong>
+    <span>${slot.time}</span>
+  </button>`).join("") || emptyState("Nenhum horario disponivel encontrado para este medico.");
+  byId("slotModal").classList.add("open");
+  lucide.createIcons();
+}
+
+function closeSlotModal() {
+  byId("slotModal").classList.remove("open");
+}
+
+function chooseSlot(date, time) {
+  byId("appointmentDate").value = date;
+  byId("appointmentTime").value = time;
+  byId("scheduleDateFilter").value = date;
+  currentScheduleDate = date;
+  closeSlotModal();
+  updateSlotAvailabilityPreview();
+  renderSchedule();
 }
 
 function renderMessagePreview() {
@@ -1254,6 +1645,8 @@ async function auth() {
   try {
     const { error } = await supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password });
     if (error) throw error;
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    currentUser.email = sessionData?.session?.user?.email || data.email;
     feedback.textContent = "Acesso confirmado.";
     await loadRemoteSnapshot();
     unlockAuth();
@@ -1300,7 +1693,7 @@ async function loadClinicTables() {
   ] = await Promise.all([
     remoteSelect("insurance_plans", "id,name,contact,active", clinicId),
     remoteSelect("patients", "id,full_name,phone,whatsapp,email,cpf,document,insurance,risk,no_show_score,insurance_plan_id", clinicId),
-    remoteSelect("staff_members", "id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,status", clinicId),
+    remoteSelect("staff_members", "id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,access_role,permissions,status", clinicId),
     remoteSelect("services", "id,name,specialty,duration_minutes,price,active", clinicId),
     remoteSelect("appointments", "id,patient_id,professional_id,service_id,starts_at,ends_at,status", clinicId),
     remoteSelect("financial_transactions", "id,description,type,amount,due_date,status,payment_method,professional_id,patient_id,appointment_id", clinicId),
@@ -1312,6 +1705,7 @@ async function loadClinicTables() {
   if (plans) state.insurancePlans = plans.map(fromRemotePlan);
   if (patients) state.patients = patients.map(fromRemotePatient);
   if (staff) state.employees = staff.map(fromRemoteStaff);
+  resolveCurrentUser();
   if (services?.length) state.services = services.map(fromRemoteService);
   syncProfessionalsFromEmployees();
   if (appointments) state.appointments = appointments.map(fromRemoteAppointment);
@@ -1413,6 +1807,7 @@ function toRemotePatient(patient) {
 
 function fromRemoteStaff(row) {
   const hours = row.working_hours || {};
+  const accessRole = row.access_role || (row.role === "doctor" ? "medical" : "receptionist");
   return {
     id: row.id,
     professionalId: row.professional_id || row.id,
@@ -1426,6 +1821,8 @@ function fromRemoteStaff(row) {
     start: hours.start || "08:00",
     end: hours.end || "18:00",
     availability: hours.availability || [{ days: [1, 2, 3, 4, 5], start: hours.start || "08:00", end: hours.end || "18:00" }],
+    accessRole,
+    permissions: Array.isArray(row.permissions) ? row.permissions : undefined,
     status: row.status || "active"
   };
 }
@@ -1442,6 +1839,8 @@ function toRemoteStaff(employee) {
     email: employee.email || "",
     commission_percent: Number(employee.commission || 0),
     working_hours: { start: employee.start || "08:00", end: employee.end || "18:00", availability: employee.availability || [] },
+    access_role: employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist"),
+    permissions: Array.isArray(employee.permissions) ? employee.permissions : null,
     status: employee.status || "active"
   };
 }
@@ -1949,7 +2348,59 @@ function downloadGuideById(id) {
 function downloadGuideFile(guide) {
   const patient = patientById(guide.patientId);
   const pro = professionalById(guide.professionalId);
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Guia de atendimento</title><style>body{font-family:Arial,sans-serif;color:#111;padding:32px;line-height:1.5}h1{font-size:22px}.box{border:1px solid #ccc;padding:14px;margin:12px 0}.signature{max-width:420px;border-bottom:1px solid #111}</style></head><body><h1>${escapeHtml(state.tenant.name)} - Guia de atendimento</h1><div class="box"><strong>Paciente:</strong> ${escapeHtml(patient.name)}<br><strong>CPF:</strong> ${escapeHtml(patient.cpf || "Nao informado")}<br><strong>Profissional:</strong> ${escapeHtml(pro.name)}<br><strong>Data:</strong> ${formatDate(guide.date)}<br><strong>Procedimento:</strong> ${escapeHtml(guide.procedure)}</div><div class="box">${escapeHtml(guide.description || "Sem descricao.").replace(/\n/g, "<br>")}</div><p><strong>Assinatura do paciente</strong></p>${guide.signatureData ? `<img class="signature" src="${guide.signatureData}" alt="Assinatura do paciente">` : "<p>Sem assinatura capturada.</p>"}</body></html>`;
+  const issuedAt = new Date(guide.createdAt || new Date().toISOString()).toLocaleString("pt-BR");
+  const description = escapeHtml(guide.description || "Sem descricao registrada.").replace(/\n/g, "<br>");
+  const html = `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Guia de atendimento - ${escapeHtml(patient.name)}</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#eef3f8;color:#14213d;font-family:Arial,Helvetica,sans-serif;line-height:1.55}.page{width:min(920px,100%);min-height:100vh;margin:0 auto;background:#fff;padding:44px 52px}.header{display:flex;justify-content:space-between;gap:24px;border-bottom:3px solid #0f766e;padding-bottom:18px;margin-bottom:28px}.brand h1{margin:0;color:#0b1a30;font-size:26px;letter-spacing:.02em}.brand p,.meta p{margin:4px 0;color:#52617a;font-size:13px}.meta{text-align:right}.meta strong{display:block;color:#0f766e;font-size:12px;text-transform:uppercase;letter-spacing:.08em}.title{margin:0 0 18px;font-size:20px;text-transform:uppercase;color:#0b1a30}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:18px}.field,.statement,.signature-box{border:1px solid #d7e1ec;border-radius:8px;padding:14px;background:#fbfdff}.field span{display:block;color:#52617a;font-size:11px;text-transform:uppercase;font-weight:700;letter-spacing:.08em}.field strong{display:block;margin-top:4px;color:#0b1a30;font-size:15px}.statement{margin:18px 0;color:#24324a;min-height:140px}.statement h2,.signature-box h2{margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#0f766e}.signature{display:block;max-width:430px;max-height:160px;margin-top:12px;border-bottom:1px solid #0b1a30;padding:4px 0}.signature-line{height:72px;border-bottom:1px solid #0b1a30;margin:18px 0 8px}.footer{margin-top:32px;padding-top:14px;border-top:1px solid #d7e1ec;color:#52617a;font-size:12px;display:flex;justify-content:space-between;gap:16px}@media print{body{background:#fff}.page{width:100%;padding:28px;min-height:auto}.footer{position:fixed;bottom:18px;left:28px;right:28px}}@media(max-width:720px){.page{padding:28px 20px}.header,.footer{display:block}.meta{text-align:left;margin-top:12px}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="header">
+      <div class="brand">
+        <h1>${escapeHtml(state.tenant.name)}</h1>
+        <p>Guia de atendimento profissional com assinatura digital do paciente.</p>
+      </div>
+      <div class="meta">
+        <strong>Documento</strong>
+        <p>Emitido em ${issuedAt}</p>
+        <p>Codigo: ${escapeHtml(String(guide.id || "").slice(-8).toUpperCase() || "LOCAL")}</p>
+      </div>
+    </header>
+
+    <h2 class="title">Guia de atendimento</h2>
+    <section class="grid">
+      <div class="field"><span>Paciente</span><strong>${escapeHtml(patient.name)}</strong></div>
+      <div class="field"><span>CPF</span><strong>${escapeHtml(patient.cpf || "Nao informado")}</strong></div>
+      <div class="field"><span>Profissional</span><strong>${escapeHtml(pro.name)}</strong></div>
+      <div class="field"><span>Registro</span><strong>${escapeHtml(pro.license || pro.specialty || "Nao informado")}</strong></div>
+      <div class="field"><span>Data do atendimento</span><strong>${formatDate(guide.date)}</strong></div>
+      <div class="field"><span>Procedimento</span><strong>${escapeHtml(guide.procedure || "Atendimento profissional")}</strong></div>
+    </section>
+
+    <section class="statement">
+      <h2>Descricao e ciencia do paciente</h2>
+      <p>${description}</p>
+    </section>
+
+    <section class="signature-box">
+      <h2>Assinatura digital do paciente</h2>
+      ${guide.signatureData ? `<img class="signature" src="${escapeAttr(guide.signatureData)}" alt="Assinatura do paciente">` : `<div class="signature-line"></div>`}
+      <p>${escapeHtml(patient.name)}${patient.cpf ? ` - CPF ${escapeHtml(patient.cpf)}` : ""}</p>
+    </section>
+
+    <footer class="footer">
+      <span>Documento gerado pelo Clinicou.</span>
+      <span>Valide os dados antes de anexar a processos externos.</span>
+    </footer>
+  </main>
+</body>
+</html>`;
   downloadBlob(html, `guia-atendimento-${normalizeName(patient.name).replace(/\s/g, "-") || "paciente"}.html`, "text/html;charset=utf-8");
 }
 
@@ -2089,7 +2540,9 @@ function professionalById(id) {
   const pro = state.professionals.find((p) => p.id === id);
   if (pro) return pro;
   const employee = state.employees.find((item) => item.professionalId === id);
-  return employee ? { id, name: employee.name, specialty: employee.specialty, commission: employee.commission, start: employee.start, end: employee.end } : { id: "", name: "Profissional", commission: 0, start: "08:00", end: "18:00" };
+  return employee
+    ? { id, name: employee.name, specialty: employee.specialty, commission: employee.commission, start: employee.start, end: employee.end, availability: employee.availability || [] }
+    : { id: "", name: "Profissional", commission: 0, start: "08:00", end: "18:00", availability: [] };
 }
 
 function employeeById(id) {
@@ -2113,6 +2566,17 @@ function formatDateTime(value) {
 function availabilityForDate(professional, date) {
   const day = new Date(`${date}T12:00:00`).getDay();
   return (professional.availability || []).find((item) => (item.days || []).includes(day));
+}
+
+function toMinutes(time = "00:00") {
+  const [hour, minute] = String(time).split(":").map(Number);
+  return (hour || 0) * 60 + (minute || 0);
+}
+
+function fromMinutes(minutes) {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
 
 function formatWeekdays(days = []) {
@@ -2183,6 +2647,10 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
 }
 
+function escapeAttr(value) {
+  return escapeHtml(value).replace(/`/g, "&#096;");
+}
+
 function toast(message) {
   const node = byId("toast");
   node.textContent = message;
@@ -2203,3 +2671,9 @@ window.editEmployee = editEmployee;
 window.toggleEmployeeStatus = toggleEmployeeStatus;
 window.deleteEmployee = deleteEmployee;
 window.openRecordHistory = openRecordHistory;
+window.chooseSlot = chooseSlot;
+window.applySmartSuggestion = applySmartSuggestion;
+window.updateEmployeeAccessRole = updateEmployeeAccessRole;
+window.toggleEmployeePermission = toggleEmployeePermission;
+window.settleCommission = settleCommission;
+window.downloadGuideById = downloadGuideById;

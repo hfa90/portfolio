@@ -15,6 +15,7 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 
 - Visao geral: metricas do dia, receita prevista, risco de no-show, planos ativos, fila de atendimento, prioridades, fluxo financeiro e confirmacoes pendentes.
 - Agenda: filtro por data, status, agenda por medico, cadastro de consulta, sugestao de horario e lancamento financeiro automatico.
+- Portal medico: area exclusiva para medico acompanhar pacientes do dia, semana e mes, abrir prontuario, ver atendimentos concluidos e consultar comissoes do periodo.
 - Pacientes: cadastro, edicao, exclusao, busca e abertura rapida do prontuario.
 - Prontuario: evolucao clinica, busca inteligente por nome/WhatsApp/CPF, historico em popup, atestado inteligente e receita inteligente.
 - Financeiro: receitas, despesas, status, repasse por profissional, CSV, resumo financeiro e marcacao de pagamento.
@@ -24,6 +25,7 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 - Guia de atendimento: formulario com paciente, profissional, procedimento, descricao, assinatura manuscrita em canvas e download em HTML.
 - CRM: templates personalizados para WhatsApp, busca de paciente, copia manual, abertura do WhatsApp e registro de envio.
 - Admin: exportacao/importacao de backup JSON, alteracao do nome da clinica e configuracao financeira de comissoes medicas.
+- Controle de acesso: nivel administrador, medico e secretaria, com permissao individual por tela definida no Admin.
 
 ## Regras implementadas
 
@@ -37,12 +39,19 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 - Atestado e receita podem ser gravados no prontuario e passam a aparecer no historico clinico.
 - Medico exige CRM no cadastro de funcionario.
 - Funcionarios suspensos deixam de aparecer na lista de profissionais da agenda.
-- A disponibilidade individual do medico limita a sugestao de horarios da agenda.
+- A disponibilidade individual do medico limita a sugestao de horarios da agenda e tambem bloqueia o salvamento manual fora dos dias/horarios permitidos.
+- O botao de sugerir horario consulta o medico selecionado, ignora conflitos existentes e abre popup com opcoes de data e horario disponiveis.
+- Medico nao pode agendar atendimento, mesmo que receba acesso visual a agenda.
+- O prontuario possui sugestoes inteligentes enquanto digita para queixa principal, sinais vitais, conduta/procedimento e prescricao.
+- A conduta/procedimento possui botao discreto para gerar texto baseado na queixa, sinais vitais e hipotese diagnostica.
+- Os campos de procedimento e descricao da Guia de Atendimento tambem possuem sugestoes inteligentes.
+- A Guia de Atendimento baixada tem modelo profissional em HTML, com cabecalho da clinica, dados do paciente, profissional, declaracao e assinatura digital.
 - Planos suspensos deixam de aparecer como opcao ativa para novos pacientes.
 - Templates de CRM sao personalizados com nome do paciente, proxima consulta, servico e profissional quando disponiveis.
 - Comissoes sao calculadas quando a configuracao financeira da clinica estiver ativa.
 - Guias de atendimento assinadas sao salvas e tambem vinculadas ao historico do prontuario.
 - Avisos e confirmacoes usam modal proprio do Clinicou, sem `alert`/`confirm` nativos do navegador.
+- Administrador pode alterar o nivel e as telas permitidas de cada funcionario em Admin > Controle de acesso.
 
 ## Persistencia
 
@@ -60,6 +69,7 @@ Mudancas recentes no schema:
 - Tabela `attendance_guides` para guias assinadas.
 - `clinics.settings` guarda configuracao de comissoes.
 - `staff_members.working_hours` guarda disponibilidade individual dos medicos.
+- `staff_members.access_role` e `staff_members.permissions` guardam nivel de acesso e telas permitidas por funcionario.
 - `medical_records.payload` guarda documentos gerados no prontuario.
 - `commissions.settled_at` registra baixa de comissao.
 - RLS, grants, gatilho de `updated_at` e auditoria para `staff_members`.
