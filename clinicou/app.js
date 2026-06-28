@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://yhftbfpkuchxfblhfvva.supabase.co";
 const SUPABASE_KEY = "sb_publishable_paT5SW04fvUuJzui4t5COQ_nVI9gJxY";
 const SESSION_KEY = "clinicou_session_v1";
 const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
+const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
 
 const statusLabel = {
   scheduled: "Agendado",
@@ -178,6 +179,9 @@ let signaturePad = null;
 let currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
 let availableClinics = [];
 let currentMembership = null;
+let currentSubscription = null;
+let trialWarningTimer = null;
+let currentSignupMetadata = {};
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -444,6 +448,7 @@ function wireEvents() {
       settings: { ...seedState.tenant.settings, ...(selected.clinic.settings || {}) }
     };
     await loadClinicTables();
+    await loadSubscriptionStatus();
     saveState();
     renderAll();
     toast("Clinica ativa alterada.");
@@ -498,6 +503,7 @@ async function enforceAuth() {
   const { data } = await supabaseClient.auth.getSession();
   if (data?.session) {
     currentUser.email = data.session.user?.email || "";
+    currentSignupMetadata = data.session.user?.user_metadata || {};
     const loaded = await loadRemoteSnapshot();
     if (loaded) unlockAuth();
     return;
@@ -507,6 +513,7 @@ async function enforceAuth() {
   supabaseClient.auth.onAuthStateChange(async (_event, session) => {
     if (session) {
       currentUser.email = session.user?.email || "";
+      currentSignupMetadata = session.user?.user_metadata || {};
       const loaded = await loadRemoteSnapshot();
       if (loaded) unlockAuth();
     }
@@ -535,6 +542,12 @@ function lockClinicSetup(message) {
   byId("authModal").classList.add("open");
   byId("authForm").hidden = true;
   byId("clinicSetupForm").hidden = false;
+  if (byId("setupClinicName") && currentSignupMetadata.clinic_name) {
+    byId("setupClinicName").value = currentSignupMetadata.clinic_name;
+  }
+  if (byId("setupClinicSlug") && currentSignupMetadata.clinic_name && !byId("setupClinicSlug").value) {
+    byId("setupClinicSlug").value = slugify(currentSignupMetadata.clinic_name);
+  }
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Criar clinica inicial";
 }
@@ -667,7 +680,37 @@ function renderAll() {
   updateCommissionPreview();
   updateEmployeeCrmRequirement();
   applyAccessControl();
+  scheduleTrialWarning();
   lucide.createIcons();
+}
+
+function scheduleTrialWarning() {
+  if (trialWarningTimer) {
+    clearInterval(trialWarningTimer);
+    trialWarningTimer = null;
+  }
+  if (!shouldWarnTrialEnding()) return;
+  maybeShowTrialWarning();
+  trialWarningTimer = setInterval(maybeShowTrialWarning, TRIAL_WARNING_INTERVAL_MS);
+}
+
+function shouldWarnTrialEnding() {
+  if (!currentSubscription || currentSubscription.status !== "trialing" || !currentSubscription.trialEndsAt) return false;
+  const remaining = new Date(currentSubscription.trialEndsAt).getTime() - Date.now();
+  return remaining > 0 && remaining <= 24 * 60 * 60 * 1000;
+}
+
+function maybeShowTrialWarning() {
+  if (!shouldWarnTrialEnding()) return;
+  const key = `clinicou_trial_warning_${currentClinicId()}`;
+  const lastShown = Number(localStorage.getItem(key) || 0);
+  if (Date.now() - lastShown < TRIAL_WARNING_INTERVAL_MS) return;
+  localStorage.setItem(key, String(Date.now()));
+  const remainingHours = Math.max(1, Math.ceil((new Date(currentSubscription.trialEndsAt).getTime() - Date.now()) / 3600000));
+  siteAlert(
+    `Seu trial do Clinicou termina em aproximadamente ${remainingHours} hora(s). Escolha um plano mensal ou anual em planos.html para manter o acesso da clinica sem interrupcao.`,
+    "Trial terminando"
+  );
 }
 
 function renderClinicSwitcher() {
@@ -1754,6 +1797,7 @@ async function auth() {
     if (error) throw error;
     const { data: sessionData } = await supabaseClient.auth.getSession();
     currentUser.email = sessionData?.session?.user?.email || data.email;
+    currentSignupMetadata = sessionData?.session?.user?.user_metadata || {};
     feedback.textContent = "Acesso confirmado.";
     const loaded = await loadRemoteSnapshot();
     if (loaded) {
@@ -1796,6 +1840,7 @@ async function loadRemoteSnapshot() {
   };
   remoteReady = true;
   await loadClinicTables();
+  await loadSubscriptionStatus();
   saveState();
   renderAll();
   return true;
@@ -1824,6 +1869,32 @@ async function createClinicFromSetup() {
     unlockAuth();
     toast("Clinica criada e vinculada a sua conta.");
   }
+}
+
+async function loadSubscriptionStatus() {
+  currentSubscription = null;
+  const clinicId = currentClinicId();
+  if (!supabaseClient || !clinicId) return;
+  const { data, error } = await supabaseClient
+    .from("clinic_subscriptions")
+    .select("id,plan_id,status,trial_ends_at,current_period_ends_at")
+    .eq("clinic_id", clinicId)
+    .maybeSingle();
+  if (error) {
+    toast(`Nao foi possivel carregar o trial: ${error.message}`);
+    return;
+  }
+  currentSubscription = data ? fromRemoteSubscription(data) : null;
+}
+
+function fromRemoteSubscription(row) {
+  return {
+    id: row.id,
+    planId: row.plan_id,
+    status: row.status,
+    trialEndsAt: row.trial_ends_at,
+    currentPeriodEndsAt: row.current_period_ends_at
+  };
 }
 
 async function loadClinicTables() {

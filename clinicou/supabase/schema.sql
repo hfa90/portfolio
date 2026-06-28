@@ -585,9 +585,25 @@ as $$
 declare
   v_user uuid := auth.uid();
   v_clinic public.clinics;
+  v_requested_plan text;
+  v_plan text := 'starter';
 begin
   if v_user is null then
     raise exception 'Authentication required';
+  end if;
+
+  select nullif(raw_user_meta_data->>'selected_plan', '')
+  into v_requested_plan
+  from auth.users
+  where id = v_user;
+
+  if exists (
+    select 1
+    from public.billing_plans bp
+    where bp.id = v_requested_plan
+      and bp.active = true
+  ) then
+    v_plan := v_requested_plan;
   end if;
 
   insert into public.clinics (name, slug, created_by)
@@ -596,6 +612,35 @@ begin
 
   insert into public.clinic_memberships (clinic_id, user_id, role)
   values (v_clinic.id, v_user, 'owner');
+
+  insert into public.clinic_subscriptions (
+    clinic_id,
+    plan_id,
+    provider,
+    status,
+    trial_ends_at,
+    current_period_ends_at,
+    metadata
+  )
+  values (
+    v_clinic.id,
+    v_plan,
+    'trial',
+    'trialing',
+    now() + interval '30 days',
+    now() + interval '30 days',
+    jsonb_build_object('created_from', 'clinicou_trial')
+  )
+  on conflict (clinic_id) do nothing;
+
+  insert into public.onboarding_tasks (clinic_id, task_key, title, metadata)
+  values
+    (v_clinic.id, 'profile', 'Completar dados da clinica', '{"screen":"admin"}'::jsonb),
+    (v_clinic.id, 'team', 'Cadastrar equipe e permissoes', '{"screen":"funcionarios"}'::jsonb),
+    (v_clinic.id, 'agenda', 'Configurar agenda e disponibilidade', '{"screen":"agenda"}'::jsonb),
+    (v_clinic.id, 'patients', 'Importar ou cadastrar primeiros pacientes', '{"screen":"pacientes"}'::jsonb),
+    (v_clinic.id, 'billing', 'Escolher plano antes do fim do trial', '{"screen":"admin"}'::jsonb)
+  on conflict (clinic_id, task_key) do nothing;
 
   return v_clinic;
 end;
@@ -872,6 +917,36 @@ values
     'month',
     '{"users":50,"patients":20000,"automations":50}'::jsonb,
     '["agenda","prontuario","financeiro","whatsapp","documentos","analytics","suporte_prioritario"]'::jsonb,
+    true
+  ),
+  (
+    'starter_annual',
+    'Starter Anual',
+    99000,
+    'BRL',
+    'year',
+    '{"users":3,"patients":500,"automations":1}'::jsonb,
+    '["agenda","pacientes","financeiro_basico","economia_2_meses"]'::jsonb,
+    true
+  ),
+  (
+    'growth_annual',
+    'Growth Anual',
+    199000,
+    'BRL',
+    'year',
+    '{"users":10,"patients":3000,"automations":10}'::jsonb,
+    '["agenda","prontuario","financeiro","whatsapp","documentos","economia_2_meses"]'::jsonb,
+    true
+  ),
+  (
+    'scale_annual',
+    'Scale Anual',
+    399000,
+    'BRL',
+    'year',
+    '{"users":50,"patients":20000,"automations":50}'::jsonb,
+    '["agenda","prontuario","financeiro","whatsapp","documentos","analytics","suporte_prioritario","economia_2_meses"]'::jsonb,
     true
   )
 on conflict (id) do update

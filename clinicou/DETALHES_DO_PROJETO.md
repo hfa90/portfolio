@@ -7,7 +7,9 @@ Clinicou e um sistema web estatico para gestao de clinica. A aplicacao roda em `
 ## Arquivos principais
 
 - `index.html`: estrutura das telas, formularios, modais e navegacao lateral.
+- `planos.html`: pagina comercial para venda, trial de 30 dias e cadastro com confirmacao por e-mail.
 - `styles.css`: design system, layout responsivo, tabelas, cards, formularios, modais e estados visuais.
+- `sales.css` e `sales.js`: visual e comportamento da pagina comercial.
 - `app.js`: dados iniciais, persistencia local, renderizacao das telas, mascaras, regras de cadastro, templates e exportacoes.
 - `supabase/schema.sql`: modelo de banco, RLS, grants, auditoria, storage e tabelas principais para Supabase.
 - `package.json`: scripts de verificacao local e testes.
@@ -80,6 +82,9 @@ Mudancas recentes no schema:
 - RLS, grants, gatilho de `updated_at` e auditoria para `staff_members`.
 - Tabelas `billing_plans`, `clinic_subscriptions`, `onboarding_tasks`, `integration_connections`, `automation_rules`, `document_templates` e `analytics_events`.
 - Edge Functions iniciais para billing webhook, envio WhatsApp, renderizacao de documentos e ingestao de analytics.
+- Pagina publica de planos com precos mensal/anual, comparativo comercial e cadastro via Supabase Auth.
+- `create_clinic` cria assinatura `trialing` por 30 dias e tarefas iniciais de onboarding.
+- O app exibe aviso a cada 20 minutos nas ultimas 24 horas do trial.
 
 ## Observacoes importantes
 
