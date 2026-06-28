@@ -1,12 +1,17 @@
 const SALES_SUPABASE_URL = "https://yhftbfpkuchxfblhfvva.supabase.co";
 const SALES_SUPABASE_KEY = "sb_publishable_paT5SW04fvUuJzui4t5COQ_nVI9gJxY";
+const SALES_TRIAL_KEY = "clinicou_sales_trial_ends_at";
+const TRIAL_DAYS = 30;
 
 const salesClient = window.supabase?.createClient(SALES_SUPABASE_URL, SALES_SUPABASE_KEY);
 let selectedCycle = "monthly";
+let previewTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   wirePricing();
   wireSignup();
+  wireHeroPreview();
+  startSalesTrialCountdown();
   lucide.createIcons();
 });
 
@@ -42,6 +47,64 @@ function wireSignup() {
   const form = document.getElementById("trialForm");
   form?.addEventListener("submit", submitTrialSignup);
   form?.phone?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
+}
+
+function wireHeroPreview() {
+  document.querySelectorAll("[data-preview]").forEach((button) => {
+    button.addEventListener("click", () => setHeroPreview(button.dataset.preview));
+  });
+  let index = 0;
+  const views = ["agenda", "financeiro", "crm"];
+  clearInterval(previewTimer);
+  previewTimer = setInterval(() => {
+    index = (index + 1) % views.length;
+    setHeroPreview(views[index]);
+  }, 5200);
+}
+
+function setHeroPreview(view) {
+  const title = document.getElementById("commandTitle");
+  const screen = document.getElementById("commandScreen");
+  const content = {
+    agenda: {
+      title: "Agenda inteligente",
+      rows: [
+        ["08:30", "Marina Lopes", "Confirmada"],
+        ["10:00", "Rafael Nunes", "Recepcao"],
+        ["14:00", "Claudia Sales", "WhatsApp pendente"]
+      ]
+    },
+    financeiro: {
+      title: "Financeiro e repasses",
+      rows: [
+        ["Pix", "Consulta Marina", "R$ 220 pago"],
+        ["Cartao", "Limpeza Rafael", "R$ 280 aberto"],
+        ["Repasse", "Dra. Ana Beatriz", "35% previsto"]
+      ]
+    },
+    crm: {
+      title: "CRM por WhatsApp",
+      rows: [
+        ["D-1", "Confirmacao automatica", "42 envios"],
+        ["Retorno", "Odontologia semestral", "18 contatos"],
+        ["Pos", "Estetica pos-procedimento", "26 envios"]
+      ]
+    }
+  }[view] || {};
+  if (title) title.textContent = content.title || "Clinicou";
+  if (screen) {
+    screen.innerHTML = (content.rows || []).map((row, index) => `
+      <div class="screen-row ${index === 0 ? "active" : ""}">
+        <span>${escapeHtml(row[0])}</span>
+        <strong>${escapeHtml(row[1])}</strong>
+        <small>${escapeHtml(row[2])}</small>
+      </div>
+    `).join("");
+  }
+  document.querySelectorAll("[data-preview]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.preview === view);
+  });
+  lucide.createIcons();
 }
 
 async function submitTrialSignup(event) {
@@ -83,6 +146,8 @@ async function submitTrialSignup(event) {
   }
 
   form.reset();
+  localStorage.setItem(SALES_TRIAL_KEY, new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString());
+  startSalesTrialCountdown();
   document.getElementById("signupPlan").value = "growth";
   document.getElementById("signupCycle").value = selectedCycle;
   setFeedback("Enviamos um e-mail personalizado para confirmar o cadastro. Depois da confirmacao, acesse o Clinicou e finalize a criacao da clinica.", "success");
@@ -108,4 +173,33 @@ function formatPhone(value) {
     return digits.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{4})(\d)/, "$1-$2");
   }
   return digits.replace(/(\d{2})(\d)/, "($1) $2").replace(/(\d{5})(\d)/, "$1-$2");
+}
+
+function startSalesTrialCountdown() {
+  updateSalesTrialCountdown();
+  clearInterval(startSalesTrialCountdown.timer);
+  startSalesTrialCountdown.timer = setInterval(updateSalesTrialCountdown, 1000);
+}
+
+function updateSalesTrialCountdown() {
+  const node = document.getElementById("salesTrialCountdown");
+  if (!node) return;
+  const stored = localStorage.getItem(SALES_TRIAL_KEY);
+  const endsAt = stored ? new Date(stored) : new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+  const remaining = endsAt.getTime() - Date.now();
+  node.textContent = remaining > 0 ? formatRemaining(remaining) : "Trial encerrado";
+}
+
+function formatRemaining(ms) {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m`;
+  return `${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[char]));
 }

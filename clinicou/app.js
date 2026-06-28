@@ -1884,7 +1884,7 @@ async function signOut() {
   if (!supabaseClient) return;
   const confirmed = await siteConfirm("Deseja sair do Clinicou e voltar para a tela de login?", "Sair");
   if (!confirmed) return;
-  await supabaseClient.auth.signOut();
+  const pendingSignOut = supabaseClient.auth.signOut();
   localStorage.removeItem(SESSION_KEY);
   activeClinicId = "";
   currentMembership = null;
@@ -1895,6 +1895,7 @@ async function signOut() {
   window.location.hash = "login";
   window.scrollTo({ top: 0, behavior: "smooth" });
   lockAuth("Voce saiu. Entre novamente para acessar o sistema.");
+  pendingSignOut.catch(() => toast("Sessao local encerrada. O Supabase pode demorar alguns segundos para sincronizar."));
 }
 
 function setAuthMode(mode = "login") {
