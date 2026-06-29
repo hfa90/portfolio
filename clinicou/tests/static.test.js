@@ -8,6 +8,7 @@ const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url)
 const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
 const salesPage = await readFile(new URL("../planos.html", import.meta.url), "utf8");
 const salesJs = await readFile(new URL("../sales.js", import.meta.url), "utf8");
+const teamAccessFunction = await readFile(new URL("../supabase/functions/team-access/index.ts", import.meta.url), "utf8");
 
 test("browser app only keeps non-sensitive session metadata in localStorage", () => {
   assert.match(app, /clinicou_session_v1/);
@@ -51,7 +52,8 @@ test("edge functions require server-side secrets before integration work", async
     "../supabase/functions/billing-webhook/index.ts",
     "../supabase/functions/whatsapp-dispatch/index.ts",
     "../supabase/functions/document-render/index.ts",
-    "../supabase/functions/analytics-ingest/index.ts"
+    "../supabase/functions/analytics-ingest/index.ts",
+    "../supabase/functions/team-access/index.ts"
   ];
 
   for (const path of functions) {
@@ -59,6 +61,18 @@ test("edge functions require server-side secrets before integration work", async
     assert.match(source, /requireEnv\(/);
     assert.match(source, /Deno\.serve/);
   }
+});
+
+test("team access uses server-side auth and six digit numeric password validation", () => {
+  assert.match(app, /functions\.invoke\("team-access"/);
+  assert.match(app, /\^\\d\{6\}\$/);
+  assert.match(teamAccessFunction, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(teamAccessFunction, /auth\.admin\.createUser/);
+  assert.match(teamAccessFunction, /auth\.admin\.updateUserById/);
+  assert.match(teamAccessFunction, /\.eq\("user_id", authData\.user\.id\)/);
+  assert.match(teamAccessFunction, /\["owner", "admin"\]\.includes/);
+  assert.match(teamAccessFunction, /\.upsert\(membershipPayload/);
+  assert.doesNotMatch(schema, /password/i);
 });
 
 test("sales page offers trial signup with Supabase email confirmation metadata", () => {
