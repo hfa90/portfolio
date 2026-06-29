@@ -469,17 +469,11 @@ function wireEvents() {
   byId("messageForm")?.addEventListener("submit", submitMessage);
   byId("authForm")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    const mode = byId("signupButton")?.hidden ? "login" : "signup";
-    mode === "signup" ? signUpTrial() : auth();
+    auth();
   });
   byId("loginButton")?.addEventListener("click", () => auth());
-  byId("signupButton")?.addEventListener("click", signUpTrial);
   byId("resendConfirmationButton")?.addEventListener("click", resendConfirmationEmail);
   byId("logoutButton")?.addEventListener("click", signOut);
-  byId("authPhone")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
-  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
-    button.addEventListener("click", () => setAuthMode(button.dataset.authMode));
-  });
   byId("setupClinicName")?.addEventListener("input", (event) => {
     const slug = byId("setupClinicSlug");
     if (slug && !slug.dataset.touched) slug.value = slugify(event.target.value);
@@ -553,9 +547,9 @@ function lockAuth(message) {
   byId("authModal").classList.add("open");
   byId("authForm").hidden = false;
   byId("clinicSetupForm").hidden = true;
+  byId("authTitle").textContent = "Entre na sua clinica";
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Acesso Supabase obrigatorio";
-  setAuthMode("login");
   stopTrialTimers();
 }
 
@@ -573,6 +567,7 @@ function lockClinicSetup(message) {
   byId("authModal").classList.add("open");
   byId("authForm").hidden = true;
   byId("clinicSetupForm").hidden = false;
+  byId("authTitle").textContent = "Criar clinica inicial";
   if (byId("setupClinicName") && currentSignupMetadata.clinic_name) {
     byId("setupClinicName").value = currentSignupMetadata.clinic_name;
   }
@@ -1810,7 +1805,7 @@ async function auth() {
     const loaded = await loadRemoteSnapshot();
     if (loaded) {
       unlockAuth();
-      toast("Autenticacao Supabase concluida.");
+      toast("Acesso confirmado.");
     }
   } catch (error) {
     const message = error.message || "Nao foi possivel autenticar.";
@@ -1818,42 +1813,6 @@ async function auth() {
       ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
       : message;
   }
-}
-
-async function signUpTrial() {
-  if (!supabaseClient) {
-    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
-    return;
-  }
-  const form = byId("authForm");
-  const data = Object.fromEntries(new FormData(form));
-  const feedback = byId("authFeedback");
-  if (!data.email || !data.password || !data.clinicName || !data.ownerName) {
-    feedback.textContent = "Preencha clinica, seu nome, e-mail e senha para iniciar o trial.";
-    return;
-  }
-  feedback.textContent = "Criando trial e enviando confirmacao...";
-  const emailRedirectTo = new URL("./index.html", window.location.href).toString();
-  const { error } = await supabaseClient.auth.signUp({
-    email: data.email,
-    password: data.password,
-    options: {
-      emailRedirectTo,
-      data: {
-        full_name: data.ownerName,
-        clinic_name: data.clinicName,
-        phone: data.phone || "",
-        trial_days: TRIAL_DAYS,
-        source: "clinicou_app"
-      }
-    }
-  });
-  if (error) {
-    feedback.textContent = error.message || "Nao foi possivel criar o trial.";
-    return;
-  }
-  feedback.textContent = "Cadastro criado. Confirme o e-mail para liberar o acesso. Se nao chegar em alguns minutos, use Reenviar e-mail.";
-  toast("Enviamos o e-mail de confirmacao do trial.");
 }
 
 async function resendConfirmationEmail() {
@@ -1882,7 +1841,13 @@ async function resendConfirmationEmail() {
 
 async function signOut() {
   if (!supabaseClient) return;
-  const confirmed = await siteConfirm("Deseja sair do Clinicou e voltar para a tela de login?", "Sair");
+  const confirmed = await showSiteDialog({
+    title: "Sair do Clinicou",
+    message: "Deseja encerrar sua sessao e voltar para a tela de login?",
+    confirmText: "Sair",
+    cancelText: "Cancelar",
+    hideCancel: false
+  });
   if (!confirmed) return;
   const pendingSignOut = supabaseClient.auth.signOut();
   localStorage.removeItem(SESSION_KEY);
@@ -1896,25 +1861,6 @@ async function signOut() {
   window.scrollTo({ top: 0, behavior: "smooth" });
   lockAuth("Voce saiu. Entre novamente para acessar o sistema.");
   pendingSignOut.catch(() => toast("Sessao local encerrada. O Supabase pode demorar alguns segundos para sincronizar."));
-}
-
-function setAuthMode(mode = "login") {
-  const signup = mode === "signup";
-  document.querySelectorAll("[data-auth-mode]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.authMode === mode);
-  });
-  if (byId("signupFields")) byId("signupFields").hidden = !signup;
-  if (byId("loginButton")) byId("loginButton").hidden = signup;
-  if (byId("signupButton")) byId("signupButton").hidden = !signup;
-  if (byId("authTitle")) byId("authTitle").textContent = signup ? "Comece seu trial" : "Entre na sua clinica";
-  const password = byId("authForm")?.elements?.password;
-  if (password) password.autocomplete = signup ? "new-password" : "current-password";
-  if (byId("authFeedback")) {
-    byId("authFeedback").textContent = signup
-      ? "Crie o acesso e confirme o e-mail para liberar o trial de 30 dias."
-      : "Entre com uma conta confirmada. Se o e-mail nao chegou, use o reenvio.";
-  }
-  lucide.createIcons();
 }
 
 async function loadRemoteSnapshot() {
@@ -2078,25 +2024,43 @@ function stopTrialTimers() {
 function renderTrialStatus(fallbackText = "") {
   const wrapper = byId("trialStatus");
   const countdown = byId("trialCountdown");
+  const label = byId("subscriptionStatusLabel");
   if (!wrapper || !countdown) return;
 
   const remaining = trialRemainingMs();
   wrapper.classList.remove("trial-ok", "trial-warning", "trial-ended", "trial-active");
 
   if (!currentSubscription) {
+    if (label) label.textContent = "Acesso";
     countdown.textContent = fallbackText || "Sem trial ativo";
     wrapper.classList.add("trial-ended");
     return;
   }
 
   if (currentSubscription.status === "active") {
+    if (label) label.textContent = "Plano";
     countdown.textContent = "Plano ativo";
     wrapper.classList.add("trial-active");
     return;
   }
 
+  if (currentSubscription.status === "past_due") {
+    if (label) label.textContent = "Plano";
+    countdown.textContent = "Pagamento pendente";
+    wrapper.classList.add("trial-warning");
+    return;
+  }
+
+  if (currentSubscription.status === "paused") {
+    if (label) label.textContent = "Acesso";
+    countdown.textContent = "Assinatura pausada";
+    wrapper.classList.add("trial-ended");
+    return;
+  }
+
+  if (label) label.textContent = currentSubscription.status === "trialing" ? "Trial" : "Acesso";
   if (currentSubscription.status !== "trialing" || remaining <= 0) {
-    countdown.textContent = "Trial encerrado";
+    countdown.textContent = currentSubscription.status === "cancelled" ? "Assinatura cancelada" : "Trial encerrado";
     wrapper.classList.add("trial-ended");
     return;
   }
@@ -2843,6 +2807,7 @@ function siteConfirm(message, title = "Confirmar acao") {
 }
 
 function showSiteDialog({ title, message, confirmText, cancelText = "Cancelar", hideCancel = false }) {
+  byId("siteDialogEyebrow").textContent = hideCancel ? "Aviso" : "Confirmacao";
   byId("siteDialogTitle").textContent = title;
   byId("siteDialogMessage").textContent = message;
   byId("siteDialogConfirm").querySelector("span").textContent = confirmText;
