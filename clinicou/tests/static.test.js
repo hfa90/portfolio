@@ -68,8 +68,10 @@ test("sales page offers trial signup with Supabase email confirmation metadata",
   assert.match(salesPage, /R\$ 399/);
   assert.match(salesJs, /auth\.signUp/);
   assert.match(salesJs, /emailRedirectTo/);
+  assert.match(salesJs, /authRedirectUrl/);
   assert.match(salesJs, /selected_plan/);
   assert.match(salesJs, /trial_days: 30/);
+  assert.match(salesJs, /SMTP proprio/);
 });
 
 test("app login stays focused on existing accounts", () => {
@@ -87,4 +89,11 @@ test("trial ending popup is scheduled every 20 minutes on the last day", () => {
   assert.match(schema, /now\(\) \+ interval '30 days'/);
   assert.match(schema, /raw_user_meta_data->>'selected_plan'/);
   assert.match(app, /currentSignupMetadata\.clinic_name/);
+});
+
+test("logout clears Supabase browser auth storage before relogin", () => {
+  assert.match(app, /signOut\(\{ scope: "local" \}\)/);
+  assert.match(app, /resetLocalAuthSession/);
+  assert.match(app, /clearSupabaseAuthStorage\(localStorage\)/);
+  assert.match(app, /sb-\$\{SUPABASE_PROJECT_REF\}-auth-token/);
 });
