@@ -5,6 +5,10 @@ const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 const TRIAL_DAYS = 30;
 const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
+const AUTH_LOGIN_TIMEOUT_MS = 60 * 1000;
+const AUTH_SESSION_TIMEOUT_MS = 30 * 1000;
+const AUTH_DATA_TIMEOUT_MS = 45 * 1000;
+const AUTH_SLOW_NOTICE_MS = 10 * 1000;
 
 const statusLabel = {
   scheduled: "Agendado",
@@ -202,6 +206,14 @@ function setAuthLoading(isLoading) {
   const resendButton = byId("resendConfirmationButton");
   if (loginButton) loginButton.disabled = isLoading;
   if (resendButton) resendButton.disabled = isLoading;
+}
+
+function scheduleAuthSlowNotice(message) {
+  return setTimeout(() => {
+    if (authRequestInFlight && byId("authFeedback")) {
+      byId("authFeedback").textContent = message;
+    }
+  }, AUTH_SLOW_NOTICE_MS);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1938,29 +1950,34 @@ async function auth() {
     feedback.textContent = "Informe e-mail e senha para entrar.";
     return;
   }
-  feedback.textContent = "Conectando...";
+  feedback.textContent = "Conectando ao Supabase...";
   setAuthLoading(true);
+  let slowNotice = scheduleAuthSlowNotice("Ainda conectando ao Supabase. Aguarde mais alguns segundos...");
   try {
     const { error } = await withTimeout(
       supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
-      15000,
-      "O Supabase demorou para responder ao login. Confira sua conexao e tente novamente."
+      AUTH_LOGIN_TIMEOUT_MS,
+      "O login nao respondeu em 60 segundos. Verifique a internet, recarregue a pagina e tente novamente."
     );
     if (error) throw error;
+    clearTimeout(slowNotice);
     feedback.textContent = "Login confirmado. Carregando sessao...";
+    slowNotice = scheduleAuthSlowNotice("Login confirmado. Ainda carregando a sessao segura...");
     const { data: sessionData } = await withTimeout(
       supabaseClient.auth.getSession(),
-      10000,
-      "Login feito, mas nao foi possivel recuperar a sessao. Atualize a pagina e tente entrar novamente."
+      AUTH_SESSION_TIMEOUT_MS,
+      "Login feito, mas a sessao nao respondeu em 30 segundos. Atualize a pagina e tente entrar novamente."
     );
     currentAuthUser = sessionData?.session?.user || null;
     currentUser.email = currentAuthUser?.email || data.email;
     currentSignupMetadata = currentAuthUser?.user_metadata || {};
+    clearTimeout(slowNotice);
     feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
+    slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
     const loaded = await withTimeout(
       loadRemoteSnapshot(),
-      15000,
-      "Login feito, mas os dados da clinica demoraram para carregar. Verifique sua conexao ou as permissoes da clinica."
+      AUTH_DATA_TIMEOUT_MS,
+      "Login feito, mas os dados da clinica nao responderam em 45 segundos. Verifique a conexao ou as permissoes da clinica."
     );
     if (loaded) {
       unlockAuth();
@@ -1972,6 +1989,7 @@ async function auth() {
       ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
       : message;
   } finally {
+    clearTimeout(slowNotice);
     setAuthLoading(false);
   }
 }
