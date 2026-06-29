@@ -97,3 +97,12 @@ test("logout clears Supabase browser auth storage before relogin", () => {
   assert.match(app, /clearSupabaseAuthStorage\(localStorage\)/);
   assert.match(app, /sb-\$\{SUPABASE_PROJECT_REF\}-auth-token/);
 });
+
+test("refresh restores auth before rendering tenant data", () => {
+  assert.ok(app.indexOf('let activeClinicId = "";') < app.indexOf("let state = loadState();"));
+  const boot = app.slice(app.indexOf('document.addEventListener("DOMContentLoaded"'), app.indexOf("function loadState()"));
+  assert.match(boot, /persistSession: true/);
+  assert.match(boot, /storage: window\.localStorage/);
+  assert.match(boot, /lockAuth\("Verificando sessao\.\.\."\)/);
+  assert.ok(!boot.includes("renderAll();"));
+});
