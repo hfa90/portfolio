@@ -77,11 +77,14 @@ test("team access uses server-side auth and six digit numeric password validatio
 });
 
 test("login bypasses cached app script and uses direct auth endpoint", () => {
-  assert.match(indexPage, /app\.js\?v=20260629-auth2/);
-  assert.match(indexPage, /styles\.css\?v=20260629-auth2/);
+  assert.match(indexPage, /app\.js\?v=20260629-auth3/);
+  assert.match(indexPage, /styles\.css\?v=20260629-auth3/);
   assert.match(app, /signInWithPasswordDirect/);
   assert.match(app, /\/auth\/v1\/token\?grant_type=password/);
   assert.match(app, /auth\.setSession/);
+  assert.match(app, /authLoginErrorMessage/);
+  assert.match(app, /invalid_credentials/);
+  assert.match(app, /E-mail ou senha incorretos/);
   assert.doesNotMatch(app, /signInWithPassword\(/);
 });
 

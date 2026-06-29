@@ -216,6 +216,28 @@ function scheduleAuthSlowNotice(message) {
   }, AUTH_SLOW_NOTICE_MS);
 }
 
+function authLoginErrorMessage(error) {
+  const message = error?.message || "Nao foi possivel autenticar.";
+  const code = error?.code || "";
+  const lower = `${code} ${message}`.toLowerCase();
+  if (lower.includes("invalid_credentials") || lower.includes("invalid login credentials")) {
+    return "E-mail ou senha incorretos. Confira a senha cadastrada para este acesso.";
+  }
+  if (lower.includes("email not confirmed")) {
+    return "Seu e-mail ainda nao foi confirmado. Use Reenviar confirmacao e confirme a caixa de entrada/spam.";
+  }
+  if (lower.includes("email_address_not_authorized") || lower.includes("email address not authorized")) {
+    return "Este e-mail ainda nao esta autorizado no Supabase Auth.";
+  }
+  if (lower.includes("too many") || lower.includes("rate limit")) {
+    return "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
+  }
+  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+    return "O navegador nao conseguiu falar com o Supabase. Desative bloqueadores/extensoes para este site ou teste outra rede.";
+  }
+  return message;
+}
+
 async function signInWithPasswordDirect(email, password) {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), AUTH_LOGIN_TIMEOUT_MS);
@@ -230,10 +252,19 @@ async function signInWithPasswordDirect(email, password) {
       body: JSON.stringify({ email, password }),
       signal: controller.signal
     });
-    const payload = await response.json().catch(() => ({}));
+    const rawBody = await response.text();
+    let payload = {};
+    try {
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      payload = { message: rawBody };
+    }
     if (!response.ok) {
       const message = payload.error_description || payload.msg || payload.message || payload.error || `Auth HTTP ${response.status}`;
-      throw new Error(message);
+      const authError = new Error(message);
+      authError.status = response.status;
+      authError.code = payload.error_code || payload.code || payload.error || "";
+      throw authError;
     }
     if (!payload.access_token || !payload.refresh_token) {
       throw new Error("O Supabase autenticou, mas nao retornou uma sessao valida.");
@@ -1987,6 +2018,8 @@ async function auth() {
   }
   const form = byId("authForm");
   const data = Object.fromEntries(new FormData(form));
+  data.email = String(data.email || "").trim().toLowerCase();
+  data.password = String(data.password || "");
   const feedback = byId("authFeedback");
   if (!data.email || !data.password) {
     feedback.textContent = "Informe e-mail e senha para entrar.";
@@ -2013,10 +2046,8 @@ async function auth() {
       toast("Acesso confirmado.");
     }
   } catch (error) {
-    const message = error.message || "Nao foi possivel autenticar.";
-    feedback.textContent = message.includes("Email not confirmed")
-      ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
-      : message;
+    clearTimeout(slowNotice);
+    feedback.textContent = authLoginErrorMessage(error);
   } finally {
     clearTimeout(slowNotice);
     setAuthLoading(false);
