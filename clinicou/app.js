@@ -186,6 +186,23 @@ let currentSignupMetadata = {};
 let currentAuthUser = null;
 let trialCountdownTimer = null;
 let trialWarningTimer = null;
+let authRequestInFlight = false;
+
+function withTimeout(promise, ms, timeoutMessage) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timeoutId));
+}
+
+function setAuthLoading(isLoading) {
+  authRequestInFlight = isLoading;
+  const loginButton = byId("loginButton");
+  const resendButton = byId("resendConfirmationButton");
+  if (loginButton) loginButton.disabled = isLoading;
+  if (resendButton) resendButton.disabled = isLoading;
+}
 
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -1833,6 +1850,7 @@ function updateEmployeeCrmRequirement() {
 }
 
 async function auth() {
+  if (authRequestInFlight) return;
   if (!supabaseClient) {
     byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
     return;
@@ -1845,15 +1863,29 @@ async function auth() {
     return;
   }
   feedback.textContent = "Conectando...";
+  setAuthLoading(true);
   try {
-    const { error } = await supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password });
+    const { error } = await withTimeout(
+      supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
+      15000,
+      "O Supabase demorou para responder ao login. Confira sua conexao e tente novamente."
+    );
     if (error) throw error;
-    const { data: sessionData } = await supabaseClient.auth.getSession();
+    feedback.textContent = "Login confirmado. Carregando sessao...";
+    const { data: sessionData } = await withTimeout(
+      supabaseClient.auth.getSession(),
+      10000,
+      "Login feito, mas nao foi possivel recuperar a sessao. Atualize a pagina e tente entrar novamente."
+    );
     currentAuthUser = sessionData?.session?.user || null;
     currentUser.email = currentAuthUser?.email || data.email;
     currentSignupMetadata = currentAuthUser?.user_metadata || {};
-    feedback.textContent = "Acesso confirmado.";
-    const loaded = await loadRemoteSnapshot();
+    feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
+    const loaded = await withTimeout(
+      loadRemoteSnapshot(),
+      15000,
+      "Login feito, mas os dados da clinica demoraram para carregar. Verifique sua conexao ou as permissoes da clinica."
+    );
     if (loaded) {
       unlockAuth();
       toast("Acesso confirmado.");
@@ -1863,6 +1895,8 @@ async function auth() {
     feedback.textContent = message.includes("Email not confirmed")
       ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
       : message;
+  } finally {
+    setAuthLoading(false);
   }
 }
 
