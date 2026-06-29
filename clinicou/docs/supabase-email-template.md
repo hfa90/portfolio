@@ -12,9 +12,15 @@ The public trial page sends signup metadata to Supabase Auth:
 
 Configure the personalized confirmation email in Supabase:
 
-1. Open Authentication > Email Templates.
-2. Edit the confirmation template.
-3. Use the Clinicou tone and point the confirmation link back to `clinicou/index.html`.
+1. Open Authentication > SMTP and configure a custom SMTP provider.
+2. Open Authentication > URL Configuration.
+3. Set Site URL to the production domain of the app.
+4. Add every app URL used for signup/login to Redirect URLs, including the final `index.html` URL.
+5. Open Authentication > Email Templates.
+6. Edit the confirmation template.
+7. Use the Clinicou tone and keep the confirmation link as `{{ .ConfirmationURL }}`.
+
+Important: the default Supabase SMTP is only for testing. It can refuse customer e-mails with `Email address not authorized` and is rate-limited. Use a custom SMTP provider before sending confirmation e-mails to real clients.
 
 Suggested subject:
 
