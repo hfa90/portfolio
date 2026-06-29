@@ -165,6 +165,7 @@ const seedState = {
   guides: []
 };
 
+let activeClinicId = "";
 let state = loadState();
 let supabaseClient = null;
 let currentStatusFilter = "all";
@@ -175,7 +176,6 @@ let editingPatientId = null;
 let editingEmployeeId = null;
 let editingInsurancePlanId = null;
 let remoteReady = false;
-let activeClinicId = "";
 let siteDialogResolve = null;
 let signaturePad = null;
 let currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
@@ -188,12 +188,18 @@ let trialCountdownTimer = null;
 let trialWarningTimer = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
-  supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY);
+  supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: window.localStorage
+    }
+  });
   wireEvents();
   setDefaultDates();
-  syncProfessionalsFromEmployees();
-  renderAll();
   initSignaturePad();
+  lockAuth("Verificando sessao...");
   lucide.createIcons();
   await enforceAuth();
 });
@@ -1914,7 +1920,7 @@ async function loadRemoteSnapshot() {
     .select("clinic_id,role,status,permissions,clinics(id,name,slug,plan,status,settings)")
     .eq("status", "active");
   if (error) {
-    toast(`Nao foi possivel carregar a clinica: ${error.message}`);
+    lockAuth(`Nao foi possivel carregar sua clinica: ${error.message}`);
     return false;
   }
   availableClinics = (memberships || []).map((membership) => ({
