@@ -216,6 +216,48 @@ function scheduleAuthSlowNotice(message) {
   }, AUTH_SLOW_NOTICE_MS);
 }
 
+async function signInWithPasswordDirect(email, password) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AUTH_LOGIN_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "X-Client-Info": "clinicou-web"
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = payload.error_description || payload.msg || payload.message || payload.error || `Auth HTTP ${response.status}`;
+      throw new Error(message);
+    }
+    if (!payload.access_token || !payload.refresh_token) {
+      throw new Error("O Supabase autenticou, mas nao retornou uma sessao valida.");
+    }
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.setSession({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token
+      }),
+      AUTH_SESSION_TIMEOUT_MS,
+      "Login feito, mas nao foi possivel salvar a sessao no navegador."
+    );
+    if (error) throw error;
+    return data?.session || { user: payload.user };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("O login nao respondeu em 60 segundos. Teste outra rede ou confira se algum bloqueador esta impedindo chamadas ao Supabase.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
@@ -1954,25 +1996,12 @@ async function auth() {
   setAuthLoading(true);
   let slowNotice = scheduleAuthSlowNotice("Ainda conectando ao Supabase. Aguarde mais alguns segundos...");
   try {
-    const { error } = await withTimeout(
-      supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
-      AUTH_LOGIN_TIMEOUT_MS,
-      "O login nao respondeu em 60 segundos. Verifique a internet, recarregue a pagina e tente novamente."
-    );
-    if (error) throw error;
+    const session = await signInWithPasswordDirect(data.email, data.password);
     clearTimeout(slowNotice);
-    feedback.textContent = "Login confirmado. Carregando sessao...";
-    slowNotice = scheduleAuthSlowNotice("Login confirmado. Ainda carregando a sessao segura...");
-    const { data: sessionData } = await withTimeout(
-      supabaseClient.auth.getSession(),
-      AUTH_SESSION_TIMEOUT_MS,
-      "Login feito, mas a sessao nao respondeu em 30 segundos. Atualize a pagina e tente entrar novamente."
-    );
-    currentAuthUser = sessionData?.session?.user || null;
+    feedback.textContent = "Login confirmado. Carregando dados da clinica...";
+    currentAuthUser = session?.user || null;
     currentUser.email = currentAuthUser?.email || data.email;
     currentSignupMetadata = currentAuthUser?.user_metadata || {};
-    clearTimeout(slowNotice);
-    feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
     slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
     const loaded = await withTimeout(
       loadRemoteSnapshot(),
@@ -3253,5 +3282,6 @@ window.chooseSlot = chooseSlot;
 window.applySmartSuggestion = applySmartSuggestion;
 window.updateEmployeeAccessRole = updateEmployeeAccessRole;
 window.toggleEmployeePermission = toggleEmployeePermission;
+window.setEmployeeAccessPassword = setEmployeeAccessPassword;
 window.settleCommission = settleCommission;
 window.downloadGuideById = downloadGuideById;

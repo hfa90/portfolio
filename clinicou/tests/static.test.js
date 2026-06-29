@@ -72,7 +72,17 @@ test("team access uses server-side auth and six digit numeric password validatio
   assert.match(teamAccessFunction, /\.eq\("user_id", authData\.user\.id\)/);
   assert.match(teamAccessFunction, /\["owner", "admin"\]\.includes/);
   assert.match(teamAccessFunction, /\.upsert\(membershipPayload/);
+  assert.match(app, /window\.setEmployeeAccessPassword = setEmployeeAccessPassword/);
   assert.doesNotMatch(schema, /password/i);
+});
+
+test("login bypasses cached app script and uses direct auth endpoint", () => {
+  assert.match(indexPage, /app\.js\?v=20260629-auth2/);
+  assert.match(indexPage, /styles\.css\?v=20260629-auth2/);
+  assert.match(app, /signInWithPasswordDirect/);
+  assert.match(app, /\/auth\/v1\/token\?grant_type=password/);
+  assert.match(app, /auth\.setSession/);
+  assert.doesNotMatch(app, /signInWithPassword\(/);
 });
 
 test("sales page offers trial signup with Supabase email confirmation metadata", () => {
