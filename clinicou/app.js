@@ -694,7 +694,11 @@ function applyAccessControl() {
 function resolveCurrentUser() {
   const email = currentUser.email || "";
   const membershipUser = accessFromMembership(currentMembership);
-  const employee = state.employees.find((item) => item.email && item.email.toLowerCase() === email.toLowerCase());
+  const authUserId = currentAuthUser?.id || "";
+  const employee = state.employees.find((item) =>
+    (authUserId && item.userId === authUserId) ||
+    (item.email && item.email.toLowerCase() === email.toLowerCase())
+  );
   if (employee) {
     const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
     const rolePerms = state.tenant.settings?.rolePermissions?.[accessRole] || [];
@@ -1188,19 +1192,26 @@ function renderAccessControl() {
   node.innerHTML = state.employees.map((employee) => {
     const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
     const permissions = employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || [];
+    const passwordInputId = `teamPassword_${employee.id}`;
+    const canCreateAccess = !!employee.email && employee.status === "active";
     return `<div class="access-item">
       <div>
         <strong>${escapeHtml(employee.name)}</strong>
-        <span>${escapeHtml(employee.email || "Sem e-mail")} - ${statusLabel[accessRole]}</span>
+        <span>${escapeHtml(employee.email || "Sem e-mail")} - ${statusLabel[accessRole]}${employee.userId ? " - acesso ativo" : " - sem acesso"}</span>
       </div>
       <label>Nivel<select onchange="updateEmployeeAccessRole('${employee.id}', this.value)">
         <option value="admin" ${accessRole === "admin" ? "selected" : ""}>Administrador</option>
         <option value="medical" ${accessRole === "medical" ? "selected" : ""}>Medico</option>
         <option value="receptionist" ${accessRole === "receptionist" ? "selected" : ""}>Secretaria</option>
       </select></label>
+      <div class="team-password-row">
+        <label>Senha numerica<input id="${passwordInputId}" type="password" inputmode="numeric" maxlength="6" pattern="\\d{6}" autocomplete="new-password" placeholder="6 digitos"></label>
+        <button class="ghost-button" type="button" ${canCreateAccess ? "" : "disabled"} onclick="setEmployeeAccessPassword('${employee.id}', '${passwordInputId}')"><i data-lucide="key-round"></i><span>${employee.userId ? "Alterar senha" : "Criar acesso"}</span></button>
+      </div>
       <div class="permission-grid">${screens.map(([view, label]) => `<label><input type="checkbox" ${permissions.includes(view) ? "checked" : ""} onchange="toggleEmployeePermission('${employee.id}', '${view}', this.checked)"> ${label}</label>`).join("")}</div>
     </div>`;
   }).join("") || emptyState("Cadastre funcionarios para controlar acessos.");
+  lucide.createIcons();
 }
 
 async function updateEmployeeAccessRole(id, accessRole) {
@@ -1228,6 +1239,71 @@ async function toggleEmployeePermission(id, view, checked) {
   resolveCurrentUser();
   applyAccessControl();
   toast("Permissao de tela atualizada.");
+}
+
+async function setEmployeeAccessPassword(id, inputId) {
+  const employee = state.employees.find((item) => item.id === id);
+  const input = byId(inputId);
+  const password = input?.value.trim() || "";
+  if (!employee) return;
+  if (!employee.email) {
+    toast("Informe um e-mail no cadastro do funcionario antes de criar acesso.");
+    return;
+  }
+  if (!/^\d{6}$/.test(password)) {
+    toast("A senha deve ter exatamente 6 numeros.");
+    input?.focus();
+    return;
+  }
+  if (!supabaseClient || !currentClinicId()) {
+    toast("Conexao Supabase indisponivel.");
+    return;
+  }
+
+  const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
+  const permissions = employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || [];
+  const confirmed = await showSiteDialog({
+    title: employee.userId ? "Alterar senha de acesso" : "Criar acesso da equipe",
+    message: `Confirmar acesso para ${employee.name} usando o e-mail ${employee.email}? A senha nao sera exibida novamente.`,
+    confirmText: employee.userId ? "Alterar senha" : "Criar acesso",
+    cancelText: "Cancelar",
+    hideCancel: false
+  });
+  if (!confirmed) return;
+
+  try {
+    input.disabled = true;
+    const { data, error } = await supabaseClient.functions.invoke("team-access", {
+      body: {
+        clinicId: currentClinicId(),
+        staffId: employee.id,
+        email: employee.email,
+        password,
+        accessRole,
+        permissions
+      }
+    });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    const wasLinked = !!employee.userId;
+    employee.userId = data.userId || employee.userId || "";
+    input.value = "";
+    await loadRemoteSnapshot();
+    toast(wasLinked ? "Acesso da equipe atualizado." : "Acesso da equipe criado.");
+  } catch (error) {
+    let message = error.message || "Nao foi possivel criar o acesso da equipe.";
+    if (error.context && typeof error.context.clone === "function") {
+      try {
+        const body = await error.context.clone().json();
+        message = body?.error || message;
+      } catch {
+        // Keep the original Supabase client message.
+      }
+    }
+    toast(message);
+  } finally {
+    input.disabled = false;
+  }
 }
 
 function renderDoctorPortal() {
@@ -2025,7 +2101,7 @@ async function loadClinicTables() {
   ] = await Promise.all([
     remoteSelect("insurance_plans", "id,name,contact,active", clinicId),
     remoteSelect("patients", "id,full_name,phone,whatsapp,email,cpf,document,insurance,risk,no_show_score,insurance_plan_id", clinicId),
-    remoteSelect("staff_members", "id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,access_role,permissions,status", clinicId),
+    remoteSelect("staff_members", "id,user_id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,access_role,permissions,status", clinicId),
     remoteSelect("services", "id,name,specialty,duration_minutes,price,active", clinicId),
     remoteSelect("appointments", "id,patient_id,professional_id,service_id,starts_at,ends_at,status", clinicId),
     remoteSelect("financial_transactions", "id,description,type,amount,due_date,status,payment_method,professional_id,patient_id,appointment_id", clinicId),
@@ -2288,6 +2364,7 @@ function fromRemoteStaff(row) {
   const accessRole = row.access_role || (row.role === "doctor" ? "medical" : "receptionist");
   return {
     id: row.id,
+    userId: row.user_id || "",
     professionalId: row.professional_id || row.id,
     name: row.full_name,
     role: row.role,
