@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+const indexPage = await readFile(new URL("../index.html", import.meta.url), "utf8");
 const schema = await readFile(new URL("../supabase/schema.sql", import.meta.url), "utf8");
 const envExample = await readFile(new URL("../.env.example", import.meta.url), "utf8");
 const salesPage = await readFile(new URL("../planos.html", import.meta.url), "utf8");
@@ -69,6 +70,14 @@ test("sales page offers trial signup with Supabase email confirmation metadata",
   assert.match(salesJs, /emailRedirectTo/);
   assert.match(salesJs, /selected_plan/);
   assert.match(salesJs, /trial_days: 30/);
+});
+
+test("app login stays focused on existing accounts", () => {
+  assert.match(indexPage, /id="authForm"/);
+  assert.doesNotMatch(indexPage, /data-auth-mode/);
+  assert.doesNotMatch(indexPage, /id="signupFields"/);
+  assert.doesNotMatch(indexPage, /id="signupButton"/);
+  assert.match(indexPage, /id="subscriptionStatusLabel"/);
 });
 
 test("trial ending popup is scheduled every 20 minutes on the last day", () => {
