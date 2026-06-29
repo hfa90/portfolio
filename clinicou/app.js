@@ -2,6 +2,7 @@ const SUPABASE_URL = "https://yhftbfpkuchxfblhfvva.supabase.co";
 const SUPABASE_KEY = "sb_publishable_paT5SW04fvUuJzui4t5COQ_nVI9gJxY";
 const SESSION_KEY = "clinicou_session_v1";
 const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
+const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 const TRIAL_DAYS = 30;
 const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
 
@@ -344,6 +345,55 @@ function byId(id) {
   return document.getElementById(id);
 }
 
+function authRedirectUrl() {
+  return new URL("./index.html", window.location.href).toString();
+}
+
+function authEmailErrorMessage(error) {
+  const message = error?.message || "";
+  const lower = message.toLowerCase();
+  if (lower.includes("email address not authorized") || lower.includes("not authorized")) {
+    return "O Supabase recusou o envio porque este e-mail nao esta autorizado no SMTP padrao. Configure um SMTP proprio em Authentication > SMTP para enviar confirmacoes aos clientes.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many") || lower.includes("over email send rate limit")) {
+    return "Limite de envio do Supabase atingido. O SMTP padrao e limitado; configure um SMTP proprio para envios de clientes.";
+  }
+  if (lower.includes("redirect") || lower.includes("url")) {
+    return "A URL de confirmacao nao esta liberada no Supabase. Adicione a URL do Clinicou em Authentication > URL Configuration > Redirect URLs.";
+  }
+  return message || "Nao foi possivel enviar a confirmacao. Confira Auth, Redirect URLs e SMTP no Supabase.";
+}
+
+function resetLocalAuthSession() {
+  localStorage.removeItem(SESSION_KEY);
+  clearSupabaseAuthStorage(localStorage);
+  clearSupabaseAuthStorage(sessionStorage);
+  activeClinicId = "";
+  currentMembership = null;
+  currentSubscription = null;
+  currentSignupMetadata = {};
+  currentAuthUser = null;
+  currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
+  availableClinics = [];
+  remoteReady = false;
+  stopTrialTimers();
+}
+
+function clearSupabaseAuthStorage(storage) {
+  const keys = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (
+      key === `sb-${SUPABASE_PROJECT_REF}-auth-token` ||
+      key === `sb-${SUPABASE_PROJECT_REF}-auth-token-code-verifier` ||
+      key?.startsWith(`sb-${SUPABASE_PROJECT_REF}-auth-token.`)
+    ) {
+      keys.push(key);
+    }
+  }
+  keys.forEach((key) => storage.removeItem(key));
+}
+
 function wireEvents() {
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => openView(button.dataset.view));
@@ -511,12 +561,7 @@ async function enforceAuth() {
 
   supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (event === "SIGNED_OUT") {
-      currentAuthUser = null;
-      currentUser = { email: "", accessRole: "admin", employeeId: "", professionalId: "", permissions: [] };
-      currentSignupMetadata = {};
-      currentSubscription = null;
-      remoteReady = false;
-      stopTrialTimers();
+      resetLocalAuthSession();
       lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
       return;
     }
@@ -1828,14 +1873,14 @@ async function resendConfirmationEmail() {
     return;
   }
   feedback.textContent = "Reenviando confirmacao...";
-  const emailRedirectTo = new URL("./index.html", window.location.href).toString();
+  const emailRedirectTo = authRedirectUrl();
   const { error } = await supabaseClient.auth.resend({
     type: "signup",
     email: data.email,
     options: { emailRedirectTo }
   });
   feedback.textContent = error
-    ? (error.message || "Nao foi possivel reenviar. Confira as configuracoes de Auth/SMTP no Supabase.")
+    ? authEmailErrorMessage(error)
     : "E-mail reenviado. Confira a caixa de entrada, spam e promocoes.";
 }
 
@@ -1849,18 +1894,17 @@ async function signOut() {
     hideCancel: false
   });
   if (!confirmed) return;
-  const pendingSignOut = supabaseClient.auth.signOut();
-  localStorage.removeItem(SESSION_KEY);
-  activeClinicId = "";
-  currentMembership = null;
-  currentSubscription = null;
-  availableClinics = [];
-  remoteReady = false;
-  stopTrialTimers();
-  window.location.hash = "login";
-  window.scrollTo({ top: 0, behavior: "smooth" });
-  lockAuth("Voce saiu. Entre novamente para acessar o sistema.");
-  pendingSignOut.catch(() => toast("Sessao local encerrada. O Supabase pode demorar alguns segundos para sincronizar."));
+  try {
+    const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+    if (error) throw error;
+  } catch (error) {
+    toast(error.message || "Sessao local encerrada.");
+  } finally {
+    resetLocalAuthSession();
+    window.location.hash = "login";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    lockAuth("Voce saiu. Entre novamente para acessar o sistema.");
+  }
 }
 
 async function loadRemoteSnapshot() {

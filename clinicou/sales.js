@@ -118,7 +118,7 @@ async function submitTrialSignup(event) {
   const form = event.currentTarget;
   const data = Object.fromEntries(new FormData(form));
   const planId = data.cycle === "annual" ? `${data.plan}_annual` : data.plan;
-  const emailRedirectTo = new URL("./index.html", window.location.href).toString();
+  const emailRedirectTo = authRedirectUrl();
 
   feedback.textContent = "Criando acesso e enviando e-mail de confirmacao...";
   feedback.className = "form-feedback";
@@ -141,7 +141,7 @@ async function submitTrialSignup(event) {
   });
 
   if (error) {
-    setFeedback(error.message || "Nao foi possivel criar o cadastro.", "error");
+    setFeedback(authEmailErrorMessage(error), "error");
     return;
   }
 
@@ -157,6 +157,25 @@ function setFeedback(message, type) {
   const feedback = document.getElementById("signupFeedback");
   feedback.textContent = message;
   feedback.className = `form-feedback ${type}`;
+}
+
+function authRedirectUrl() {
+  return new URL("./index.html", window.location.href).toString();
+}
+
+function authEmailErrorMessage(error) {
+  const message = error?.message || "";
+  const lower = message.toLowerCase();
+  if (lower.includes("email address not authorized") || lower.includes("not authorized")) {
+    return "Cadastro criado, mas o Supabase recusou o envio para este e-mail porque o SMTP padrao so envia para e-mails autorizados do projeto. Configure um SMTP proprio em Authentication > SMTP.";
+  }
+  if (lower.includes("rate limit") || lower.includes("too many") || lower.includes("over email send rate limit")) {
+    return "O Supabase atingiu o limite de envio de e-mails. Configure um SMTP proprio para confirmar cadastros de clientes sem esse bloqueio.";
+  }
+  if (lower.includes("redirect") || lower.includes("url")) {
+    return "A URL de confirmacao nao esta liberada no Supabase. Adicione a URL do Clinicou em Authentication > URL Configuration > Redirect URLs.";
+  }
+  return message || "Nao foi possivel criar o cadastro. Confira as configuracoes de Auth, Redirect URLs e SMTP no Supabase.";
 }
 
 function formatPlanPrice(value) {
