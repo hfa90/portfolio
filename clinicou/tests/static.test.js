@@ -34,37 +34,6 @@ test("schema includes the first SaaS platform tables", () => {
   }
 });
 
-test("patient, schedule and medical record modules include expanded clinic workflow fields", () => {
-  for (const field of [
-    "emergency_contacts",
-    "family_history",
-    "chronic_diseases",
-    "continuous_medications",
-    "equipment_id",
-    "recurrence_rule",
-    "signature_data"
-  ]) {
-    assert.match(schema, new RegExp(field));
-  }
-
-  for (const uiId of [
-    "patientEmergencyPhone",
-    "appointmentEquipment",
-    "waitlistForm",
-    "scheduleBlockForm",
-    "recordCid10",
-    "recordCid11",
-    "recordCiap",
-    "recordAttachments",
-    "recordSigned"
-  ]) {
-    assert.match(indexPage, new RegExp(`id="${uiId}"`));
-  }
-
-  assert.match(app, /uploadRecordAttachments/);
-  assert.match(app, /validateAppointmentSlot\(professionalId, date, time, serviceId, roomId = "", equipmentId = "", allowOverbook = false\)/);
-});
-
 test("schema avoids deprecated auth.role policies", () => {
   assert.doesNotMatch(schema, /auth\.role\(\)/);
 });
@@ -106,7 +75,61 @@ test("team access uses server-side auth and six digit numeric password validatio
   assert.match(teamAccessFunction, /\.eq\("user_id", authData\.user\.id\)/);
   assert.match(teamAccessFunction, /\["owner", "admin"\]\.includes/);
   assert.match(teamAccessFunction, /\.upsert\(membershipPayload/);
+  assert.match(app, /window\.setEmployeeAccessPassword = setEmployeeAccessPassword/);
   assert.doesNotMatch(schema, /password/i);
+});
+
+test("patient, schedule and medical record modules include expanded clinic workflow fields", () => {
+  for (const field of [
+    "emergency_contacts",
+    "family_history",
+    "chronic_diseases",
+    "continuous_medications",
+    "equipment_id",
+    "recurrence_rule",
+    "signature_data"
+  ]) {
+    assert.match(schema, new RegExp(field));
+  }
+
+  for (const uiId of [
+    "patientEmergencyPhone",
+    "appointmentEquipment",
+    "waitlistForm",
+    "scheduleBlockForm",
+    "recordCid10",
+    "recordCid11",
+    "recordCiap",
+    "recordAttachments",
+    "recordSigned"
+  ]) {
+    assert.match(indexPage, new RegExp(`id="${uiId}"`));
+  }
+
+  assert.match(app, /uploadRecordAttachments/);
+  assert.match(app, /validateAppointmentSlot\(professionalId, date, time, serviceId, roomId = "", equipmentId = "", allowOverbook = false\)/);
+});
+
+test("login bypasses cached app script and uses direct auth endpoint", () => {
+  assert.match(indexPage, /app\.js\?v=20260629-auth4/);
+  assert.match(indexPage, /styles\.css\?v=20260629-auth4/);
+  assert.match(app, /signInWithPasswordDirect/);
+  assert.match(app, /\/auth\/v1\/token\?grant_type=password/);
+  assert.match(app, /auth\.setSession/);
+  assert.match(app, /authLoginErrorMessage/);
+  assert.match(app, /invalid_credentials/);
+  assert.match(app, /E-mail ou senha incorretos/);
+  assert.doesNotMatch(app, /signInWithPassword\(/);
+});
+
+test("login supports saved session restore and password recovery", () => {
+  assert.match(indexPage, /id="resetPasswordButton"/);
+  assert.match(indexPage, /id="passwordRecoveryForm"/);
+  assert.match(app, /activateAuthSession/);
+  assert.match(app, /resetPasswordForEmail/);
+  assert.match(app, /PASSWORD_RECOVERY/);
+  assert.match(app, /updateUser\(\{ password: newPassword \}\)/);
+  assert.match(app, /isPasswordRecoveryUrl/);
 });
 
 test("sales page offers trial signup with Supabase email confirmation metadata", () => {
