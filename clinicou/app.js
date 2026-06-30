@@ -204,8 +204,10 @@ function setAuthLoading(isLoading) {
   authRequestInFlight = isLoading;
   const loginButton = byId("loginButton");
   const resendButton = byId("resendConfirmationButton");
+  const resetButton = byId("resetPasswordButton");
   if (loginButton) loginButton.disabled = isLoading;
   if (resendButton) resendButton.disabled = isLoading;
+  if (resetButton) resetButton.disabled = isLoading;
 }
 
 function scheduleAuthSlowNotice(message) {
@@ -236,6 +238,10 @@ function authLoginErrorMessage(error) {
     return "O navegador nao conseguiu falar com o Supabase. Desative bloqueadores/extensoes para este site ou teste outra rede.";
   }
   return message;
+}
+
+function isPasswordRecoveryUrl() {
+  return /[?#&]type=recovery\b/.test(window.location.href);
 }
 
 async function signInWithPasswordDirect(email, password) {
@@ -631,6 +637,8 @@ function wireEvents() {
   });
   byId("loginButton")?.addEventListener("click", () => auth());
   byId("resendConfirmationButton")?.addEventListener("click", resendConfirmationEmail);
+  byId("resetPasswordButton")?.addEventListener("click", sendPasswordResetEmail);
+  byId("passwordRecoveryForm")?.addEventListener("submit", submitPasswordRecovery);
   byId("logoutButton")?.addEventListener("click", signOut);
   byId("setupClinicName")?.addEventListener("input", (event) => {
     const slug = byId("setupClinicSlug");
@@ -673,32 +681,61 @@ async function enforceAuth() {
       lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
       return;
     }
-    if (session) {
-      currentAuthUser = session.user || null;
-      currentUser.email = session.user?.email || "";
-      currentSignupMetadata = session.user?.user_metadata || {};
-      const loaded = await loadRemoteSnapshot();
-      if (loaded) unlockAuth();
+    if (event === "PASSWORD_RECOVERY") {
+      currentAuthUser = session?.user || null;
+      currentUser.email = session?.user?.email || "";
+      currentSignupMetadata = session?.user?.user_metadata || {};
+      lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
     }
   });
 
-  const { data } = await supabaseClient.auth.getSession();
+  if (isPasswordRecoveryUrl()) {
+    lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
+    return;
+  }
+
+  const { data, error } = await withTimeout(
+    supabaseClient.auth.getSession(),
+    AUTH_SESSION_TIMEOUT_MS,
+    "A sessao salva demorou para responder. Entre novamente."
+  ).catch((error) => ({ data: null, error }));
   if (data?.session) {
-    currentAuthUser = data.session.user || null;
-    currentUser.email = currentAuthUser?.email || "";
-    currentSignupMetadata = currentAuthUser?.user_metadata || {};
-    const loaded = await loadRemoteSnapshot();
-    if (loaded) unlockAuth();
+    try {
+      await activateAuthSession(data.session, "Restaurando sessao salva...");
+    } catch (error) {
+      lockAuth(error.message || "Nao foi possivel restaurar a sessao salva.");
+    }
+    return;
+  }
+  if (error) {
+    resetLocalAuthSession();
+    lockAuth(authLoginErrorMessage(error));
     return;
   }
 
   lockAuth("Entre com uma conta autorizada para acessar o sistema.");
 }
 
+async function activateAuthSession(session, loadingMessage = "Carregando dados da clinica...") {
+  if (!session) return false;
+  currentAuthUser = session.user || null;
+  currentUser.email = currentAuthUser?.email || "";
+  currentSignupMetadata = currentAuthUser?.user_metadata || {};
+  byId("authFeedback").textContent = loadingMessage;
+  const loaded = await withTimeout(
+    loadRemoteSnapshot(),
+    AUTH_DATA_TIMEOUT_MS,
+    "Sessao ativa, mas os dados da clinica nao responderam em 45 segundos. Tente recarregar a pagina."
+  );
+  if (loaded) unlockAuth();
+  return loaded;
+}
+
 function lockAuth(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = false;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("authTitle").textContent = "Entre na sua clinica";
   byId("authFeedback").textContent = message;
@@ -710,6 +747,7 @@ function unlockAuth() {
   document.body.classList.remove("auth-locked");
   byId("authModal").classList.remove("open");
   byId("authForm").hidden = false;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("syncState").textContent = "Online com Supabase";
   startTrialTimers();
@@ -719,6 +757,7 @@ function lockClinicSetup(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = true;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = false;
   byId("authTitle").textContent = "Criar clinica inicial";
   if (byId("setupClinicName") && currentSignupMetadata.clinic_name) {
@@ -729,6 +768,18 @@ function lockClinicSetup(message) {
   }
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Criar clinica inicial";
+  stopTrialTimers();
+}
+
+function lockPasswordRecovery(message) {
+  document.body.classList.add("auth-locked");
+  byId("authModal").classList.add("open");
+  byId("authForm").hidden = true;
+  byId("clinicSetupForm").hidden = true;
+  byId("passwordRecoveryForm").hidden = false;
+  byId("authTitle").textContent = "Redefinir senha";
+  byId("authFeedback").textContent = message;
+  byId("syncState").textContent = "Redefinir senha";
   stopTrialTimers();
 }
 
@@ -2031,18 +2082,9 @@ async function auth() {
   try {
     const session = await signInWithPasswordDirect(data.email, data.password);
     clearTimeout(slowNotice);
-    feedback.textContent = "Login confirmado. Carregando dados da clinica...";
-    currentAuthUser = session?.user || null;
-    currentUser.email = currentAuthUser?.email || data.email;
-    currentSignupMetadata = currentAuthUser?.user_metadata || {};
     slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
-    const loaded = await withTimeout(
-      loadRemoteSnapshot(),
-      AUTH_DATA_TIMEOUT_MS,
-      "Login feito, mas os dados da clinica nao responderam em 45 segundos. Verifique a conexao ou as permissoes da clinica."
-    );
+    const loaded = await activateAuthSession(session, "Login confirmado. Carregando dados da clinica...");
     if (loaded) {
-      unlockAuth();
       toast("Acesso confirmado.");
     }
   } catch (error) {
@@ -2076,6 +2118,59 @@ async function resendConfirmationEmail() {
   feedback.textContent = error
     ? authEmailErrorMessage(error)
     : "E-mail reenviado. Confira a caixa de entrada, spam e promocoes.";
+}
+
+async function sendPasswordResetEmail() {
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = byId("authForm");
+  const data = Object.fromEntries(new FormData(form));
+  const email = String(data.email || "").trim().toLowerCase();
+  const feedback = byId("authFeedback");
+  if (!email) {
+    feedback.textContent = "Informe o e-mail para redefinir a senha.";
+    return;
+  }
+  feedback.textContent = "Enviando link para redefinir senha...";
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: authRedirectUrl()
+  });
+  feedback.textContent = error
+    ? authEmailErrorMessage(error)
+    : "Enviamos um link para redefinir sua senha. Confira caixa de entrada, spam e promocoes.";
+}
+
+async function submitPasswordRecovery(event) {
+  event.preventDefault();
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const newPassword = String(data.newPassword || "");
+  const confirmPassword = String(data.confirmPassword || "");
+  const feedback = byId("authFeedback");
+  if (newPassword.length < 6) {
+    feedback.textContent = "A nova senha precisa ter pelo menos 6 caracteres.";
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    feedback.textContent = "As senhas nao conferem.";
+    return;
+  }
+  feedback.textContent = "Salvando nova senha...";
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  if (error) {
+    feedback.textContent = authLoginErrorMessage(error);
+    return;
+  }
+  form.reset();
+  await supabaseClient.auth.signOut({ scope: "local" }).catch(() => {});
+  resetLocalAuthSession();
+  lockAuth("Senha atualizada. Entre novamente com sua nova senha.");
 }
 
 async function signOut() {

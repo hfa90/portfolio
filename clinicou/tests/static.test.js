@@ -77,8 +77,8 @@ test("team access uses server-side auth and six digit numeric password validatio
 });
 
 test("login bypasses cached app script and uses direct auth endpoint", () => {
-  assert.match(indexPage, /app\.js\?v=20260629-auth3/);
-  assert.match(indexPage, /styles\.css\?v=20260629-auth3/);
+  assert.match(indexPage, /app\.js\?v=20260629-auth4/);
+  assert.match(indexPage, /styles\.css\?v=20260629-auth4/);
   assert.match(app, /signInWithPasswordDirect/);
   assert.match(app, /\/auth\/v1\/token\?grant_type=password/);
   assert.match(app, /auth\.setSession/);
@@ -86,6 +86,16 @@ test("login bypasses cached app script and uses direct auth endpoint", () => {
   assert.match(app, /invalid_credentials/);
   assert.match(app, /E-mail ou senha incorretos/);
   assert.doesNotMatch(app, /signInWithPassword\(/);
+});
+
+test("login supports saved session restore and password recovery", () => {
+  assert.match(indexPage, /id="resetPasswordButton"/);
+  assert.match(indexPage, /id="passwordRecoveryForm"/);
+  assert.match(app, /activateAuthSession/);
+  assert.match(app, /resetPasswordForEmail/);
+  assert.match(app, /PASSWORD_RECOVERY/);
+  assert.match(app, /updateUser\(\{ password: newPassword \}\)/);
+  assert.match(app, /isPasswordRecoveryUrl/);
 });
 
 test("sales page offers trial signup with Supabase email confirmation metadata", () => {
