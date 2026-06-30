@@ -17,6 +17,7 @@ const statusLabel = {
   in_service: "Em atendimento",
   finished: "Finalizado",
   no_show: "Faltou",
+  cancelled: "Cancelado",
   open: "Aberto",
   paid: "Pago",
   overdue: "Vencido",
@@ -41,6 +42,13 @@ const statusLabel = {
   admin: "Administrador",
   medical: "Medico",
   receptionist: "Secretaria"
+};
+
+const periodLabel = {
+  morning: "Manha",
+  afternoon: "Tarde",
+  evening: "Noite",
+  any: "Qualquer horario"
 };
 
 const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -108,10 +116,10 @@ const seedState = {
     { id: "ip3", name: "Bradesco Saude", contact: "(92) 3000-2000", active: true }
   ],
   patients: [
-    { id: "p1", name: "Marina Lopes", cpf: "284.719.630-02", phone: "(92) 98812-4401", email: "marina@email.com", risk: "low", insurance: "Particular", noShow: 4 },
-    { id: "p2", name: "Rafael Nunes", cpf: "735.418.920-11", phone: "(92) 98177-2210", email: "rafael@email.com", risk: "medium", insurance: "Unimed", noShow: 18 },
-    { id: "p3", name: "Claudia Sales", cpf: "617.204.830-57", phone: "(92) 99910-8122", email: "claudia@email.com", risk: "high", insurance: "Bradesco Saude", noShow: 35 },
-    { id: "p4", name: "Joao Pedro", cpf: "092.538.160-80", phone: "(92) 98422-7764", email: "joao@email.com", risk: "low", insurance: "Particular", noShow: 7 }
+    { id: "p1", name: "Marina Lopes", cpf: "284.719.630-02", rg: "3219987-1", phone: "(92) 98812-4401", email: "marina@email.com", birthDate: "1988-04-10", risk: "low", insurance: "Particular", noShow: 4, emergencyName: "Lucas Lopes", emergencyPhone: "(92) 98812-4402", addressStreet: "Rua das Acacias", addressNumber: "120", addressDistrict: "Adrianopolis", addressCity: "Manaus", addressState: "AM", allergies: "Dipirona", chronicDiseases: "", medications: "", familyHistory: "Mae hipertensa", importantNotes: "Prefere confirmacao por WhatsApp." },
+    { id: "p2", name: "Rafael Nunes", cpf: "735.418.920-11", rg: "2245981-0", phone: "(92) 98177-2210", email: "rafael@email.com", birthDate: "1979-09-22", risk: "medium", insurance: "Unimed", noShow: 18, emergencyName: "Camila Nunes", emergencyPhone: "(92) 98177-2211", allergies: "", chronicDiseases: "Hipertensao", medications: "Losartana 50 mg", familyHistory: "Pai diabetico", importantNotes: "" },
+    { id: "p3", name: "Claudia Sales", cpf: "617.204.830-57", rg: "5182339-2", phone: "(92) 99910-8122", email: "claudia@email.com", birthDate: "1992-01-18", risk: "high", insurance: "Bradesco Saude", noShow: 35, emergencyName: "Patricia Sales", emergencyPhone: "(92) 99910-8123", allergies: "Latex", chronicDiseases: "Asma", medications: "Budesonida inalatoria", familyHistory: "", importantNotes: "Checar autorizacao do convenio antes de procedimento." },
+    { id: "p4", name: "Joao Pedro", cpf: "092.538.160-80", rg: "7402991-8", phone: "(92) 98422-7764", email: "joao@email.com", birthDate: "2001-11-05", risk: "low", insurance: "Particular", noShow: 7, emergencyName: "Ana Pedro", emergencyPhone: "(92) 98422-7765", allergies: "", chronicDiseases: "", medications: "", familyHistory: "", importantNotes: "" }
   ],
   employees: [
     { id: "e1", professionalId: "dr1", name: "Dra. Ana Beatriz", role: "doctor", accessRole: "medical", crm: "CRM-AM 12345", specialty: "Clinica geral", phone: "(92) 98800-1100", email: "ana@clinica.com", commission: 35, start: "08:00", end: "17:00", status: "active", availability: [{ days: [1, 2, 3, 4, 5], start: "08:00", end: "17:00" }] },
@@ -130,11 +138,26 @@ const seedState = {
     { id: "s3", name: "Retorno pos-procedimento", duration: 25, price: 0, specialty: "Estetica" },
     { id: "s4", name: "Toxina botulinica", duration: 60, price: 890, specialty: "Estetica" }
   ],
+  rooms: [
+    { id: "room1", name: "Sala 01", resources: ["Maca", "Oxigenio"], active: true },
+    { id: "room2", name: "Sala Odonto", resources: ["Cadeira odontologica"], active: true },
+    { id: "room3", name: "Sala Estetica", resources: ["Iluminacao clinica"], active: true }
+  ],
+  equipment: [
+    { id: "eq1", name: "Ultrassom portatil", type: "Imagem", roomId: "room1", active: true },
+    { id: "eq2", name: "Laser estetico", type: "Procedimento", roomId: "room3", active: true }
+  ],
   appointments: [
-    { id: "a1", patientId: "p1", professionalId: "dr1", serviceId: "s1", date: todayIso, time: "08:30", status: "confirmed" },
-    { id: "a2", patientId: "p2", professionalId: "dr2", serviceId: "s2", date: todayIso, time: "10:00", status: "waiting" },
-    { id: "a3", patientId: "p3", professionalId: "dr3", serviceId: "s4", date: todayIso, time: "14:00", status: "scheduled" },
-    { id: "a4", patientId: "p4", professionalId: "dr1", serviceId: "s1", date: addDays(1), time: "09:20", status: "scheduled" }
+    { id: "a1", patientId: "p1", professionalId: "dr1", serviceId: "s1", roomId: "room1", equipmentId: "", date: todayIso, time: "08:30", status: "confirmed", source: "manual", isOverbooked: false, recurrence: "none", notes: "" },
+    { id: "a2", patientId: "p2", professionalId: "dr2", serviceId: "s2", roomId: "room2", equipmentId: "", date: todayIso, time: "10:00", status: "waiting", source: "online", isOverbooked: false, recurrence: "none", notes: "" },
+    { id: "a3", patientId: "p3", professionalId: "dr3", serviceId: "s4", roomId: "room3", equipmentId: "eq2", date: todayIso, time: "14:00", status: "scheduled", source: "manual", isOverbooked: false, recurrence: "none", notes: "" },
+    { id: "a4", patientId: "p4", professionalId: "dr1", serviceId: "s1", roomId: "room1", equipmentId: "", date: addDays(1), time: "09:20", status: "scheduled", source: "manual", isOverbooked: false, recurrence: "none", notes: "" }
+  ],
+  waitlist: [
+    { id: "w1", patientId: "p3", professionalId: "dr3", serviceId: "s4", preferredDate: todayIso, preferredPeriod: "afternoon", priority: 1, status: "waiting", notes: "Quer encaixe se abrir horario." }
+  ],
+  scheduleBlocks: [
+    { id: "b1", professionalId: "dr1", roomId: "", equipmentId: "", date: todayIso, start: "12:00", end: "13:00", reason: "Almoco" }
   ],
   finance: [
     { id: "f1", description: "Consulta Marina Lopes", amount: 220, type: "income", dueDate: todayIso, status: "paid", professionalId: "dr1", paymentMethod: "Pix" },
@@ -204,10 +227,8 @@ function setAuthLoading(isLoading) {
   authRequestInFlight = isLoading;
   const loginButton = byId("loginButton");
   const resendButton = byId("resendConfirmationButton");
-  const resetButton = byId("resetPasswordButton");
   if (loginButton) loginButton.disabled = isLoading;
   if (resendButton) resendButton.disabled = isLoading;
-  if (resetButton) resetButton.disabled = isLoading;
 }
 
 function scheduleAuthSlowNotice(message) {
@@ -216,83 +237,6 @@ function scheduleAuthSlowNotice(message) {
       byId("authFeedback").textContent = message;
     }
   }, AUTH_SLOW_NOTICE_MS);
-}
-
-function authLoginErrorMessage(error) {
-  const message = error?.message || "Nao foi possivel autenticar.";
-  const code = error?.code || "";
-  const lower = `${code} ${message}`.toLowerCase();
-  if (lower.includes("invalid_credentials") || lower.includes("invalid login credentials")) {
-    return "E-mail ou senha incorretos. Confira a senha cadastrada para este acesso.";
-  }
-  if (lower.includes("email not confirmed")) {
-    return "Seu e-mail ainda nao foi confirmado. Use Reenviar confirmacao e confirme a caixa de entrada/spam.";
-  }
-  if (lower.includes("email_address_not_authorized") || lower.includes("email address not authorized")) {
-    return "Este e-mail ainda nao esta autorizado no Supabase Auth.";
-  }
-  if (lower.includes("too many") || lower.includes("rate limit")) {
-    return "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
-  }
-  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
-    return "O navegador nao conseguiu falar com o Supabase. Desative bloqueadores/extensoes para este site ou teste outra rede.";
-  }
-  return message;
-}
-
-function isPasswordRecoveryUrl() {
-  return /[?#&]type=recovery\b/.test(window.location.href);
-}
-
-async function signInWithPasswordDirect(email, password) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), AUTH_LOGIN_TIMEOUT_MS);
-  try {
-    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-      method: "POST",
-      headers: {
-        apikey: SUPABASE_KEY,
-        "Content-Type": "application/json",
-        "X-Client-Info": "clinicou-web"
-      },
-      body: JSON.stringify({ email, password }),
-      signal: controller.signal
-    });
-    const rawBody = await response.text();
-    let payload = {};
-    try {
-      payload = rawBody ? JSON.parse(rawBody) : {};
-    } catch {
-      payload = { message: rawBody };
-    }
-    if (!response.ok) {
-      const message = payload.error_description || payload.msg || payload.message || payload.error || `Auth HTTP ${response.status}`;
-      const authError = new Error(message);
-      authError.status = response.status;
-      authError.code = payload.error_code || payload.code || payload.error || "";
-      throw authError;
-    }
-    if (!payload.access_token || !payload.refresh_token) {
-      throw new Error("O Supabase autenticou, mas nao retornou uma sessao valida.");
-    }
-    const { data, error } = await withTimeout(
-      supabaseClient.auth.setSession({
-        access_token: payload.access_token,
-        refresh_token: payload.refresh_token
-      }),
-      AUTH_SESSION_TIMEOUT_MS,
-      "Login feito, mas nao foi possivel salvar a sessao no navegador."
-    );
-    if (error) throw error;
-    return data?.session || { user: payload.user };
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw new Error("O login nao respondeu em 60 segundos. Teste outra rede ou confira se algum bloqueador esta impedindo chamadas ao Supabase.");
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -329,7 +273,11 @@ function loadState() {
       employees: [],
       professionals: [],
       services: [],
+      rooms: [],
+      equipment: [],
       appointments: [],
+      waitlist: [],
+      scheduleBlocks: [],
       finance: [],
       records: [],
       campaigns: [],
@@ -345,7 +293,11 @@ function loadState() {
       employees: [],
       professionals: [],
       services: [],
+      rooms: [],
+      equipment: [],
       appointments: [],
+      waitlist: [],
+      scheduleBlocks: [],
       finance: [],
       records: [],
       campaigns: [],
@@ -375,7 +327,11 @@ function normalizeState(saved) {
   merged.professionals = Array.isArray(saved.professionals) ? saved.professionals : seedState.professionals;
   merged.employees = normalizeEmployees(saved.employees, merged.professionals);
   merged.services = Array.isArray(saved.services) ? saved.services : seedState.services;
-  merged.appointments = Array.isArray(saved.appointments) ? saved.appointments : seedState.appointments;
+  merged.rooms = Array.isArray(saved.rooms) ? saved.rooms : seedState.rooms;
+  merged.equipment = Array.isArray(saved.equipment) ? saved.equipment : seedState.equipment;
+  merged.appointments = normalizeAppointments(saved.appointments);
+  merged.waitlist = Array.isArray(saved.waitlist) ? saved.waitlist : seedState.waitlist;
+  merged.scheduleBlocks = Array.isArray(saved.scheduleBlocks) ? saved.scheduleBlocks : seedState.scheduleBlocks;
   merged.finance = Array.isArray(saved.finance) ? saved.finance : seedState.finance;
   merged.records = Array.isArray(saved.records) ? saved.records : seedState.records;
   merged.campaigns = Array.isArray(saved.campaigns) ? saved.campaigns : seedState.campaigns;
@@ -396,7 +352,24 @@ function normalizePatients(patients) {
   return (Array.isArray(patients) ? patients : seedState.patients).map((patient, index) => ({
     ...patient,
     cpf: formatCpf(patient.cpf || patient.document || seedState.patients[index]?.cpf || ""),
-    phone: formatPhone(patient.phone || patient.whatsapp || "")
+    phone: formatPhone(patient.phone || patient.whatsapp || ""),
+    emergencyPhone: formatPhone(patient.emergencyPhone || patient.emergency?.phone || ""),
+    allergies: patient.allergies || "",
+    chronicDiseases: patient.chronicDiseases || "",
+    medications: patient.medications || patient.continuousMedications || "",
+    importantNotes: patient.importantNotes || patient.notes || ""
+  }));
+}
+
+function normalizeAppointments(appointments) {
+  return (Array.isArray(appointments) ? appointments : seedState.appointments).map((appointment) => ({
+    roomId: "",
+    equipmentId: "",
+    source: "manual",
+    isOverbooked: false,
+    recurrence: "none",
+    notes: "",
+    ...appointment
   }));
 }
 
@@ -537,8 +510,12 @@ function wireEvents() {
     updateSlotAvailabilityPreview();
   });
   byId("appointmentService")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("appointmentRoom")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("appointmentEquipment")?.addEventListener("change", updateSlotAvailabilityPreview);
   byId("appointmentDate")?.addEventListener("change", updateSlotAvailabilityPreview);
   byId("appointmentTime")?.addEventListener("change", updateSlotAvailabilityPreview);
+  byId("waitlistForm")?.addEventListener("submit", submitWaitlistEntry);
+  byId("scheduleBlockForm")?.addEventListener("submit", submitScheduleBlock);
   byId("closeSlotModal")?.addEventListener("click", closeSlotModal);
   byId("slotModal")?.addEventListener("click", (event) => {
     if (event.target.id === "slotModal") closeSlotModal();
@@ -549,6 +526,7 @@ function wireEvents() {
   byId("patientSearch")?.addEventListener("input", renderPatients);
   byId("patientCpf")?.addEventListener("input", (event) => event.target.value = formatCpf(event.target.value));
   byId("patientWhatsapp")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
+  byId("patientEmergencyPhone")?.addEventListener("input", (event) => event.target.value = formatPhone(event.target.value));
 
   byId("recordForm")?.addEventListener("submit", submitRecord);
   byId("recordComplaint")?.addEventListener("input", () => renderSmartSuggestions("complaint"));
@@ -637,8 +615,6 @@ function wireEvents() {
   });
   byId("loginButton")?.addEventListener("click", () => auth());
   byId("resendConfirmationButton")?.addEventListener("click", resendConfirmationEmail);
-  byId("resetPasswordButton")?.addEventListener("click", sendPasswordResetEmail);
-  byId("passwordRecoveryForm")?.addEventListener("submit", submitPasswordRecovery);
   byId("logoutButton")?.addEventListener("click", signOut);
   byId("setupClinicName")?.addEventListener("input", (event) => {
     const slug = byId("setupClinicSlug");
@@ -665,6 +641,10 @@ function wireEvents() {
 function setDefaultDates() {
   if (byId("appointmentDate")) byId("appointmentDate").value = todayIso;
   if (byId("scheduleDateFilter")) byId("scheduleDateFilter").value = todayIso;
+  if (document.querySelector("#waitlistForm [name='preferredDate']")) document.querySelector("#waitlistForm [name='preferredDate']").value = todayIso;
+  if (document.querySelector("#scheduleBlockForm [name='date']")) document.querySelector("#scheduleBlockForm [name='date']").value = todayIso;
+  if (document.querySelector("#scheduleBlockForm [name='start']")) document.querySelector("#scheduleBlockForm [name='start']").value = "12:00";
+  if (document.querySelector("#scheduleBlockForm [name='end']")) document.querySelector("#scheduleBlockForm [name='end']").value = "13:00";
   if (byId("guideDate")) byId("guideDate").value = todayIso;
   if (document.querySelector("[name='dueDate']")) document.querySelector("[name='dueDate']").value = todayIso;
 }
@@ -681,61 +661,32 @@ async function enforceAuth() {
       lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
       return;
     }
-    if (event === "PASSWORD_RECOVERY") {
-      currentAuthUser = session?.user || null;
-      currentUser.email = session?.user?.email || "";
-      currentSignupMetadata = session?.user?.user_metadata || {};
-      lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
+    if (session) {
+      currentAuthUser = session.user || null;
+      currentUser.email = session.user?.email || "";
+      currentSignupMetadata = session.user?.user_metadata || {};
+      const loaded = await loadRemoteSnapshot();
+      if (loaded) unlockAuth();
     }
   });
 
-  if (isPasswordRecoveryUrl()) {
-    lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
-    return;
-  }
-
-  const { data, error } = await withTimeout(
-    supabaseClient.auth.getSession(),
-    AUTH_SESSION_TIMEOUT_MS,
-    "A sessao salva demorou para responder. Entre novamente."
-  ).catch((error) => ({ data: null, error }));
+  const { data } = await supabaseClient.auth.getSession();
   if (data?.session) {
-    try {
-      await activateAuthSession(data.session, "Restaurando sessao salva...");
-    } catch (error) {
-      lockAuth(error.message || "Nao foi possivel restaurar a sessao salva.");
-    }
-    return;
-  }
-  if (error) {
-    resetLocalAuthSession();
-    lockAuth(authLoginErrorMessage(error));
+    currentAuthUser = data.session.user || null;
+    currentUser.email = currentAuthUser?.email || "";
+    currentSignupMetadata = currentAuthUser?.user_metadata || {};
+    const loaded = await loadRemoteSnapshot();
+    if (loaded) unlockAuth();
     return;
   }
 
   lockAuth("Entre com uma conta autorizada para acessar o sistema.");
 }
 
-async function activateAuthSession(session, loadingMessage = "Carregando dados da clinica...") {
-  if (!session) return false;
-  currentAuthUser = session.user || null;
-  currentUser.email = currentAuthUser?.email || "";
-  currentSignupMetadata = currentAuthUser?.user_metadata || {};
-  byId("authFeedback").textContent = loadingMessage;
-  const loaded = await withTimeout(
-    loadRemoteSnapshot(),
-    AUTH_DATA_TIMEOUT_MS,
-    "Sessao ativa, mas os dados da clinica nao responderam em 45 segundos. Tente recarregar a pagina."
-  );
-  if (loaded) unlockAuth();
-  return loaded;
-}
-
 function lockAuth(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = false;
-  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("authTitle").textContent = "Entre na sua clinica";
   byId("authFeedback").textContent = message;
@@ -747,7 +698,6 @@ function unlockAuth() {
   document.body.classList.remove("auth-locked");
   byId("authModal").classList.remove("open");
   byId("authForm").hidden = false;
-  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("syncState").textContent = "Online com Supabase";
   startTrialTimers();
@@ -757,7 +707,6 @@ function lockClinicSetup(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = true;
-  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = false;
   byId("authTitle").textContent = "Criar clinica inicial";
   if (byId("setupClinicName") && currentSignupMetadata.clinic_name) {
@@ -768,18 +717,6 @@ function lockClinicSetup(message) {
   }
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Criar clinica inicial";
-  stopTrialTimers();
-}
-
-function lockPasswordRecovery(message) {
-  document.body.classList.add("auth-locked");
-  byId("authModal").classList.add("open");
-  byId("authForm").hidden = true;
-  byId("clinicSetupForm").hidden = true;
-  byId("passwordRecoveryForm").hidden = false;
-  byId("authTitle").textContent = "Redefinir senha";
-  byId("authFeedback").textContent = message;
-  byId("syncState").textContent = "Redefinir senha";
   stopTrialTimers();
 }
 
@@ -890,6 +827,8 @@ function renderAll() {
   renderCashflow();
   renderCrmQueue();
   renderSchedule();
+  renderScheduleResources();
+  renderWaitlist();
   renderPatients();
   renderRecordPatientSummary();
   renderRecordSearchResults();
@@ -940,6 +879,14 @@ function populateSelects() {
   fillSelect("guideProfessional", state.professionals, "name");
   fillSelect("availabilityDoctor", state.professionals, "name");
   fillSelect("appointmentService", state.services, "name");
+  fillSelect("appointmentRoom", [{ id: "", name: "Sem sala definida" }, ...state.rooms.filter((room) => room.active !== false)], "name");
+  fillSelect("appointmentEquipment", [{ id: "", name: "Sem equipamento" }, ...state.equipment.filter((item) => item.active !== false)], "name");
+  fillSelect("waitlistPatient", state.patients, "name");
+  fillSelect("waitlistProfessional", [{ id: "", name: "Qualquer medico" }, ...state.professionals], "name");
+  fillSelect("waitlistService", [{ id: "", name: "Qualquer servico" }, ...state.services], "name");
+  fillSelect("blockProfessional", [{ id: "", name: "Nao bloquear medico" }, ...state.professionals], "name");
+  fillSelect("blockRoom", [{ id: "", name: "Nao bloquear sala" }, ...state.rooms.filter((room) => room.active !== false)], "name");
+  fillSelect("blockEquipment", [{ id: "", name: "Nao bloquear equipamento" }, ...state.equipment.filter((item) => item.active !== false)], "name");
   fillInsuranceSelect("patientInsurance");
 }
 
@@ -1068,7 +1015,8 @@ function renderSchedule() {
     const cards = appts.map((a) => `<div class="appt-card">
       <strong>${a.time} - ${escapeHtml(patientById(a.patientId).name)}</strong>
       <span>${escapeHtml(serviceById(a.serviceId).name)}</span>
-      <span>${escapeHtml(patientById(a.patientId).insurance || "Particular")}</span>
+      <span>${escapeHtml(roomById(a.roomId).name)}${a.equipmentId ? ` - ${escapeHtml(equipmentById(a.equipmentId).name)}` : ""}</span>
+      <span>${escapeHtml(patientById(a.patientId).insurance || "Particular")}${a.isOverbooked ? " - Encaixe" : ""}</span>
       <span class="badge ${a.status}">${statusLabel[a.status]}</span>
     </div>`).join("");
     return `<div class="pro-column"><div class="pro-heading">${escapeHtml(pro.name)}<p class="item-sub">${escapeHtml(pro.specialty)} - ${pro.start} as ${pro.end}</p></div>${cards || emptyState("Sem consultas neste dia.")}</div>`;
@@ -1082,8 +1030,8 @@ function renderPatients() {
   const rows = state.patients
     .filter((p) => normalizeSearch(`${p.name} ${p.phone} ${p.cpf} ${p.email} ${p.insurance}`).includes(query))
     .map((p) => `<div class="table-row patients-row">
-      <div><strong>${escapeHtml(p.name)}</strong><div class="table-label">${escapeHtml(p.email || "Sem e-mail")}</div></div>
-      <div>${escapeHtml(p.phone)}<div class="table-label">CPF ${escapeHtml(p.cpf || "Nao informado")}</div></div>
+      <div><strong>${escapeHtml(p.name)}</strong><div class="table-label">${escapeHtml(p.email || "Sem e-mail")} ${p.birthDate ? `- ${formatDate(p.birthDate)}` : ""}</div></div>
+      <div>${escapeHtml(p.phone)}<div class="table-label">CPF ${escapeHtml(p.cpf || "Nao informado")} ${p.rg ? `- RG ${escapeHtml(p.rg)}` : ""}</div></div>
       <div><span class="badge ${p.risk}">${statusLabel[p.risk]}</span></div>
       <div class="row-actions">
         <button class="icon-button" onclick="editPatient('${p.id}')" aria-label="Editar paciente"><i data-lucide="pencil"></i></button>
@@ -1113,6 +1061,11 @@ function renderRecordPatientSummary() {
       <span>Ultima passagem</span>
       <strong>${lastVisit ? formatDateTime(lastVisit) : "Sem historico"}</strong>
       <small>${recordCount} evolucao(oes) no prontuario</small>
+    </div>
+    <div>
+      <span>Alertas clinicos</span>
+      <strong>${escapeHtml(patient.allergies || "Sem alergias informadas")}</strong>
+      <small>${escapeHtml(patient.chronicDiseases || patient.medications || "Sem doenca cronica/medicacao registrada")}</small>
     </div>
   </div>`;
 }
@@ -1145,7 +1098,8 @@ function renderRecords() {
     <div>
       <p class="item-title">${formatDateTime(r.createdAt)} - ${escapeHtml(statusLabel[r.type] || r.diagnosis || "Evolucao registrada")}</p>
       <p class="item-sub">${escapeHtml(r.complaint || "Sem queixa informada")}</p>
-      <p class="item-sub">${escapeHtml(r.documentText || r.conduct || r.prescription || "")}</p>
+      <p class="item-sub">${escapeHtml([r.cid10, r.cid11, r.ciap].filter(Boolean).join(" | ") || r.documentText || r.conduct || r.prescription || "")}</p>
+      <p class="item-sub">${r.signedAt ? `Assinado em ${formatDateTime(r.signedAt)}` : "Nao assinado"}${r.attachments?.length ? ` - ${r.attachments.length} anexo(s)` : ""}</p>
     </div>
     <button class="icon-button" onclick="openRecordHistory('${r.id}')" aria-label="Visualizar historico"><i data-lucide="eye"></i></button>
   </div>`).join("") || emptyState("Nenhuma evolucao registrada para este paciente.");
@@ -1347,6 +1301,49 @@ function renderAccessControl() {
       <div class="permission-grid">${screens.map(([view, label]) => `<label><input type="checkbox" ${permissions.includes(view) ? "checked" : ""} onchange="toggleEmployeePermission('${employee.id}', '${view}', this.checked)"> ${label}</label>`).join("")}</div>
     </div>`;
   }).join("") || emptyState("Cadastre funcionarios para controlar acessos.");
+  lucide.createIcons();
+}
+
+function renderScheduleResources() {
+  const node = byId("scheduleResources");
+  if (!node) return;
+  const resources = [
+    ...state.rooms.filter((room) => room.active !== false).map((room) => ({ id: room.id, type: "Sala", name: room.name })),
+    ...state.equipment.filter((item) => item.active !== false).map((item) => ({ id: item.id, type: "Equipamento", name: item.name }))
+  ];
+  node.innerHTML = resources.map((resource) => {
+    const appts = state.appointments
+      .filter((appt) => appt.date === currentScheduleDate && (appt.roomId === resource.id || appt.equipmentId === resource.id))
+      .sort((a, b) => a.time.localeCompare(b.time));
+    const blocks = state.scheduleBlocks
+      .filter((block) => block.date === currentScheduleDate && (block.roomId === resource.id || block.equipmentId === resource.id))
+      .sort((a, b) => a.start.localeCompare(b.start));
+    return `<div class="resource-item">
+      <div><strong>${escapeHtml(resource.name)}</strong><span>${resource.type}</span></div>
+      <small>${appts.length} consulta(s) - ${blocks.length} bloqueio(s)</small>
+      ${appts.slice(0, 3).map((appt) => `<p>${appt.time} ${escapeHtml(patientById(appt.patientId).name)}</p>`).join("")}
+      ${blocks.slice(0, 2).map((block) => `<p>${block.start}-${block.end} ${escapeHtml(block.reason)}</p>`).join("")}
+    </div>`;
+  }).join("") || emptyState("Cadastre salas ou equipamentos para acompanhar a ocupacao.");
+}
+
+function renderWaitlist() {
+  const node = byId("waitlistList");
+  if (!node) return;
+  const entries = state.waitlist
+    .filter((entry) => entry.status === "waiting")
+    .slice()
+    .sort((a, b) => Number(a.priority || 3) - Number(b.priority || 3));
+  node.innerHTML = entries.map((entry) => `<div class="record-item">
+    <i data-lucide="list-plus"></i>
+    <div>
+      <p class="item-title">${escapeHtml(patientById(entry.patientId).name)} - prioridade ${entry.priority}</p>
+      <p class="item-sub">${escapeHtml(professionalById(entry.professionalId).name)} - ${escapeHtml(serviceById(entry.serviceId).name)}</p>
+      <p class="item-sub">${entry.preferredDate ? formatDate(entry.preferredDate) : "Data flexivel"} - ${periodLabel[entry.preferredPeriod] || "Qualquer horario"}</p>
+      ${entry.notes ? `<p class="item-sub">${escapeHtml(entry.notes)}</p>` : ""}
+    </div>
+    <button class="icon-button" onclick="scheduleFromWaitlist('${entry.id}')" aria-label="Usar na agenda"><i data-lucide="calendar-plus"></i></button>
+  </div>`).join("") || emptyState("Lista de espera vazia.");
   lucide.createIcons();
 }
 
@@ -1574,15 +1571,28 @@ async function submitAppointment(event) {
     toast("Selecione paciente, medico e servico.");
     return;
   }
-  const validation = validateAppointmentSlot(data.professionalId, data.date, data.time, data.serviceId);
+  data.isOverbooked = data.isOverbooked === "true";
+  const validation = validateAppointmentSlot(data.professionalId, data.date, data.time, data.serviceId, data.roomId, data.equipmentId, data.isOverbooked);
   if (!validation.ok) {
     await siteAlert(validation.message, "Horario indisponivel");
     openSlotModal(data.professionalId, data.date, data.serviceId);
     return;
   }
-  let appointment = { id: uid("a"), ...data };
-  appointment = await saveAppointmentRemote(appointment);
-  state.appointments.push(appointment);
+  const appointments = buildRecurringAppointments({ id: uid("a"), ...data });
+  const invalidRecurring = appointments
+    .slice(1)
+    .map((appointment) => ({ appointment, validation: validateAppointmentSlot(appointment.professionalId, appointment.date, appointment.time, appointment.serviceId, appointment.roomId, appointment.equipmentId, appointment.isOverbooked) }))
+    .find((item) => !item.validation.ok);
+  if (invalidRecurring) {
+    await siteAlert(`${formatDate(invalidRecurring.appointment.date)}: ${invalidRecurring.validation.message}`, "Recorrencia indisponivel");
+    return;
+  }
+  const savedAppointments = [];
+  for (const item of appointments) {
+    const saved = await saveAppointmentRemote(item);
+    savedAppointments.push(saved);
+    state.appointments.push(saved);
+  }
   const service = serviceById(data.serviceId);
   let financeItem = {
     id: uid("f"),
@@ -1593,7 +1603,7 @@ async function submitAppointment(event) {
     status: "open",
     professionalId: data.professionalId,
     patientId: data.patientId,
-    appointmentId: appointment.id,
+    appointmentId: savedAppointments[0].id,
     paymentMethod: "A definir"
   };
   financeItem = await saveFinanceRemote(financeItem);
@@ -1603,7 +1613,7 @@ async function submitAppointment(event) {
   state.audit.unshift({ id: uid("lg"), action: "Consulta agendada", actor: "Usuario atual", target: patientById(data.patientId).name, at: "Agora" });
   saveState();
   renderAll();
-  toast("Consulta agendada e lancamento financeiro criado.");
+  toast(`${savedAppointments.length} consulta(s) agendada(s) e lancamento financeiro criado.`);
 }
 
 async function submitPatient(event) {
@@ -1612,6 +1622,8 @@ async function submitPatient(event) {
   data.name = data.name.trim();
   data.cpf = formatCpf(data.cpf);
   data.phone = formatPhone(data.phone);
+  data.emergencyPhone = formatPhone(data.emergencyPhone);
+  data.addressState = String(data.addressState || "").toUpperCase().slice(0, 2);
   if (!digitsOnly(data.cpf)) {
     toast("Informe o CPF do paciente.");
     return;
@@ -1641,29 +1653,95 @@ async function submitPatient(event) {
   renderAll();
 }
 
+async function submitWaitlistEntry(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  if (!data.patientId) {
+    toast("Selecione um paciente para a lista de espera.");
+    return;
+  }
+  let entry = {
+    id: uid("w"),
+    patientId: data.patientId,
+    professionalId: data.professionalId || "",
+    serviceId: data.serviceId || "",
+    preferredDate: data.preferredDate || "",
+    preferredPeriod: data.preferredPeriod || "any",
+    priority: Number(data.priority || 3),
+    status: "waiting",
+    notes: data.notes || ""
+  };
+  entry = await saveWaitlistEntryRemote(entry);
+  state.waitlist.push(entry);
+  event.target.reset();
+  saveState();
+  renderAll();
+  toast("Paciente adicionado a lista de espera.");
+}
+
+async function submitScheduleBlock(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  if (!data.professionalId && !data.roomId && !data.equipmentId) {
+    toast("Escolha pelo menos um medico, sala ou equipamento.");
+    return;
+  }
+  if (!data.date || !data.start || !data.end || toMinutes(data.end) <= toMinutes(data.start)) {
+    toast("Informe data, inicio e fim validos para o bloqueio.");
+    return;
+  }
+  let block = {
+    id: uid("b"),
+    professionalId: data.professionalId || "",
+    roomId: data.roomId || "",
+    equipmentId: data.equipmentId || "",
+    date: data.date,
+    start: data.start,
+    end: data.end,
+    reason: data.reason || "Bloqueio de agenda"
+  };
+  block = await saveScheduleBlockRemote(block);
+  state.scheduleBlocks.push(block);
+  event.target.reset();
+  saveState();
+  renderAll();
+  toast("Horario bloqueado.");
+}
+
 async function submitRecord(event) {
   event.preventDefault();
   const record = {
     id: uid("r"),
     patientId: byId("recordPatient").value,
     complaint: byId("recordComplaint").value,
+    diseaseHistory: byId("recordDiseaseHistory").value,
     vitals: byId("recordVitals").value,
+    physicalExam: byId("recordPhysicalExam").value,
     diagnosis: byId("recordDiagnosis").value,
+    cid10: byId("recordCid10").value,
+    cid11: byId("recordCid11").value,
+    ciap: byId("recordCiap").value,
     conduct: byId("recordConduct").value,
     prescription: byId("recordPrescription").value,
+    examRequests: byId("recordExamRequests").value,
+    referrals: byId("recordReferrals").value,
     followUp: byId("recordFollowUp").value,
     notes: byId("recordNotes").value,
+    attachments: [],
+    signedAt: byId("recordSigned")?.checked ? new Date().toISOString() : "",
     createdAt: new Date().toISOString()
   };
   if (!record.patientId) {
     toast("Selecione um paciente para salvar o prontuario.");
     return;
   }
+  record.attachments = await uploadRecordAttachments(record, Array.from(byId("recordAttachments")?.files || []));
   const saved = await saveRecordRemote(record);
   state.records.push(saved);
   state.audit.unshift({ id: uid("lg"), action: "Evolucao clinica registrada", actor: "Usuario atual", target: patientById(record.patientId).name, at: "Agora" });
   saveState();
   event.target.reset();
+  byId("recordAttachments").value = "";
   byId("recordPatient").value = record.patientId;
   renderAll();
   toast("Prontuario atualizado com historico do paciente.");
@@ -1899,14 +1977,17 @@ function updateSlotAvailabilityPreview() {
   const date = byId("appointmentDate")?.value;
   const time = byId("appointmentTime")?.value;
   const serviceId = byId("appointmentService")?.value;
+  const roomId = byId("appointmentRoom")?.value;
+  const equipmentId = byId("appointmentEquipment")?.value;
+  const isOverbooked = Boolean(byId("appointmentForm")?.elements.isOverbooked?.checked);
   if (!proId || !date || !time) return;
-  const validation = validateAppointmentSlot(proId, date, time, serviceId);
+  const validation = validateAppointmentSlot(proId, date, time, serviceId, roomId, equipmentId, isOverbooked);
   byId("slotSuggestion").textContent = validation.ok
     ? "Horario disponivel para este medico."
     : validation.message;
 }
 
-function validateAppointmentSlot(professionalId, date, time, serviceId) {
+function validateAppointmentSlot(professionalId, date, time, serviceId, roomId = "", equipmentId = "", allowOverbook = false) {
   const professional = professionalById(professionalId);
   const service = serviceById(serviceId);
   const availability = availabilityForDate(professional, date);
@@ -1919,14 +2000,38 @@ function validateAppointmentSlot(professionalId, date, time, serviceId) {
   if (start < availStart || end > availEnd) {
     return { ok: false, message: `${professional.name} atende neste dia de ${availability.start} as ${availability.end}.` };
   }
+  const blocked = state.scheduleBlocks.find((block) => {
+    if (block.date !== date) return false;
+    const sameResource = block.professionalId === professionalId || (roomId && block.roomId === roomId) || (equipmentId && block.equipmentId === equipmentId);
+    if (!sameResource) return false;
+    return start < toMinutes(block.end) && end > toMinutes(block.start);
+  });
+  if (blocked) return { ok: false, message: `Horario bloqueado: ${blocked.reason}.` };
   const conflict = state.appointments.some((appt) => {
-    if (appt.professionalId !== professionalId || appt.date !== date) return false;
+    if (appt.professionalId !== professionalId || appt.date !== date || ["cancelled", "no_show"].includes(appt.status)) return false;
     const apptStart = toMinutes(appt.time);
     const apptEnd = apptStart + Number(serviceById(appt.serviceId).duration || 30);
     return start < apptEnd && end > apptStart;
   });
-  if (conflict) return { ok: false, message: "Este horario conflita com outra consulta do mesmo medico." };
+  if (conflict && !allowOverbook) return { ok: false, message: "Este horario conflita com outra consulta do mesmo medico." };
+  const roomConflict = roomId && state.appointments.some((appt) => appt.roomId === roomId && appt.date === date && !["cancelled", "no_show"].includes(appt.status) && start < toMinutes(appt.time) + Number(serviceById(appt.serviceId).duration || 30) && end > toMinutes(appt.time));
+  if (roomConflict) return { ok: false, message: "Esta sala ja esta ocupada neste horario." };
+  const equipmentConflict = equipmentId && state.appointments.some((appt) => appt.equipmentId === equipmentId && appt.date === date && !["cancelled", "no_show"].includes(appt.status) && start < toMinutes(appt.time) + Number(serviceById(appt.serviceId).duration || 30) && end > toMinutes(appt.time));
+  if (equipmentConflict) return { ok: false, message: "Este equipamento ja esta reservado neste horario." };
   return { ok: true, message: "Horario disponivel." };
+}
+
+function buildRecurringAppointments(appointment) {
+  const recurrence = appointment.recurrence || "none";
+  if (recurrence === "none") return [appointment];
+  const increments = { weekly: 7, biweekly: 14, monthly: 30 };
+  const days = increments[recurrence] || 0;
+  const base = new Date(`${appointment.date}T12:00:00`);
+  return Array.from({ length: 4 }, (_, index) => {
+    const date = new Date(base);
+    date.setDate(base.getDate() + (days * index));
+    return { ...appointment, id: index === 0 ? appointment.id : uid("a"), date: date.toISOString().slice(0, 10) };
+  });
 }
 
 function availableSlots(professionalId, fromDate, serviceId, daysAhead = 14) {
@@ -2069,8 +2174,6 @@ async function auth() {
   }
   const form = byId("authForm");
   const data = Object.fromEntries(new FormData(form));
-  data.email = String(data.email || "").trim().toLowerCase();
-  data.password = String(data.password || "");
   const feedback = byId("authFeedback");
   if (!data.email || !data.password) {
     feedback.textContent = "Informe e-mail e senha para entrar.";
@@ -2080,16 +2183,40 @@ async function auth() {
   setAuthLoading(true);
   let slowNotice = scheduleAuthSlowNotice("Ainda conectando ao Supabase. Aguarde mais alguns segundos...");
   try {
-    const session = await signInWithPasswordDirect(data.email, data.password);
+    const { error } = await withTimeout(
+      supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
+      AUTH_LOGIN_TIMEOUT_MS,
+      "O login nao respondeu em 60 segundos. Verifique a internet, recarregue a pagina e tente novamente."
+    );
+    if (error) throw error;
     clearTimeout(slowNotice);
+    feedback.textContent = "Login confirmado. Carregando sessao...";
+    slowNotice = scheduleAuthSlowNotice("Login confirmado. Ainda carregando a sessao segura...");
+    const { data: sessionData } = await withTimeout(
+      supabaseClient.auth.getSession(),
+      AUTH_SESSION_TIMEOUT_MS,
+      "Login feito, mas a sessao nao respondeu em 30 segundos. Atualize a pagina e tente entrar novamente."
+    );
+    currentAuthUser = sessionData?.session?.user || null;
+    currentUser.email = currentAuthUser?.email || data.email;
+    currentSignupMetadata = currentAuthUser?.user_metadata || {};
+    clearTimeout(slowNotice);
+    feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
     slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
-    const loaded = await activateAuthSession(session, "Login confirmado. Carregando dados da clinica...");
+    const loaded = await withTimeout(
+      loadRemoteSnapshot(),
+      AUTH_DATA_TIMEOUT_MS,
+      "Login feito, mas os dados da clinica nao responderam em 45 segundos. Verifique a conexao ou as permissoes da clinica."
+    );
     if (loaded) {
+      unlockAuth();
       toast("Acesso confirmado.");
     }
   } catch (error) {
-    clearTimeout(slowNotice);
-    feedback.textContent = authLoginErrorMessage(error);
+    const message = error.message || "Nao foi possivel autenticar.";
+    feedback.textContent = message.includes("Email not confirmed")
+      ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
+      : message;
   } finally {
     clearTimeout(slowNotice);
     setAuthLoading(false);
@@ -2118,59 +2245,6 @@ async function resendConfirmationEmail() {
   feedback.textContent = error
     ? authEmailErrorMessage(error)
     : "E-mail reenviado. Confira a caixa de entrada, spam e promocoes.";
-}
-
-async function sendPasswordResetEmail() {
-  if (!supabaseClient) {
-    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
-    return;
-  }
-  const form = byId("authForm");
-  const data = Object.fromEntries(new FormData(form));
-  const email = String(data.email || "").trim().toLowerCase();
-  const feedback = byId("authFeedback");
-  if (!email) {
-    feedback.textContent = "Informe o e-mail para redefinir a senha.";
-    return;
-  }
-  feedback.textContent = "Enviando link para redefinir senha...";
-  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-    redirectTo: authRedirectUrl()
-  });
-  feedback.textContent = error
-    ? authEmailErrorMessage(error)
-    : "Enviamos um link para redefinir sua senha. Confira caixa de entrada, spam e promocoes.";
-}
-
-async function submitPasswordRecovery(event) {
-  event.preventDefault();
-  if (!supabaseClient) {
-    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
-    return;
-  }
-  const form = event.currentTarget;
-  const data = Object.fromEntries(new FormData(form));
-  const newPassword = String(data.newPassword || "");
-  const confirmPassword = String(data.confirmPassword || "");
-  const feedback = byId("authFeedback");
-  if (newPassword.length < 6) {
-    feedback.textContent = "A nova senha precisa ter pelo menos 6 caracteres.";
-    return;
-  }
-  if (newPassword !== confirmPassword) {
-    feedback.textContent = "As senhas nao conferem.";
-    return;
-  }
-  feedback.textContent = "Salvando nova senha...";
-  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-  if (error) {
-    feedback.textContent = authLoginErrorMessage(error);
-    return;
-  }
-  form.reset();
-  await supabaseClient.auth.signOut({ scope: "local" }).catch(() => {});
-  resetLocalAuthSession();
-  lockAuth("Senha atualizada. Entre novamente com sua nova senha.");
 }
 
 async function signOut() {
@@ -2266,19 +2340,27 @@ async function loadClinicTables() {
     patients,
     staff,
     services,
+    rooms,
+    equipment,
     appointments,
+    waitlist,
+    scheduleBlocks,
     finance,
     records,
     commissions,
     guides
   ] = await Promise.all([
     remoteSelect("insurance_plans", "id,name,contact,active", clinicId),
-    remoteSelect("patients", "id,full_name,phone,whatsapp,email,cpf,document,insurance,risk,no_show_score,insurance_plan_id", clinicId),
+    remoteSelect("patients", "id,full_name,phone,whatsapp,email,birth_date,cpf,document,rg,photo_url,insurance,risk,no_show_score,insurance_plan_id,address,emergency_contacts,family_history,allergies,chronic_diseases,continuous_medications,important_notes,notes", clinicId),
     remoteSelect("staff_members", "id,user_id,professional_id,full_name,role,crm,specialty,phone,whatsapp,email,commission_percent,working_hours,access_role,permissions,status", clinicId),
     remoteSelect("services", "id,name,specialty,duration_minutes,price,active", clinicId),
-    remoteSelect("appointments", "id,patient_id,professional_id,service_id,starts_at,ends_at,status", clinicId),
+    remoteSelect("rooms", "id,name,resources,active", clinicId),
+    remoteSelect("equipment", "id,name,type,room_id,active,metadata", clinicId),
+    remoteSelect("appointments", "id,patient_id,professional_id,service_id,room_id,equipment_id,starts_at,ends_at,status,source,is_overbooked,recurrence_rule,online_booking_ref,notes", clinicId),
+    remoteSelect("waitlist_entries", "id,patient_id,professional_id,service_id,preferred_date,preferred_period,priority,status,notes,created_at", clinicId),
+    remoteSelect("schedule_blocks", "id,professional_id,room_id,equipment_id,starts_at,ends_at,reason,created_at", clinicId),
     remoteSelect("financial_transactions", "id,description,type,amount,due_date,status,payment_method,professional_id,patient_id,appointment_id", clinicId),
-    remoteSelect("medical_records", "id,patient_id,professional_id,template,complaint,payload,signed_at,created_at", clinicId),
+    remoteSelect("medical_records", "id,patient_id,professional_id,template,complaint,payload,signed_at,signature_data,created_at", clinicId),
     remoteSelect("commissions", "id,professional_id,transaction_id,percent,amount,status,settled_at,created_at", clinicId),
     remoteSelect("attendance_guides", "id,patient_id,professional_id,service_date,procedure,description,signature_data,created_at", clinicId)
   ]);
@@ -2288,8 +2370,12 @@ async function loadClinicTables() {
   if (staff) state.employees = staff.map(fromRemoteStaff);
   resolveCurrentUser();
   if (services?.length) state.services = services.map(fromRemoteService);
+  if (rooms?.length) state.rooms = rooms.map(fromRemoteRoom);
+  if (equipment?.length) state.equipment = equipment.map(fromRemoteEquipment);
   syncProfessionalsFromEmployees();
   if (appointments) state.appointments = appointments.map(fromRemoteAppointment);
+  if (waitlist) state.waitlist = waitlist.map(fromRemoteWaitlistEntry);
+  if (scheduleBlocks) state.scheduleBlocks = scheduleBlocks.map(fromRemoteScheduleBlock);
   if (finance) state.finance = finance.map(fromRemoteFinance);
   if (records) state.records = records.map(fromRemoteRecord);
   if (commissions) state.commissions = commissions.map(fromRemoteCommission);
@@ -2506,15 +2592,33 @@ function toRemotePlan(plan) {
 }
 
 function fromRemotePatient(row) {
+  const address = row.address || {};
+  const emergency = Array.isArray(row.emergency_contacts) ? row.emergency_contacts[0] || {} : {};
   return {
     id: row.id,
     name: row.full_name,
     cpf: formatCpf(row.cpf || row.document || ""),
+    rg: row.rg || "",
     phone: formatPhone(row.whatsapp || row.phone || ""),
     email: row.email || "",
+    birthDate: row.birth_date || "",
+    photoUrl: row.photo_url || "",
     risk: row.risk || "low",
     insurance: row.insurance || "Particular",
-    noShow: Number(row.no_show_score || 0)
+    noShow: Number(row.no_show_score || 0),
+    addressZip: address.zip || "",
+    addressStreet: address.street || "",
+    addressNumber: address.number || "",
+    addressDistrict: address.district || "",
+    addressCity: address.city || "",
+    addressState: address.state || "",
+    emergencyName: emergency.name || "",
+    emergencyPhone: formatPhone(emergency.phone || ""),
+    familyHistory: row.family_history || "",
+    allergies: row.allergies || "",
+    chronicDiseases: row.chronic_diseases || "",
+    medications: row.continuous_medications || "",
+    importantNotes: row.important_notes || row.notes || ""
   };
 }
 
@@ -2524,9 +2628,27 @@ function toRemotePatient(patient) {
     phone: patient.phone,
     whatsapp: patient.phone,
     email: patient.email || "",
+    birth_date: patient.birthDate || null,
     cpf: patient.cpf || "",
+    rg: patient.rg || "",
+    photo_url: patient.photoUrl || "",
     document: digitsOnly(patient.cpf),
     insurance: patient.insurance || "Particular",
+    address: {
+      zip: patient.addressZip || "",
+      street: patient.addressStreet || "",
+      number: patient.addressNumber || "",
+      district: patient.addressDistrict || "",
+      city: patient.addressCity || "",
+      state: patient.addressState || ""
+    },
+    emergency_contacts: patient.emergencyName || patient.emergencyPhone ? [{ name: patient.emergencyName || "", phone: patient.emergencyPhone || "" }] : [],
+    family_history: patient.familyHistory || "",
+    allergies: patient.allergies || "",
+    chronic_diseases: patient.chronicDiseases || "",
+    continuous_medications: patient.medications || "",
+    important_notes: patient.importantNotes || "",
+    notes: patient.importantNotes || "",
     risk: patient.risk || "low",
     no_show_score: Number(patient.noShow || 0)
   };
@@ -2588,6 +2710,14 @@ function fromRemoteService(row) {
   return { id: row.id, name: row.name, specialty: row.specialty || "", duration: Number(row.duration_minutes || 30), price: Number(row.price || 0), active: row.active };
 }
 
+function fromRemoteRoom(row) {
+  return { id: row.id, name: row.name, resources: row.resources || [], active: row.active };
+}
+
+function fromRemoteEquipment(row) {
+  return { id: row.id, name: row.name, type: row.type || "", roomId: row.room_id || "", active: row.active, metadata: row.metadata || {} };
+}
+
 function fromRemoteAppointment(row) {
   const start = new Date(row.starts_at);
   return {
@@ -2595,9 +2725,16 @@ function fromRemoteAppointment(row) {
     patientId: row.patient_id,
     professionalId: row.professional_id,
     serviceId: row.service_id,
+    roomId: row.room_id || "",
+    equipmentId: row.equipment_id || "",
     date: start.toISOString().slice(0, 10),
     time: start.toTimeString().slice(0, 5),
-    status: row.status
+    status: row.status,
+    source: row.source || "manual",
+    isOverbooked: Boolean(row.is_overbooked),
+    recurrence: row.recurrence_rule?.frequency || "none",
+    onlineBookingRef: row.online_booking_ref || "",
+    notes: row.notes || ""
   };
 }
 
@@ -2609,10 +2746,70 @@ function toRemoteAppointment(appointment) {
     patient_id: appointment.patientId,
     professional_id: appointment.professionalId,
     service_id: isUuid(appointment.serviceId) ? appointment.serviceId : null,
+    room_id: isUuid(appointment.roomId) ? appointment.roomId : null,
+    equipment_id: isUuid(appointment.equipmentId) ? appointment.equipmentId : null,
     starts_at: startsAt.toISOString(),
     ends_at: endsAt.toISOString(),
     status: appointment.status || "scheduled",
-    source: "manual"
+    source: appointment.source || "manual",
+    is_overbooked: Boolean(appointment.isOverbooked),
+    recurrence_rule: { frequency: appointment.recurrence || "none" },
+    online_booking_ref: appointment.onlineBookingRef || "",
+    notes: appointment.notes || ""
+  };
+}
+
+function fromRemoteWaitlistEntry(row) {
+  return {
+    id: row.id,
+    patientId: row.patient_id,
+    professionalId: row.professional_id || "",
+    serviceId: row.service_id || "",
+    preferredDate: row.preferred_date || "",
+    preferredPeriod: row.preferred_period || "any",
+    priority: Number(row.priority || 3),
+    status: row.status || "waiting",
+    notes: row.notes || "",
+    createdAt: row.created_at
+  };
+}
+
+function toRemoteWaitlistEntry(entry) {
+  return {
+    patient_id: entry.patientId,
+    professional_id: isUuid(entry.professionalId) ? entry.professionalId : null,
+    service_id: isUuid(entry.serviceId) ? entry.serviceId : null,
+    preferred_date: entry.preferredDate || null,
+    preferred_period: entry.preferredPeriod || "any",
+    priority: Number(entry.priority || 3),
+    status: entry.status || "waiting",
+    notes: entry.notes || ""
+  };
+}
+
+function fromRemoteScheduleBlock(row) {
+  const start = new Date(row.starts_at);
+  const end = new Date(row.ends_at);
+  return {
+    id: row.id,
+    professionalId: row.professional_id || "",
+    roomId: row.room_id || "",
+    equipmentId: row.equipment_id || "",
+    date: start.toISOString().slice(0, 10),
+    start: start.toTimeString().slice(0, 5),
+    end: end.toTimeString().slice(0, 5),
+    reason: row.reason || "Bloqueio"
+  };
+}
+
+function toRemoteScheduleBlock(block) {
+  return {
+    professional_id: isUuid(block.professionalId) ? block.professionalId : null,
+    room_id: isUuid(block.roomId) ? block.roomId : null,
+    equipment_id: isUuid(block.equipmentId) ? block.equipmentId : null,
+    starts_at: new Date(`${block.date}T${block.start}:00`).toISOString(),
+    ends_at: new Date(`${block.date}T${block.end}:00`).toISOString(),
+    reason: block.reason || "Bloqueio"
   };
 }
 
@@ -2653,12 +2850,22 @@ function fromRemoteRecord(row) {
     professionalId: row.professional_id || "",
     type: row.template || "geral",
     complaint: row.complaint || "",
+    diseaseHistory: payload.diseaseHistory || "",
     vitals: payload.vitals || "",
+    physicalExam: payload.physicalExam || "",
     diagnosis: payload.diagnosis || "",
+    cid10: payload.cid10 || "",
+    cid11: payload.cid11 || "",
+    ciap: payload.ciap || "",
     conduct: payload.conduct || payload.documentText || "",
     prescription: payload.prescription || "",
+    examRequests: payload.examRequests || "",
+    referrals: payload.referrals || "",
     followUp: payload.followUp || "",
     notes: payload.notes || "",
+    attachments: payload.attachments || [],
+    signedAt: row.signed_at || "",
+    signatureData: row.signature_data || "",
     documentText: payload.documentText || "",
     createdAt: row.created_at
   };
@@ -2671,15 +2878,24 @@ function toRemoteRecord(record) {
     template: record.type || "geral",
     complaint: record.complaint || "",
     payload: {
+      diseaseHistory: record.diseaseHistory || "",
       vitals: record.vitals || "",
+      physicalExam: record.physicalExam || "",
       diagnosis: record.diagnosis || "",
+      cid10: record.cid10 || "",
+      cid11: record.cid11 || "",
+      ciap: record.ciap || "",
       conduct: record.conduct || "",
       prescription: record.prescription || "",
+      examRequests: record.examRequests || "",
+      referrals: record.referrals || "",
       followUp: record.followUp || "",
       notes: record.notes || "",
+      attachments: record.attachments || [],
       documentText: record.documentText || ""
     },
-    signed_at: null
+    signed_at: record.signedAt || null,
+    signature_data: record.signatureData || ""
   };
 }
 
@@ -2756,6 +2972,17 @@ async function saveAppointmentRemote(appointment) {
   return row ? fromRemoteAppointment(row) : appointment;
 }
 
+async function saveWaitlistEntryRemote(entry) {
+  if (!isUuid(entry.patientId)) return entry;
+  const row = await upsertRemote("waitlist_entries", toRemoteWaitlistEntry(entry), entry.id);
+  return row ? fromRemoteWaitlistEntry(row) : entry;
+}
+
+async function saveScheduleBlockRemote(block) {
+  const row = await upsertRemote("schedule_blocks", toRemoteScheduleBlock(block), block.id);
+  return row ? fromRemoteScheduleBlock(row) : block;
+}
+
 async function saveFinanceRemote(item) {
   const row = await upsertRemote("financial_transactions", toRemoteFinance(item), item.id);
   return row ? fromRemoteFinance(row) : item;
@@ -2765,6 +2992,26 @@ async function saveRecordRemote(record) {
   if (!isUuid(record.patientId)) return record;
   const row = await upsertRemote("medical_records", toRemoteRecord(record), record.id);
   return row ? fromRemoteRecord(row) : record;
+}
+
+async function uploadRecordAttachments(record, files) {
+  if (!files.length) return [];
+  const fallback = files.map((file) => ({ name: file.name, type: file.type, size: file.size, path: "" }));
+  if (!remoteReady || !supabaseClient || !currentClinicId()) return fallback;
+
+  const uploaded = [];
+  for (const file of files) {
+    const safeName = `${Date.now()}-${normalizeName(file.name).replace(/[^a-z0-9.]+/g, "-") || "anexo"}`;
+    const path = `${currentClinicId()}/${record.patientId}/${record.id}/${safeName}`;
+    const { error } = await supabaseClient.storage.from("clinicou-documents").upload(path, file, { upsert: true, contentType: file.type || undefined });
+    if (error) {
+      toast(`Anexo ${file.name} nao enviado: ${error.message}`);
+      uploaded.push({ name: file.name, type: file.type, size: file.size, path: "" });
+    } else {
+      uploaded.push({ name: file.name, type: file.type, size: file.size, path });
+    }
+  }
+  return uploaded;
 }
 
 async function saveCommissionRemote(commission) {
@@ -2797,8 +3044,24 @@ function editPatient(id) {
   byId("patientForm").elements.cpf.value = patient.cpf || "";
   byId("patientForm").elements.phone.value = patient.phone || "";
   byId("patientForm").elements.email.value = patient.email || "";
+  byId("patientForm").elements.birthDate.value = patient.birthDate || "";
+  byId("patientForm").elements.rg.value = patient.rg || "";
+  byId("patientForm").elements.photoUrl.value = patient.photoUrl || "";
+  byId("patientForm").elements.emergencyName.value = patient.emergencyName || "";
+  byId("patientForm").elements.emergencyPhone.value = patient.emergencyPhone || "";
+  byId("patientForm").elements.addressZip.value = patient.addressZip || "";
+  byId("patientForm").elements.addressStreet.value = patient.addressStreet || "";
+  byId("patientForm").elements.addressNumber.value = patient.addressNumber || "";
+  byId("patientForm").elements.addressDistrict.value = patient.addressDistrict || "";
+  byId("patientForm").elements.addressCity.value = patient.addressCity || "";
+  byId("patientForm").elements.addressState.value = patient.addressState || "";
   byId("patientForm").elements.risk.value = patient.risk || "low";
   byId("patientForm").elements.insurance.value = patient.insurance || "Particular";
+  byId("patientForm").elements.allergies.value = patient.allergies || "";
+  byId("patientForm").elements.chronicDiseases.value = patient.chronicDiseases || "";
+  byId("patientForm").elements.medications.value = patient.medications || "";
+  byId("patientForm").elements.familyHistory.value = patient.familyHistory || "";
+  byId("patientForm").elements.importantNotes.value = patient.importantNotes || "";
   openView("pacientes");
 }
 
@@ -2835,6 +3098,19 @@ function selectRecordPatient(id) {
   renderRecordPatientSummary();
   renderRecords();
   renderRecordSearchResults();
+}
+
+function scheduleFromWaitlist(id) {
+  const entry = state.waitlist.find((item) => item.id === id);
+  if (!entry) return;
+  openView("agenda");
+  if (byId("appointmentPatient")) byId("appointmentPatient").value = entry.patientId;
+  if (entry.professionalId && byId("appointmentProfessional")) byId("appointmentProfessional").value = entry.professionalId;
+  if (entry.serviceId && byId("appointmentService")) byId("appointmentService").value = entry.serviceId;
+  if (entry.preferredDate && byId("appointmentDate")) byId("appointmentDate").value = entry.preferredDate;
+  if (byId("appointmentForm")?.elements.source) byId("appointmentForm").elements.source.value = "waitlist";
+  updateSlotAvailabilityPreview();
+  toast("Dados da lista de espera enviados para a agenda.");
 }
 
 function editInsurancePlan(id) {
@@ -2968,11 +3244,17 @@ function historyRecordItem(record, highlighted) {
     <div>
       <p class="item-title">${formatDateTime(record.createdAt)} - ${escapeHtml(statusLabel[record.type] || record.diagnosis || "Evolucao")}</p>
       <p class="item-sub">Queixa: ${escapeHtml(record.complaint || "Nao informada")}</p>
+      <p class="item-sub">Historia: ${escapeHtml(record.diseaseHistory || "Nao informada")}</p>
+      <p class="item-sub">Exame fisico: ${escapeHtml(record.physicalExam || "Nao informado")}</p>
+      <p class="item-sub">Codigos: ${escapeHtml([record.cid10, record.cid11, record.ciap].filter(Boolean).join(" | ") || "Nao informados")}</p>
       <p class="item-sub">Conduta: ${escapeHtml(record.documentText || record.conduct || "Nao informada")}</p>
       <p class="item-sub">Prescricao: ${escapeHtml(record.prescription || "Nao informada")}</p>
+      <p class="item-sub">Exames: ${escapeHtml(record.examRequests || "Nao solicitados")}</p>
+      <p class="item-sub">Encaminhamentos: ${escapeHtml(record.referrals || "Nao informados")}</p>
+      <p class="item-sub">Anexos: ${escapeHtml((record.attachments || []).map((item) => item.name).join(", ") || "Nenhum")}</p>
       ${record.followUp ? `<p class="item-sub">Retorno: ${escapeHtml(record.followUp)}</p>` : ""}
     </div>
-    <span class="badge confirmed">Salvo</span>
+    <span class="badge ${record.signedAt ? "confirmed" : "scheduled"}">${record.signedAt ? "Assinado" : "Rascunho"}</span>
   </div>`;
 }
 
@@ -3282,6 +3564,14 @@ function serviceById(id) {
   return state.services.find((s) => s.id === id) || { id: "", name: "Servico", duration: 30, price: 0 };
 }
 
+function roomById(id) {
+  return state.rooms.find((room) => room.id === id) || { id: "", name: "Sem sala" };
+}
+
+function equipmentById(id) {
+  return state.equipment.find((item) => item.id === id) || { id: "", name: "Sem equipamento" };
+}
+
 function formatDate(value) {
   if (!value) return "";
   return new Date(`${value}T12:00:00`).toLocaleDateString("pt-BR");
@@ -3395,6 +3685,7 @@ function toast(message) {
 window.markPaid = markPaid;
 window.selectPatient = selectPatient;
 window.selectRecordPatient = selectRecordPatient;
+window.scheduleFromWaitlist = scheduleFromWaitlist;
 window.editPatient = editPatient;
 window.deletePatient = deletePatient;
 window.editInsurancePlan = editInsurancePlan;
@@ -3408,6 +3699,5 @@ window.chooseSlot = chooseSlot;
 window.applySmartSuggestion = applySmartSuggestion;
 window.updateEmployeeAccessRole = updateEmployeeAccessRole;
 window.toggleEmployeePermission = toggleEmployeePermission;
-window.setEmployeeAccessPassword = setEmployeeAccessPassword;
 window.settleCommission = settleCommission;
 window.downloadGuideById = downloadGuideById;
