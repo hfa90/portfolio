@@ -5,10 +5,10 @@ const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 const TRIAL_DAYS = 30;
 const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
-const AUTH_LOGIN_TIMEOUT_MS = 20 * 1000;
-const AUTH_SESSION_TIMEOUT_MS = 12 * 1000;
-const AUTH_DATA_TIMEOUT_MS = 25 * 1000;
-const AUTH_SLOW_NOTICE_MS = 6 * 1000;
+const AUTH_LOGIN_TIMEOUT_MS = 60 * 1000;
+const AUTH_SESSION_TIMEOUT_MS = 30 * 1000;
+const AUTH_DATA_TIMEOUT_MS = 45 * 1000;
+const AUTH_SLOW_NOTICE_MS = 10 * 1000;
 
 const statusLabel = {
   scheduled: "Agendado",
@@ -214,7 +214,6 @@ let currentAuthUser = null;
 let trialCountdownTimer = null;
 let trialWarningTimer = null;
 let authRequestInFlight = false;
-let authSessionLoadToken = 0;
 
 function withTimeout(promise, ms, timeoutMessage) {
   let timeoutId;
@@ -228,8 +227,10 @@ function setAuthLoading(isLoading) {
   authRequestInFlight = isLoading;
   const loginButton = byId("loginButton");
   const resendButton = byId("resendConfirmationButton");
+  const resetButton = byId("resetPasswordButton");
   if (loginButton) loginButton.disabled = isLoading;
   if (resendButton) resendButton.disabled = isLoading;
+  if (resetButton) resetButton.disabled = isLoading;
 }
 
 function scheduleAuthSlowNotice(message) {
@@ -240,48 +241,81 @@ function scheduleAuthSlowNotice(message) {
   }, AUTH_SLOW_NOTICE_MS);
 }
 
-function applyAuthenticatedSession(session, fallbackEmail = "") {
-  currentAuthUser = session?.user || null;
-  currentUser.email = currentAuthUser?.email || fallbackEmail || "";
-  currentSignupMetadata = currentAuthUser?.user_metadata || {};
-}
-
-function authFriendlyErrorMessage(error, fallback = "Nao foi possivel autenticar.") {
-  const message = error?.message || fallback;
-  const lower = message.toLowerCase();
+function authLoginErrorMessage(error) {
+  const message = error?.message || "Nao foi possivel autenticar.";
+  const code = error?.code || "";
+  const lower = `${code} ${message}`.toLowerCase();
+  if (lower.includes("invalid_credentials") || lower.includes("invalid login credentials")) {
+    return "E-mail ou senha incorretos. Confira a senha cadastrada para este acesso.";
+  }
   if (lower.includes("email not confirmed")) {
-    return "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam.";
+    return "Seu e-mail ainda nao foi confirmado. Use Reenviar confirmacao e confirme a caixa de entrada/spam.";
   }
-  if (lower.includes("invalid login credentials") || lower.includes("invalid credentials")) {
-    return "E-mail ou senha invalidos.";
+  if (lower.includes("email_address_not_authorized") || lower.includes("email address not authorized")) {
+    return "Este e-mail ainda nao esta autorizado no Supabase Auth.";
   }
-  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("fetch")) {
-    return "Nao consegui comunicar com o Supabase. Confira a internet e tente novamente.";
+  if (lower.includes("too many") || lower.includes("rate limit")) {
+    return "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
   }
-  if (lower.includes("timed out") || lower.includes("timeout") || lower.includes("nao respondeu")) {
-    return message;
+  if (lower.includes("failed to fetch") || lower.includes("networkerror")) {
+    return "O navegador nao conseguiu falar com o Supabase. Desative bloqueadores/extensoes para este site ou teste outra rede.";
   }
   return message;
 }
 
-function queueSessionClinicLoad(session) {
-  const token = ++authSessionLoadToken;
-  applyAuthenticatedSession(session);
-  setTimeout(async () => {
-    if (token !== authSessionLoadToken || authRequestInFlight) return;
+function isPasswordRecoveryUrl() {
+  return /[?#&]type=recovery\b/.test(window.location.href);
+}
+
+async function signInWithPasswordDirect(email, password) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), AUTH_LOGIN_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "X-Client-Info": "clinicou-web"
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal
+    });
+    const rawBody = await response.text();
+    let payload = {};
     try {
-      const loaded = await withTimeout(
-        loadRemoteSnapshot(),
-        AUTH_DATA_TIMEOUT_MS,
-        "Sessao ativa, mas os dados da clinica nao responderam. Tente entrar novamente."
-      );
-      if (loaded && token === authSessionLoadToken) unlockAuth();
-    } catch (error) {
-      if (token === authSessionLoadToken) {
-        lockAuth(authFriendlyErrorMessage(error, "Nao foi possivel carregar sua clinica."));
-      }
+      payload = rawBody ? JSON.parse(rawBody) : {};
+    } catch {
+      payload = { message: rawBody };
     }
-  }, 0);
+    if (!response.ok) {
+      const message = payload.error_description || payload.msg || payload.message || payload.error || `Auth HTTP ${response.status}`;
+      const authError = new Error(message);
+      authError.status = response.status;
+      authError.code = payload.error_code || payload.code || payload.error || "";
+      throw authError;
+    }
+    if (!payload.access_token || !payload.refresh_token) {
+      throw new Error("O Supabase autenticou, mas nao retornou uma sessao valida.");
+    }
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.setSession({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token
+      }),
+      AUTH_SESSION_TIMEOUT_MS,
+      "Login feito, mas nao foi possivel salvar a sessao no navegador."
+    );
+    if (error) throw error;
+    return data?.session || { user: payload.user };
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("O login nao respondeu em 60 segundos. Teste outra rede ou confira se algum bloqueador esta impedindo chamadas ao Supabase.");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -527,6 +561,7 @@ function clearSupabaseAuthStorage(storage) {
 }
 
 function wireEvents() {
+  initFormModals();
   document.querySelectorAll(".nav-item").forEach((button) => {
     button.addEventListener("click", () => openView(button.dataset.view));
   });
@@ -590,6 +625,7 @@ function wireEvents() {
   });
   byId("recordSmartSearch")?.addEventListener("input", renderRecordSearchResults);
   byId("openRecordHistory")?.addEventListener("click", () => openRecordHistory());
+  byId("openRecordHistoryPanel")?.addEventListener("click", () => openRecordHistory());
   byId("closeRecordHistory")?.addEventListener("click", closeRecordHistory);
   byId("recordHistoryModal")?.addEventListener("click", (event) => {
     if (event.target.id === "recordHistoryModal") closeRecordHistory();
@@ -660,6 +696,8 @@ function wireEvents() {
   });
   byId("loginButton")?.addEventListener("click", () => auth());
   byId("resendConfirmationButton")?.addEventListener("click", resendConfirmationEmail);
+  byId("resetPasswordButton")?.addEventListener("click", sendPasswordResetEmail);
+  byId("passwordRecoveryForm")?.addEventListener("submit", submitPasswordRecovery);
   byId("logoutButton")?.addEventListener("click", signOut);
   byId("setupClinicName")?.addEventListener("input", (event) => {
     const slug = byId("setupClinicSlug");
@@ -683,6 +721,81 @@ function wireEvents() {
   byId("siteDialogConfirm")?.addEventListener("click", () => closeSiteDialog(true));
 }
 
+function initFormModals() {
+  const backdrop = byId("formModalBackdrop");
+  document.querySelectorAll("[data-modal-panel]").forEach((panel) => {
+    panel.classList.add("modal-panel");
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-modal", "true");
+    panel.setAttribute("aria-hidden", "true");
+    if (!panel.querySelector(":scope > .close-form-modal")) {
+      const closeButton = document.createElement("button");
+      closeButton.className = "icon-button close-form-modal";
+      closeButton.type = "button";
+      closeButton.setAttribute("aria-label", "Fechar");
+      closeButton.innerHTML = '<i data-lucide="x"></i>';
+      closeButton.addEventListener("click", closeFormModal);
+      panel.prepend(closeButton);
+    }
+  });
+
+  document.querySelectorAll("[data-open-form]").forEach((button) => {
+    button.addEventListener("click", () => {
+      resetModalForm(button.dataset.resetForm);
+      openFormModal(button.dataset.openForm);
+    });
+  });
+  backdrop?.addEventListener("click", closeFormModal);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeFormModal();
+  });
+}
+
+function resetModalForm(formId) {
+  if (!formId) return;
+  if (formId === "patientForm") {
+    resetPatientForm();
+    return;
+  }
+  if (formId === "employeeForm") {
+    resetEmployeeForm();
+    return;
+  }
+  if (formId === "insurancePlanForm") {
+    editingInsurancePlanId = null;
+    byId("insurancePlanForm")?.reset();
+  }
+}
+
+function modalPanelForForm(formId) {
+  const form = byId(formId);
+  return form?.closest("[data-modal-panel]") || null;
+}
+
+function openFormModal(formId) {
+  const panel = modalPanelForForm(formId);
+  if (!panel) return;
+  closeFormModal();
+  panel.classList.add("open");
+  panel.setAttribute("aria-hidden", "false");
+  byId("formModalBackdrop")?.classList.add("open");
+  document.body.classList.add("form-modal-open");
+  setTimeout(() => {
+    const focusTarget = panel.querySelector("input:not([type='hidden']), select, textarea, button:not(.close-form-modal)");
+    focusTarget?.focus();
+  }, 0);
+  lucide.createIcons();
+}
+
+function closeFormModal() {
+  document.querySelectorAll("[data-modal-panel].open").forEach((panel) => {
+    panel.classList.remove("open");
+    panel.setAttribute("aria-hidden", "true");
+  });
+  byId("formModalBackdrop")?.classList.remove("open");
+  document.body.classList.remove("form-modal-open");
+}
+
 function setDefaultDates() {
   if (byId("appointmentDate")) byId("appointmentDate").value = todayIso;
   if (byId("scheduleDateFilter")) byId("scheduleDateFilter").value = todayIso;
@@ -700,51 +813,67 @@ async function enforceAuth() {
     return;
   }
 
-  supabaseClient.auth.onAuthStateChange((event, session) => {
+  supabaseClient.auth.onAuthStateChange(async (event, session) => {
     if (event === "SIGNED_OUT") {
-      authSessionLoadToken += 1;
       resetLocalAuthSession();
       lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
       return;
     }
-    if (session) {
-      applyAuthenticatedSession(session);
-      if (event === "SIGNED_IN" && !authRequestInFlight) {
-        queueSessionClinicLoad(session);
-      }
+    if (event === "PASSWORD_RECOVERY") {
+      currentAuthUser = session?.user || null;
+      currentUser.email = session?.user?.email || "";
+      currentSignupMetadata = session?.user?.user_metadata || {};
+      lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
     }
   });
 
-  try {
-    const { data, error } = await withTimeout(
-      supabaseClient.auth.getSession(),
-      AUTH_SESSION_TIMEOUT_MS,
-      "Nao foi possivel verificar sua sessao em 12 segundos."
-    );
-    if (error) throw error;
-    if (data?.session) {
-      authSessionLoadToken += 1;
-      applyAuthenticatedSession(data.session);
-      const loaded = await withTimeout(
-        loadRemoteSnapshot(),
-        AUTH_DATA_TIMEOUT_MS,
-        "Sua sessao foi encontrada, mas os dados da clinica nao responderam. Tente entrar novamente."
-      );
-      if (loaded) unlockAuth();
-      return;
+  if (isPasswordRecoveryUrl()) {
+    lockPasswordRecovery("Digite uma nova senha para recuperar seu acesso.");
+    return;
+  }
+
+  const { data, error } = await withTimeout(
+    supabaseClient.auth.getSession(),
+    AUTH_SESSION_TIMEOUT_MS,
+    "A sessao salva demorou para responder. Entre novamente."
+  ).catch((error) => ({ data: null, error }));
+  if (data?.session) {
+    try {
+      await activateAuthSession(data.session, "Restaurando sessao salva...");
+    } catch (error) {
+      lockAuth(error.message || "Nao foi possivel restaurar a sessao salva.");
     }
-  } catch (error) {
-    lockAuth(authFriendlyErrorMessage(error, "Nao foi possivel verificar sua sessao. Informe e-mail e senha para entrar."));
+    return;
+  }
+  if (error) {
+    resetLocalAuthSession();
+    lockAuth(authLoginErrorMessage(error));
     return;
   }
 
   lockAuth("Entre com uma conta autorizada para acessar o sistema.");
 }
 
+async function activateAuthSession(session, loadingMessage = "Carregando dados da clinica...") {
+  if (!session) return false;
+  currentAuthUser = session.user || null;
+  currentUser.email = currentAuthUser?.email || "";
+  currentSignupMetadata = currentAuthUser?.user_metadata || {};
+  byId("authFeedback").textContent = loadingMessage;
+  const loaded = await withTimeout(
+    loadRemoteSnapshot(),
+    AUTH_DATA_TIMEOUT_MS,
+    "Sessao ativa, mas os dados da clinica nao responderam em 45 segundos. Tente recarregar a pagina."
+  );
+  if (loaded) unlockAuth();
+  return loaded;
+}
+
 function lockAuth(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = false;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("authTitle").textContent = "Entre na sua clinica";
   byId("authFeedback").textContent = message;
@@ -756,6 +885,7 @@ function unlockAuth() {
   document.body.classList.remove("auth-locked");
   byId("authModal").classList.remove("open");
   byId("authForm").hidden = false;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = true;
   byId("syncState").textContent = "Online com Supabase";
   startTrialTimers();
@@ -765,6 +895,7 @@ function lockClinicSetup(message) {
   document.body.classList.add("auth-locked");
   byId("authModal").classList.add("open");
   byId("authForm").hidden = true;
+  byId("passwordRecoveryForm").hidden = true;
   byId("clinicSetupForm").hidden = false;
   byId("authTitle").textContent = "Criar clinica inicial";
   if (byId("setupClinicName") && currentSignupMetadata.clinic_name) {
@@ -775,6 +906,18 @@ function lockClinicSetup(message) {
   }
   byId("authFeedback").textContent = message;
   byId("syncState").textContent = "Criar clinica inicial";
+  stopTrialTimers();
+}
+
+function lockPasswordRecovery(message) {
+  document.body.classList.add("auth-locked");
+  byId("authModal").classList.add("open");
+  byId("authForm").hidden = true;
+  byId("clinicSetupForm").hidden = true;
+  byId("passwordRecoveryForm").hidden = false;
+  byId("authTitle").textContent = "Redefinir senha";
+  byId("authFeedback").textContent = message;
+  byId("syncState").textContent = "Redefinir senha";
   stopTrialTimers();
 }
 
@@ -1083,6 +1226,49 @@ function renderSchedule() {
   lucide.createIcons();
 }
 
+function renderScheduleResources() {
+  const node = byId("scheduleResources");
+  if (!node) return;
+  const resources = [
+    ...state.rooms.filter((room) => room.active !== false).map((room) => ({ id: room.id, type: "Sala", name: room.name })),
+    ...state.equipment.filter((item) => item.active !== false).map((item) => ({ id: item.id, type: "Equipamento", name: item.name }))
+  ];
+  node.innerHTML = resources.map((resource) => {
+    const appts = state.appointments
+      .filter((appt) => appt.date === currentScheduleDate && (appt.roomId === resource.id || appt.equipmentId === resource.id))
+      .sort((a, b) => a.time.localeCompare(b.time));
+    const blocks = state.scheduleBlocks
+      .filter((block) => block.date === currentScheduleDate && (block.roomId === resource.id || block.equipmentId === resource.id))
+      .sort((a, b) => a.start.localeCompare(b.start));
+    return `<div class="resource-item">
+      <div><strong>${escapeHtml(resource.name)}</strong><span>${resource.type}</span></div>
+      <small>${appts.length} consulta(s) - ${blocks.length} bloqueio(s)</small>
+      ${appts.slice(0, 3).map((appt) => `<p>${appt.time} ${escapeHtml(patientById(appt.patientId).name)}</p>`).join("")}
+      ${blocks.slice(0, 2).map((block) => `<p>${block.start}-${block.end} ${escapeHtml(block.reason)}</p>`).join("")}
+    </div>`;
+  }).join("") || emptyState("Cadastre salas ou equipamentos para acompanhar a ocupacao.");
+}
+
+function renderWaitlist() {
+  const node = byId("waitlistList");
+  if (!node) return;
+  const entries = state.waitlist
+    .filter((entry) => entry.status === "waiting")
+    .slice()
+    .sort((a, b) => Number(a.priority || 3) - Number(b.priority || 3));
+  node.innerHTML = entries.map((entry) => `<div class="record-item">
+    <i data-lucide="list-plus"></i>
+    <div>
+      <p class="item-title">${escapeHtml(patientById(entry.patientId).name)} - prioridade ${entry.priority}</p>
+      <p class="item-sub">${escapeHtml(professionalById(entry.professionalId).name)} - ${escapeHtml(serviceById(entry.serviceId).name)}</p>
+      <p class="item-sub">${entry.preferredDate ? formatDate(entry.preferredDate) : "Data flexivel"} - ${periodLabel[entry.preferredPeriod] || "Qualquer horario"}</p>
+      ${entry.notes ? `<p class="item-sub">${escapeHtml(entry.notes)}</p>` : ""}
+    </div>
+    <button class="icon-button" onclick="scheduleFromWaitlist('${entry.id}')" aria-label="Usar na agenda"><i data-lucide="calendar-plus"></i></button>
+  </div>`).join("") || emptyState("Lista de espera vazia.");
+  lucide.createIcons();
+}
+
 function renderPatients() {
   const query = normalizeSearch(byId("patientSearch")?.value || "");
   const rows = state.patients
@@ -1362,49 +1548,6 @@ function renderAccessControl() {
   lucide.createIcons();
 }
 
-function renderScheduleResources() {
-  const node = byId("scheduleResources");
-  if (!node) return;
-  const resources = [
-    ...state.rooms.filter((room) => room.active !== false).map((room) => ({ id: room.id, type: "Sala", name: room.name })),
-    ...state.equipment.filter((item) => item.active !== false).map((item) => ({ id: item.id, type: "Equipamento", name: item.name }))
-  ];
-  node.innerHTML = resources.map((resource) => {
-    const appts = state.appointments
-      .filter((appt) => appt.date === currentScheduleDate && (appt.roomId === resource.id || appt.equipmentId === resource.id))
-      .sort((a, b) => a.time.localeCompare(b.time));
-    const blocks = state.scheduleBlocks
-      .filter((block) => block.date === currentScheduleDate && (block.roomId === resource.id || block.equipmentId === resource.id))
-      .sort((a, b) => a.start.localeCompare(b.start));
-    return `<div class="resource-item">
-      <div><strong>${escapeHtml(resource.name)}</strong><span>${resource.type}</span></div>
-      <small>${appts.length} consulta(s) - ${blocks.length} bloqueio(s)</small>
-      ${appts.slice(0, 3).map((appt) => `<p>${appt.time} ${escapeHtml(patientById(appt.patientId).name)}</p>`).join("")}
-      ${blocks.slice(0, 2).map((block) => `<p>${block.start}-${block.end} ${escapeHtml(block.reason)}</p>`).join("")}
-    </div>`;
-  }).join("") || emptyState("Cadastre salas ou equipamentos para acompanhar a ocupacao.");
-}
-
-function renderWaitlist() {
-  const node = byId("waitlistList");
-  if (!node) return;
-  const entries = state.waitlist
-    .filter((entry) => entry.status === "waiting")
-    .slice()
-    .sort((a, b) => Number(a.priority || 3) - Number(b.priority || 3));
-  node.innerHTML = entries.map((entry) => `<div class="record-item">
-    <i data-lucide="list-plus"></i>
-    <div>
-      <p class="item-title">${escapeHtml(patientById(entry.patientId).name)} - prioridade ${entry.priority}</p>
-      <p class="item-sub">${escapeHtml(professionalById(entry.professionalId).name)} - ${escapeHtml(serviceById(entry.serviceId).name)}</p>
-      <p class="item-sub">${entry.preferredDate ? formatDate(entry.preferredDate) : "Data flexivel"} - ${periodLabel[entry.preferredPeriod] || "Qualquer horario"}</p>
-      ${entry.notes ? `<p class="item-sub">${escapeHtml(entry.notes)}</p>` : ""}
-    </div>
-    <button class="icon-button" onclick="scheduleFromWaitlist('${entry.id}')" aria-label="Usar na agenda"><i data-lucide="calendar-plus"></i></button>
-  </div>`).join("") || emptyState("Lista de espera vazia.");
-  lucide.createIcons();
-}
-
 async function updateEmployeeAccessRole(id, accessRole) {
   const employee = state.employees.find((item) => item.id === id);
   if (!employee) return;
@@ -1671,6 +1814,7 @@ async function submitAppointment(event) {
   state.audit.unshift({ id: uid("lg"), action: "Consulta agendada", actor: "Usuario atual", target: patientById(data.patientId).name, at: "Agora" });
   saveState();
   renderAll();
+  closeFormModal();
   toast(`${savedAppointments.length} consulta(s) agendada(s) e lancamento financeiro criado.`);
 }
 
@@ -1709,6 +1853,7 @@ async function submitPatient(event) {
   saveState();
   resetPatientForm();
   renderAll();
+  closeFormModal();
 }
 
 async function submitWaitlistEntry(event) {
@@ -1734,6 +1879,7 @@ async function submitWaitlistEntry(event) {
   event.target.reset();
   saveState();
   renderAll();
+  closeFormModal();
   toast("Paciente adicionado a lista de espera.");
 }
 
@@ -1763,6 +1909,7 @@ async function submitScheduleBlock(event) {
   event.target.reset();
   saveState();
   renderAll();
+  closeFormModal();
   toast("Horario bloqueado.");
 }
 
@@ -1802,6 +1949,7 @@ async function submitRecord(event) {
   byId("recordAttachments").value = "";
   byId("recordPatient").value = record.patientId;
   renderAll();
+  closeFormModal();
   toast("Prontuario atualizado com historico do paciente.");
 }
 
@@ -1814,6 +1962,7 @@ async function submitFinance(event) {
   event.target.reset();
   setDefaultDates();
   renderAll();
+  closeFormModal();
   toast("Movimentacao financeira lancada.");
 }
 
@@ -1849,6 +1998,7 @@ async function submitInsurancePlan(event) {
   populateSelects();
   renderInsurancePlans();
   renderPatients();
+  closeFormModal();
 }
 
 async function submitEmployee(event) {
@@ -1886,6 +2036,7 @@ async function submitEmployee(event) {
   saveState();
   resetEmployeeForm();
   renderAll();
+  closeFormModal();
 }
 
 async function submitTenantName(event) {
@@ -2005,6 +2156,7 @@ async function submitGuide(event) {
   event.target.reset();
   setDefaultDates();
   renderAll();
+  closeFormModal();
   toast("Guia assinada salva e vinculada ao prontuario.");
 }
 
@@ -2014,6 +2166,7 @@ function submitMessage(event) {
   state.audit.unshift({ id: uid("lg"), action: "Mensagem registrada", actor: "CRM", target: patient.name, at: "Agora" });
   saveState();
   renderAll();
+  closeFormModal();
   toast("Envio registrado na auditoria.");
 }
 
@@ -2232,40 +2385,27 @@ async function auth() {
   }
   const form = byId("authForm");
   const data = Object.fromEntries(new FormData(form));
+  data.email = String(data.email || "").trim().toLowerCase();
+  data.password = String(data.password || "");
   const feedback = byId("authFeedback");
   if (!data.email || !data.password) {
     feedback.textContent = "Informe e-mail e senha para entrar.";
     return;
   }
   feedback.textContent = "Conectando ao Supabase...";
-  authSessionLoadToken += 1;
   setAuthLoading(true);
   let slowNotice = scheduleAuthSlowNotice("Ainda conectando ao Supabase. Aguarde mais alguns segundos...");
   try {
-    const { data: authData, error } = await withTimeout(
-      supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
-      AUTH_LOGIN_TIMEOUT_MS,
-      "O login nao respondeu em 20 segundos. Verifique a internet, recarregue a pagina e tente novamente."
-    );
-    if (error) throw error;
-    if (!authData?.session) {
-      throw new Error("Login confirmado, mas o Supabase nao retornou uma sessao valida. Recarregue a pagina e tente novamente.");
-    }
+    const session = await signInWithPasswordDirect(data.email, data.password);
     clearTimeout(slowNotice);
-    applyAuthenticatedSession(authData.session, data.email);
-    feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
     slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
-    const loaded = await withTimeout(
-      loadRemoteSnapshot(),
-      AUTH_DATA_TIMEOUT_MS,
-      "Login feito, mas os dados da clinica nao responderam em 25 segundos. Verifique a conexao ou as permissoes da clinica."
-    );
+    const loaded = await activateAuthSession(session, "Login confirmado. Carregando dados da clinica...");
     if (loaded) {
-      unlockAuth();
       toast("Acesso confirmado.");
     }
   } catch (error) {
-    feedback.textContent = authFriendlyErrorMessage(error);
+    clearTimeout(slowNotice);
+    feedback.textContent = authLoginErrorMessage(error);
   } finally {
     clearTimeout(slowNotice);
     setAuthLoading(false);
@@ -2294,6 +2434,59 @@ async function resendConfirmationEmail() {
   feedback.textContent = error
     ? authEmailErrorMessage(error)
     : "E-mail reenviado. Confira a caixa de entrada, spam e promocoes.";
+}
+
+async function sendPasswordResetEmail() {
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = byId("authForm");
+  const data = Object.fromEntries(new FormData(form));
+  const email = String(data.email || "").trim().toLowerCase();
+  const feedback = byId("authFeedback");
+  if (!email) {
+    feedback.textContent = "Informe o e-mail para redefinir a senha.";
+    return;
+  }
+  feedback.textContent = "Enviando link para redefinir senha...";
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: authRedirectUrl()
+  });
+  feedback.textContent = error
+    ? authEmailErrorMessage(error)
+    : "Enviamos um link para redefinir sua senha. Confira caixa de entrada, spam e promocoes.";
+}
+
+async function submitPasswordRecovery(event) {
+  event.preventDefault();
+  if (!supabaseClient) {
+    byId("authFeedback").textContent = "Biblioteca Supabase nao carregou. Verifique a conexao.";
+    return;
+  }
+  const form = event.currentTarget;
+  const data = Object.fromEntries(new FormData(form));
+  const newPassword = String(data.newPassword || "");
+  const confirmPassword = String(data.confirmPassword || "");
+  const feedback = byId("authFeedback");
+  if (newPassword.length < 6) {
+    feedback.textContent = "A nova senha precisa ter pelo menos 6 caracteres.";
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    feedback.textContent = "As senhas nao conferem.";
+    return;
+  }
+  feedback.textContent = "Salvando nova senha...";
+  const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
+  if (error) {
+    feedback.textContent = authLoginErrorMessage(error);
+    return;
+  }
+  form.reset();
+  await supabaseClient.auth.signOut({ scope: "local" }).catch(() => {});
+  resetLocalAuthSession();
+  lockAuth("Senha atualizada. Entre novamente com sua nova senha.");
 }
 
 async function signOut() {
@@ -3112,6 +3305,7 @@ function editPatient(id) {
   byId("patientForm").elements.familyHistory.value = patient.familyHistory || "";
   byId("patientForm").elements.importantNotes.value = patient.importantNotes || "";
   openView("pacientes");
+  openFormModal("patientForm");
 }
 
 async function deletePatient(id) {
@@ -3159,6 +3353,7 @@ function scheduleFromWaitlist(id) {
   if (entry.preferredDate && byId("appointmentDate")) byId("appointmentDate").value = entry.preferredDate;
   if (byId("appointmentForm")?.elements.source) byId("appointmentForm").elements.source.value = "waitlist";
   updateSlotAvailabilityPreview();
+  openFormModal("appointmentForm");
   toast("Dados da lista de espera enviados para a agenda.");
 }
 
@@ -3170,6 +3365,7 @@ function editInsurancePlan(id) {
   form.elements.name.value = plan.name || "";
   form.elements.contact.value = plan.contact || "";
   openView("convenios");
+  openFormModal("insurancePlanForm");
   toast("Edite os dados do plano e salve.");
 }
 
@@ -3219,6 +3415,7 @@ function editEmployee(id) {
   form.elements.end.value = employee.end || "18:00";
   form.elements.commission.value = employee.commission || 0;
   openView("funcionarios");
+  openFormModal("employeeForm");
 }
 
 async function toggleEmployeeStatus(id) {
@@ -3748,5 +3945,6 @@ window.chooseSlot = chooseSlot;
 window.applySmartSuggestion = applySmartSuggestion;
 window.updateEmployeeAccessRole = updateEmployeeAccessRole;
 window.toggleEmployeePermission = toggleEmployeePermission;
+window.setEmployeeAccessPassword = setEmployeeAccessPassword;
 window.settleCommission = settleCommission;
 window.downloadGuideById = downloadGuideById;
