@@ -6,7 +6,8 @@ Sistema completo de gestão de pedidos de marmita para empresas. **Apenas 3 arqu
 
 | Arquivo | O que é |
 |---|---|
-| `banco.sql` | Banco completo (rodar no Supabase uma vez só) |
+| `banco.sql` | Banco base (rodar no Supabase uma vez só) |
+| `migration.sql` | Complemento atual do banco: RPCs, pedidos coletivos, comprovantes PIX e push |
 | `marmita.html` | Tela do colaborador: login com PIN + cardápio + pedido + meus pedidos |
 | `admin.html` | Painel administrativo completo: pedidos, cardápio, fornecedores, pratos, acompanhamentos, colaboradores, financeiro, configurações |
 
@@ -20,7 +21,14 @@ Acesse https://supabase.com → "New project" → defina nome e senha do banco.
 ### 2. Rodar o banco
 No Supabase: **SQL Editor → New query** → cole todo o conteúdo de `banco.sql` → **Run**.
 
-Ele cria todas as tabelas, funções, políticas RLS **e já popula com dados de exemplo**:
+Depois rode também o conteúdo de **`migration.sql`**. Ele é idempotente e pode ser executado mais de uma vez; serve tanto para uma instalação nova quanto para atualizar um banco que já estava usando a primeira versão.
+
+O `banco.sql` cria as tabelas base, funções, políticas RLS **e já popula com dados de exemplo**. O `migration.sql` adiciona os recursos usados pela versão atual das telas:
+- RPCs `cardapio_hoje`, `criar_pedido`, `meus_pedidos`, `buscar_pedido`, `anexar_comprovante`, `copiar_cardapio`, `criar_pedido_coletivo` e `listar_pedidos_coletivos`
+- colunas de empresa/WhatsApp do colaborador e comprovante PIX do pedido
+- bucket público `comprovantes-pix`
+- tabela `push_subscriptions`
+- suporte a pedidos coletivos
 - 2 fornecedores (Restaurante da Dona Maria, Marmitex do Zé)
 - Pratos e acompanhamentos
 - Cardápio de hoje
