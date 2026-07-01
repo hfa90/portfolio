@@ -135,8 +135,17 @@ create table if not exists public.patients (
   birth_date date,
   document text,
   cpf text,
+  rg text,
+  photo_url text,
   insurance_plan_id uuid references public.insurance_plans(id) on delete set null,
   insurance text,
+  address jsonb not null default '{}'::jsonb,
+  emergency_contacts jsonb not null default '[]'::jsonb,
+  family_history text,
+  allergies text,
+  chronic_diseases text,
+  continuous_medications text,
+  important_notes text,
   risk text not null default 'low',
   no_show_score int not null default 0 check (no_show_score between 0 and 100),
   notes text,
@@ -149,7 +158,16 @@ alter table public.patients
 
 alter table public.patients
   add column if not exists cpf text,
-  add column if not exists whatsapp text;
+  add column if not exists whatsapp text,
+  add column if not exists rg text,
+  add column if not exists photo_url text,
+  add column if not exists address jsonb not null default '{}'::jsonb,
+  add column if not exists emergency_contacts jsonb not null default '[]'::jsonb,
+  add column if not exists family_history text,
+  add column if not exists allergies text,
+  add column if not exists chronic_diseases text,
+  add column if not exists continuous_medications text,
+  add column if not exists important_notes text;
 
 update public.patients
 set cpf = coalesce(cpf, document),
@@ -220,7 +238,25 @@ create table if not exists public.rooms (
   clinic_id uuid not null references public.clinics(id) on delete cascade,
   name text not null,
   resources jsonb not null default '[]'::jsonb,
-  active boolean not null default true
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.rooms
+  add column if not exists created_at timestamptz not null default now(),
+  add column if not exists updated_at timestamptz not null default now();
+
+create table if not exists public.equipment (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  name text not null,
+  type text,
+  room_id uuid references public.rooms(id) on delete set null,
+  active boolean not null default true,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.appointments (
@@ -230,15 +266,59 @@ create table if not exists public.appointments (
   professional_id uuid not null references public.professionals(id) on delete restrict,
   service_id uuid references public.services(id) on delete set null,
   room_id uuid references public.rooms(id) on delete set null,
+  equipment_id uuid references public.equipment(id) on delete set null,
   starts_at timestamptz not null,
   ends_at timestamptz not null,
   status public.appointment_status not null default 'scheduled',
   source text not null default 'manual',
+  is_overbooked boolean not null default false,
+  recurrence_rule jsonb not null default '{}'::jsonb,
+  online_booking_ref text,
   notes text,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint appointments_valid_time check (ends_at > starts_at)
+);
+
+alter table public.appointments
+  add column if not exists equipment_id uuid references public.equipment(id) on delete set null,
+  add column if not exists is_overbooked boolean not null default false,
+  add column if not exists recurrence_rule jsonb not null default '{}'::jsonb,
+  add column if not exists online_booking_ref text;
+
+create table if not exists public.waitlist_entries (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  patient_id uuid not null references public.patients(id) on delete cascade,
+  professional_id uuid references public.professionals(id) on delete set null,
+  service_id uuid references public.services(id) on delete set null,
+  preferred_date date,
+  preferred_period text check (preferred_period in ('morning', 'afternoon', 'evening', 'any')),
+  priority int not null default 3 check (priority between 1 and 5),
+  status text not null default 'waiting' check (status in ('waiting', 'offered', 'scheduled', 'cancelled')),
+  notes text,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.schedule_blocks (
+  id uuid primary key default gen_random_uuid(),
+  clinic_id uuid not null references public.clinics(id) on delete cascade,
+  professional_id uuid references public.professionals(id) on delete cascade,
+  room_id uuid references public.rooms(id) on delete cascade,
+  equipment_id uuid references public.equipment(id) on delete cascade,
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  reason text not null,
+  created_by uuid references auth.users(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint schedule_blocks_has_resource check (
+    professional_id is not null or room_id is not null or equipment_id is not null
+  ),
+  constraint schedule_blocks_valid_time check (ends_at > starts_at)
 );
 
 create table if not exists public.appointment_events (
@@ -260,10 +340,14 @@ create table if not exists public.medical_records (
   complaint text,
   payload jsonb not null default '{}'::jsonb,
   signed_at timestamptz,
+  signature_data text,
   created_by uuid references auth.users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.medical_records
+  add column if not exists signature_data text;
 
 create table if not exists public.attendance_guides (
   id uuid primary key default gen_random_uuid(),
@@ -458,8 +542,13 @@ create index if not exists insurance_plans_clinic_name_idx on public.insurance_p
 create index if not exists patients_clinic_name_idx on public.patients(clinic_id, full_name);
 create index if not exists patients_clinic_cpf_idx on public.patients(clinic_id, cpf);
 create index if not exists staff_members_clinic_role_idx on public.staff_members(clinic_id, role, status);
+create index if not exists equipment_clinic_active_idx on public.equipment(clinic_id, active);
 create index if not exists appointments_clinic_starts_idx on public.appointments(clinic_id, starts_at);
 create index if not exists appointments_professional_time_idx on public.appointments(professional_id, starts_at, ends_at);
+create index if not exists appointments_room_time_idx on public.appointments(room_id, starts_at, ends_at) where room_id is not null;
+create index if not exists appointments_equipment_time_idx on public.appointments(equipment_id, starts_at, ends_at) where equipment_id is not null;
+create index if not exists waitlist_entries_clinic_status_idx on public.waitlist_entries(clinic_id, status, priority, preferred_date);
+create index if not exists schedule_blocks_clinic_time_idx on public.schedule_blocks(clinic_id, starts_at, ends_at);
 create index if not exists attendance_guides_clinic_patient_idx on public.attendance_guides(clinic_id, patient_id, service_date desc);
 create index if not exists financial_transactions_clinic_due_idx on public.financial_transactions(clinic_id, due_date, status);
 create index if not exists clinic_subscriptions_status_idx on public.clinic_subscriptions(status, current_period_ends_at);
@@ -678,7 +767,8 @@ declare
   t text;
 begin
   foreach t in array array[
-    'profiles', 'clinics', 'patients', 'professionals', 'staff_members', 'services', 'appointments',
+    'profiles', 'clinics', 'patients', 'professionals', 'staff_members', 'services', 'rooms', 'equipment', 'appointments',
+    'waitlist_entries', 'schedule_blocks',
     'insurance_plans', 'medical_records', 'attendance_guides', 'treatment_plans', 'financial_transactions', 'notification_templates',
     'billing_plans', 'clinic_subscriptions', 'onboarding_tasks', 'integration_connections', 'automation_rules', 'document_templates'
   ]
@@ -692,6 +782,10 @@ drop trigger if exists audit_patients on public.patients;
 create trigger audit_patients after insert or update or delete on public.patients for each row execute function public.audit_clinic_row();
 drop trigger if exists audit_appointments on public.appointments;
 create trigger audit_appointments after insert or update or delete on public.appointments for each row execute function public.audit_clinic_row();
+drop trigger if exists audit_waitlist_entries on public.waitlist_entries;
+create trigger audit_waitlist_entries after insert or update or delete on public.waitlist_entries for each row execute function public.audit_clinic_row();
+drop trigger if exists audit_schedule_blocks on public.schedule_blocks;
+create trigger audit_schedule_blocks after insert or update or delete on public.schedule_blocks for each row execute function public.audit_clinic_row();
 drop trigger if exists audit_financial_transactions on public.financial_transactions;
 create trigger audit_financial_transactions after insert or update or delete on public.financial_transactions for each row execute function public.audit_clinic_row();
 drop trigger if exists audit_medical_records on public.medical_records;
@@ -710,7 +804,10 @@ alter table public.professionals enable row level security;
 alter table public.staff_members enable row level security;
 alter table public.services enable row level security;
 alter table public.rooms enable row level security;
+alter table public.equipment enable row level security;
 alter table public.appointments enable row level security;
+alter table public.waitlist_entries enable row level security;
+alter table public.schedule_blocks enable row level security;
 alter table public.appointment_events enable row level security;
 alter table public.medical_records enable row level security;
 alter table public.attendance_guides enable row level security;
@@ -777,6 +874,10 @@ drop policy if exists "rooms member select" on public.rooms;
 create policy "rooms member select" on public.rooms for select to authenticated using (public.is_clinic_member(clinic_id));
 drop policy if exists "rooms admin write" on public.rooms;
 create policy "rooms admin write" on public.rooms for all to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[])) with check (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[]));
+drop policy if exists "equipment member select" on public.equipment;
+create policy "equipment member select" on public.equipment for select to authenticated using (public.is_clinic_member(clinic_id));
+drop policy if exists "equipment admin write" on public.equipment;
+create policy "equipment admin write" on public.equipment for all to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[])) with check (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[]));
 drop policy if exists "appointments member crud" on public.appointments;
 drop policy if exists "appointments member select" on public.appointments;
 create policy "appointments member select" on public.appointments for select to authenticated using (public.is_clinic_member(clinic_id));
@@ -786,6 +887,18 @@ drop policy if exists "appointments front desk update" on public.appointments;
 create policy "appointments front desk update" on public.appointments for update to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[]) or public.is_assigned_professional(clinic_id, professional_id)) with check (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[]) or public.is_assigned_professional(clinic_id, professional_id));
 drop policy if exists "appointments admin delete" on public.appointments;
 create policy "appointments admin delete" on public.appointments for delete to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[]));
+drop policy if exists "waitlist member select" on public.waitlist_entries;
+create policy "waitlist member select" on public.waitlist_entries for select to authenticated using (public.is_clinic_member(clinic_id));
+drop policy if exists "waitlist front desk write" on public.waitlist_entries;
+create policy "waitlist front desk write" on public.waitlist_entries for insert to authenticated with check (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[]));
+drop policy if exists "waitlist front desk update" on public.waitlist_entries;
+create policy "waitlist front desk update" on public.waitlist_entries for update to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[])) with check (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[]));
+drop policy if exists "waitlist admin delete" on public.waitlist_entries;
+create policy "waitlist admin delete" on public.waitlist_entries for delete to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin']::public.clinic_role[]));
+drop policy if exists "schedule blocks member select" on public.schedule_blocks;
+create policy "schedule blocks member select" on public.schedule_blocks for select to authenticated using (public.is_clinic_member(clinic_id));
+drop policy if exists "schedule blocks front desk write" on public.schedule_blocks;
+create policy "schedule blocks front desk write" on public.schedule_blocks for all to authenticated using (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[])) with check (public.has_clinic_role(clinic_id, array['owner','admin','receptionist']::public.clinic_role[]));
 drop policy if exists "appointment events member crud" on public.appointment_events;
 drop policy if exists "appointment events member select" on public.appointment_events;
 create policy "appointment events member select" on public.appointment_events for select to authenticated using (public.is_clinic_member(clinic_id));
@@ -856,7 +969,10 @@ grant select, insert, update, delete on public.professionals to authenticated;
 grant select, insert, update, delete on public.staff_members to authenticated;
 grant select, insert, update, delete on public.services to authenticated;
 grant select, insert, update, delete on public.rooms to authenticated;
+grant select, insert, update, delete on public.equipment to authenticated;
 grant select, insert, update, delete on public.appointments to authenticated;
+grant select, insert, update, delete on public.waitlist_entries to authenticated;
+grant select, insert, update, delete on public.schedule_blocks to authenticated;
 grant select, insert, update, delete on public.appointment_events to authenticated;
 grant select, insert, update, delete on public.medical_records to authenticated;
 grant select, insert, update, delete on public.attendance_guides to authenticated;
