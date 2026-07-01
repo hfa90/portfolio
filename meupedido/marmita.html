@@ -12,8 +12,8 @@
   <title>Marmita — pedir almoço</title>
 
   <script>
-    window.SUPABASE_URL = "https://cazbhqfwlxesthwsbsoj.supabase.co";
-    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhemJocWZ3bHhlc3Rod3Nic29qIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MTg3NzYsImV4cCI6MjA5NDM5NDc3Nn0.0kg4zOnXkzwvVVwgE9W56CMbG0zsMq2gdkbwRbUfYY8";
+    window.SUPABASE_URL = "https://nhfwekyforsofptffohz.supabase.co";
+    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZndla3lmb3Jzb2ZwdGZmb2h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjQzMDAsImV4cCI6MjA5ODQ0MDMwMH0.GIOhh5q8o5u3euNw45ZY026w3bwWmnz-CS6-a754TqM";
   </script>
 
   <style>
@@ -1560,6 +1560,37 @@
       else if (e.key === "Enter") $("btnEntrar").click();
     });
 
+    let bloqueioTimer = null;
+
+    function iniciarBloqueio(bloqueadoAteISO) {
+      clearInterval(bloqueioTimer);
+      const alertEl = $("loginAlert");
+      const btn = $("btnEntrar");
+      const fim = new Date(bloqueadoAteISO).getTime();
+
+      const tick = () => {
+        const restanteMs = fim - Date.now();
+        if (restanteMs <= 0) {
+          clearInterval(bloqueioTimer);
+          btn.disabled = false;
+          btn.textContent = "Entrar";
+          alertEl.classList.remove("show");
+          return;
+        }
+        const totalSeg = Math.ceil(restanteMs / 1000);
+        const min = Math.floor(totalSeg / 60);
+        const seg = String(totalSeg % 60).padStart(2, "0");
+        const horaLocal = new Date(fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        btn.disabled = true;
+        btn.textContent = `Bloqueado (${min}:${seg})`;
+        alertEl.textContent = `Muitas tentativas erradas. Tente novamente às ${horaLocal}.`;
+        alertEl.classList.add("show");
+      };
+
+      tick();
+      bloqueioTimer = setInterval(tick, 1000);
+    }
+
     $("btnEntrar").addEventListener("click", async () => {
       const matricula = $("matricula").value.trim();
       const alertEl = $("loginAlert");
@@ -1580,12 +1611,12 @@
 
         const resp = Array.isArray(data) ? data[0] : data;
         if (!resp || !resp.sucesso) {
-          alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
-          alertEl.classList.add("show");
           pin = ""; renderPin();
           if (resp?.bloqueado_ate) {
-            $("btnEntrar").disabled = true;
-            $("btnEntrar").textContent = "Bloqueado";
+            iniciarBloqueio(resp.bloqueado_ate);
+          } else {
+            alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
+            alertEl.classList.add("show");
           }
           return;
         }
@@ -2037,7 +2068,12 @@
 
       const comprovanteUrl = await uploadComprovante(window.pedidoAtualId, file);
       if (comprovanteUrl) {
-        await sb.from("pedidos").update({ comprovante_url: comprovanteUrl }).eq("id", window.pedidoAtualId);
+        const colab = getColab();
+        await sb.rpc("anexar_comprovante", {
+          p_pedido_id: window.pedidoAtualId,
+          p_colaborador_id: colab.id,
+          p_comprovante_url: comprovanteUrl
+        });
         $("pixComprovanteBtn").classList.replace("btn-primary", "btn-olive");
         $("pixComprovanteBtn").textContent = "✅ Comprovante Enviado";
       } else {
@@ -2055,7 +2091,12 @@
       $("pixComprovanteInput").disabled = false;
 
       if (window.pedidoAtualId) {
-        await sb.from("pedidos").update({ comprovante_url: null }).eq("id", window.pedidoAtualId);
+        const colab = getColab();
+        await sb.rpc("anexar_comprovante", {
+          p_pedido_id: window.pedidoAtualId,
+          p_colaborador_id: colab.id,
+          p_comprovante_url: null
+        });
       }
     });
 
@@ -2105,9 +2146,9 @@
 
       window.pedidoAtualId = pedidoId;
 
-      if (state.selPagamento === "fiado" && pedidoId) {
-        await sb.from("pedidos").update({ preco_total: total }).eq("id", pedidoId);
-      }
+      // A taxa de fiado (+R$10) agora é calculada dentro da RPC criar_pedido, de forma
+      // atômica — não depende mais de um segundo UPDATE separado vindo do navegador.
+      // Ver migration.sql (fix #3) para a definição atualizada da function.
 
       notificarPedidoConfirmado(state.selPrato.nome, state.selPrato.fornecedor.nome);
       mostrarToast("✅", "Pedido confirmado!", `${state.selPrato.nome} registrado com sucesso.`);
