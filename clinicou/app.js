@@ -5,10 +5,10 @@ const LEGACY_STORAGE_KEYS = ["clinicou_state_v3", "clinicou_state_v2"];
 const SUPABASE_PROJECT_REF = new URL(SUPABASE_URL).hostname.split(".")[0];
 const TRIAL_DAYS = 30;
 const TRIAL_WARNING_INTERVAL_MS = 20 * 60 * 1000;
-const AUTH_LOGIN_TIMEOUT_MS = 60 * 1000;
-const AUTH_SESSION_TIMEOUT_MS = 30 * 1000;
-const AUTH_DATA_TIMEOUT_MS = 45 * 1000;
-const AUTH_SLOW_NOTICE_MS = 10 * 1000;
+const AUTH_LOGIN_TIMEOUT_MS = 20 * 1000;
+const AUTH_SESSION_TIMEOUT_MS = 12 * 1000;
+const AUTH_DATA_TIMEOUT_MS = 25 * 1000;
+const AUTH_SLOW_NOTICE_MS = 6 * 1000;
 
 const statusLabel = {
   scheduled: "Agendado",
@@ -214,6 +214,7 @@ let currentAuthUser = null;
 let trialCountdownTimer = null;
 let trialWarningTimer = null;
 let authRequestInFlight = false;
+let authSessionLoadToken = 0;
 
 function withTimeout(promise, ms, timeoutMessage) {
   let timeoutId;
@@ -237,6 +238,50 @@ function scheduleAuthSlowNotice(message) {
       byId("authFeedback").textContent = message;
     }
   }, AUTH_SLOW_NOTICE_MS);
+}
+
+function applyAuthenticatedSession(session, fallbackEmail = "") {
+  currentAuthUser = session?.user || null;
+  currentUser.email = currentAuthUser?.email || fallbackEmail || "";
+  currentSignupMetadata = currentAuthUser?.user_metadata || {};
+}
+
+function authFriendlyErrorMessage(error, fallback = "Nao foi possivel autenticar.") {
+  const message = error?.message || fallback;
+  const lower = message.toLowerCase();
+  if (lower.includes("email not confirmed")) {
+    return "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam.";
+  }
+  if (lower.includes("invalid login credentials") || lower.includes("invalid credentials")) {
+    return "E-mail ou senha invalidos.";
+  }
+  if (lower.includes("failed to fetch") || lower.includes("network") || lower.includes("fetch")) {
+    return "Nao consegui comunicar com o Supabase. Confira a internet e tente novamente.";
+  }
+  if (lower.includes("timed out") || lower.includes("timeout") || lower.includes("nao respondeu")) {
+    return message;
+  }
+  return message;
+}
+
+function queueSessionClinicLoad(session) {
+  const token = ++authSessionLoadToken;
+  applyAuthenticatedSession(session);
+  setTimeout(async () => {
+    if (token !== authSessionLoadToken || authRequestInFlight) return;
+    try {
+      const loaded = await withTimeout(
+        loadRemoteSnapshot(),
+        AUTH_DATA_TIMEOUT_MS,
+        "Sessao ativa, mas os dados da clinica nao responderam. Tente entrar novamente."
+      );
+      if (loaded && token === authSessionLoadToken) unlockAuth();
+    } catch (error) {
+      if (token === authSessionLoadToken) {
+        lockAuth(authFriendlyErrorMessage(error, "Nao foi possivel carregar sua clinica."));
+      }
+    }
+  }, 0);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -655,28 +700,41 @@ async function enforceAuth() {
     return;
   }
 
-  supabaseClient.auth.onAuthStateChange(async (event, session) => {
+  supabaseClient.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
+      authSessionLoadToken += 1;
       resetLocalAuthSession();
       lockAuth("Sessao encerrada. Entre novamente para acessar sua clinica.");
       return;
     }
     if (session) {
-      currentAuthUser = session.user || null;
-      currentUser.email = session.user?.email || "";
-      currentSignupMetadata = session.user?.user_metadata || {};
-      const loaded = await loadRemoteSnapshot();
-      if (loaded) unlockAuth();
+      applyAuthenticatedSession(session);
+      if (event === "SIGNED_IN" && !authRequestInFlight) {
+        queueSessionClinicLoad(session);
+      }
     }
   });
 
-  const { data } = await supabaseClient.auth.getSession();
-  if (data?.session) {
-    currentAuthUser = data.session.user || null;
-    currentUser.email = currentAuthUser?.email || "";
-    currentSignupMetadata = currentAuthUser?.user_metadata || {};
-    const loaded = await loadRemoteSnapshot();
-    if (loaded) unlockAuth();
+  try {
+    const { data, error } = await withTimeout(
+      supabaseClient.auth.getSession(),
+      AUTH_SESSION_TIMEOUT_MS,
+      "Nao foi possivel verificar sua sessao em 12 segundos."
+    );
+    if (error) throw error;
+    if (data?.session) {
+      authSessionLoadToken += 1;
+      applyAuthenticatedSession(data.session);
+      const loaded = await withTimeout(
+        loadRemoteSnapshot(),
+        AUTH_DATA_TIMEOUT_MS,
+        "Sua sessao foi encontrada, mas os dados da clinica nao responderam. Tente entrar novamente."
+      );
+      if (loaded) unlockAuth();
+      return;
+    }
+  } catch (error) {
+    lockAuth(authFriendlyErrorMessage(error, "Nao foi possivel verificar sua sessao. Informe e-mail e senha para entrar."));
     return;
   }
 
@@ -2180,43 +2238,34 @@ async function auth() {
     return;
   }
   feedback.textContent = "Conectando ao Supabase...";
+  authSessionLoadToken += 1;
   setAuthLoading(true);
   let slowNotice = scheduleAuthSlowNotice("Ainda conectando ao Supabase. Aguarde mais alguns segundos...");
   try {
-    const { error } = await withTimeout(
+    const { data: authData, error } = await withTimeout(
       supabaseClient.auth.signInWithPassword({ email: data.email, password: data.password }),
       AUTH_LOGIN_TIMEOUT_MS,
-      "O login nao respondeu em 60 segundos. Verifique a internet, recarregue a pagina e tente novamente."
+      "O login nao respondeu em 20 segundos. Verifique a internet, recarregue a pagina e tente novamente."
     );
     if (error) throw error;
+    if (!authData?.session) {
+      throw new Error("Login confirmado, mas o Supabase nao retornou uma sessao valida. Recarregue a pagina e tente novamente.");
+    }
     clearTimeout(slowNotice);
-    feedback.textContent = "Login confirmado. Carregando sessao...";
-    slowNotice = scheduleAuthSlowNotice("Login confirmado. Ainda carregando a sessao segura...");
-    const { data: sessionData } = await withTimeout(
-      supabaseClient.auth.getSession(),
-      AUTH_SESSION_TIMEOUT_MS,
-      "Login feito, mas a sessao nao respondeu em 30 segundos. Atualize a pagina e tente entrar novamente."
-    );
-    currentAuthUser = sessionData?.session?.user || null;
-    currentUser.email = currentAuthUser?.email || data.email;
-    currentSignupMetadata = currentAuthUser?.user_metadata || {};
-    clearTimeout(slowNotice);
+    applyAuthenticatedSession(authData.session, data.email);
     feedback.textContent = "Sessao ativa. Carregando dados da clinica...";
     slowNotice = scheduleAuthSlowNotice("Sessao ativa. Ainda carregando dados e permissoes da clinica...");
     const loaded = await withTimeout(
       loadRemoteSnapshot(),
       AUTH_DATA_TIMEOUT_MS,
-      "Login feito, mas os dados da clinica nao responderam em 45 segundos. Verifique a conexao ou as permissoes da clinica."
+      "Login feito, mas os dados da clinica nao responderam em 25 segundos. Verifique a conexao ou as permissoes da clinica."
     );
     if (loaded) {
       unlockAuth();
       toast("Acesso confirmado.");
     }
   } catch (error) {
-    const message = error.message || "Nao foi possivel autenticar.";
-    feedback.textContent = message.includes("Email not confirmed")
-      ? "Seu e-mail ainda nao foi confirmado. Use Reenviar e-mail e confirme a caixa de entrada/spam."
-      : message;
+    feedback.textContent = authFriendlyErrorMessage(error);
   } finally {
     clearTimeout(slowNotice);
     setAuthLoading(false);
