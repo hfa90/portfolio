@@ -111,8 +111,8 @@ test("patient, schedule and medical record modules include expanded clinic workf
 });
 
 test("login bypasses cached app script and uses direct auth endpoint", () => {
-  assert.match(indexPage, /app\.js\?v=20260629-auth4/);
-  assert.match(indexPage, /styles\.css\?v=20260629-auth4/);
+  assert.match(indexPage, /app\.js\?v=20260701-admin-services/);
+  assert.match(indexPage, /styles\.css\?v=20260701-admin-services/);
   assert.match(app, /signInWithPasswordDirect/);
   assert.match(app, /\/auth\/v1\/token\?grant_type=password/);
   assert.match(app, /auth\.setSession/);
@@ -120,6 +120,26 @@ test("login bypasses cached app script and uses direct auth endpoint", () => {
   assert.match(app, /invalid_credentials/);
   assert.match(app, /E-mail ou senha incorretos/);
   assert.doesNotMatch(app, /signInWithPassword\(/);
+});
+
+test("admin manages clinic service catalog and access email inline", () => {
+  for (const id of [
+    "serviceCatalogForm",
+    "serviceName",
+    "serviceSpecialty",
+    "serviceActive",
+    "servicesCatalogList",
+    "serviceSuggestions",
+    "serviceSmartSuggest"
+  ]) {
+    assert.match(indexPage, new RegExp(`id="${id}"`));
+  }
+  assert.match(app, /serviceCatalogPresets/);
+  assert.match(app, /saveServiceRemote/);
+  assert.match(app, /renderServiceCatalog/);
+  assert.match(app, /window\.editServiceCatalog = editServiceCatalog/);
+  assert.match(app, /teamEmail_\$\{employee\.id\}/);
+  assert.match(app, /setEmployeeAccessPassword\('\$\{employee\.id\}', '\$\{passwordInputId\}', '\$\{emailInputId\}'\)/);
 });
 
 test("login supports saved session restore and password recovery", () => {
