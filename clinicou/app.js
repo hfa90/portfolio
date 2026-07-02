@@ -202,6 +202,7 @@ let currentFinanceSearch = "";
 let editingPatientId = null;
 let editingEmployeeId = null;
 let editingInsurancePlanId = null;
+let editingServiceId = null;
 let remoteReady = false;
 let siteDialogResolve = null;
 let signaturePad = null;
@@ -680,6 +681,11 @@ function wireEvents() {
     toast("Clinica ativa alterada.");
   });
   byId("financeSettingsForm")?.addEventListener("submit", submitFinanceSettings);
+  byId("serviceCatalogForm")?.addEventListener("submit", submitServiceCatalog);
+  byId("resetServiceCatalogForm")?.addEventListener("click", resetServiceCatalogForm);
+  byId("serviceSmartSuggest")?.addEventListener("click", renderServiceSuggestions);
+  byId("serviceSpecialty")?.addEventListener("change", updateServiceSuggestionsFromForm);
+  byId("serviceName")?.addEventListener("input", updateServiceSuggestionsFromForm);
   byId("exportBackup")?.addEventListener("click", exportBackup);
   byId("importBackupButton")?.addEventListener("click", () => byId("importBackupFile").click());
   byId("importBackupFile")?.addEventListener("change", importBackup);
@@ -1044,6 +1050,7 @@ function renderAll() {
   renderMessagePatientOptions();
   renderMessagePreview();
   renderFinanceSettings();
+  renderServiceCatalog();
   renderAccessControl();
   renderDoctorPortal();
   renderTrialStatus();
@@ -1071,6 +1078,7 @@ function renderClinicSwitcher() {
 
 function populateSelects() {
   const visiblePatients = visiblePatientsForCurrentUser();
+  const activeServices = state.services.filter((service) => service.active !== false);
   fillSelect("appointmentPatient", currentUser.accessRole === "medical" ? visiblePatients : state.patients, "name");
   fillSelect("recordPatient", visiblePatients, "name");
   fillSelect("messagePatient", state.patients, "name");
@@ -1079,12 +1087,12 @@ function populateSelects() {
   fillSelect("financeProfessional", [{ id: "", name: "Sem repasse" }, ...state.professionals], "name");
   fillSelect("guideProfessional", state.professionals, "name");
   fillSelect("availabilityDoctor", state.professionals, "name");
-  fillSelect("appointmentService", state.services, "name");
+  fillSelect("appointmentService", activeServices, "name");
   fillSelect("appointmentRoom", [{ id: "", name: "Sem sala definida" }, ...state.rooms.filter((room) => room.active !== false)], "name");
   fillSelect("appointmentEquipment", [{ id: "", name: "Sem equipamento" }, ...state.equipment.filter((item) => item.active !== false)], "name");
   fillSelect("waitlistPatient", state.patients, "name");
   fillSelect("waitlistProfessional", [{ id: "", name: "Qualquer medico" }, ...state.professionals], "name");
-  fillSelect("waitlistService", [{ id: "", name: "Qualquer servico" }, ...state.services], "name");
+  fillSelect("waitlistService", [{ id: "", name: "Qualquer servico" }, ...activeServices], "name");
   fillSelect("blockProfessional", [{ id: "", name: "Nao bloquear medico" }, ...state.professionals], "name");
   fillSelect("blockRoom", [{ id: "", name: "Nao bloquear sala" }, ...state.rooms.filter((room) => room.active !== false)], "name");
   fillSelect("blockEquipment", [{ id: "", name: "Nao bloquear equipamento" }, ...state.equipment.filter((item) => item.active !== false)], "name");
@@ -1515,6 +1523,227 @@ function renderFinanceSettings() {
   byId("defaultCommission").value = Number(state.tenant.settings?.defaultCommission || 0);
 }
 
+const serviceCatalogPresets = [
+  { name: "Consulta inicial", specialty: "Clinica geral", duration: 40, price: 220, keywords: ["clinica", "medicina", "medico", "geral"] },
+  { name: "Retorno medico", specialty: "Clinica geral", duration: 25, price: 120, keywords: ["clinica", "medicina", "medico", "geral"] },
+  { name: "Consulta de urgencia", specialty: "Clinica geral", duration: 30, price: 260, keywords: ["clinica", "medicina", "urgencia"] },
+  { name: "Limpeza odontologica", specialty: "Odontologia", duration: 50, price: 280, keywords: ["odonto", "dentista", "odontologia"] },
+  { name: "Avaliacao odontologica", specialty: "Odontologia", duration: 30, price: 150, keywords: ["odonto", "dentista", "odontologia"] },
+  { name: "Clareamento dental", specialty: "Odontologia", duration: 60, price: 650, keywords: ["odonto", "dentista", "odontologia"] },
+  { name: "Avaliacao estetica", specialty: "Estetica", duration: 30, price: 120, keywords: ["estetica", "dermato", "beleza"] },
+  { name: "Toxina botulinica", specialty: "Estetica", duration: 60, price: 890, keywords: ["estetica", "dermato", "botox"] },
+  { name: "Preenchimento facial", specialty: "Estetica", duration: 70, price: 1200, keywords: ["estetica", "dermato", "harmonizacao"] },
+  { name: "Sessao de psicoterapia", specialty: "Psicologia", duration: 50, price: 180, keywords: ["psicologia", "psicologo", "terapia"] },
+  { name: "Avaliacao psicologica", specialty: "Psicologia", duration: 60, price: 240, keywords: ["psicologia", "psicologo", "terapia"] },
+  { name: "Sessao de fisioterapia", specialty: "Fisioterapia", duration: 50, price: 160, keywords: ["fisioterapia", "fisio", "reabilitacao"] },
+  { name: "Avaliacao fisioterapeutica", specialty: "Fisioterapia", duration: 45, price: 190, keywords: ["fisioterapia", "fisio", "reabilitacao"] },
+  { name: "Coleta de exames", specialty: "Exames", duration: 20, price: 80, keywords: ["exame", "laboratorio", "coleta"] },
+  { name: "Ultrassonografia", specialty: "Exames", duration: 30, price: 260, keywords: ["exame", "imagem", "ultrassom"] }
+];
+
+function serviceSpecialtyOptions() {
+  const values = new Set([
+    ...serviceCatalogPresets.map((item) => item.specialty),
+    ...state.professionals.map((item) => item.specialty).filter(Boolean),
+    ...state.services.map((item) => item.specialty).filter(Boolean)
+  ]);
+  return [...values].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+function renderServiceCatalog() {
+  if (!byId("servicesCatalogList")) return;
+  renderServiceSpecialtyOptions();
+  updateServiceCatalogSummary();
+  renderServiceSuggestions();
+  const rows = state.services
+    .slice()
+    .sort((a, b) => Number(a.active === false) - Number(b.active === false) || normalizeName(a.specialty).localeCompare(normalizeName(b.specialty)) || normalizeName(a.name).localeCompare(normalizeName(b.name)))
+    .map((service) => {
+      const status = service.active === false ? "suspended" : "active";
+      const appointments = state.appointments.filter((appointment) => appointment.serviceId === service.id).length;
+      return `<div class="service-item">
+        <div>
+          <p class="item-title">${escapeHtml(service.name)}</p>
+          <p class="item-sub">${escapeHtml(service.specialty || "Sem tipo")} - ${Number(service.duration || 30)} min - ${appointments} agendamento(s)</p>
+        </div>
+        <strong>${money.format(Number(service.price || 0))}</strong>
+        <span class="badge ${status}">${statusLabel[status]}</span>
+        <div class="row-actions">
+          <button class="icon-button" onclick="editServiceCatalog('${service.id}')" aria-label="Editar servico"><i data-lucide="pencil"></i></button>
+          <button class="icon-button" onclick="toggleServiceCatalog('${service.id}')" aria-label="Ativar ou pausar servico"><i data-lucide="${service.active === false ? "play" : "pause"}"></i></button>
+          <button class="icon-button danger" onclick="deleteServiceCatalog('${service.id}')" aria-label="Excluir servico"><i data-lucide="trash-2"></i></button>
+        </div>
+      </div>`;
+    });
+  byId("servicesCatalogList").innerHTML = rows.join("") || emptyState("Nenhum servico cadastrado para esta clinica.");
+  lucide.createIcons();
+}
+
+function renderServiceSpecialtyOptions() {
+  const list = byId("serviceSpecialtyOptions");
+  if (!list) return;
+  list.innerHTML = serviceSpecialtyOptions().map((item) => `<option value="${escapeAttr(item)}"></option>`).join("");
+}
+
+function updateServiceCatalogSummary() {
+  const node = byId("servicesCatalogSummary");
+  if (!node) return;
+  const active = state.services.filter((service) => service.active !== false);
+  const average = active.length ? active.reduce((sum, item) => sum + Number(item.price || 0), 0) / active.length : 0;
+  const specialties = new Set(active.map((item) => normalizeName(item.specialty)).filter(Boolean)).size;
+  node.innerHTML = `
+    <div><span>Ativos</span><strong>${active.length}</strong><small>${state.services.length} no catalogo</small></div>
+    <div><span>Tipos</span><strong>${specialties}</strong><small>Especialidades ofertadas</small></div>
+    <div><span>Ticket medio</span><strong>${money.format(average)}</strong><small>Servicos ativos</small></div>
+  `;
+}
+
+function serviceSuggestionMatches(preset, context) {
+  const text = normalizeName(`${context} ${preset.specialty} ${preset.name}`);
+  return preset.keywords.some((keyword) => text.includes(normalizeName(keyword)));
+}
+
+function suggestedServices() {
+  const context = [
+    state.tenant.name,
+    ...state.professionals.map((item) => item.specialty),
+    byId("serviceSpecialty")?.value || "",
+    byId("serviceName")?.value || ""
+  ].join(" ");
+  const existingNames = new Set(state.services.map((item) => normalizeName(item.name)));
+  const matches = serviceCatalogPresets.filter((preset) => !existingNames.has(normalizeName(preset.name)) && serviceSuggestionMatches(preset, context));
+  return (matches.length ? matches : serviceCatalogPresets.filter((preset) => !existingNames.has(normalizeName(preset.name)))).slice(0, 8);
+}
+
+function renderServiceSuggestions() {
+  const node = byId("serviceSuggestions");
+  if (!node) return;
+  const suggestions = suggestedServices();
+  node.innerHTML = suggestions.map((preset) => `<button type="button" onclick="applyServiceSuggestion('${escapeAttr(preset.name)}')">
+    <strong>${escapeHtml(preset.name)}</strong>
+    <span>${escapeHtml(preset.specialty)} - ${Number(preset.duration)} min - ${money.format(Number(preset.price))}</span>
+  </button>`).join("") || emptyState("Seu catalogo ja cobre as sugestoes principais.");
+  lucide.createIcons();
+}
+
+function updateServiceSuggestionsFromForm() {
+  clearTimeout(updateServiceSuggestionsFromForm.timer);
+  updateServiceSuggestionsFromForm.timer = setTimeout(renderServiceSuggestions, 120);
+}
+
+function applyServiceSuggestion(name) {
+  const preset = serviceCatalogPresets.find((item) => item.name === name);
+  const form = byId("serviceCatalogForm");
+  if (!preset || !form) return;
+  form.elements.name.value = preset.name;
+  form.elements.specialty.value = preset.specialty;
+  form.elements.duration.value = preset.duration;
+  form.elements.price.value = preset.price;
+  form.elements.active.checked = true;
+  renderServiceSpecialtyOptions();
+}
+
+async function submitServiceCatalog(event) {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(event.target));
+  const service = {
+    id: editingServiceId || uid("s"),
+    name: String(data.name || "").trim(),
+    specialty: String(data.specialty || "").trim(),
+    duration: Number(data.duration || 30),
+    price: Number(data.price || 0),
+    active: byId("serviceActive")?.checked !== false
+  };
+  if (!service.name) {
+    toast("Informe o nome do servico.");
+    return;
+  }
+  if (service.duration < 5 || service.duration > 480) {
+    toast("A duracao deve ficar entre 5 e 480 minutos.");
+    return;
+  }
+  if (service.price < 0) {
+    toast("O preco nao pode ser negativo.");
+    return;
+  }
+  const duplicate = state.services.some((item) => item.id !== editingServiceId && normalizeName(item.name) === normalizeName(service.name));
+  if (duplicate) {
+    toast("Ja existe um servico com este nome.");
+    return;
+  }
+
+  const saved = await saveServiceRemote(service);
+  if (editingServiceId) {
+    const current = state.services.find((item) => item.id === editingServiceId);
+    if (current) Object.assign(current, saved);
+    toast("Servico atualizado.");
+  } else {
+    state.services.push(saved);
+    toast("Servico cadastrado.");
+  }
+  saveState();
+  resetServiceCatalogForm();
+  populateSelects();
+  renderServiceCatalog();
+}
+
+function editServiceCatalog(id) {
+  const service = state.services.find((item) => item.id === id);
+  const form = byId("serviceCatalogForm");
+  if (!service || !form) return;
+  editingServiceId = id;
+  byId("serviceCatalogTitle").textContent = "Editar servico";
+  byId("serviceCatalogSubmitLabel").textContent = "Salvar servico";
+  form.elements.name.value = service.name || "";
+  form.elements.specialty.value = service.specialty || "";
+  form.elements.duration.value = Number(service.duration || 30);
+  form.elements.price.value = Number(service.price || 0);
+  form.elements.active.checked = service.active !== false;
+  openView("admin");
+  byId("serviceName")?.focus();
+  renderServiceSuggestions();
+}
+
+async function toggleServiceCatalog(id) {
+  const service = state.services.find((item) => item.id === id);
+  if (!service) return;
+  service.active = service.active === false;
+  Object.assign(service, await saveServiceRemote(service));
+  saveState();
+  populateSelects();
+  renderServiceCatalog();
+  toast(service.active ? "Servico reativado." : "Servico pausado.");
+}
+
+async function deleteServiceCatalog(id) {
+  const service = state.services.find((item) => item.id === id);
+  if (!service) return;
+  const hasAppointments = state.appointments.some((appointment) => appointment.serviceId === id);
+  if (hasAppointments) {
+    toast("Servico possui agendamentos. Pause em vez de excluir.");
+    return;
+  }
+  if (!await siteConfirm(`Excluir servico ${service.name}?`, "Excluir servico")) return;
+  await deleteRemote("services", id);
+  state.services = state.services.filter((item) => item.id !== id);
+  if (editingServiceId === id) resetServiceCatalogForm();
+  saveState();
+  populateSelects();
+  renderServiceCatalog();
+  toast("Servico removido.");
+}
+
+function resetServiceCatalogForm() {
+  editingServiceId = null;
+  const form = byId("serviceCatalogForm");
+  if (form) form.reset();
+  if (byId("serviceCatalogTitle")) byId("serviceCatalogTitle").textContent = "Catalogo de servicos";
+  if (byId("serviceCatalogSubmitLabel")) byId("serviceCatalogSubmitLabel").textContent = "Salvar servico";
+  if (byId("serviceActive")) byId("serviceActive").checked = true;
+  renderServiceSpecialtyOptions();
+  renderServiceSuggestions();
+}
+
 function renderAccessControl() {
   const node = byId("accessControlList");
   if (!node) return;
@@ -1527,7 +1756,8 @@ function renderAccessControl() {
     const accessRole = employee.accessRole || (employee.role === "doctor" ? "medical" : "receptionist");
     const permissions = employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || [];
     const passwordInputId = `teamPassword_${employee.id}`;
-    const canCreateAccess = !!employee.email && employee.status === "active";
+    const emailInputId = `teamEmail_${employee.id}`;
+    const canCreateAccess = employee.status === "active";
     return `<div class="access-item">
       <div>
         <strong>${escapeHtml(employee.name)}</strong>
@@ -1538,9 +1768,10 @@ function renderAccessControl() {
         <option value="medical" ${accessRole === "medical" ? "selected" : ""}>Medico</option>
         <option value="receptionist" ${accessRole === "receptionist" ? "selected" : ""}>Secretaria</option>
       </select></label>
+      <label>E-mail de acesso<input id="${emailInputId}" type="email" value="${escapeAttr(employee.email || "")}" placeholder="nome@clinica.com" autocomplete="off"></label>
       <div class="team-password-row">
         <label>Senha numerica<input id="${passwordInputId}" type="password" inputmode="numeric" maxlength="6" pattern="\\d{6}" autocomplete="new-password" placeholder="6 digitos"></label>
-        <button class="ghost-button" type="button" ${canCreateAccess ? "" : "disabled"} onclick="setEmployeeAccessPassword('${employee.id}', '${passwordInputId}')"><i data-lucide="key-round"></i><span>${employee.userId ? "Alterar senha" : "Criar acesso"}</span></button>
+        <button class="ghost-button" type="button" ${canCreateAccess ? "" : "disabled"} onclick="setEmployeeAccessPassword('${employee.id}', '${passwordInputId}', '${emailInputId}')"><i data-lucide="key-round"></i><span>${employee.userId ? "Alterar senha" : "Criar acesso"}</span></button>
       </div>
       <div class="permission-grid">${screens.map(([view, label]) => `<label><input type="checkbox" ${permissions.includes(view) ? "checked" : ""} onchange="toggleEmployeePermission('${employee.id}', '${view}', this.checked)"> ${label}</label>`).join("")}</div>
     </div>`;
@@ -1575,13 +1806,20 @@ async function toggleEmployeePermission(id, view, checked) {
   toast("Permissao de tela atualizada.");
 }
 
-async function setEmployeeAccessPassword(id, inputId) {
+async function setEmployeeAccessPassword(id, inputId, emailInputId = "") {
   const employee = state.employees.find((item) => item.id === id);
   const input = byId(inputId);
+  const emailInput = byId(emailInputId);
   const password = input?.value.trim() || "";
+  const email = (emailInput?.value || employee?.email || "").trim().toLowerCase();
   if (!employee) return;
-  if (!employee.email) {
-    toast("Informe um e-mail no cadastro do funcionario antes de criar acesso.");
+  if (employee.status !== "active") {
+    toast("Funcionario suspenso nao pode receber acesso.");
+    return;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    toast("Informe um e-mail valido para criar o acesso.");
+    emailInput?.focus();
     return;
   }
   if (!/^\d{6}$/.test(password)) {
@@ -1598,7 +1836,7 @@ async function setEmployeeAccessPassword(id, inputId) {
   const permissions = employee.permissions || state.tenant.settings?.rolePermissions?.[accessRole] || [];
   const confirmed = await showSiteDialog({
     title: employee.userId ? "Alterar senha de acesso" : "Criar acesso da equipe",
-    message: `Confirmar acesso para ${employee.name} usando o e-mail ${employee.email}? A senha nao sera exibida novamente.`,
+    message: `Confirmar acesso para ${employee.name} usando o e-mail ${email}? A senha nao sera exibida novamente.`,
     confirmText: employee.userId ? "Alterar senha" : "Criar acesso",
     cancelText: "Cancelar",
     hideCancel: false
@@ -1607,11 +1845,16 @@ async function setEmployeeAccessPassword(id, inputId) {
 
   try {
     input.disabled = true;
+    if (emailInput) emailInput.disabled = true;
+    if (employee.email !== email) {
+      employee.email = email;
+      Object.assign(employee, await saveEmployeeRemote(employee));
+    }
     const { data, error } = await supabaseClient.functions.invoke("team-access", {
       body: {
         clinicId: currentClinicId(),
         staffId: employee.id,
-        email: employee.email,
+        email,
         password,
         accessRole,
         permissions
@@ -1634,9 +1877,15 @@ async function setEmployeeAccessPassword(id, inputId) {
         // Keep the original Supabase client message.
       }
     }
+    if (/function.*not.*found|not found|404/i.test(message)) {
+      message = "A funcao team-access nao esta publicada no Supabase. Publique a Edge Function para criar acessos.";
+    } else if (/forbidden|apenas administradores|permission|403/i.test(message)) {
+      message = "Apenas owner/admin da clinica pode criar acesso da equipe.";
+    }
     toast(message);
   } finally {
     input.disabled = false;
+    if (emailInput) emailInput.disabled = false;
   }
 }
 
@@ -2952,6 +3201,16 @@ function fromRemoteService(row) {
   return { id: row.id, name: row.name, specialty: row.specialty || "", duration: Number(row.duration_minutes || 30), price: Number(row.price || 0), active: row.active };
 }
 
+function toRemoteService(service) {
+  return {
+    name: service.name,
+    specialty: service.specialty || "",
+    duration_minutes: Number(service.duration || 30),
+    price: Number(service.price || 0),
+    active: service.active !== false
+  };
+}
+
 function fromRemoteRoom(row) {
   return { id: row.id, name: row.name, resources: row.resources || [], active: row.active };
 }
@@ -3206,6 +3465,11 @@ async function saveEmployeeRemote(employee) {
   }
   const row = await upsertRemote("staff_members", toRemoteStaff(employee), employee.id);
   return row ? fromRemoteStaff(row) : employee;
+}
+
+async function saveServiceRemote(service) {
+  const row = await upsertRemote("services", toRemoteService(service), service.id);
+  return row ? fromRemoteService(row) : service;
 }
 
 async function saveAppointmentRemote(appointment) {
@@ -3946,5 +4210,9 @@ window.applySmartSuggestion = applySmartSuggestion;
 window.updateEmployeeAccessRole = updateEmployeeAccessRole;
 window.toggleEmployeePermission = toggleEmployeePermission;
 window.setEmployeeAccessPassword = setEmployeeAccessPassword;
+window.applyServiceSuggestion = applyServiceSuggestion;
+window.editServiceCatalog = editServiceCatalog;
+window.toggleServiceCatalog = toggleServiceCatalog;
+window.deleteServiceCatalog = deleteServiceCatalog;
 window.settleCommission = settleCommission;
 window.downloadGuideById = downloadGuideById;
