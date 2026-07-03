@@ -3,345 +3,325 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Painel do organizador — Copa RD Saúde CD-AM</title>
+<title>Painel · Copa RD Saúde CD-AM</title>
 <link rel="manifest" href="manifest.json" />
-<meta name="theme-color" content="#c41820" />
+<meta name="theme-color" content="#101419" />
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
 <link rel="icon" href="icons/favicon-32.png" />
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
 <header class="topbar">
   <div class="container topbar-inner">
-    <a class="marca" href="index.html">
-      <span class="marca-selo">RD</span>
-      <span class="marca-texto">COPA CD-AM<small>RD Saúde · Torneio interno</small></span>
-    </a>
-    <nav class="nav-links">
+    <a class="brand" href="index.html"><span class="brand-mark">RD</span><span class="brand-text">Copa CD-AM<small>Painel</small></span></a>
+    <button class="nav-toggle" data-nav-toggle aria-label="Abrir menu">☰</button>
+    <nav class="nav-links" data-nav>
       <a href="index.html">Início</a>
       <a href="chaveamento.html">Chaveamento</a>
-      <button id="btn-sair" class="btn btn-fantasma" style="padding:8px 12px;">Sair</button>
+      <button id="btn-sair" class="nav-button">Sair</button>
     </nav>
   </div>
 </header>
 
-<section class="secao" style="padding-top:24px;">
+<main class="section admin-shell">
   <div class="container">
-    <div id="bloqueado" class="cartao cartao-estreito oculto" style="text-align:center;">
-      <p>Você precisa entrar como organizador para acessar esta página.</p>
-      <a href="admin-login.html" class="btn btn-primario" style="margin-top:10px;">Ir para o login</a>
+    <div class="section-head">
+      <div>
+        <span class="eyebrow">Administração</span>
+        <h1>Painel do organizador</h1>
+      </div>
+      <span class="mode-pill" id="modo"></span>
     </div>
 
-    <div id="painel" class="oculto">
-      <h2 style="font-size:30px;">Painel do organizador</h2>
+    <div class="stats-grid" id="stats"></div>
 
-      <div class="abas">
-        <button class="aba ativa" data-aba="inscricoes">Inscrições</button>
-        <button class="aba" data-aba="chaveamento">Chaveamento</button>
-      </div>
-
-      <!-- ================= ABA INSCRIÇÕES ================= -->
-      <div id="aba-inscricoes">
-        <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
-          <select id="filtro-modalidade" style="max-width:220px;">
-            <option value="">Todas as modalidades</option>
-          </select>
-          <select id="filtro-status" style="max-width:200px;">
-            <option value="">Todos os status</option>
-            <option value="aguardando_pagamento">Aguardando pagamento</option>
-            <option value="em_analise">Em análise</option>
-            <option value="confirmada">Confirmada</option>
-            <option value="rejeitada">Rejeitada</option>
-          </select>
-          <button class="btn btn-secundario" id="btn-atualizar-inscricoes">↻ Atualizar</button>
-        </div>
-
-        <div class="cartao tabela-wrap">
-          <table class="tabela-admin">
-            <thead>
-              <tr>
-                <th>Atleta</th><th>Modalidade</th><th>Loja</th><th>WhatsApp</th>
-                <th>Status</th><th>Comprovante</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-inscricoes"><tr><td colspan="7">Carregando…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- ================= ABA CHAVEAMENTO ================= -->
-      <div id="aba-chaveamento" class="oculto">
-        <div class="chips-modalidade" id="chips-modalidade-admin" style="margin-bottom:20px;"></div>
-
-        <div class="cartao" id="cartao-chave-status" style="margin-bottom:20px;"></div>
-
-        <div id="lista-partidas-prontas"></div>
-      </div>
+    <div class="tabs" role="tablist">
+      <button class="active" data-tab="inscricoes" type="button">Inscrições</button>
+      <button data-tab="chaves" type="button">Chaveamento</button>
     </div>
+
+    <section id="tab-inscricoes">
+      <div class="toolbar">
+        <select id="filtro-modalidade"><option value="">Todas as modalidades</option></select>
+        <select id="filtro-status">
+          <option value="">Todos os status</option>
+          <option value="aguardando_pagamento">Aguardando pagamento</option>
+          <option value="em_analise">Em análise</option>
+          <option value="confirmada">Confirmada</option>
+          <option value="rejeitada">Rejeitada</option>
+        </select>
+        <button class="btn btn-secondary" id="btn-atualizar" type="button">Atualizar</button>
+      </div>
+      <div class="table-shell">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Atleta</th>
+              <th>Modalidade</th>
+              <th>Status</th>
+              <th>Comprovante</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-chaves" class="hidden">
+      <div class="segmented" id="modalidades-admin"></div>
+      <div class="bracket-admin" id="bracket-admin"></div>
+    </section>
   </div>
-</section>
+</main>
+
+<dialog id="modal-comprovante" class="modal">
+  <button class="modal-close" value="cancel" formmethod="dialog">×</button>
+  <div id="modal-body"></div>
+</dialog>
 
 <script type="module">
-  import { supabase, supabaseConfigurado } from "./js/supabaseClient.js";
-  import { gerarChaveParaModalidade, apagarChave, buscarChaveCompleta, registrarResultado } from "./js/chaveamentoService.js";
+  import {
+    adminLogado,
+    apagarChave,
+    buscarChaveCompleta,
+    gerarChave,
+    listarInscricoes,
+    listarModalidades,
+    modoDados,
+    registrarResultado,
+    revisarPagamento,
+    sairAdmin,
+  } from "./js/appData.js";
 
-  const $ = (id) => document.getElementById(id);
-
-  if (!supabaseConfigurado()) {
-    document.body.innerHTML = '<div class="container" style="padding:40px 0;"><div class="alerta alerta-erro">Conecte o Supabase em <code>public/js/config.js</code> antes de usar o painel.</div></div>';
-    throw new Error("Supabase não configurado");
-  }
-
-  let usuario = null;
-  let modalidades = [];
-  let modalidadeAtualAdmin = null;
-
-  async function checarAcesso() {
-    const { data: sessao } = await supabase.auth.getSession();
-    if (!sessao.session) return mostrarBloqueado();
-
-    usuario = sessao.session.user;
-    const { data: admin } = await supabase.from("auth_admins").select("user_id").eq("user_id", usuario.id).maybeSingle();
-    if (!admin) return mostrarBloqueado();
-
-    $("painel").classList.remove("oculto");
-    iniciar();
-  }
-
-  function mostrarBloqueado() {
-    $("bloqueado").classList.remove("oculto");
-  }
-
-  $("btn-sair").addEventListener("click", async () => {
-    await supabase.auth.signOut();
-    location.href = "admin-login.html";
+  document.querySelector("[data-nav-toggle]").addEventListener("click", () => {
+    document.querySelector("[data-nav]").classList.toggle("aberto");
   });
 
-  document.querySelectorAll(".aba").forEach((aba) =>
-    aba.addEventListener("click", () => {
-      document.querySelectorAll(".aba").forEach((a) => a.classList.remove("ativa"));
-      aba.classList.add("ativa");
-      $("aba-inscricoes").classList.toggle("oculto", aba.dataset.aba !== "inscricoes");
-      $("aba-chaveamento").classList.toggle("oculto", aba.dataset.aba !== "chaveamento");
-      if (aba.dataset.aba === "chaveamento") carregarChaveamentoAdmin();
-    })
-  );
+  if (!(await adminLogado())) location.href = "admin-login.html";
 
-  async function iniciar() {
-    const { data } = await supabase.from("modalidades").select("*").order("nome");
-    modalidades = data || [];
-    modalidadeAtualAdmin = modalidades[0]?.slug;
-
-    $("filtro-modalidade").innerHTML += modalidades.map((m) => `<option value="${m.id}">${m.nome}</option>`).join("");
-    $("chips-modalidade-admin").innerHTML = modalidades
-      .map((m) => `<button class="chip ${m.slug === modalidadeAtualAdmin ? "selecionado" : ""}" data-slug="${m.slug}">${m.icone || ""} ${m.nome}</button>`)
-      .join("");
-    document.querySelectorAll("#chips-modalidade-admin .chip").forEach((chip) =>
-      chip.addEventListener("click", () => {
-        modalidadeAtualAdmin = chip.dataset.slug;
-        document.querySelectorAll("#chips-modalidade-admin .chip").forEach((c) => c.classList.remove("selecionado"));
-        chip.classList.add("selecionado");
-        carregarChaveamentoAdmin();
-      })
-    );
-
-    carregarInscricoes();
-  }
-
-  // ---------------- INSCRIÇÕES ----------------
   const badges = {
-    aguardando_pagamento: ["Aguardando pagamento", "badge-pendente"],
-    em_analise: ["Em análise", "badge-analise"],
-    confirmada: ["Confirmada", "badge-aprovado"],
-    rejeitada: ["Rejeitada", "badge-rejeitado"],
-    cancelada: ["Cancelada", "badge-rejeitado"],
+    aguardando_pagamento: ["Aguardando", "badge-wait"],
+    em_analise: ["Em análise", "badge-info"],
+    confirmada: ["Confirmada", "badge-ok"],
+    rejeitada: ["Rejeitada", "badge-danger"],
+    cancelada: ["Cancelada", "badge-danger"],
   };
 
+  let modalidades = await listarModalidades();
+  let modalidadeChave = modalidades[0]?.id || "";
+
+  const tbody = document.getElementById("tbody");
+  const filtroModalidade = document.getElementById("filtro-modalidade");
+  const filtroStatus = document.getElementById("filtro-status");
+  const bracketAdmin = document.getElementById("bracket-admin");
+
+  document.getElementById("modo").textContent = modoDados() === "supabase" ? "Supabase" : "Modo local";
+
+  function badge(status) {
+    const [texto, classe] = badges[status] || badges.aguardando_pagamento;
+    return `<span class="badge ${classe}">${texto}</span>`;
+  }
+
+  function escapeHtml(texto = "") {
+    return texto.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+  }
+
+  function renderStats(lista) {
+    const total = lista.length;
+    const analise = lista.filter((i) => i.status === "em_analise").length;
+    const confirmadas = lista.filter((i) => i.status === "confirmada").length;
+    const pendentes = lista.filter((i) => i.status === "aguardando_pagamento").length;
+    document.getElementById("stats").innerHTML = [
+      ["Total", total],
+      ["Para revisar", analise],
+      ["Confirmadas", confirmadas],
+      ["Pendentes", pendentes],
+    ].map(([rotulo, valor]) => `<article><span>${rotulo}</span><strong>${valor}</strong></article>`).join("");
+  }
+
   async function carregarInscricoes() {
-    $("tbody-inscricoes").innerHTML = `<tr><td colspan="7">Carregando…</td></tr>`;
-    let query = supabase
-      .from("inscricoes")
-      .select("*, atletas(*), modalidades(*), pagamentos(*)")
-      .order("criado_em", { ascending: false });
+    tbody.innerHTML = `<tr><td colspan="5">Carregando...</td></tr>`;
+    const lista = await listarInscricoes({
+      modalidadeId: filtroModalidade.value,
+      status: filtroStatus.value,
+    });
+    renderStats(await listarInscricoes());
 
-    const modalidadeId = $("filtro-modalidade").value;
-    const status = $("filtro-status").value;
-    if (modalidadeId) query = query.eq("modalidade_id", modalidadeId);
-    if (status) query = query.eq("status", status);
-
-    const { data, error } = await query;
-    if (error) {
-      $("tbody-inscricoes").innerHTML = `<tr><td colspan="7">Erro ao carregar.</td></tr>`;
-      return;
-    }
-    if (!data.length) {
-      $("tbody-inscricoes").innerHTML = `<tr><td colspan="7">Nenhuma inscrição encontrada.</td></tr>`;
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="5">Nenhuma inscrição encontrada.</td></tr>`;
       return;
     }
 
-    $("tbody-inscricoes").innerHTML = data
-      .map((i) => {
-        const [texto, classe] = badges[i.status] || badges.aguardando_pagamento;
-        const pagamento = i.pagamentos;
-        const mostrarAcoes = pagamento && (pagamento.status === "em_analise" || pagamento.status === "pendente") && pagamento.comprovante_url;
-        return `
-        <tr data-pagamento="${pagamento?.id || ""}" data-inscricao="${i.id}">
-          <td><strong>${i.atletas.nome_completo}</strong><br><span style="color:var(--cor-tinta-suave);font-size:12px;">${i.atletas.email}</span></td>
-          <td>${i.modalidades.nome}</td>
-          <td>${i.atletas.loja_filial || "—"}</td>
-          <td>${i.atletas.whatsapp}</td>
-          <td><span class="badge ${classe}">${texto}</span></td>
-          <td>${pagamento?.comprovante_url ? `<button class="btn btn-fantasma ver-comprovante" style="padding:6px 10px;">👁 Ver</button>` : "—"}</td>
+    tbody.innerHTML = lista.map((i) => {
+      const pagamento = i.pagamentos || {};
+      const podeAprovar = pagamento.id && pagamento.comprovante_url && pagamento.status !== "aprovado";
+      return `
+        <tr data-inscricao="${i.id}" data-pagamento="${pagamento.id || ""}">
           <td>
-            ${mostrarAcoes ? `
-              <button class="btn btn-primario aprovar" style="padding:8px 12px;font-size:13px;">Aprovar</button>
-              <button class="btn btn-secundario rejeitar" style="padding:8px 12px;font-size:13px;">Rejeitar</button>
-            ` : "—"}
+            <strong>${escapeHtml(i.atletas?.nome_completo || "")}</strong>
+            <small>${escapeHtml(i.atletas?.email || "")} · ${escapeHtml(i.atletas?.whatsapp || "")}</small>
+            <small>${escapeHtml(i.atletas?.loja_filial || "Sem setor informado")}</small>
+          </td>
+          <td>${escapeHtml(i.modalidades?.nome || "")}</td>
+          <td>${badge(i.status)}</td>
+          <td>
+            ${pagamento.comprovante_url ? `<button class="text-button ver-comprovante" type="button">Ver comprovante</button>` : `<span class="muted">Não enviado</span>`}
+          </td>
+          <td>
+            <div class="action-row">
+              <button class="btn btn-primary aprovar" type="button" ${podeAprovar ? "" : "disabled"}>Aprovar</button>
+              <button class="btn btn-secondary rejeitar" type="button" ${pagamento.id ? "" : "disabled"}>Rejeitar</button>
+            </div>
           </td>
         </tr>`;
-      })
-      .join("");
+    }).join("");
 
-    document.querySelectorAll(".ver-comprovante").forEach((btn) =>
-      btn.addEventListener("click", async (e) => {
-        const tr = e.target.closest("tr");
-        const inscId = tr.dataset.inscricao;
-        const item = data.find((d) => d.id === inscId);
-        const { data: signed } = await supabase.storage.from("comprovantes").createSignedUrl(item.pagamentos.comprovante_url, 3600);
-        if (signed?.signedUrl) window.open(signed.signedUrl, "_blank");
-      })
-    );
+    tbody.querySelectorAll(".aprovar").forEach((btn) => btn.addEventListener("click", async (event) => {
+      event.target.disabled = true;
+      await revisarPagamento(event.target.closest("tr").dataset.pagamento, "aprovado");
+      await carregarInscricoes();
+      await carregarChaveAdmin();
+    }));
 
-    document.querySelectorAll(".aprovar").forEach((btn) =>
-      btn.addEventListener("click", (e) => atualizarPagamento(e, "aprovado"))
-    );
-    document.querySelectorAll(".rejeitar").forEach((btn) =>
-      btn.addEventListener("click", (e) => atualizarPagamento(e, "rejeitado"))
-    );
+    tbody.querySelectorAll(".rejeitar").forEach((btn) => btn.addEventListener("click", async (event) => {
+      const motivo = prompt("Motivo da rejeição (opcional):") || "";
+      event.target.disabled = true;
+      await revisarPagamento(event.target.closest("tr").dataset.pagamento, "rejeitado", motivo);
+      await carregarInscricoes();
+    }));
+
+    tbody.querySelectorAll(".ver-comprovante").forEach((btn) => btn.addEventListener("click", async (event) => {
+      const id = event.target.closest("tr").dataset.inscricao;
+      const item = lista.find((i) => i.id === id);
+      const pg = item.pagamentos || {};
+      const body = document.getElementById("modal-body");
+      body.innerHTML = pg.comprovante_preview
+        ? `<img class="modal-image" src="${pg.comprovante_preview}" alt="Comprovante" />`
+        : `<h2>Comprovante</h2><p>${escapeHtml(pg.comprovante_nome || pg.comprovante_url || "Arquivo enviado")}</p>`;
+      document.getElementById("modal-comprovante").showModal();
+    }));
   }
 
-  async function atualizarPagamento(e, novoStatus) {
-    const tr = e.target.closest("tr");
-    const pagamentoId = tr.dataset.pagamento;
-    if (novoStatus === "rejeitado" && !confirm("Rejeitar este comprovante?")) return;
-
-    e.target.disabled = true;
-    const { error } = await supabase
-      .from("pagamentos")
-      .update({ status: novoStatus, revisado_por: usuario.email, revisado_em: new Date().toISOString() })
-      .eq("id", pagamentoId);
-
-    if (error) {
-      alert("Erro ao atualizar: " + error.message);
-      e.target.disabled = false;
-      return;
-    }
-    carregarInscricoes();
+  function renderModalidades() {
+    filtroModalidade.innerHTML = `<option value="">Todas as modalidades</option>` + modalidades.map((m) => `<option value="${m.id}">${m.nome}</option>`).join("");
+    document.getElementById("modalidades-admin").innerHTML = modalidades.map((m) => `
+      <button type="button" class="${m.id === modalidadeChave ? "active" : ""}" data-id="${m.id}">
+        <span>${m.icone || "CP"}</span>${m.nome}
+      </button>
+    `).join("");
+    document.querySelectorAll("#modalidades-admin button").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        modalidadeChave = btn.dataset.id;
+        renderModalidades();
+        await carregarChaveAdmin();
+      });
+    });
   }
 
-  $("filtro-modalidade").addEventListener("change", carregarInscricoes);
-  $("filtro-status").addEventListener("change", carregarInscricoes);
-  $("btn-atualizar-inscricoes").addEventListener("click", carregarInscricoes);
-
-  // ---------------- CHAVEAMENTO ----------------
-  async function carregarChaveamentoAdmin() {
-    const modalidade = modalidades.find((m) => m.slug === modalidadeAtualAdmin);
+  async function carregarChaveAdmin() {
+    const modalidade = modalidades.find((m) => m.id === modalidadeChave);
     if (!modalidade) return;
-
-    $("cartao-chave-status").innerHTML = "Carregando…";
-    $("lista-partidas-prontas").innerHTML = "";
-
-    const { count } = await supabase
-      .from("inscricoes")
-      .select("id", { count: "exact", head: true })
-      .eq("modalidade_id", modalidade.id)
-      .eq("status", "confirmada");
-
+    const inscricoes = await listarInscricoes({ modalidadeId: modalidade.id });
+    const confirmadas = inscricoes.filter((i) => i.status === "confirmada");
     const resultado = await buscarChaveCompleta(modalidade.id);
 
     if (!resultado) {
-      $("cartao-chave-status").innerHTML = `
-        <p><strong>${count || 0}</strong> inscrição(ões) confirmada(s) em ${modalidade.nome}.</p>
-        <button class="btn btn-primario" id="btn-gerar-chave" ${count < 2 ? "disabled" : ""}>🎲 Sortear e gerar chaveamento</button>
-        ${count < 2 ? `<p class="dica">É preciso de pelo menos 2 inscrições confirmadas.</p>` : ""}
-      `;
-      $("btn-gerar-chave")?.addEventListener("click", async () => {
-        if (!confirm(`Sortear a chave de ${modalidade.nome} com ${count} atleta(s)? Isso não poderá ser desfeito sem apagar a chave.`)) return;
+      bracketAdmin.innerHTML = `
+        <div class="empty-state">
+          <h2>${modalidade.nome}</h2>
+          <p>${confirmadas.length} inscrição(ões) confirmada(s). São necessárias pelo menos 2.</p>
+          <button class="btn btn-primary" id="btn-gerar-chave" ${confirmadas.length < 2 ? "disabled" : ""} type="button">Sortear chaveamento</button>
+        </div>`;
+      document.getElementById("btn-gerar-chave")?.addEventListener("click", async () => {
         try {
-          await gerarChaveParaModalidade(modalidade.id);
-          carregarChaveamentoAdmin();
-        } catch (err) {
-          alert("Erro ao gerar chave: " + err.message);
+          await gerarChave(modalidade.id);
+          await carregarChaveAdmin();
+        } catch (e) {
+          alert(e.message || "Erro ao gerar chave.");
         }
       });
       return;
     }
 
     const { chave, partidas } = resultado;
-    $("cartao-chave-status").innerHTML = `
-      <p><strong>Chave de ${modalidade.nome}</strong> — ${chave.tamanho} posições — status: <span class="badge ${chave.status === "finalizada" ? "badge-aprovado" : "badge-analise"}">${chave.status}</span></p>
-      <div style="display:flex;gap:10px;margin-top:10px;">
-        <a class="btn btn-secundario" href="chaveamento.html?modalidade=${modalidade.slug}" target="_blank">Ver chaveamento público</a>
-        <button class="btn btn-fantasma" id="btn-apagar-chave" style="color:var(--cor-vermelho-escuro);">🗑 Apagar chave</button>
+    const prontas = partidas.filter((p) => p.status === "pronta");
+    bracketAdmin.innerHTML = `
+      <div class="admin-bracket-head">
+        <div>
+          <h2>${modalidade.nome}</h2>
+          <p>Tamanho ${chave.tamanho} · ${partidas.length} partidas · ${badge(chave.status)}</p>
+        </div>
+        <div class="action-row">
+          <a class="btn btn-secondary" href="chaveamento.html?modalidade=${modalidade.slug}" target="_blank">Ver público</a>
+          <button class="btn btn-danger" id="btn-apagar" type="button">Apagar chave</button>
+        </div>
       </div>
-    `;
-    $("btn-apagar-chave").addEventListener("click", async () => {
-      if (!confirm("Apagar toda a chave (todas as partidas serão perdidas)? Essa ação não pode ser desfeita.")) return;
+      <div class="ready-list">
+        ${prontas.length ? prontas.map((p) => `
+          <article class="match-editor" data-partida="${p.id}">
+            <span>${p.fase === "WB" ? "Vencedores" : p.fase === "LB" ? "Repescagem" : "Final"} · Rodada ${p.rodada}</span>
+            <div class="score-inputs">
+              <strong>${escapeHtml(p.atleta1_nome || "A definir")}</strong>
+              <input class="placar1" type="number" min="0" inputmode="numeric" placeholder="0" />
+              <b>x</b>
+              <input class="placar2" type="number" min="0" inputmode="numeric" placeholder="0" />
+              <strong>${escapeHtml(p.atleta2_nome || "A definir")}</strong>
+            </div>
+            <button class="btn btn-primary salvar-placar" type="button">Salvar resultado</button>
+          </article>
+        `).join("") : `<div class="note">Nenhuma partida pronta agora. Confira se os resultados anteriores já foram lançados.</div>`}
+      </div>`;
+
+    document.getElementById("btn-apagar").addEventListener("click", async () => {
+      if (!confirm("Apagar toda a chave desta modalidade?")) return;
       await apagarChave(chave.id);
-      carregarChaveamentoAdmin();
+      await carregarChaveAdmin();
     });
 
-    const prontas = partidas.filter((p) => p.status === "pronta");
-    if (!prontas.length) {
-      $("lista-partidas-prontas").innerHTML = `<p class="dica" style="margin-top:16px;">Nenhuma partida pronta para ser jogada no momento.</p>`;
-      return;
-    }
-
-    $("lista-partidas-prontas").innerHTML = `
-      <h3 style="font-size:18px;margin:20px 0 10px;">Partidas prontas para lançar resultado</h3>
-      <div style="display:grid;gap:12px;">
-        ${prontas
-          .map(
-            (p) => `
-          <div class="cartao" data-partida="${p.id}">
-            <div style="font-size:11px;font-weight:700;color:var(--cor-tinta-suave);text-transform:uppercase;">${p.fase === "WB" ? "Vencedores" : p.fase === "LB" ? "Repescagem" : "Grande final"} · rodada ${p.rodada}</div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
-              <span style="flex:1;min-width:140px;font-weight:700;">${p.atleta1_nome}</span>
-              <input type="number" min="0" class="placar1" style="width:70px;text-align:center;" placeholder="0" />
-              <span style="color:var(--cor-tinta-suave);">×</span>
-              <input type="number" min="0" class="placar2" style="width:70px;text-align:center;" placeholder="0" />
-              <span style="flex:1;min-width:140px;font-weight:700;text-align:right;">${p.atleta2_nome}</span>
-            </div>
-            <button class="btn btn-primario btn-salvar-resultado" style="margin-top:12px;width:100%;">Salvar resultado</button>
-          </div>`
-          )
-          .join("")}
-      </div>
-    `;
-
-    document.querySelectorAll(".btn-salvar-resultado").forEach((btn) =>
-      btn.addEventListener("click", async (e) => {
-        const card = e.target.closest("[data-partida]");
+    bracketAdmin.querySelectorAll(".salvar-placar").forEach((btn) => {
+      btn.addEventListener("click", async (event) => {
+        const card = event.target.closest(".match-editor");
         const p1 = Number(card.querySelector(".placar1").value);
         const p2 = Number(card.querySelector(".placar2").value);
-        if (Number.isNaN(p1) || Number.isNaN(p2) || (p1 === p2)) {
-          alert("Informe um placar válido (sem empate).");
+        if (!Number.isFinite(p1) || !Number.isFinite(p2) || p1 === p2) {
+          alert("Informe um placar válido, sem empate.");
           return;
         }
-        e.target.disabled = true;
+        event.target.disabled = true;
         try {
-          await registrarResultado(card.dataset.partida, p1, p2, false);
-          carregarChaveamentoAdmin();
-        } catch (err) {
-          alert("Erro ao salvar: " + err.message);
-          e.target.disabled = false;
+          await registrarResultado(card.dataset.partida, p1, p2);
+          await carregarChaveAdmin();
+        } catch (e) {
+          alert(e.message || "Erro ao salvar resultado.");
+          event.target.disabled = false;
         }
-      })
-    );
+      });
+    });
   }
 
-  checarAcesso();
+  document.querySelectorAll(".tabs button").forEach((tab) => {
+    tab.addEventListener("click", async () => {
+      document.querySelectorAll(".tabs button").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("tab-inscricoes").classList.toggle("hidden", tab.dataset.tab !== "inscricoes");
+      document.getElementById("tab-chaves").classList.toggle("hidden", tab.dataset.tab !== "chaves");
+      if (tab.dataset.tab === "chaves") await carregarChaveAdmin();
+    });
+  });
+
+  document.getElementById("btn-sair").addEventListener("click", async () => {
+    await sairAdmin();
+    location.href = "admin-login.html";
+  });
+
+  document.querySelector(".modal-close").addEventListener("click", () => document.getElementById("modal-comprovante").close());
+  filtroModalidade.addEventListener("change", carregarInscricoes);
+  filtroStatus.addEventListener("change", carregarInscricoes);
+  document.getElementById("btn-atualizar").addEventListener("click", carregarInscricoes);
+
+  renderModalidades();
+  await carregarInscricoes();
 </script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 // dos arquivos estáticos do próprio site, sempre priorizando a rede quando
 // disponível para não travar o usuário numa versão antiga.
 // ============================================================================
-const CACHE_NOME = "copa-rd-saude-v1";
+const CACHE_NOME = "copa-rd-saude-v2";
 const ARQUIVOS_APP_SHELL = [
   "./",
   "./index.html",
@@ -14,6 +14,10 @@ const ARQUIVOS_APP_SHELL = [
   "./admin.html",
   "./admin-login.html",
   "./css/style.css",
+  "./js/appData.js",
+  "./js/pix.js",
+  "./js/bracket.js",
+  "./js/config.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
