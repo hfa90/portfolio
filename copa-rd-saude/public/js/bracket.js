@@ -169,6 +169,9 @@ export function gerarEliminacaoDupla(participantes) {
   let sobreviventesLB = null; // slots vencedores da última rodada da LB
   let rodadaLB = 0;
 
+  if (rodadasWB === 1) {
+    sobreviventesLB = [perdedoresPorRodadaWB[0][0]];
+  } else {
   for (let j = 1; j <= rodadasWB; j++) {
     const perdedoresWBRodadaJ = perdedoresPorRodadaWB[j - 1];
 
@@ -211,6 +214,7 @@ export function gerarEliminacaoDupla(participantes) {
       todasPartidas.push(...consolidacao.partidas);
       sobreviventesLB = consolidacao.slotsVencedor;
     }
+  }
   }
   const campeaoLBSlotRef = sobreviventesLB[0]; // vencedor da final da loser bracket
 

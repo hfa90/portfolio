@@ -1,14 +1,13 @@
-// ============================================================================
-// config.js — ÚNICO arquivo que você precisa editar para colocar no ar.
-// ============================================================================
+// Configure estes valores antes de publicar com Supabase.
+// Sem Supabase preenchido, o app funciona em modo local usando localStorage.
 
-export const SUPABASE_URL = "COLE_AQUI_SUA_SUPABASE_URL"; // ex: https://xxxxx.supabase.co
+export const SUPABASE_URL = "COLE_AQUI_SUA_SUPABASE_URL";
 export const SUPABASE_ANON_KEY = "COLE_AQUI_SUA_ANON_KEY";
 
-// Número de WhatsApp que recebe os comprovantes (formato internacional, só dígitos)
+// WhatsApp do organizador no formato internacional, somente digitos.
 export const WHATSAPP_NUMERO = "5592995258724";
 
-// Chave Pix e nome do recebedor (usados para gerar o QR Code)
+// Dados usados no Pix copia e cola.
 export const PIX_CHAVE = "haydenfernandes.ti@gmail.com";
 export const PIX_NOME_RECEBEDOR = "Hayden Fernandes";
 export const PIX_CIDADE = "Manaus";

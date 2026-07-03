@@ -1,46 +1,30 @@
-// ============================================================================
-// pix.js — Gera o payload "Pix Copia e Cola" (padrão BR Code / EMV do Bacen)
-// Sem dependências externas. Testável com: node public/js/pix.js
-// ============================================================================
+import { PIX_CHAVE, PIX_CIDADE, PIX_NOME_RECEBEDOR } from "./config.js";
 
-/** Formata um campo EMV: ID (2 dígitos) + tamanho (2 dígitos) + valor */
 function campo(id, valor) {
   const tamanho = String(valor.length).padStart(2, "0");
   return `${id}${tamanho}${valor}`;
 }
 
-/** Remove acentos e caracteres fora do padrão aceito pelo Pix (ASCII) */
 function normalizar(texto) {
-  return texto
+  return String(texto || "")
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^A-Za-z0-9 ]/g, "")
     .trim();
 }
 
-/** CRC16/CCITT-FFFF — checksum final exigido no payload Pix */
 function crc16(payload) {
   let crc = 0xffff;
   const polinomio = 0x1021;
-  for (let i = 0; i < payload.length; i++) {
+  for (let i = 0; i < payload.length; i += 1) {
     crc ^= payload.charCodeAt(i) << 8;
-    for (let j = 0; j < 8; j++) {
+    for (let j = 0; j < 8; j += 1) {
       crc = (crc & 0x8000) !== 0 ? ((crc << 1) ^ polinomio) & 0xffff : (crc << 1) & 0xffff;
     }
   }
   return crc.toString(16).toUpperCase().padStart(4, "0");
 }
 
-/**
- * Monta o payload Pix "copia e cola" (estático, com valor fixo).
- * @param {Object} opts
- * @param {string} opts.chave        - chave Pix (e-mail, telefone, CPF/CNPJ ou aleatória)
- * @param {string} opts.nomeRecebedor - até 25 caracteres, sem acento
- * @param {string} opts.cidade        - até 15 caracteres, sem acento
- * @param {number} opts.valor         - valor em reais, ex: 10.00
- * @param {string} opts.txid          - identificador da cobrança (até 25 caracteres alfanuméricos)
- * @param {string} [opts.descricao]   - mensagem curta opcional
- */
 export function gerarPayloadPix({ chave, nomeRecebedor, cidade, valor, txid, descricao }) {
   const nome = normalizar(nomeRecebedor).slice(0, 25) || "COPA RD SAUDE";
   const cid = normalizar(cidade).slice(0, 15) || "MANAUS";
@@ -52,32 +36,28 @@ export function gerarPayloadPix({ chave, nomeRecebedor, cidade, valor, txid, des
     ...(descricao ? [campo("02", normalizar(descricao).slice(0, 40))] : []),
   ].join("");
 
-  const additionalData = campo("05", tid);
-
   const partes = [
-    campo("00", "01"), // Payload Format Indicator
-    campo("01", "12"), // Point of Initiation Method: 12 = estático reutilizável com valor
-    campo("26", merchantAccountInfo), // Merchant Account Information - Pix
-    campo("52", "0000"), // Merchant Category Code
-    campo("53", "986"), // Transaction Currency: BRL
-    campo("54", valor.toFixed(2)), // Transaction Amount
-    campo("58", "BR"), // Country Code
-    campo("59", nome), // Merchant Name
-    campo("60", cid), // Merchant City
-    campo("62", additionalData), // Additional Data Field (txid)
+    campo("00", "01"),
+    campo("01", "12"),
+    campo("26", merchantAccountInfo),
+    campo("52", "0000"),
+    campo("53", "986"),
+    campo("54", Number(valor).toFixed(2)),
+    campo("58", "BR"),
+    campo("59", nome),
+    campo("60", cid),
+    campo("62", campo("05", tid)),
   ];
 
-  const payloadSemCrc = partes.join("") + "6304"; // 63 = CRC16, "04" = tamanho fixo do valor do CRC
-  const crc = crc16(payloadSemCrc);
-  return payloadSemCrc + crc;
+  const payloadSemCrc = `${partes.join("")}6304`;
+  return payloadSemCrc + crc16(payloadSemCrc);
 }
 
-/** Gera o payload já com os dados fixos da Copa RD Saúde CD-AM */
 export function gerarPixCopa({ txid, valor = 10.0 }) {
   return gerarPayloadPix({
-    chave: "haydenfernandes.ti@gmail.com",
-    nomeRecebedor: "Hayden Fernandes",
-    cidade: "Manaus",
+    chave: PIX_CHAVE,
+    nomeRecebedor: PIX_NOME_RECEBEDOR,
+    cidade: PIX_CIDADE,
     valor,
     txid,
     descricao: "Copa RD Saude CD-AM",
