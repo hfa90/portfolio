@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Admin — Copa RD Saúde CD-AM</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#c41820" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/favicon-32.png" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="marca" href="index.html">
+      <span class="marca-selo">RD</span>
+      <span class="marca-texto">COPA CD-AM<small>RD Saúde · Torneio interno</small></span>
+    </a>
+    <nav class="nav-links"><a href="index.html">Início</a></nav>
+  </div>
+</header>
+
+<section class="secao">
+  <div class="container">
+    <div class="cartao cartao-estreito">
+      <span class="eyebrow-simples">Acesso restrito</span>
+      <h2 style="font-size:26px;margin-top:6px;">Entrar como organizador</h2>
+
+      <form id="form-login" style="margin-top:20px;">
+        <div class="campo">
+          <label for="email">E-mail</label>
+          <input type="email" id="email" required autocomplete="email" />
+        </div>
+        <div class="campo">
+          <label for="senha">Senha</label>
+          <input type="text" id="senha" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <div id="alerta-erro" class="alerta alerta-erro oculto"></div>
+        <button type="submit" id="btn-entrar" class="btn btn-primario btn-grande">Entrar</button>
+      </form>
+
+      <div class="dica" style="margin-top:16px;">
+        O usuário admin é criado em Supabase → Authentication → Users, e liberado
+        na tabela <code>auth_admins</code> (veja o README).
+      </div>
+    </div>
+  </div>
+</section>
+
+<script type="module">
+  import { supabase, supabaseConfigurado } from "./js/supabaseClient.js";
+
+  if (supabaseConfigurado()) {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) location.href = "admin.html";
+    });
+  }
+
+  document.getElementById("form-login").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const erro = document.getElementById("alerta-erro");
+    erro.classList.add("oculto");
+
+    if (!supabaseConfigurado()) {
+      erro.textContent = "Conecte o Supabase em config.js primeiro.";
+      erro.classList.remove("oculto");
+      return;
+    }
+
+    const email = document.getElementById("email").value.trim();
+    const senha = document.getElementById("senha").value;
+
+    const btn = document.getElementById("btn-entrar");
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Entrando...';
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+    if (error) {
+      erro.textContent = "E-mail ou senha inválidos.";
+      erro.classList.remove("oculto");
+      btn.disabled = false;
+      btn.textContent = "Entrar";
+      return;
+    }
+    location.href = "admin.html";
+  });
+</script>
+</body>
+</html>

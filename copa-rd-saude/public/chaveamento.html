@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Chaveamento — Copa RD Saúde CD-AM</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#c41820" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/favicon-32.png" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="marca" href="index.html">
+      <span class="marca-selo">RD</span>
+      <span class="marca-texto">COPA CD-AM<small>RD Saúde · Torneio interno</small></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html">Início</a>
+      <a href="chaveamento.html" class="ativo">Chaveamento</a>
+      <a href="inscricao.html">Inscrição</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+  </div>
+</header>
+
+<section class="secao" style="padding-top:28px;">
+  <div class="container">
+    <span class="eyebrow-simples">Acompanhe ao vivo</span>
+    <h2 style="font-size:32px;margin-top:6px;">Chaveamento</h2>
+
+    <div class="chips-modalidade" id="chips-modalidade" style="margin-top:18px;"></div>
+
+    <div class="legenda-chaveamento">
+      <span class="legenda-item"><span class="legenda-ponto" style="background:var(--cor-vermelho);"></span> pronta para jogar</span>
+      <span class="legenda-item"><span class="legenda-ponto" style="background:var(--cor-verde-mesa);"></span> finalizada</span>
+      <span class="legenda-item"><span class="legenda-ponto" style="background:var(--cor-linha);"></span> aguardando definição</span>
+    </div>
+
+    <div id="estado-vazio" class="cartao oculto" style="text-align:center;">
+      <p style="color:var(--cor-tinta-suave);">O chaveamento desta modalidade ainda não foi sorteado.</p>
+      <a href="inscricao.html" class="btn btn-primario" style="margin-top:12px;">Inscreva-se antes que o sorteio saia</a>
+    </div>
+
+    <div id="carregando" style="text-align:center;padding:40px 0;">
+      <span class="spinner spinner-escuro"></span>
+    </div>
+
+    <div id="selo-campeao-wrap"></div>
+
+    <div id="bloco-wb" class="oculto">
+      <div class="chave-coluna-titulo" style="text-align:left;margin-top:20px;">🏆 Chave de vencedores</div>
+      <div class="chave-scroll"><div class="chave-colunas" id="colunas-wb"></div></div>
+    </div>
+
+    <div id="bloco-lb" class="oculto">
+      <div class="chave-coluna-titulo" style="text-align:left;margin-top:8px;">♻️ Repescagem</div>
+      <div class="chave-scroll"><div class="chave-colunas" id="colunas-lb"></div></div>
+    </div>
+
+    <div id="bloco-gf" class="oculto">
+      <div class="chave-coluna-titulo" style="text-align:left;margin-top:8px;">🥇 Grande final</div>
+      <div class="chave-scroll"><div class="chave-colunas" id="colunas-gf"></div></div>
+    </div>
+  </div>
+</section>
+
+<footer class="rodape"><div class="container">Copa RD Saúde CD-AM · torneio interno de colaboradores</div></footer>
+
+<script type="module">
+  import { supabase, supabaseConfigurado } from "./js/supabaseClient.js";
+  import { buscarChaveCompleta } from "./js/chaveamentoService.js";
+
+  const $ = (id) => document.getElementById(id);
+  const modalidadesFallback = [
+    { slug: "tenis-de-mesa", nome: "Tênis de Mesa", icone: "🏓" },
+    { slug: "damas", nome: "Damas", icone: "⚫" },
+    { slug: "domino", nome: "Dominó", icone: "🁵" },
+  ];
+  let modalidades = modalidadesFallback;
+  let atual = new URLSearchParams(location.search).get("modalidade") || modalidades[0].slug;
+
+  function renderChips() {
+    $("chips-modalidade").innerHTML = modalidades
+      .map((m) => `<button class="chip ${m.slug === atual ? "selecionado" : ""}" data-slug="${m.slug}">${m.icone || ""} ${m.nome}</button>`)
+      .join("");
+    document.querySelectorAll(".chip").forEach((chip) =>
+      chip.addEventListener("click", () => {
+        atual = chip.dataset.slug;
+        history.replaceState(null, "", `?modalidade=${atual}`);
+        renderChips();
+        carregarChave();
+      })
+    );
+  }
+
+  function nomeLado(partida, lado) {
+    const nome = lado === 1 ? partida.atleta1_nome : partida.atleta2_nome;
+    if (nome) return nome;
+    return partida[`atleta${lado}_id`] ? "?" : "aguardando";
+  }
+
+  function cartaoPartida(p) {
+    const classeCard = p.status === "finalizada" || p.status === "wo" ? "finalizada" : p.status === "pronta" ? "pronta" : "";
+    const lado = (n, id) => {
+      const ehVencedor = p.vencedor_id && id === p.vencedor_id;
+      const ehPerdedor = p.vencedor_id && id && id !== p.vencedor_id;
+      const classe = ehVencedor ? "vencedor" : ehPerdedor ? "perdedor" : "";
+      const placar = p.status === "finalizada" || p.status === "wo" ? (id === p.atleta1_id ? p.placar1 : p.placar2) : "";
+      const nomeTxt = n === "?" || n === "aguardando" ? `<span class="partida-vazia">${n === "aguardando" ? "a definir" : "?"}</span>` : n;
+      return `<div class="partida-lado ${classe}"><span class="nome">${nomeTxt}</span><span class="placar">${placar ?? ""}</span></div>`;
+    };
+    return `
+      <div class="partida-card ${classeCard}">
+        ${lado(nomeLado(p, 1), p.atleta1_id)}
+        ${lado(nomeLado(p, 2), p.atleta2_id)}
+        ${p.mesa_local ? `<div class="partida-meta">${p.mesa_local}</div>` : ""}
+      </div>`;
+  }
+
+  function renderFase(containerId, partidas, tituloRodada) {
+    const porRodada = {};
+    partidas.forEach((p) => {
+      porRodada[p.rodada] = porRodada[p.rodada] || [];
+      porRodada[p.rodada].push(p);
+    });
+    const rodadas = Object.keys(porRodada).sort((a, b) => a - b);
+    $(containerId).innerHTML = rodadas
+      .map(
+        (r) => `
+      <div class="chave-coluna">
+        <div class="chave-coluna-titulo">${tituloRodada(r, rodadas.length)}</div>
+        ${porRodada[r].map(cartaoPartida).join("")}
+      </div>`
+      )
+      .join("");
+  }
+
+  async function carregarChave() {
+    $("carregando").classList.remove("oculto");
+    $("estado-vazio").classList.add("oculto");
+    ["bloco-wb", "bloco-lb", "bloco-gf"].forEach((id) => $(id).classList.add("oculto"));
+    $("selo-campeao-wrap").innerHTML = "";
+
+    if (!supabaseConfigurado()) {
+      $("carregando").classList.add("oculto");
+      $("estado-vazio").classList.remove("oculto");
+      return;
+    }
+
+    const modalidade = modalidades.find((m) => m.slug === atual);
+    if (!modalidade?.id) {
+      $("carregando").classList.add("oculto");
+      $("estado-vazio").classList.remove("oculto");
+      return;
+    }
+
+    try {
+      const resultado = await buscarChaveCompleta(modalidade.id);
+      $("carregando").classList.add("oculto");
+      if (!resultado) {
+        $("estado-vazio").classList.remove("oculto");
+        return;
+      }
+      const { chave, partidas } = resultado;
+
+      if (chave.status === "finalizada" && chave.campeao_id) {
+        const campeao = partidas.find((p) => p.vencedor_id === chave.campeao_id);
+        const nomeCampeao = campeao ? (campeao.vencedor_nome || "Campeão") : "Campeão";
+        $("selo-campeao-wrap").innerHTML = `
+          <div class="selo-campeao">
+            <span class="troféu">🏆</span>
+            <div><div style="font-size:12px;font-weight:700;opacity:.85;">CAMPEÃO DA MODALIDADE</div><div class="nome">${nomeCampeao}</div></div>
+          </div>`;
+      }
+
+      const wb = partidas.filter((p) => p.fase === "WB");
+      const lb = partidas.filter((p) => p.fase === "LB");
+      const gf = partidas.filter((p) => p.fase === "GF" && (p.rodada === 1 || p.atleta1_id));
+
+      const totalRodadasWB = Math.max(...wb.map((p) => p.rodada));
+      if (wb.length) {
+        renderFase("colunas-wb", wb, (r, total) => (Number(r) === totalRodadasWB ? "Final da chave" : `Rodada ${r}`));
+        $("bloco-wb").classList.remove("oculto");
+      }
+      if (lb.length) {
+        renderFase("colunas-lb", lb, (r) => `Rodada ${r}`);
+        $("bloco-lb").classList.remove("oculto");
+      }
+      if (gf.length) {
+        renderFase("colunas-gf", gf, (r) => (Number(r) === 1 ? "Jogo 1" : "Reset (jogo 2)"));
+        $("bloco-gf").classList.remove("oculto");
+      }
+    } catch (err) {
+      console.error(err);
+      $("carregando").classList.add("oculto");
+      $("estado-vazio").classList.remove("oculto");
+    }
+  }
+
+  renderChips();
+  if (supabaseConfigurado()) {
+    supabase.from("modalidades").select("*").eq("ativa", true).order("nome").then(({ data }) => {
+      if (data?.length) {
+        modalidades = data;
+        renderChips();
+        carregarChave();
+      }
+    });
+  } else {
+    carregarChave();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Copa RD Saúde CD-AM</title>
+<meta name="description" content="Campeonato interno de Tênis de Mesa, Damas e Dominó da RD Saúde — CD-AM" />
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#c41820" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Copa RD Saúde" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" href="icons/favicon-32.png" />
+
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="container topbar-inner">
+    <a class="marca" href="index.html">
+      <span class="marca-selo">RD</span>
+      <span class="marca-texto">COPA CD-AM<small>RD Saúde · Torneio interno</small></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html" class="ativo">Início</a>
+      <a href="chaveamento.html">Chaveamento</a>
+      <a href="inscricao.html">Inscrição</a>
+      <a href="admin.html">Admin</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="container">
+    <span class="hero-eyebrow">🏆 1ª edição · fase de inscrições aberta</span>
+    <h1>COPA RD SAÚDE<br /><span>CD-AM</span></h1>
+    <p class="lead">
+      O campeonato interno da RD Saúde no CD-AM, no formato eliminação dupla —
+      quem perde uma vez ainda tem chance na repescagem. Três modalidades,
+      um único campeão em cada uma.
+    </p>
+    <div class="hero-acoes">
+      <a href="inscricao.html" class="btn btn-primario">Quero me inscrever</a>
+      <a href="chaveamento.html" class="btn btn-secundario">Ver chaveamento</a>
+    </div>
+
+    <div class="grade-modalidades" id="grade-modalidades">
+      <!-- preenchido via JS a partir de modalidades fixas (fallback) e, se configurado, do Supabase -->
+    </div>
+  </div>
+</section>
+
+<section class="secao">
+  <div class="container">
+    <div class="cartao">
+      <span class="eyebrow-simples">Como funciona</span>
+      <ol class="passo-a-passo">
+        <li>Escolha a modalidade e preencha seus dados.</li>
+        <li>Pague a taxa de inscrição de R$ 10,00 via Pix (QR Code gerado na hora).</li>
+        <li>Envie o comprovante pelo app e confirme pelo WhatsApp.</li>
+        <li>Aguarde a confirmação — seu nome entra no sorteio da chave.</li>
+        <li>Acompanhe seus jogos e a repescagem em tempo real no chaveamento.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<footer class="rodape">
+  <div class="container">Copa RD Saúde CD-AM · torneio interno de colaboradores</div>
+</footer>
+
+<script type="module">
+  const modalidadesFallback = [
+    { slug: "tenis-de-mesa", nome: "Tênis de Mesa", icone: "🏓", valor: 10 },
+    { slug: "damas", nome: "Damas", icone: "⚫", valor: 10 },
+    { slug: "domino", nome: "Dominó", icone: "🁵", valor: 10 },
+  ];
+
+  function renderCards(lista) {
+    const grade = document.getElementById("grade-modalidades");
+    grade.innerHTML = lista
+      .map(
+        (m) => `
+      <a class="cartao-modalidade" href="inscricao.html?modalidade=${m.slug}">
+        <div class="icone">${m.icone || "🏆"}</div>
+        <h3>${m.nome}</h3>
+        <div class="valor">Inscrição · R$ ${Number(m.valor).toFixed(2).replace(".", ",")}</div>
+        <div class="cta">Inscrever-se →</div>
+      </a>`
+      )
+      .join("");
+  }
+
+  renderCards(modalidadesFallback);
+
+  import("./js/supabaseClient.js").then(async ({ supabase, supabaseConfigurado }) => {
+    if (!supabaseConfigurado()) return;
+    const { data, error } = await supabase.from("modalidades").select("*").eq("ativa", true).order("nome");
+    if (!error && data && data.length) renderCards(data);
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("service-worker.js").catch(() => {}));
+  }
+</script>
+</body>
+</html>
