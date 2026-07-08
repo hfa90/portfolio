@@ -260,20 +260,16 @@ async function montarPayload(
   minutos_antes = 30
 ): Promise<PushPayload> {
   if (tipo === "lembrete_limite") {
-    // Busca horário-limite de hoje.
-    // NOTA: horario_limite é coluna de `fornecedores`, não de `cardapio_dia` — antes essa
-    // query pedia a coluna errada e falhava silenciosamente, caindo sempre no "??:??".
+    // Busca horários-limite de hoje
     const hoje = new Date().toISOString().slice(0, 10);
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from("cardapio_dia")
-      .select("fornecedor:fornecedores(nome, horario_limite)")
+      .select("horario_limite, fornecedor:fornecedores(nome)")
       .eq("data", hoje)
       .eq("disponivel", true)
       .limit(1);
 
-    if (error) console.error("Erro ao buscar horário-limite:", error.message);
-
-    const horario = data?.[0]?.fornecedor?.horario_limite?.slice(0, 5) ?? "??:??";
+    const horario = data?.[0]?.horario_limite?.slice(0, 5) ?? "??:??";
     return {
       title: minutos_antes <= 10 ? "⚠️ Últimos minutos!" : "⏰ Lembrete de pedido",
       body: minutos_antes <= 10

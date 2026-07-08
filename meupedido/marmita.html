@@ -1560,37 +1560,6 @@
       else if (e.key === "Enter") $("btnEntrar").click();
     });
 
-    let bloqueioTimer = null;
-
-    function iniciarBloqueio(bloqueadoAteISO) {
-      clearInterval(bloqueioTimer);
-      const alertEl = $("loginAlert");
-      const btn = $("btnEntrar");
-      const fim = new Date(bloqueadoAteISO).getTime();
-
-      const tick = () => {
-        const restanteMs = fim - Date.now();
-        if (restanteMs <= 0) {
-          clearInterval(bloqueioTimer);
-          btn.disabled = false;
-          btn.textContent = "Entrar";
-          alertEl.classList.remove("show");
-          return;
-        }
-        const totalSeg = Math.ceil(restanteMs / 1000);
-        const min = Math.floor(totalSeg / 60);
-        const seg = String(totalSeg % 60).padStart(2, "0");
-        const horaLocal = new Date(fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        btn.disabled = true;
-        btn.textContent = `Bloqueado (${min}:${seg})`;
-        alertEl.textContent = `Muitas tentativas erradas. Tente novamente às ${horaLocal}.`;
-        alertEl.classList.add("show");
-      };
-
-      tick();
-      bloqueioTimer = setInterval(tick, 1000);
-    }
-
     $("btnEntrar").addEventListener("click", async () => {
       const matricula = $("matricula").value.trim();
       const alertEl = $("loginAlert");
@@ -1611,12 +1580,12 @@
 
         const resp = Array.isArray(data) ? data[0] : data;
         if (!resp || !resp.sucesso) {
+          alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
+          alertEl.classList.add("show");
           pin = ""; renderPin();
           if (resp?.bloqueado_ate) {
-            iniciarBloqueio(resp.bloqueado_ate);
-          } else {
-            alertEl.textContent = resp?.mensagem_erro || "Matrícula ou PIN incorretos.";
-            alertEl.classList.add("show");
+            $("btnEntrar").disabled = true;
+            $("btnEntrar").textContent = "Bloqueado";
           }
           return;
         }
@@ -2069,7 +2038,7 @@
       const comprovanteUrl = await uploadComprovante(window.pedidoAtualId, file);
       if (comprovanteUrl) {
         const colab = getColab();
-        await sb.rpc("anexar_comprovante", {
+        await sb.rpc("anexar_comprovante_pedido", {
           p_pedido_id: window.pedidoAtualId,
           p_colaborador_id: colab.id,
           p_comprovante_url: comprovanteUrl
@@ -2092,7 +2061,7 @@
 
       if (window.pedidoAtualId) {
         const colab = getColab();
-        await sb.rpc("anexar_comprovante", {
+        await sb.rpc("anexar_comprovante_pedido", {
           p_pedido_id: window.pedidoAtualId,
           p_colaborador_id: colab.id,
           p_comprovante_url: null
@@ -2145,10 +2114,6 @@
       }
 
       window.pedidoAtualId = pedidoId;
-
-      // A taxa de fiado (+R$10) agora é calculada dentro da RPC criar_pedido, de forma
-      // atômica — não depende mais de um segundo UPDATE separado vindo do navegador.
-      // Ver migration.sql (fix #3) para a definição atualizada da function.
 
       notificarPedidoConfirmado(state.selPrato.nome, state.selPrato.fornecedor.nome);
       mostrarToast("✅", "Pedido confirmado!", `${state.selPrato.nome} registrado com sucesso.`);
@@ -2467,13 +2432,13 @@
       const colab = getColab();
       if (!colab) return;
       const j = sub.toJSON();
-      await sb.from("push_subscriptions").upsert({
-        colaborador_id: colab.id,
-        endpoint: j.endpoint,
-        p256dh: j.keys.p256dh,
-        auth: j.keys.auth,
-        user_agent: navigator.userAgent.slice(0, 200)
-      }, { onConflict: "endpoint" });
+      await sb.rpc("salvar_push_subscription", {
+        p_colaborador_id: colab.id,
+        p_endpoint: j.endpoint,
+        p_p256dh: j.keys.p256dh,
+        p_auth: j.keys.auth,
+        p_user_agent: navigator.userAgent.slice(0, 200)
+      });
     }
 
     function notificarLocal(titulo, corpo, icon = "🍱") {
@@ -2507,15 +2472,12 @@
       async function checarFiado() {
         const colab = getColab();
         if (!colab) return;
-        const { data } = await sb.from("pedidos")
-          .select("id, status_pagamento")
-          .eq("colaborador_id", colab.id)
-          .eq("forma_pagamento", "fiado")
-          .neq("status", "cancelado");
+        const { data } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
 
         if (!data) return;
-        const pendentes = data.filter(p => p.status_pagamento === "pendente").length;
-        const pagos = data.filter(p => p.status_pagamento === "pago").length;
+        const fiados = data.filter(p => p.forma_pagamento === "fiado" && p.status !== "cancelado");
+        const pendentes = fiados.filter(p => p.status_pagamento === "pendente").length;
+        const pagos = fiados.filter(p => p.status_pagamento === "pago").length;
         const statusAtual = `${pendentes}:${pagos}`;
 
         if (ultimoStatusFiado !== null && ultimoStatusFiado !== statusAtual) {
@@ -2542,13 +2504,13 @@
         if (type === "PUSH_SUBSCRIPTION_CHANGED" && sub) {
           const colab = getColab();
           if (colab) {
-            await sb.from("push_subscriptions").upsert({
-              colaborador_id: colab.id,
-              endpoint: sub.endpoint,
-              p256dh: sub.keys.p256dh,
-              auth: sub.keys.auth,
-              user_agent: navigator.userAgent.slice(0, 200)
-            }, { onConflict: "endpoint" });
+            await sb.rpc("salvar_push_subscription", {
+              p_colaborador_id: colab.id,
+              p_endpoint: sub.endpoint,
+              p_p256dh: sub.keys.p256dh,
+              p_auth: sub.keys.auth,
+              p_user_agent: navigator.userAgent.slice(0, 200)
+            });
           }
         }
 
