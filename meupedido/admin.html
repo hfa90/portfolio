@@ -877,6 +877,39 @@
       color: var(--olive);
     }
 
+    .resumo-diario {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 10px;
+      margin: -6px 0 18px;
+    }
+
+    .resumo-fornecedor {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+    }
+
+    .resumo-fornecedor h3 {
+      margin: 0 0 8px;
+      font-size: .95rem;
+      color: var(--ink);
+    }
+
+    .resumo-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 4px 0;
+      font-size: .82rem;
+      color: var(--ink-soft);
+    }
+
+    .resumo-line strong {
+      color: var(--ink);
+    }
+
     /* ==================================================================
        PEDIDOS
        ================================================================== */
@@ -1347,6 +1380,7 @@
       </div>
 
       <div id="pedidosStats" class="stats"></div>
+      <div id="pedidosResumoDiario" class="resumo-diario"></div>
 
       <div id="viewCaixa">
         <div id="listaCaixa" class="loading">Carregando informações financeiras…</div>
@@ -1355,6 +1389,7 @@
       <div id="viewCozinha" class="hidden">
         <div style="display:flex; gap:8px; margin-bottom: 16px;">
           <button class="btn btn-primary btn-block" id="btnGerarWA">📱 Msg Padrão WhatsApp</button>
+          <button class="btn btn-ghost btn-block" id="btnExportarCSV">Exportar CSV/Excel</button>
           <button class="btn btn-olive btn-block" id="btnPedidoColetivo">🛵 Modo Coletivo (Dividir Frete)</button>
         </div>
         <div id="pedidosLista" class="loading">Carregando lista de fornecedores…</div>
@@ -1781,7 +1816,7 @@
       // Buscamos: Pedidos da data SELECIONADA *OU* pedidos PENDENTES de qualquer data (para cobrar fiados atrasados)
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
-      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_url,
+      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
       prato:pratos ( nome ),
       fornecedor:fornecedores ( id, nome, whatsapp ),
       colaborador:colaboradores ( id, nome, empresa, whatsapp ),
@@ -1810,12 +1845,40 @@
     <div class="stat"><div class="stat-label">Pendente Hoje</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
   `;
 
+      const resumoFornecedor = new Map();
+      pedidosHoje.forEach(p => {
+        const fid = p.fornecedor?.id || "sem-fornecedor";
+        if (!resumoFornecedor.has(fid)) {
+          resumoFornecedor.set(fid, { nome: p.fornecedor?.nome || "Sem fornecedor", qtd: 0, total: 0, pix: 0, dinheiro: 0, fiado: 0, comprovantes: 0 });
+        }
+        const r = resumoFornecedor.get(fid);
+        r.qtd += 1;
+        r.total += Number(p.preco_total);
+        if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) r.pix += Number(p.preco_total);
+        if (p.forma_pagamento === "dinheiro") r.dinheiro += Number(p.preco_total);
+        if (p.forma_pagamento === "fiado") r.fiado += Number(p.preco_total);
+        if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente") r.comprovantes += 1;
+      });
+
+      $("pedidosResumoDiario").innerHTML = [...resumoFornecedor.values()].map(r => `
+        <div class="resumo-fornecedor">
+          <h3>${r.nome}</h3>
+          <div class="resumo-line"><span>Marmitas</span><strong>${r.qtd}</strong></div>
+          <div class="resumo-line"><span>Total</span><strong>${fmtBRL(r.total)}</strong></div>
+          <div class="resumo-line"><span>PIX</span><strong>${fmtBRL(r.pix)}</strong></div>
+          <div class="resumo-line"><span>Dinheiro</span><strong>${fmtBRL(r.dinheiro)}</strong></div>
+          <div class="resumo-line"><span>Fiado</span><strong>${fmtBRL(r.fiado)}</strong></div>
+          <div class="resumo-line"><span>Comprovantes pendentes</span><strong>${r.comprovantes}</strong></div>
+        </div>
+      `).join("");
+
       // ==========================================================
       // RENDERIZAÇÃO DA ABA 1: CAIXA E RECEBIMENTOS (AÇÃO IMEDIATA)
       // ==========================================================
 
       // 1. PIX Aguardando Aprovação
-      const pixPendentes = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente");
+      const pixPendentes = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status !== "rejeitado");
+      const pixRejeitados = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status === "rejeitado");
 
       // 2. Dinheiro a Receber (Somente hoje)
       const dinheiroHoje = pedidosHoje.filter(p => p.forma_pagamento === "dinheiro" && p.status_pagamento === "pendente");
@@ -1847,6 +1910,25 @@
               : `<span class="badge pendente" style="padding:6px 10px;">⏳ Aguardando Cliente Enviar</span>`
             }
             <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard(this, '${p.id}')">✓ Aprovar</button>
+          </div>
+        </div>`;
+        });
+        caixaHtml += `</div>`;
+      }
+
+      if (pixRejeitados.length > 0) {
+        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--crimson);">
+      <h2>PIX rejeitados aguardando reenvio</h2>`;
+        pixRejeitados.forEach(p => {
+          caixaHtml += `
+        <div class="item-caixa">
+          <div class="info-row">
+            <div class="info">
+              <strong style="font-size: 1.05rem;">${p.colaborador?.nome ?? "Desconhecido"}</strong>
+              <div class="small muted">${fmtData(p.data)} · ${p.prato?.nome}</div>
+              <div class="small" style="color:var(--crimson); font-weight:600; margin-top:4px;">${p.comprovante_motivo || "Comprovante rejeitado"}</div>
+            </div>
+            <strong style="color:var(--crimson); font-size: 1.1rem;">${fmtBRL(p.preco_total)}</strong>
           </div>
         </div>`;
         });
@@ -1946,6 +2028,7 @@
 
         pedsForn.forEach(p => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
+          const statusLabel = { aberto: "Recebido", fechado: "Fechado", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado" }[p.status] || p.status;
           logisticaHtml += `
         <div class="pedido-card">
           <div class="pc-topo">
@@ -1956,8 +2039,13 @@
             </div>
           </div>
           <div class="pc-rodape">
-             <div class="small muted">${payLabel[p.forma_pagamento]}</div>
+             <div class="small muted">${payLabel[p.forma_pagamento]} · ${statusLabel}</div>
              <strong style="font-size: 1.1rem; color: var(--ink);">${fmtBRL(p.preco_total)}</strong>
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'enviado')">Enviado</button>
+            <button class="btn btn-olive btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'entregue')">Entregue</button>
+            <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>
           </div>
         </div>`;
         });
@@ -1967,6 +2055,17 @@
       $("pedidosLista").innerHTML = logisticaHtml;
     }
 
+    window.atualizarStatusPedido = async (id, status) => {
+      const labels = { enviado: "enviado", entregue: "entregue", cancelado: "cancelado" };
+      if (status === "cancelado" && !confirm("Cancelar este pedido?")) return;
+      const { error } = await sb.from("pedidos").update({ status }).eq("id", id);
+      if (error) {
+        alert("Erro ao atualizar pedido: " + error.message);
+        return;
+      }
+      await carregarPedidos();
+    };
+
     window.marcarPagoDashboard = async (btnRef, id) => {
       const originalText = btnRef.innerHTML;
       btnRef.disabled = true;
@@ -1975,8 +2074,39 @@
       // Removido o pago_em que estava causando o Erro 400
       await sb.from("pedidos").update({
         status_pagamento: "pago",
-        pago_em: new Date().toISOString()
+        pago_em: new Date().toISOString(),
+        comprovante_status: "aprovado",
+        comprovante_motivo: null,
+        comprovante_revisado_em: new Date().toISOString()
       }).eq("id", id.trim());
+
+      await carregarPedidos();
+      fecharModal();
+    };
+
+    window.rejeitarComprovante = async (btnRef, id) => {
+      const motivo = ($("motivoRejeicaoComprovante")?.value || "").trim();
+      if (!motivo) {
+        alert("Informe o motivo da rejeicao.");
+        return;
+      }
+      const originalText = btnRef.innerHTML;
+      btnRef.disabled = true;
+      btnRef.innerHTML = "Processando...";
+
+      const { error } = await sb.from("pedidos").update({
+        status_pagamento: "pendente",
+        comprovante_status: "rejeitado",
+        comprovante_motivo: motivo,
+        comprovante_revisado_em: new Date().toISOString()
+      }).eq("id", id.trim());
+
+      if (error) {
+        alert("Erro ao rejeitar comprovante: " + error.message);
+        btnRef.disabled = false;
+        btnRef.innerHTML = originalText;
+        return;
+      }
 
       await carregarPedidos();
       fecharModal();
@@ -1997,7 +2127,10 @@
         await Promise.all(ids.map(id =>
           sb.from("pedidos").update({
             status_pagamento: "pago",
-            pago_em: new Date().toISOString()
+            pago_em: new Date().toISOString(),
+            comprovante_status: "aprovado",
+            comprovante_motivo: null,
+            comprovante_revisado_em: new Date().toISOString()
           }).eq("id", id)
         ));
 
@@ -2022,8 +2155,13 @@
         }
     </div>
     
+    <div class="field" style="text-align:left;">
+      <label>Motivo da rejeicao</label>
+      <textarea id="motivoRejeicaoComprovante" class="input" rows="3" placeholder="Ex.: valor diferente, imagem ilegivel ou comprovante incorreto"></textarea>
+    </div>
+
     <div style="display:flex; gap:10px;">
-      <button class="btn btn-danger btn-block" style="flex:1;" onclick="fecharModal()">Fechar</button>
+      <button class="btn btn-danger btn-block" style="flex:1;" onclick="rejeitarComprovante(this, '${pedidoId}')">Rejeitar</button>
       <button class="btn btn-olive btn-block" style="flex:2;" onclick="marcarPagoDashboard(this, '${pedidoId}')">✅ Aprovar e Baixar PIX</button>
     </div>
   `;
@@ -2055,7 +2193,10 @@ Bom apetite! 😋`;
       // Removido o pago_em
       await sb.from("pedidos").update({
         status_pagamento: "pago",
-        pago_em: new Date().toISOString()
+        pago_em: new Date().toISOString(),
+        comprovante_status: "aprovado",
+        comprovante_motivo: null,
+        comprovante_revisado_em: new Date().toISOString()
       }).eq("id", id.trim());
 
       const secAtiva = document.querySelector(".drawer-item.active")?.dataset?.section;
@@ -2120,6 +2261,68 @@ Bom apetite! 😋`;
       $("modalBody").innerHTML = bodyHtml;
       $("modalSave").classList.add("hidden");
       $("modal").classList.add("show");
+    });
+
+    $("btnExportarCSV").addEventListener("click", async () => {
+      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const { data: pedidos, error } = await sb.from("pedidos")
+        .select(`
+          id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_status,
+          prato:pratos ( nome ),
+          fornecedor:fornecedores ( nome ),
+          colaborador:colaboradores ( nome, empresa, whatsapp ),
+          acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
+        `)
+        .eq("data", data)
+        .neq("status", "cancelado")
+        .order("criado_em");
+
+      if (error) {
+        alert("Erro ao exportar: " + error.message);
+        return;
+      }
+      if (!pedidos || pedidos.length === 0) {
+        alert("Nenhum pedido para exportar.");
+        return;
+      }
+
+      const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const linhas = [[
+        "Data", "Hora", "Colaborador", "Empresa", "WhatsApp", "Fornecedor", "Prato",
+        "Acompanhamentos", "Observacoes", "Pagamento", "Status pagamento", "Comprovante", "Status pedido", "Total"
+      ]];
+
+      pedidos.forEach(p => {
+        const hora = p.criado_em ? new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+        const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
+        linhas.push([
+          fmtData(p.data),
+          hora,
+          p.colaborador?.nome,
+          p.colaborador?.empresa,
+          p.colaborador?.whatsapp,
+          p.fornecedor?.nome,
+          p.prato?.nome,
+          acomps,
+          p.observacoes,
+          p.forma_pagamento,
+          p.status_pagamento,
+          p.comprovante_status,
+          p.status,
+          Number(p.preco_total).toFixed(2).replace(".", ",")
+        ]);
+      });
+
+      const csv = "\uFEFF" + linhas.map(row => row.map(esc).join(";")).join("\r\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `pedidos-${data}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     });
 
     // =====================================================================
@@ -2984,3 +3187,4 @@ Bom apetite! 😋`;
 </body>
 
 </html>
+

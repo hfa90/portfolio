@@ -780,6 +780,63 @@
       color: var(--blue-ios);
     }
 
+    .badge.enviado {
+      background: rgba(0, 122, 255, .12);
+      color: var(--blue-ios);
+    }
+
+    .badge.entregue,
+    .badge.aprovado {
+      background: rgba(52, 199, 89, .16);
+      color: #1a7a36;
+    }
+
+    .badge.rejeitado {
+      background: rgba(197, 48, 48, .14);
+      color: var(--crimson);
+    }
+
+    .pedido-status-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .pedido-status-item {
+      background: rgba(0, 0, 0, .025);
+      border: 1px solid rgba(0, 0, 0, .04);
+      border-radius: 10px;
+      padding: 8px 10px;
+      min-width: 0;
+    }
+
+    .pedido-status-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--ink-tertiary);
+      font-weight: 700;
+      margin-bottom: 3px;
+    }
+
+    .pedido-status-value {
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 600;
+      line-height: 1.25;
+    }
+
+    .pedido-alerta {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: rgba(197, 48, 48, .08);
+      color: var(--crimson);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
     /* Tabs */
     .tabs,
     .segmented {
@@ -1618,6 +1675,39 @@
       await carregarMeusPedidos();
     }
 
+    function formatHorario(horario) {
+      return (horario || "").slice(0, 5) || "--:--";
+    }
+
+    function horarioEncerrado(horario) {
+      if (!horario) return false;
+      const [hh, mm] = horario.split(":").map(Number);
+      const agora = new Date();
+      const limite = new Date();
+      limite.setHours(hh || 0, mm || 0, 0, 0);
+      return agora > limite;
+    }
+
+    function pedidoStatusInfo(p) {
+      const map = {
+        aberto: "Pedido recebido",
+        fechado: "Pedido fechado",
+        enviado: "Enviado ao fornecedor",
+        entregue: "Entregue",
+        cancelado: "Cancelado"
+      };
+      return map[p.status] || p.status || "Pedido recebido";
+    }
+
+    function pagamentoStatusInfo(p) {
+      if (p.status_pagamento === "pago") return "Pagamento confirmado";
+      if (p.forma_pagamento === "fiado") return "Fiado em aberto";
+      if (p.comprovante_status === "rejeitado") return "Comprovante rejeitado";
+      if (p.comprovante_status === "enviado") return "Comprovante em analise";
+      if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) return "Aguardando comprovante";
+      return "Pagamento pendente";
+    }
+
     async function carregarCardapio() {
       const lista = $("cardapioList");
       lista.innerHTML = '<div class="loading">Carregando cardápio…</div>';
@@ -1641,13 +1731,14 @@
         const fid = item.fornecedor_id;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
-            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
+            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix, horario_limite: item.horario_limite },
             pratos: []
           });
         }
         grupos.get(fid).pratos.push({
           id: item.prato_id, nome: item.prato_nome,
-          descricao: item.prato_descricao, preco: item.prato_preco
+          descricao: item.prato_descricao, preco: item.prato_preco,
+          horario_limite: item.horario_limite
         });
       });
 
@@ -1667,18 +1758,31 @@
         </div>`;
       }
 
+      const todosEncerrados = data.every(item => horarioEncerrado(item.horario_limite));
+      if (pedidosAbertos && todosEncerrados) {
+        const horarios = data.map(item => item.horario_limite).filter(Boolean).sort();
+        const ultimoHorario = horarios[horarios.length - 1];
+        html += `<div class="card" style="background:rgba(197,48,48,.08); border:1px solid rgba(197,48,48,.2); margin-bottom:16px;">
+          <div style="font-weight:600;">Pedidos encerrados</div>
+          <div class="small muted">O horario limite de hoje foi ${formatHorario(ultimoHorario)}.</div>
+        </div>`;
+      }
+
       for (const { fornecedor, pratos } of grupos.values()) {
         html += `<div class="fornecedor-bloco">
           <div class="fornecedor-head">
             <h2>${fornecedor.nome}</h2>
+            <span class="small muted">Pedidos ate ${formatHorario(fornecedor.horario_limite)}</span>
           </div>
           <div class="pratos-grid">`;
         pratos.forEach(p => {
-          html += `<div class="prato ${pedidosAbertos ? '' : 'prato-encerrado'}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${pedidosAbertos ? '' : 'style="opacity:.55;"'}>
-            ${pedidosAbertos ? '<span class="prato-badge-add">+</span>' : ''}
+          const encerrado = !pedidosAbertos || horarioEncerrado(p.horario_limite);
+          html += `<div class="prato ${encerrado ? 'prato-encerrado' : ''}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${encerrado ? 'style="opacity:.55;"' : ''}>
+            ${encerrado ? '' : '<span class="prato-badge-add">+</span>'}
             <div class="prato-info">
               <div class="prato-nome">${p.nome}</div>
               ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
+              ${encerrado ? `<div class="prato-desc" style="color:var(--crimson); font-weight:600;">Encerrado as ${formatHorario(p.horario_limite)}</div>` : ""}
             </div>
             <div class="prato-preco">${fmtBRL(p.preco)}</div>
           </div>`;
@@ -1688,7 +1792,7 @@
       lista.innerHTML = html;
 
       if (pedidosAbertos) {
-        lista.querySelectorAll(".prato").forEach(el => {
+        lista.querySelectorAll(".prato:not(.prato-encerrado)").forEach(el => {
           el.addEventListener("click", () => abrirPedido(el.dataset.prato, el.dataset.fornecedor));
         });
       }
@@ -1739,23 +1843,45 @@
 
       function renderPedidoCard(p) {
         const isFiado = p.forma_pagamento === "fiado" && p.status_pagamento === "pendente";
-        const badgeClass = isFiado ? "fiado" : p.status_pagamento;
-        const badgeText = isFiado ? "Fiado" : p.status_pagamento;
+        const badgeClass = p.comprovante_status === "rejeitado" ? "rejeitado" : (isFiado ? "fiado" : p.status_pagamento);
+        const badgeText = p.comprovante_status === "rejeitado" ? "Rejeitado" : (isFiado ? "Fiado" : p.status_pagamento);
+        const criado = p.criado_em ? new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+        const compMotivo = p.comprovante_status === "rejeitado" && p.comprovante_motivo
+          ? `<div class="pedido-alerta">Motivo: ${p.comprovante_motivo}</div>`
+          : "";
+        const podeReenviar = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente";
+        const acaoComprovante = podeReenviar
+          ? `<button class="btn btn-primary btn-sm btn-pill btn-block btn-reenviar-comprovante" data-pedido="${p.id}">
+              ${p.comprovante_status === "rejeitado" ? "Reenviar comprovante" : "Enviar comprovante"}
+            </button>`
+          : "";
         return `<div class="pedido-card">
           <div class="pedido-head">
             <div style="flex:1; min-width:0;">
               <div class="pedido-prato">${p.prato_nome ?? "—"}</div>
-              <div class="pedido-meta">${p.fornecedor_nome ?? ""}</div>
+              <div class="pedido-meta">${p.fornecedor_nome ?? ""} · ${fmtData(p.data)} as ${criado}</div>
               ${p.acompanhamentos ? `<div class="pedido-meta">+ ${p.acompanhamentos}</div>` : ""}
               ${p.observacoes ? `<div class="pedido-obs">📝 ${p.observacoes}</div>` : ""}
             </div>
             <span class="badge ${badgeClass}">${badgeText}</span>
           </div>
+          <div class="pedido-status-grid">
+            <div class="pedido-status-item">
+              <div class="pedido-status-label">Pedido</div>
+              <div class="pedido-status-value">${pedidoStatusInfo(p)}</div>
+            </div>
+            <div class="pedido-status-item">
+              <div class="pedido-status-label">Pagamento</div>
+              <div class="pedido-status-value">${pagamentoStatusInfo(p)}</div>
+            </div>
+          </div>
+          ${compMotivo}
           <div class="pedido-foot">
             <span class="small muted">${payLabel[p.forma_pagamento] || p.forma_pagamento}</span>
             <span class="pedido-valor">${fmtBRL(p.preco_total)}</span>
           </div>
-          <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator);">
+          <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator); display:grid; gap:8px;">
+            ${acaoComprovante}
             <button class="btn btn-secondary btn-sm btn-pill btn-block btn-repetir" data-pedido="${p.id}">
               🔁 Pedir de novo
             </button>
@@ -1861,6 +1987,17 @@
           await pedirDeNovo(btn.dataset.pedido);
         });
       });
+
+      lista.querySelectorAll(".btn-reenviar-comprovante").forEach(btn => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          window.pedidoAtualId = btn.dataset.pedido;
+          window.reenviandoComprovante = true;
+          $("pixComprovanteInput").value = "";
+          $("pixComprovanteInput").disabled = false;
+          $("pixComprovanteInput").click();
+        });
+      });
     }
 
     async function pedirDeNovo(pedidoId) {
@@ -1927,6 +2064,13 @@
     // MONTAR PEDIDO
     // =====================================================================
     async function abrirPedido(pratoId, fornecedorId) {
+      const itemCardapio = (state.cardapio || []).find(item => item.prato_id === pratoId);
+      if (itemCardapio && horarioEncerrado(itemCardapio.horario_limite)) {
+        alert("Pedidos encerrados as " + formatHorario(itemCardapio.horario_limite) + " para este fornecedor.");
+        await carregarCardapio();
+        return;
+      }
+
       const { data: prato } = await sb.from("pratos")
         .select("id, nome, descricao, preco, fornecedor:fornecedores(id, nome, chave_pix)")
         .eq("id", pratoId).single();
@@ -2043,10 +2187,16 @@
           p_colaborador_id: colab.id,
           p_comprovante_url: comprovanteUrl
         });
+        if (window.reenviandoComprovante) {
+          window.reenviandoComprovante = false;
+          mostrarToast("OK", "Comprovante enviado", "O administrador ja pode revisar o novo arquivo.");
+          await carregarMeusPedidos();
+        }
         $("pixComprovanteBtn").classList.replace("btn-primary", "btn-olive");
         $("pixComprovanteBtn").textContent = "✅ Comprovante Enviado";
       } else {
         $("pixComprovanteBtn").textContent = "❌ Erro. Tentar novamente";
+        window.reenviandoComprovante = false;
         $("pixComprovanteInput").disabled = false;
       }
     });
@@ -2094,6 +2244,14 @@
       $("btnConfirmar").disabled = true; $("btnConfirmar").textContent = "Enviando…";
 
       const colab = getColab();
+      const itemCardapio = (state.cardapio || []).find(item => item.prato_id === state.selPrato?.id);
+      if (itemCardapio && horarioEncerrado(itemCardapio.horario_limite)) {
+        alertEl.textContent = "Pedidos encerrados as " + formatHorario(itemCardapio.horario_limite) + " para este fornecedor.";
+        alertEl.classList.add("show");
+        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+        await carregarCardapio();
+        return;
+      }
       const total = calcTotal();
       const acompArr = [...state.selAcomp];
 
