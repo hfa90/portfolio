@@ -1,0 +1,1972 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Banco de Mesa</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f6;
+      --surface: #ffffff;
+      --surface-2: #f7fafb;
+      --ink: #162022;
+      --muted: #667477;
+      --line: #dbe4e6;
+      --teal: #168c84;
+      --teal-dark: #0d6862;
+      --coral: #e96f4f;
+      --gold: #d79b2d;
+      --violet: #6f61d4;
+      --danger: #d94343;
+      --ok: #1f9f64;
+      --shadow: 0 22px 70px rgba(30, 47, 55, .14);
+      --radius: 8px;
+      --tap: 44px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 7% 9%, rgba(22, 140, 132, .12), transparent 28rem),
+        linear-gradient(135deg, #eef3f6 0%, #f7efe8 100%);
+      color: var(--ink);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    button {
+      min-height: var(--tap);
+      border: 0;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    input,
+    select {
+      width: 100%;
+      min-height: var(--tap);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 12px;
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(22, 140, 132, .15);
+    }
+
+    .app-shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px clamp(16px, 4vw, 44px);
+      border-bottom: 1px solid rgba(219, 228, 230, .78);
+      backdrop-filter: blur(18px);
+      background: rgba(255, 255, 255, .72);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .mark {
+      width: 46px;
+      height: 46px;
+      border-radius: var(--radius);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: conic-gradient(from 160deg, var(--teal), var(--gold), var(--coral), var(--violet), var(--teal));
+      box-shadow: 0 12px 30px rgba(22, 140, 132, .22);
+      flex: 0 0 auto;
+    }
+
+    .brand-title {
+      min-width: 0;
+    }
+
+    .brand-title strong {
+      display: block;
+      font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+      letter-spacing: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand-title span {
+      color: var(--muted);
+      font-size: .9rem;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .icon-btn,
+    .ghost-btn,
+    .primary-btn,
+    .danger-btn,
+    .quick-btn,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-weight: 750;
+    }
+
+    .icon-btn {
+      width: var(--tap);
+      padding: 0;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .ghost-btn {
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .primary-btn {
+      padding: 0 16px;
+      background: var(--teal);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(22, 140, 132, .22);
+    }
+
+    .primary-btn:hover {
+      background: var(--teal-dark);
+    }
+
+    .danger-btn {
+      padding: 0 16px;
+      background: #fff0f0;
+      color: var(--danger);
+      border: 1px solid #f2c6c6;
+    }
+
+    .layout {
+      width: min(1500px, 100%);
+      margin: 0 auto;
+      padding: clamp(16px, 3vw, 32px);
+      display: grid;
+      grid-template-columns: minmax(260px, 320px) minmax(0, 1.16fr) minmax(290px, 390px);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid rgba(219, 228, 230, .9);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-head h2,
+    .panel-head h3 {
+      margin: 0;
+      font-size: 1rem;
+      letter-spacing: 0;
+    }
+
+    .panel-body {
+      padding: 16px;
+    }
+
+    .setup {
+      width: min(980px, calc(100% - 32px));
+      margin: 30px auto;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(310px, .92fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .intro {
+      min-height: 640px;
+      display: grid;
+      align-content: space-between;
+      padding: clamp(22px, 4vw, 40px);
+      background:
+        linear-gradient(160deg, rgba(22, 140, 132, .88), rgba(26, 33, 38, .94)),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='900' height='900' viewBox='0 0 900 900'%3E%3Cg fill='none' stroke='rgba(255,255,255,.23)' stroke-width='18'%3E%3Cpath d='M120 180h220v220H120zM560 120h160v160H560zM510 510h260v170H510zM170 590h190v150H170z'/%3E%3Cpath d='M340 290l220-90M340 400l200 180M360 665l160-60'/%3E%3C/g%3E%3Cg fill='rgba(255,255,255,.18)'%3E%3Ccircle cx='338' cy='292' r='30'/%3E%3Ccircle cx='560' cy='200' r='34'/%3E%3Ccircle cx='540' cy='584' r='28'/%3E%3Ccircle cx='360' cy='664' r='24'/%3E%3C/g%3E%3C/svg%3E");
+      background-size: cover;
+      color: #fff;
+    }
+
+    .intro h1 {
+      margin: 0;
+      max-width: 12ch;
+      font-size: clamp(3rem, 8vw, 6.5rem);
+      line-height: .94;
+      letter-spacing: 0;
+    }
+
+    .intro p {
+      margin: 20px 0 0;
+      max-width: 58ch;
+      color: rgba(255, 255, 255, .82);
+      font-size: 1.05rem;
+      line-height: 1.55;
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .stat {
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, .24);
+      background: rgba(255, 255, 255, .1);
+      border-radius: var(--radius);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.35rem;
+    }
+
+    .stat span {
+      display: block;
+      margin-top: 4px;
+      color: rgba(255, 255, 255, .74);
+      font-size: .82rem;
+    }
+
+    .setup-form {
+      display: grid;
+      gap: 14px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .86rem;
+      font-weight: 760;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .player-editor {
+      display: grid;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .player-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .swatch-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .swatch {
+      width: 28px;
+      height: 28px;
+      min-height: 28px;
+      border: 2px solid #fff;
+      box-shadow: 0 0 0 1px var(--line);
+      border-radius: 999px;
+      padding: 0;
+    }
+
+    .swatch.active {
+      box-shadow: 0 0 0 3px rgba(22, 140, 132, .3);
+    }
+
+    .player-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .player-card {
+      width: 100%;
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 1fr;
+      padding: 12px;
+      background:
+        linear-gradient(130deg, rgba(255,255,255,.94), rgba(255,255,255,.74)),
+        var(--player-color, var(--teal));
+      border: 1px solid var(--line);
+      color: var(--ink);
+      text-align: left;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .player-card.active {
+      border-color: color-mix(in srgb, var(--player-color, var(--teal)) 55%, #fff);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-color, var(--teal)) 20%, transparent);
+    }
+
+    .player-card::before {
+      content: "";
+      position: absolute;
+      inset: auto 12px 12px auto;
+      width: 52px;
+      height: 34px;
+      border-radius: 7px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.38), rgba(255,255,255,.08)),
+        var(--player-color, var(--teal));
+      opacity: .9;
+    }
+
+    .stripe {
+      display: none;
+    }
+
+    .player-content {
+      padding: 12px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .player-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .player-meta strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: .96rem;
+    }
+
+    .balance {
+      font-size: 1.28rem;
+      font-weight: 850;
+    }
+
+    .subtle {
+      color: var(--muted);
+      font-size: .86rem;
+    }
+
+    .wallet {
+      min-height: 650px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      background: rgba(249, 250, 250, .96);
+    }
+
+    .wallet-hero {
+      margin: 16px;
+      min-height: 380px;
+      padding: clamp(22px, 4vw, 34px);
+      border-radius: 28px;
+      background: 
+        radial-gradient(circle at 18% 12%, rgba(255, 255, 255, .36), transparent 18rem),
+        linear-gradient(140deg, rgba(255,255,255,.2), rgba(0,0,0,.18)),
+        var(--player-color, var(--teal));
+      color: #fff;
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+      box-shadow: 0 30px 80px color-mix(in srgb, var(--player-color, var(--teal)) 34%, rgba(20, 25, 28, .28));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .wallet-hero::before,
+    .wallet-hero::after {
+      content: "";
+      position: absolute;
+      pointer-events: none;
+      border: 1px solid rgba(255, 255, 255, .2);
+    }
+
+    .wallet-hero::before {
+      width: 92px;
+      height: 62px;
+      right: 28px;
+      top: 28px;
+      border-radius: 11px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.06)),
+        rgba(255,255,255,.08);
+    }
+
+    .wallet-hero::after {
+      width: 240px;
+      height: 240px;
+      right: -92px;
+      bottom: -110px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .08);
+    }
+
+    .wallet-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: flex-start;
+    }
+
+    .wallet-main h2 {
+      margin: 0;
+      font-size: clamp(1.4rem, 3vw, 2.3rem);
+      line-height: 1;
+      word-break: break-word;
+    }
+
+    .big-money {
+      font-size: clamp(3rem, 8.8vw, 6.8rem);
+      line-height: .88;
+      font-weight: 900;
+      letter-spacing: 0;
+      word-break: break-word;
+      text-shadow: 0 14px 38px rgba(0, 0, 0, .18);
+    }
+
+    .wallet-label {
+      display: grid;
+      gap: 9px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .wallet-kicker {
+      color: rgba(255,255,255,.72);
+      font-size: .8rem;
+      font-weight: 820;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .wallet-footer {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 14px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .wallet-owner {
+      display: grid;
+      gap: 5px;
+    }
+
+    .wallet-owner span {
+      color: rgba(255, 255, 255, .72);
+      font-size: .82rem;
+      font-weight: 760;
+    }
+
+    .wallet-owner strong {
+      font-size: 1.2rem;
+      word-break: break-word;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: rgba(255, 255, 255, .18);
+      border: 1px solid rgba(255, 255, 255, .24);
+      color: #fff;
+      font-size: .86rem;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      padding: 0 16px 16px;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+    }
+
+    .quick-btn {
+      min-height: 64px;
+      background: #fff;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      padding: 8px;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: 0 8px 24px rgba(31, 44, 51, .08);
+    }
+
+    .quick-btn small {
+      color: var(--muted);
+      font-size: .74rem;
+      font-weight: 700;
+    }
+
+    .money-actions {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .action-box {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .action-box h3 {
+      margin: 0;
+      font-size: .95rem;
+    }
+
+    .wallet-actions {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .action-tile {
+      min-height: 96px;
+      padding: 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      display: grid;
+      justify-items: start;
+      align-content: space-between;
+      text-align: left;
+      box-shadow: 0 10px 26px rgba(31, 44, 51, .08);
+    }
+
+    .action-tile.active {
+      border-color: color-mix(in srgb, var(--player-color, var(--teal)) 50%, #fff);
+      background: color-mix(in srgb, var(--player-color, var(--teal)) 10%, #fff);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--player-color, var(--teal)) 16%, transparent);
+    }
+
+    .action-tile .icon {
+      color: var(--player-color, var(--teal));
+    }
+
+    .action-tile strong {
+      font-size: .95rem;
+    }
+
+    .shortcut {
+      min-height: 24px;
+      min-width: 24px;
+      padding: 2px 7px;
+      border-radius: 6px;
+      background: #eef2f3;
+      color: var(--muted);
+      font-size: .74rem;
+      font-weight: 850;
+    }
+
+    .terminal {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: grid;
+      gap: 12px;
+      box-shadow: 0 10px 26px rgba(31, 44, 51, .08);
+    }
+
+    .terminal-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .terminal-title h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+
+    .terminal-title span {
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 780;
+      text-align: right;
+    }
+
+    .target-field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .target-field.hidden-field {
+      display: none;
+    }
+
+    .listbox-select {
+      min-height: 50px;
+      appearance: none;
+      background:
+        linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+        linear-gradient(135deg, var(--muted) 50%, transparent 50%),
+        #fff;
+      background-position:
+        calc(100% - 18px) 20px,
+        calc(100% - 12px) 20px,
+        0 0;
+      background-size: 6px 6px, 6px 6px, 100% 100%;
+      background-repeat: no-repeat;
+    }
+
+    .amount-display {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+    }
+
+    .amount-prefix {
+      color: var(--muted);
+      font-weight: 850;
+    }
+
+    .amount-display input {
+      min-height: 46px;
+      border: 0;
+      box-shadow: none;
+      padding: 0;
+      background: transparent;
+      font-size: clamp(1.7rem, 4vw, 2.7rem);
+      font-weight: 900;
+    }
+
+    .terminal-submit {
+      min-height: 56px;
+      background: #111416;
+      color: #fff;
+      box-shadow: 0 14px 30px rgba(17, 20, 22, .18);
+    }
+
+    .shortcut-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      color: var(--muted);
+      font-size: .78rem;
+      font-weight: 760;
+    }
+
+    .legacy-actions {
+      display: none;
+    }
+
+    .amount-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .pay-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      padding: 3px;
+      background: #e9f0f1;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+    }
+
+    .segment {
+      min-height: 38px;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .segment.active {
+      background: #fff;
+      color: var(--ink);
+      box-shadow: 0 5px 14px rgba(32, 48, 53, .1);
+    }
+
+    .history {
+      max-height: calc(100vh - 150px);
+      overflow: auto;
+    }
+
+    .history-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .event {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: #fff;
+      display: grid;
+      gap: 6px;
+    }
+
+    .event-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      font-weight: 780;
+    }
+
+    .event-value.plus {
+      color: var(--ok);
+    }
+
+    .event-value.minus {
+      color: var(--danger);
+    }
+
+    .event-time {
+      color: var(--muted);
+      font-size: .78rem;
+    }
+
+    .empty {
+      padding: 26px 18px;
+      border: 1px dashed #c6d2d5;
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-align: center;
+      background: rgba(255, 255, 255, .65);
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      min-width: min(430px, calc(100vw - 32px));
+      border-radius: var(--radius);
+      background: #172326;
+      color: #fff;
+      padding: 13px 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+      z-index: 10;
+      transition: opacity .2s ease, transform .2s ease;
+      text-align: center;
+      font-weight: 760;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    .icon {
+      width: 20px;
+      height: 20px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    @media (max-width: 1120px) {
+      .layout {
+        grid-template-columns: 290px minmax(0, 1fr);
+      }
+
+      .side-history {
+        grid-column: 1 / -1;
+      }
+
+      .history {
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 860px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .top-actions {
+        justify-content: flex-start;
+        width: 100%;
+      }
+
+      .setup,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .intro {
+        min-height: 520px;
+      }
+
+      .player-list {
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      }
+
+      .money-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      :root {
+        --tap: 42px;
+      }
+
+      .top-actions .ghost-btn span {
+        display: none;
+      }
+
+      .setup {
+        width: min(100% - 20px, 980px);
+        margin: 10px auto;
+      }
+
+      .stat-row,
+      .form-grid,
+      .quick-grid,
+      .pay-row {
+        grid-template-columns: 1fr;
+      }
+
+      .wallet-main {
+        display: grid;
+      }
+
+      .big-money {
+        font-size: clamp(2rem, 14vw, 4rem);
+      }
+
+      .wallet-hero {
+        min-height: 330px;
+        border-radius: 22px;
+      }
+
+      .wallet-actions {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 10h18"></path><path d="M5 10v8"></path><path d="M19 10v8"></path><path d="M2 18h20"></path><path d="M12 4l9 6H3l9-6z"></path>
+          </svg>
+        </div>
+        <div class="brand-title">
+          <strong>Banco de Mesa</strong>
+          <span id="game-subtitle">Dinheiro digital para Banco Imobiliário</span>
+        </div>
+      </div>
+      <div class="top-actions hidden" id="game-actions">
+        <button class="ghost-btn" id="export-btn" title="Exportar partida">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M7 10l5 5 5-5"></path><path d="M12 15V3"></path></svg>
+          <span>Exportar</span>
+        </button>
+        <button class="ghost-btn" id="import-btn" title="Importar partida">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><path d="M17 8l-5-5-5 5"></path><path d="M12 3v12"></path></svg>
+          <span>Importar</span>
+        </button>
+        <button class="ghost-btn" id="undo-btn" title="Desfazer última transação">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10a6 6 0 0 1 0 12h-2"></path></svg>
+          <span>Desfazer</span>
+        </button>
+        <button class="danger-btn" id="new-game-btn" title="Criar nova partida">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M8 6V4h8v2"></path><path d="m19 6-1 14H6L5 6"></path><path d="M10 11v5"></path><path d="M14 11v5"></path></svg>
+          Nova
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="setup" id="setup-screen">
+        <div class="panel intro">
+          <div>
+            <h1>Banco digital da partida</h1>
+            <p>Controle saldos, pagamentos, transferências e histórico sem papel, sem fichas e sem calculadora no meio do tabuleiro.</p>
+          </div>
+          <div class="stat-row" aria-label="Recursos">
+            <div class="stat"><strong>1 toque</strong><span>para receber do banco</span></div>
+            <div class="stat"><strong>0 DB</strong><span>salvo no navegador</span></div>
+            <div class="stat"><strong>Undo</strong><span>para corrigir erro rápido</span></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Nova partida</h2>
+            <button class="ghost-btn" id="load-saved-btn">Abrir salva</button>
+          </div>
+          <div class="panel-body setup-form">
+            <div class="form-grid">
+              <label>
+                Nome da mesa
+                <input id="game-name" maxlength="38" value="Partida de hoje">
+              </label>
+              <label>
+                Saldo inicial
+                <input id="start-balance" type="number" inputmode="numeric" min="0" step="10" value="1500">
+              </label>
+            </div>
+
+            <label>
+              Jogadores
+              <div class="player-editor" id="setup-players"></div>
+            </label>
+
+            <div class="player-row">
+              <input id="new-player-name" maxlength="24" placeholder="Nome do jogador">
+              <button class="icon-btn" id="add-player-btn" title="Adicionar jogador">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+              </button>
+            </div>
+
+            <button class="primary-btn" id="start-game-btn">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-14 9V3z"></path></svg>
+              Começar partida
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="layout hidden" id="game-screen">
+        <aside class="panel">
+          <div class="panel-head">
+            <h2>Jogadores</h2>
+            <button class="icon-btn" id="add-player-game-btn" title="Adicionar jogador">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+            </button>
+          </div>
+          <div class="panel-body player-list" id="players-list"></div>
+        </aside>
+
+        <section class="panel wallet">
+          <div class="wallet-hero" id="wallet-hero">
+            <div class="wallet-main">
+              <div>
+                <span class="badge" id="active-position">Jogador ativo</span>
+                <h2 id="active-name">Jogador</h2>
+              </div>
+              <span class="badge" id="net-movement">Hoje: R$ 0</span>
+            </div>
+            <div class="wallet-label">
+              <span class="wallet-kicker">Saldo disponivel</span>
+              <div class="big-money" id="active-balance">R$ 0</div>
+            </div>
+            <div class="wallet-footer">
+              <div class="wallet-owner">
+                <span>Carteira criada para</span>
+                <strong id="wallet-owner-name">Jogador</strong>
+              </div>
+              <span class="badge">Banco de Mesa</span>
+            </div>
+          </div>
+
+          <div class="quick-grid" id="quick-actions"></div>
+
+          <div class="money-actions">
+            <div class="wallet-actions" aria-label="Atalhos da carteira">
+              <button class="action-tile active" data-action-mode="receive" title="Atalho R">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M19 12H5"></path></svg>
+                <strong>Cobrar banco</strong>
+                <span class="shortcut">R</span>
+              </button>
+              <button class="action-tile" data-action-mode="pay-bank" title="Atalho P">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 19 7-7-7-7"></path></svg>
+                <strong>Pagar banco</strong>
+                <span class="shortcut">P</span>
+              </button>
+              <button class="action-tile" data-action-mode="transfer" title="Atalho T">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18"></path><path d="M8 15h.01"></path><path d="M12 15h3"></path></svg>
+                <strong>Pagar jogador</strong>
+                <span class="shortcut">T</span>
+              </button>
+            </div>
+
+            <div class="terminal">
+              <div class="terminal-title">
+                <h3 id="terminal-title">Cobrar banco</h3>
+                <span id="terminal-hint">Receber valor na carteira</span>
+              </div>
+
+              <label class="target-field hidden-field" id="transfer-target-field">
+                Jogador destino
+                <select class="listbox-select" id="wallet-transfer-target" size="1"></select>
+              </label>
+
+              <div class="amount-display">
+                <span class="amount-prefix">R$</span>
+                <input id="action-amount" type="number" inputmode="numeric" min="1" step="1" placeholder="0">
+              </div>
+
+              <input id="action-note" maxlength="38" placeholder="Descricao da transacao">
+
+              <button class="terminal-submit" id="action-submit" title="Confirmar transacao">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                Aprovar transacao
+              </button>
+
+              <div class="shortcut-strip">
+                <span><b>R</b> cobrar banco</span>
+                <span><b>P</b> pagar banco</span>
+                <span><b>T</b> pagar jogador</span>
+                <span><b>Enter</b> aprovar</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="money-actions legacy-actions">
+            <div class="action-box">
+              <h3>Banco</h3>
+              <div class="segmented" role="tablist" aria-label="Tipo de operação com banco">
+                <button class="segment active" data-bank-mode="receive">Receber</button>
+                <button class="segment" data-bank-mode="pay">Pagar</button>
+              </div>
+              <div class="amount-row">
+                <input id="bank-amount" type="number" inputmode="numeric" min="1" step="1" placeholder="Valor">
+                <button class="primary-btn" id="bank-submit" title="Confirmar operação com banco">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+                </button>
+              </div>
+              <input id="bank-note" maxlength="38" placeholder="Motivo opcional">
+            </div>
+
+            <div class="action-box">
+              <h3>Transferir</h3>
+              <select id="transfer-target"></select>
+              <div class="amount-row">
+                <input id="transfer-amount" type="number" inputmode="numeric" min="1" step="1" placeholder="Valor">
+                <button class="primary-btn" id="transfer-submit" title="Enviar dinheiro">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path></svg>
+                </button>
+              </div>
+              <input id="transfer-note" maxlength="38" placeholder="Aluguel, acordo, venda...">
+            </div>
+
+            <div class="action-box">
+              <h3>Cobrar de todos</h3>
+              <div class="pay-row">
+                <input id="collect-amount" type="number" inputmode="numeric" min="1" step="1" placeholder="Valor">
+                <button class="primary-btn" id="collect-submit" title="Receber de todos os outros jogadores">
+                  <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8"></path><path d="M12 17v4"></path><path d="M7 4h10"></path><path d="M17 4v6a5 5 0 0 1-10 0V4"></path><path d="M5 6H3a4 4 0 0 0 4 4"></path><path d="M19 6h2a4 4 0 0 1-4 4"></path></svg>
+                </button>
+              </div>
+              <input id="collect-note" maxlength="38" placeholder="Aniversário, taxa, carta...">
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel side-history">
+          <div class="panel-head">
+            <h2>Histórico</h2>
+            <span class="subtle" id="history-count">0</span>
+          </div>
+          <div class="panel-body history">
+            <div class="history-list" id="history-list"></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <input class="file-input" id="import-file" type="file" accept="application/json">
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <script>
+    const STORAGE_KEY = "banco-de-mesa-v1";
+    const SUPABASE_CONFIG = window.BANCO_SUPABASE || {};
+    const SUPABASE_KEY = SUPABASE_CONFIG.publishableKey || SUPABASE_CONFIG.anonKey || "";
+    const SUPABASE_ENABLED = Boolean(window.supabase?.createClient && SUPABASE_CONFIG.url && SUPABASE_KEY);
+    const LOCAL_HTTP_HOST = location.hostname === "localhost" || location.hostname === "127.0.0.1" || /^(\d{1,3}\.){3}\d{1,3}$/.test(location.hostname);
+    const REMOTE_SYNC = !SUPABASE_ENABLED && location.protocol.startsWith("http") && LOCAL_HTTP_HOST;
+    const SUPABASE_TABLE = SUPABASE_CONFIG.table || "banco_games";
+    const colors = ["#168c84", "#e96f4f", "#d79b2d", "#6f61d4", "#2f80ed", "#1f9f64", "#b84c8d", "#444f5f"];
+    const quickValues = [
+      { label: "Início", amount: 200, type: "receive" },
+      { label: "Prêmio", amount: 100, type: "receive" },
+      { label: "Imposto", amount: 100, type: "pay" },
+      { label: "Multa", amount: 50, type: "pay" },
+      { label: "Taxa", amount: 25, type: "pay" }
+    ];
+
+    let setupPlayers = ["Ana", "Bruno", "Carol", "Diego"].map((name, index) => ({ name, color: colors[index] }));
+    let state = null;
+    let selectedPlayerId = null;
+    let bankMode = "receive";
+    let actionMode = "receive";
+    let remoteReady = false;
+    let supabaseClient = SUPABASE_ENABLED ? window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_KEY) : null;
+    let realtimeChannel = null;
+
+    const $ = (selector) => document.querySelector(selector);
+    const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+
+    const els = {
+      setupScreen: $("#setup-screen"),
+      gameScreen: $("#game-screen"),
+      gameActions: $("#game-actions"),
+      gameSubtitle: $("#game-subtitle"),
+      setupPlayers: $("#setup-players"),
+      playersList: $("#players-list"),
+      walletHero: $("#wallet-hero"),
+      activeName: $("#active-name"),
+      activeBalance: $("#active-balance"),
+      walletOwnerName: $("#wallet-owner-name"),
+      activePosition: $("#active-position"),
+      netMovement: $("#net-movement"),
+      transferTarget: $("#transfer-target"),
+      walletTransferTarget: $("#wallet-transfer-target"),
+      transferTargetField: $("#transfer-target-field"),
+      actionAmount: $("#action-amount"),
+      actionNote: $("#action-note"),
+      actionSubmit: $("#action-submit"),
+      terminalTitle: $("#terminal-title"),
+      terminalHint: $("#terminal-hint"),
+      historyList: $("#history-list"),
+      historyCount: $("#history-count"),
+      quickActions: $("#quick-actions"),
+      toast: $("#toast")
+    };
+
+    function uid() {
+      return Math.random().toString(36).slice(2, 10);
+    }
+
+    function parseAmount(value) {
+      const amount = Math.round(Number(value));
+      return Number.isFinite(amount) && amount > 0 ? amount : 0;
+    }
+
+    function showToast(message) {
+      els.toast.textContent = message;
+      els.toast.classList.add("show");
+      window.clearTimeout(showToast.timer);
+      showToast.timer = window.setTimeout(() => els.toast.classList.remove("show"), 2300);
+    }
+
+    function save(options = {}) {
+      if (!state) return;
+      const { remote = true } = options;
+      state.savedAt = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      if (remote) pushRemote();
+    }
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    function bumpRevision() {
+      if (!state) return;
+      state.revision = (state.revision || 0) + 1;
+    }
+
+    function roomCodeFromUrl() {
+      return location.hash.replace("#", "").trim();
+    }
+
+    function setRoomCode(code) {
+      if (!code) return;
+      if (location.hash.replace("#", "") !== code) {
+        history.replaceState(null, "", `${location.pathname}${location.search}#${code}`);
+      }
+    }
+
+    function persistAndRender(message) {
+      bumpRevision();
+      save();
+      renderGame();
+      if (message) showToast(message);
+    }
+
+    async function pushRemote() {
+      if (!state) return;
+      if (SUPABASE_ENABLED) {
+        await pushSupabase();
+        return;
+      }
+      if (!REMOTE_SYNC) return;
+      try {
+        const response = await fetch("/api/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(state)
+        });
+        remoteReady = response.ok;
+      } catch {
+        remoteReady = false;
+      }
+    }
+
+    async function pullRemote() {
+      if (SUPABASE_ENABLED) {
+        await pullSupabase();
+        return;
+      }
+      if (!REMOTE_SYNC) return;
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) return;
+        remoteReady = true;
+        const remoteState = await response.json();
+        if (!remoteState?.players?.length) return;
+        if (state && (remoteState.revision || 0) <= (state.revision || 0)) return;
+        state = remoteState;
+        selectedPlayerId = state.players.some((player) => player.id === selectedPlayerId)
+          ? selectedPlayerId
+          : state.players[0].id;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        showGame();
+      } catch {
+        remoteReady = false;
+      }
+    }
+
+    async function pushSupabase() {
+      if (!supabaseClient || !state?.id) return;
+      try {
+        setRoomCode(state.id);
+        const { error } = await supabaseClient
+          .from(SUPABASE_TABLE)
+          .upsert({
+            room_code: state.id,
+            name: state.name,
+            state,
+            revision: state.revision || 0,
+            updated_at: new Date().toISOString()
+          }, { onConflict: "room_code" });
+        remoteReady = !error;
+        if (error) console.warn("Supabase sync failed", error);
+      } catch (error) {
+        remoteReady = false;
+        console.warn("Supabase sync failed", error);
+      }
+    }
+
+    async function pullSupabase() {
+      if (!supabaseClient) return;
+      const roomCode = roomCodeFromUrl() || state?.id;
+      if (!roomCode) return;
+      try {
+        const { data, error } = await supabaseClient
+          .from(SUPABASE_TABLE)
+          .select("state, revision")
+          .eq("room_code", roomCode)
+          .maybeSingle();
+        if (error || !data?.state?.players?.length) return;
+        if (state && (data.revision || 0) <= (state.revision || 0)) return;
+        state = data.state;
+        selectedPlayerId = state.players.some((player) => player.id === selectedPlayerId)
+          ? selectedPlayerId
+          : state.players[0].id;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        setRoomCode(state.id);
+        subscribeToSupabaseRoom(state.id);
+        showGame();
+        remoteReady = true;
+      } catch (error) {
+        remoteReady = false;
+        console.warn("Supabase pull failed", error);
+      }
+    }
+
+    function subscribeToSupabaseRoom(roomCode) {
+      if (!supabaseClient || !roomCode) return;
+      if (realtimeChannel) supabaseClient.removeChannel(realtimeChannel);
+      realtimeChannel = supabaseClient
+        .channel(`banco-room-${roomCode}`)
+        .on("postgres_changes", {
+          event: "*",
+          schema: "public",
+          table: SUPABASE_TABLE,
+          filter: `room_code=eq.${roomCode}`
+        }, (payload) => {
+          const nextState = payload.new?.state;
+          const nextRevision = payload.new?.revision || nextState?.revision || 0;
+          if (!nextState?.players?.length) return;
+          if (state && nextRevision <= (state.revision || 0)) return;
+          state = nextState;
+          selectedPlayerId = state.players.some((player) => player.id === selectedPlayerId)
+            ? selectedPlayerId
+            : state.players[0].id;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+          showGame();
+        })
+        .subscribe();
+    }
+
+    async function resetRemoteRoom(roomCode) {
+      if (SUPABASE_ENABLED && supabaseClient && roomCode) {
+        await supabaseClient.from(SUPABASE_TABLE).delete().eq("room_code", roomCode);
+        if (realtimeChannel) {
+          supabaseClient.removeChannel(realtimeChannel);
+          realtimeChannel = null;
+        }
+        history.replaceState(null, "", `${location.pathname}${location.search}`);
+        return;
+      }
+      if (REMOTE_SYNC) {
+        await fetch("/api/reset", { method: "POST" });
+      }
+    }
+
+    function currentPlayer() {
+      return state?.players.find((player) => player.id === selectedPlayerId) || state?.players[0];
+    }
+
+    function renderSetupPlayers() {
+      els.setupPlayers.innerHTML = "";
+      setupPlayers.forEach((player, index) => {
+        const row = document.createElement("div");
+        row.className = "player-row";
+        row.innerHTML = `
+          <input value="${escapeHtml(player.name)}" maxlength="24" aria-label="Nome do jogador ${index + 1}">
+          <button class="icon-btn" title="Remover jogador" ${setupPlayers.length <= 2 ? "disabled" : ""}>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg>
+          </button>
+        `;
+        const input = row.querySelector("input");
+        const remove = row.querySelector("button");
+        input.addEventListener("input", () => {
+          setupPlayers[index].name = input.value;
+        });
+        remove.addEventListener("click", () => {
+          setupPlayers.splice(index, 1);
+          renderSetupPlayers();
+        });
+
+        const swatches = document.createElement("div");
+        swatches.className = "swatch-row";
+        colors.forEach((color) => {
+          const swatch = document.createElement("button");
+          swatch.className = `swatch ${player.color === color ? "active" : ""}`;
+          swatch.style.background = color;
+          swatch.title = "Cor do jogador";
+          swatch.addEventListener("click", () => {
+            setupPlayers[index].color = color;
+            renderSetupPlayers();
+          });
+          swatches.appendChild(swatch);
+        });
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "action-box";
+        wrapper.append(row, swatches);
+        els.setupPlayers.appendChild(wrapper);
+      });
+    }
+
+    function startGame() {
+      const names = setupPlayers.map((player) => player.name.trim()).filter(Boolean);
+      if (names.length < 2) {
+        showToast("Adicione pelo menos 2 jogadores.");
+        return;
+      }
+      const startBalance = parseAmount($("#start-balance").value) || 1500;
+      const uniqueNames = names.map((name, index) => names.indexOf(name) === index ? name : `${name} ${index + 1}`);
+      state = {
+        id: uid(),
+        name: $("#game-name").value.trim() || "Partida",
+        createdAt: new Date().toISOString(),
+        revision: 1,
+        players: uniqueNames.map((name, index) => ({
+          id: uid(),
+          name,
+          color: setupPlayers[index]?.color || colors[index % colors.length],
+          balance: startBalance,
+          startingBalance: startBalance
+        })),
+        history: []
+      };
+      selectedPlayerId = state.players[0].id;
+      save();
+      showGame();
+      showToast("Partida criada.");
+    }
+
+    function showGame() {
+      if (!state?.players?.length) return;
+      els.setupScreen.classList.add("hidden");
+      els.gameScreen.classList.remove("hidden");
+      els.gameActions.classList.remove("hidden");
+      els.gameSubtitle.textContent = SUPABASE_ENABLED ? `${state.name} · sala ${state.id}` : state.name;
+      if (!selectedPlayerId || !state.players.some((player) => player.id === selectedPlayerId)) {
+        selectedPlayerId = state.players[0].id;
+      }
+      if (SUPABASE_ENABLED) {
+        setRoomCode(state.id);
+        subscribeToSupabaseRoom(state.id);
+      }
+      renderGame();
+    }
+
+    function showSetup() {
+      els.setupScreen.classList.remove("hidden");
+      els.gameScreen.classList.add("hidden");
+      els.gameActions.classList.add("hidden");
+      els.gameSubtitle.textContent = "Dinheiro digital para Banco Imobiliário";
+      renderSetupPlayers();
+    }
+
+    function renderGame() {
+      const active = currentPlayer();
+      if (!active) return;
+      selectedPlayerId = active.id;
+      renderPlayers(active);
+      renderWallet(active);
+      renderTransferTargets(active);
+      renderHistory();
+    }
+
+    function renderPlayers(active) {
+      els.playersList.innerHTML = "";
+      [...state.players]
+        .sort((a, b) => b.balance - a.balance)
+        .forEach((player, index) => {
+          const button = document.createElement("button");
+          button.className = `player-card ${player.id === active.id ? "active" : ""}`;
+          button.style.setProperty("--player-color", player.color);
+          button.innerHTML = `
+            <span class="stripe"></span>
+            <span class="player-content">
+              <span class="player-meta">
+                <strong>${escapeHtml(player.name)}</strong>
+                <span class="subtle">#${index + 1}</span>
+              </span>
+              <span class="balance">${money.format(player.balance)}</span>
+              <span class="subtle">${movementLabel(player)}</span>
+            </span>
+          `;
+          button.addEventListener("click", () => {
+            selectedPlayerId = player.id;
+            renderGame();
+          });
+          els.playersList.appendChild(button);
+        });
+    }
+
+    function renderWallet(active) {
+      const ranking = [...state.players].sort((a, b) => b.balance - a.balance).findIndex((player) => player.id === active.id) + 1;
+      els.walletHero.style.setProperty("--player-color", active.color);
+      els.activeName.textContent = active.name;
+      els.walletOwnerName.textContent = active.name;
+      els.activeBalance.textContent = money.format(active.balance);
+      els.activePosition.textContent = `Posição #${ranking}`;
+      els.netMovement.textContent = movementLabel(active);
+      renderActionMode();
+
+      els.quickActions.innerHTML = "";
+      quickValues.forEach((item) => {
+        const button = document.createElement("button");
+        button.className = "quick-btn";
+        button.innerHTML = `<strong>${item.type === "receive" ? "+" : "-"} ${money.format(item.amount)}</strong><small>${item.label}</small>`;
+        button.addEventListener("click", () => bankTransaction(item.type, item.amount, item.label));
+        els.quickActions.appendChild(button);
+      });
+    }
+
+    function renderTransferTargets(active) {
+      els.transferTarget.innerHTML = "";
+      els.walletTransferTarget.innerHTML = "";
+      state.players
+        .filter((player) => player.id !== active.id)
+        .forEach((player) => {
+          const option = document.createElement("option");
+          option.value = player.id;
+          option.textContent = player.name;
+          els.transferTarget.appendChild(option);
+          els.walletTransferTarget.appendChild(option.cloneNode(true));
+        });
+    }
+
+    function renderHistory() {
+      const active = currentPlayer();
+      const personalHistory = state.history
+        .map((event) => ({ event, delta: active ? eventDeltaForPlayer(event, active.id) : 0 }))
+        .filter((item) => item.delta !== 0 || item.event.playerId === active?.id);
+
+      els.historyCount.textContent = `${personalHistory.length}`;
+      els.historyList.innerHTML = "";
+      if (!personalHistory.length) {
+        els.historyList.innerHTML = `<div class="empty">As transações da partida aparecem aqui.</div>`;
+        return;
+      }
+
+      personalHistory.slice().reverse().slice(0, 80).forEach(({ event, delta }) => {
+        const div = document.createElement("div");
+        div.className = "event";
+        const signed = delta >= 0 ? "plus" : "minus";
+        div.innerHTML = `
+          <div class="event-top">
+            <span>${escapeHtml(event.title)}</span>
+            <span class="event-value ${signed}">${delta > 0 ? "+" : ""}${money.format(delta)}</span>
+          </div>
+          <div class="subtle">${escapeHtml(event.detail)}</div>
+          <div class="event-time">${new Date(event.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</div>
+        `;
+        els.historyList.appendChild(div);
+      });
+    }
+
+    function eventDeltaForPlayer(event, playerId) {
+      if (Array.isArray(event.entries)) {
+        const entry = event.entries.find((item) => item.id === playerId);
+        return entry ? entry.amount : 0;
+      }
+      if (event.playerId === playerId) return event.amount || 0;
+      const reverse = event.reverse?.find((item) => item.id === playerId);
+      return reverse ? -(reverse.amount || 0) : 0;
+    }
+
+    function movementLabel(player) {
+      const diff = player.balance - player.startingBalance;
+      if (diff === 0) return "Hoje: R$ 0";
+      return `Hoje: ${diff > 0 ? "+" : ""}${money.format(diff)}`;
+    }
+
+    function bankTransaction(type, amount, note) {
+      const active = currentPlayer();
+      if (!active || !amount) {
+        showToast("Informe um valor válido.");
+        return;
+      }
+      const delta = type === "receive" ? amount : -amount;
+      active.balance += delta;
+      state.history.push({
+        id: uid(),
+        kind: "bank",
+        at: new Date().toISOString(),
+        playerId: active.id,
+        amount: delta,
+        title: `${active.name} ${type === "receive" ? "recebeu do banco" : "pagou ao banco"}`,
+        detail: note || (type === "receive" ? "Crédito do banco" : "Pagamento ao banco"),
+        entries: [{ id: active.id, amount: delta }],
+        reverse: [{ id: active.id, amount: -delta }]
+      });
+      clearBankFields();
+      persistAndRender("Saldo atualizado.");
+    }
+
+    function transfer() {
+      const from = currentPlayer();
+      const to = state.players.find((player) => player.id === els.transferTarget.value);
+      const amount = parseAmount($("#transfer-amount").value);
+      if (!from || !to || !amount) {
+        showToast("Escolha destino e valor.");
+        return;
+      }
+      from.balance -= amount;
+      to.balance += amount;
+      const note = $("#transfer-note").value.trim() || "Transferência";
+      state.history.push({
+        id: uid(),
+        kind: "transfer",
+        at: new Date().toISOString(),
+        playerId: from.id,
+        amount: -amount,
+        title: `${from.name} enviou para ${to.name}`,
+        detail: note,
+        entries: [{ id: from.id, amount: -amount }, { id: to.id, amount }],
+        reverse: [{ id: from.id, amount }, { id: to.id, amount: -amount }]
+      });
+      $("#transfer-amount").value = "";
+      $("#transfer-note").value = "";
+      persistAndRender("Transferência feita.");
+    }
+
+    function collectFromAll() {
+      const active = currentPlayer();
+      const amount = parseAmount($("#collect-amount").value);
+      if (!active || !amount) {
+        showToast("Informe um valor para cobrar.");
+        return;
+      }
+      const others = state.players.filter((player) => player.id !== active.id);
+      const reverse = [{ id: active.id, amount: -(amount * others.length) }];
+      active.balance += amount * others.length;
+      others.forEach((player) => {
+        player.balance -= amount;
+        reverse.push({ id: player.id, amount });
+      });
+      const note = $("#collect-note").value.trim() || "Cobrança coletiva";
+      state.history.push({
+        id: uid(),
+        kind: "collect",
+        at: new Date().toISOString(),
+        playerId: active.id,
+        amount: amount * others.length,
+        title: `${active.name} cobrou de todos`,
+        detail: `${note} · ${others.length} jogadores`,
+        entries: [{ id: active.id, amount: amount * others.length }, ...others.map((player) => ({ id: player.id, amount: -amount }))],
+        reverse
+      });
+      $("#collect-amount").value = "";
+      $("#collect-note").value = "";
+      persistAndRender("Cobrança recebida.");
+    }
+
+    function undo() {
+      if (!state?.history.length) {
+        showToast("Nada para desfazer.");
+        return;
+      }
+      const last = state.history.pop();
+      last.reverse.forEach((change) => {
+        if (change.remove) {
+          state.players = state.players.filter((item) => item.id !== change.id);
+          if (selectedPlayerId === change.id) selectedPlayerId = state.players[0]?.id;
+          return;
+        }
+        const player = state.players.find((item) => item.id === change.id);
+        if (player) player.balance += change.amount;
+      });
+      persistAndRender("Última transação desfeita.");
+    }
+
+    function clearBankFields() {
+      $("#bank-amount").value = "";
+      $("#bank-note").value = "";
+    }
+
+    function renderActionMode() {
+      const config = {
+        receive: ["Cobrar banco", "Receber valor na carteira", false],
+        "pay-bank": ["Pagar banco", "Enviar valor ao banco", false],
+        transfer: ["Pagar jogador", "Escolha o jogador no listbox", true]
+      }[actionMode];
+
+      document.querySelectorAll("[data-action-mode]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.actionMode === actionMode);
+        button.style.setProperty("--player-color", currentPlayer()?.color || colors[0]);
+      });
+      els.terminalTitle.textContent = config[0];
+      els.terminalHint.textContent = config[1];
+      els.transferTargetField.classList.toggle("hidden-field", !config[2]);
+    }
+
+    function selectActionMode(mode, shouldFocus = true) {
+      actionMode = mode;
+      bankMode = mode === "pay-bank" ? "pay" : "receive";
+      renderActionMode();
+      if (shouldFocus) els.actionAmount.focus();
+    }
+
+    function approveWalletAction() {
+      const amount = parseAmount(els.actionAmount.value);
+      const note = els.actionNote.value.trim();
+      if (!amount) {
+        showToast("Informe um valor valido.");
+        els.actionAmount.focus();
+        return;
+      }
+
+      if (actionMode === "transfer") {
+        els.transferTarget.value = els.walletTransferTarget.value;
+        $("#transfer-amount").value = amount;
+        $("#transfer-note").value = note || "Pagamento por carteira";
+        transfer();
+      } else {
+        const type = actionMode === "pay-bank" ? "pay" : "receive";
+        $("#bank-amount").value = amount;
+        $("#bank-note").value = note || (type === "receive" ? "Cobrado pela carteira" : "Pago pela carteira");
+        bankTransaction(type, amount, $("#bank-note").value);
+      }
+
+      els.actionAmount.value = "";
+      els.actionNote.value = "";
+      els.actionAmount.focus();
+    }
+
+    function addSetupPlayer() {
+      const name = $("#new-player-name").value.trim();
+      if (!name) {
+        showToast("Digite o nome do jogador.");
+        return;
+      }
+      setupPlayers.push({ name, color: colors[setupPlayers.length % colors.length] });
+      $("#new-player-name").value = "";
+      renderSetupPlayers();
+    }
+
+    function addPlayerInGame() {
+      if (!state) return;
+      const name = prompt("Nome do novo jogador:");
+      if (!name?.trim()) return;
+      const baseBalance = state.players[0]?.startingBalance || 1500;
+      const player = {
+        id: uid(),
+        name: name.trim().slice(0, 24),
+        color: colors[state.players.length % colors.length],
+        balance: baseBalance,
+        startingBalance: baseBalance
+      };
+      state.players.push(player);
+      selectedPlayerId = player.id;
+      state.history.push({
+        id: uid(),
+        kind: "player",
+        at: new Date().toISOString(),
+        playerId: player.id,
+        amount: 0,
+        title: `${player.name} entrou na partida`,
+        detail: `Saldo inicial: ${money.format(baseBalance)}`,
+        reverse: [{ id: player.id, remove: true }]
+      });
+      persistAndRender(`${player.name} entrou na partida.`);
+    }
+
+    function exportGame() {
+      if (!state) return;
+      const data = JSON.stringify(state, null, 2);
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const safeName = state.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "partida";
+      link.href = url;
+      link.download = `${safeName}-banco-de-mesa.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast("Arquivo exportado.");
+    }
+
+    function importGame(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const imported = JSON.parse(reader.result);
+          if (!Array.isArray(imported.players) || !Array.isArray(imported.history)) throw new Error("invalid");
+          state = imported;
+          bumpRevision();
+          selectedPlayerId = state.players[0]?.id;
+          save();
+          showGame();
+          showToast("Partida importada.");
+        } catch {
+          showToast("Arquivo inválido.");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    document.addEventListener("click", (event) => {
+      const segment = event.target.closest("[data-bank-mode]");
+      if (!segment) return;
+      bankMode = segment.dataset.bankMode;
+      document.querySelectorAll("[data-bank-mode]").forEach((button) => button.classList.toggle("active", button === segment));
+    });
+
+    document.addEventListener("click", (event) => {
+      const action = event.target.closest("[data-action-mode]");
+      if (!action) return;
+      selectActionMode(action.dataset.actionMode);
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (!state || els.gameScreen.classList.contains("hidden")) return;
+      const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(event.target.tagName);
+      const key = event.key.toLowerCase();
+
+      if ((event.ctrlKey || event.metaKey) && key === "z") {
+        event.preventDefault();
+        undo();
+        return;
+      }
+
+      if (event.key === "Enter" && (typing || document.activeElement === els.actionSubmit)) {
+        event.preventDefault();
+        approveWalletAction();
+        return;
+      }
+
+      const modeKey = ["r", "p", "t"].includes(key);
+      const modeAllowedFromAmount = event.target === els.actionAmount && modeKey;
+      if ((typing && !modeAllowedFromAmount) || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      if (key === "r") {
+        event.preventDefault();
+        selectActionMode("receive");
+      }
+      if (key === "p") {
+        event.preventDefault();
+        selectActionMode("pay-bank");
+      }
+      if (key === "t") {
+        event.preventDefault();
+        selectActionMode("transfer");
+      }
+    });
+
+    $("#add-player-btn").addEventListener("click", addSetupPlayer);
+    $("#new-player-name").addEventListener("keydown", (event) => {
+      if (event.key === "Enter") addSetupPlayer();
+    });
+    $("#start-game-btn").addEventListener("click", startGame);
+    $("#load-saved-btn").addEventListener("click", () => {
+      const saved = load();
+      if (!saved) {
+        showToast("Nenhuma partida salva neste navegador.");
+        return;
+      }
+      state = saved;
+      selectedPlayerId = state.players[0]?.id;
+      showGame();
+    });
+    $("#bank-submit").addEventListener("click", () => bankTransaction(bankMode, parseAmount($("#bank-amount").value), $("#bank-note").value.trim()));
+    $("#transfer-submit").addEventListener("click", transfer);
+    $("#collect-submit").addEventListener("click", collectFromAll);
+    $("#action-submit").addEventListener("click", approveWalletAction);
+    $("#undo-btn").addEventListener("click", undo);
+    $("#add-player-game-btn").addEventListener("click", addPlayerInGame);
+    $("#export-btn").addEventListener("click", exportGame);
+    $("#import-btn").addEventListener("click", () => $("#import-file").click());
+    $("#import-file").addEventListener("change", (event) => importGame(event.target.files[0]));
+    $("#new-game-btn").addEventListener("click", async () => {
+      if (!confirm("Criar uma nova partida? A partida atual continuará disponível se você exportar antes.")) return;
+      const previousRoomCode = state?.id || roomCodeFromUrl();
+      state = null;
+      selectedPlayerId = null;
+      localStorage.removeItem(STORAGE_KEY);
+      if (SUPABASE_ENABLED || REMOTE_SYNC) {
+        try {
+          await resetRemoteRoom(previousRoomCode);
+        } catch {
+          remoteReady = false;
+        }
+      }
+      showSetup();
+    });
+
+    ["#bank-amount", "#transfer-amount", "#collect-amount"].forEach((selector) => {
+      $(selector).addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        if (selector === "#bank-amount") bankTransaction(bankMode, parseAmount($("#bank-amount").value), $("#bank-note").value.trim());
+        if (selector === "#transfer-amount") transfer();
+        if (selector === "#collect-amount") collectFromAll();
+      });
+    });
+
+    renderSetupPlayers();
+    const saved = load();
+    if (saved?.players?.length) {
+      state = saved;
+      selectedPlayerId = state.players[0].id;
+      showGame();
+    }
+    pullRemote();
+    if (REMOTE_SYNC) window.setInterval(pullRemote, 1400);
+  </script>
+</body>
+</html>
