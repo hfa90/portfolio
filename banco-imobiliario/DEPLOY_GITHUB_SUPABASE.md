@@ -6,7 +6,7 @@
 2. Abra `SQL Editor`.
 3. Rode o arquivo `supabase-schema.sql`.
 
-Esse schema cria uma tabela `banco_games` com uma linha por partida. O estado inteiro da mesa fica no campo `state` em JSON.
+O schema cria a tabela `banco_games`, bloqueia acesso direto anonimo a ela com RLS e expõe apenas funcoes RPC com tokens.
 
 ## 2. Configurar o app
 
@@ -26,6 +26,7 @@ Use a chave publica/publishable do Supabase. Nunca coloque `service_role` no Git
 
 Suba estes arquivos para um repositorio:
 
+- `.nojekyll`
 - `index.html`
 - `supabase-config.js`
 - `supabase-schema.sql`
@@ -38,16 +39,31 @@ No GitHub:
 3. Em `Build and deployment`, selecione `Deploy from a branch`.
 4. Escolha a branch e a pasta onde esta o `index.html`.
 
-## 4. Como compartilhar a partida
+## 4. Como funcionam os acessos
 
-Quando voce cria uma partida, o app coloca o codigo da sala no final da URL, por exemplo:
+Ao criar uma partida, o banco recebe um link mestre:
 
 ```txt
-https://seuusuario.github.io/seu-repo/#abc123xyz
+https://seuusuario.github.io/seu-repo/#bank=TOKEN_DO_BANCO
 ```
 
-Envie esse link para os amigos. Todos que abrirem o mesmo link entram na mesma mesa.
+Esse link mostra todos os jogadores, todos os saldos, historico completo e os links individuais.
+
+Para cada jogador, o banco copia um link individual:
+
+```txt
+https://seuusuario.github.io/seu-repo/#player=TOKEN_DO_JOGADOR
+```
+
+Esse link mostra somente a carteira daquele jogador. Ele recebe apenas:
+
+- nome e saldo dele;
+- historico que envolve a carteira dele;
+- nomes dos outros jogadores para poder pagar alguem;
+- nenhum saldo dos outros jogadores.
 
 ## Nota de seguranca
 
-Este setup deixa qualquer pessoa com o link da sala ler e alterar a partida. Para Banco Imobiliario entre amigos isso costuma ser suficiente. Para algo publico ou com contas reais, o proximo passo e adicionar login com Supabase Auth e politicas RLS por usuario.
+Este setup usa tokens longos nos links e funcoes RPC com validacao no Supabase. A tabela nao fica aberta diretamente para `anon`.
+
+Quem tiver o link do banco tem acesso total. Quem tiver um link de jogador acessa somente aquela carteira. Para uso publico ou mais sensivel, o proximo passo seria adicionar Supabase Auth com login por usuario.
