@@ -2,9 +2,13 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
 import socket
 import sys
+import time
+import uuid
+from urllib.parse import parse_qs, urlparse
 
 
 STATE = None
+CHESS_ROOMS = {}
 
 
 class BancoHandler(SimpleHTTPRequestHandler):
@@ -15,6 +19,17 @@ class BancoHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/api/state":
             self.send_json(STATE)
+            return
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/chess/state":
+            params = parse_qs(parsed.query)
+            room_id = (params.get("room") or [""])[0].strip()
+            password = (params.get("password") or [""])[0]
+            room = CHESS_ROOMS.get(room_id)
+            if not room or room.get("password") != password:
+                self.send_json({"error": "room not found"}, status=404)
+                return
+            self.send_json({"room": public_chess_room(room)})
             return
         super().do_GET()
 
@@ -41,7 +56,108 @@ class BancoHandler(SimpleHTTPRequestHandler):
             self.send_json({"ok": True})
             return
 
+        if self.path == "/api/chess/create":
+            payload = self.read_json()
+            if payload is None:
+                self.send_json({"error": "invalid payload"}, status=400)
+                return
+            password = str(payload.get("password") or "").strip()
+            if len(password) < 3:
+                self.send_json({"error": "password required"}, status=400)
+                return
+            room_id = uuid.uuid4().hex[:8]
+            now = time.time()
+            CHESS_ROOMS[room_id] = {
+                "id": room_id,
+                "password": password,
+                "revision": 1,
+                "created_at": now,
+                "updated_at": now,
+                "players": {
+                    "white": str(payload.get("playerName") or "Brancas")[:24],
+                    "black": ""
+                },
+                "state": {
+                    "fen": "start",
+                    "pgn": "",
+                    "moves": [],
+                    "lastMove": "",
+                    "status": "Aguardando oponente",
+                    "result": "",
+                    "turn": "w"
+                }
+            }
+            self.send_json({
+                "room": public_chess_room(CHESS_ROOMS[room_id]),
+                "color": "white",
+                "link": self.room_link(room_id)
+            })
+            return
+
+        if self.path == "/api/chess/join":
+            payload = self.read_json()
+            if payload is None:
+                self.send_json({"error": "invalid payload"}, status=400)
+                return
+            room_id = str(payload.get("roomId") or "").strip()
+            password = str(payload.get("password") or "")
+            room = CHESS_ROOMS.get(room_id)
+            if not room or room.get("password") != password:
+                self.send_json({"error": "room not found"}, status=404)
+                return
+            color = "black" if not room["players"].get("black") else "spectator"
+            if color == "black":
+                room["players"]["black"] = str(payload.get("playerName") or "Pretas")[:24]
+                if room["state"].get("status") == "Aguardando oponente":
+                    room["state"]["status"] = "Partida em andamento"
+                room["revision"] += 1
+                room["updated_at"] = time.time()
+            self.send_json({"room": public_chess_room(room), "color": color})
+            return
+
+        if self.path == "/api/chess/move":
+            payload = self.read_json()
+            if payload is None:
+                self.send_json({"error": "invalid payload"}, status=400)
+                return
+            room_id = str(payload.get("roomId") or "").strip()
+            password = str(payload.get("password") or "")
+            room = CHESS_ROOMS.get(room_id)
+            if not room or room.get("password") != password:
+                self.send_json({"error": "room not found"}, status=404)
+                return
+            state = payload.get("state")
+            if not isinstance(state, dict) or not state.get("fen"):
+                self.send_json({"error": "invalid state"}, status=400)
+                return
+            room["state"] = {
+                "fen": str(state.get("fen") or "start"),
+                "pgn": str(state.get("pgn") or ""),
+                "moves": state.get("moves") if isinstance(state.get("moves"), list) else [],
+                "lastMove": str(state.get("lastMove") or ""),
+                "status": str(state.get("status") or "Partida em andamento"),
+                "result": str(state.get("result") or ""),
+                "turn": str(state.get("turn") or "w")[:1]
+            }
+            room["revision"] += 1
+            room["updated_at"] = time.time()
+            self.send_json({"room": public_chess_room(room)})
+            return
+
         self.send_json({"error": "not found"}, status=404)
+
+    def read_json(self):
+        length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(length) if length else b"{}"
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            return payload if isinstance(payload, dict) else None
+        except Exception:
+            return None
+
+    def room_link(self, room_id):
+        host = self.headers.get("Host") or "127.0.0.1:4173"
+        return f"http://{host}/#chess={room_id}"
 
     def send_json(self, payload, status=200):
         data = json.dumps(payload).encode("utf-8")
@@ -50,6 +166,15 @@ class BancoHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+
+def public_chess_room(room):
+    return {
+        "id": room["id"],
+        "revision": room["revision"],
+        "players": room["players"],
+        "state": room["state"],
+    }
 
 
 def local_ip():
