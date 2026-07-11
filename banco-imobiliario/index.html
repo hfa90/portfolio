@@ -1299,9 +1299,13 @@
       margin: 0 auto;
       padding: clamp(16px, 3vw, 32px);
       display: grid;
-      grid-template-columns: minmax(280px, 360px) minmax(0, 720px) minmax(280px, 360px);
+      grid-template-columns: minmax(250px, 330px) minmax(0, 1fr) minmax(240px, 320px);
       gap: 18px;
       align-items: start;
+    }
+
+    .chess-shell .panel {
+      min-width: 0;
     }
 
     .chess-board-wrap {
@@ -1311,12 +1315,13 @@
     }
 
     .chess-board {
-      width: min(720px, calc(100vw - 32px));
+      width: min(100%, 62vh, 640px);
+      max-width: 100%;
       aspect-ratio: 1;
       display: grid;
       grid-template-columns: repeat(8, 1fr);
       grid-template-rows: repeat(8, 1fr);
-      border: 10px solid #27313a;
+      border: clamp(5px, 1vw, 10px) solid #27313a;
       border-radius: var(--radius);
       overflow: hidden;
       box-shadow: 0 28px 76px rgba(23, 35, 38, .22);
@@ -1328,7 +1333,7 @@
       border-radius: 0;
       display: grid;
       place-items: center;
-      font-size: clamp(1.9rem, 6.2vw, 4.5rem);
+      font-size: clamp(1.55rem, 5.2vw, 4.2rem);
       line-height: 1;
       color: #111827;
       box-shadow: none;
@@ -1385,6 +1390,42 @@
       color: var(--ink);
     }
 
+    .chess-suggestion,
+    .chess-curiosity-box {
+      width: 100%;
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: var(--radius);
+      border: 1px solid rgba(22, 140, 132, .22);
+      background: #f2fbfa;
+      color: var(--ink);
+      line-height: 1.45;
+      position: relative;
+    }
+
+    .chess-suggestion::before {
+      content: "";
+      position: absolute;
+      left: 28px;
+      bottom: -9px;
+      width: 16px;
+      height: 16px;
+      background: #f2fbfa;
+      border-right: 1px solid rgba(22, 140, 132, .22);
+      border-bottom: 1px solid rgba(22, 140, 132, .22);
+      transform: rotate(45deg);
+    }
+
+    .chess-suggestion strong,
+    .chess-curiosity-box strong {
+      color: var(--teal-dark);
+    }
+
+    .chess-suggestion button {
+      justify-self: start;
+    }
+
     .chess-controls,
     .chess-room-panel,
     .move-list {
@@ -1437,6 +1478,15 @@
       word-break: break-all;
     }
 
+    .chess-curiosity-box ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .chess-curiosity-box li + li {
+      margin-top: 6px;
+    }
+
     @media (max-width: 1120px) {
       .layout {
         grid-template-columns: 290px minmax(0, 1fr);
@@ -1475,6 +1525,15 @@
       .chess-shell,
       .game-choice-grid {
         grid-template-columns: 1fr;
+      }
+
+      .chess-shell {
+        width: 100%;
+        padding: 12px;
+      }
+
+      .chess-board {
+        width: min(100%, calc(100vw - 40px));
       }
 
       .intro {
@@ -1530,6 +1589,14 @@
 
       .wallet-actions {
         grid-template-columns: 1fr;
+      }
+
+      .chess-board {
+        width: min(100%, calc(100vw - 28px));
+      }
+
+      .square {
+        font-size: clamp(1.35rem, 10vw, 2.4rem);
       }
     }
   </style>
@@ -1861,6 +1928,22 @@
               <input id="chess-player-name" maxlength="24" value="Jogador">
             </label>
 
+            <button class="ghost-btn" id="chess-curiosity-btn">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 17h.01"></path><path d="M9.1 9a3 3 0 1 1 5.8 1c-.5 1.1-1.7 1.6-2.3 2.5-.3.4-.5.8-.5 1.5"></path></svg>
+              Curiosidades
+            </button>
+
+            <div class="chess-curiosity-box hidden" id="chess-curiosity-box">
+              <strong>Curiosidades do xadrez</strong>
+              <ul>
+                <li>O jogo nasceu na India como chaturanga, um jogo de estrategia sobre quatro divisoes de um exercito.</li>
+                <li>O nome "xadrez" chegou ao portugues por caminhos ligados ao persa "shah", que significa rei.</li>
+                <li>A dama ja foi uma peca mais lenta; ela ficou poderosa na Europa medieval, deixando o jogo mais dinamico.</li>
+                <li>Bispos representam conselheiros, elefantes ou clerigos dependendo da tradicao cultural.</li>
+                <li>O roque protege o rei e ativa a torre no mesmo lance.</li>
+              </ul>
+            </div>
+
             <div id="chess-ai-controls" class="chess-controls">
               <label>
                 Dificuldade da IA
@@ -1919,6 +2002,11 @@
               <span><strong id="chess-white-player">Brancas</strong> vs <strong id="chess-black-player">Pretas</strong></span>
               <span id="chess-status">Escolha um modo para começar.</span>
             </div>
+            <div class="chess-suggestion hidden" id="chess-suggestion">
+              <strong id="chess-suggestion-move">Sugestao</strong>
+              <span id="chess-suggestion-reason"></span>
+              <button class="ghost-btn" id="play-chess-suggestion-btn">Jogar sugestao</button>
+            </div>
             <div class="chess-board" id="chess-board" aria-label="Tabuleiro de xadrez"></div>
           </div>
         </section>
@@ -1964,6 +2052,7 @@
     const SUPABASE_ENABLED = Boolean(window.supabase?.createClient && SUPABASE_CONFIG.url && SUPABASE_KEY);
     const LOCAL_HTTP_HOST = location.hostname === "localhost" || location.hostname === "127.0.0.1" || /^(\d{1,3}\.){3}\d{1,3}$/.test(location.hostname);
     const REMOTE_SYNC = !SUPABASE_ENABLED && location.protocol.startsWith("http") && LOCAL_HTTP_HOST;
+    const CHESS_LOCAL_API = !SUPABASE_ENABLED && location.protocol.startsWith("http") && LOCAL_HTTP_HOST;
     const SUPABASE_TABLE = SUPABASE_CONFIG.table || "banco_games";
     const colors = ["#168c84", "#e96f4f", "#d79b2d", "#6f61d4", "#2f80ed", "#1f9f64", "#b84c8d", "#444f5f"];
     const quickValues = [
@@ -1995,6 +2084,8 @@
     let chessRoom = null;
     let chessPollTimer = null;
     let chessLastMove = "";
+    let chessSuggestedMove = null;
+    let chessRoomPasswordValue = "";
 
     const $ = (selector) => document.querySelector(selector);
     const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -2058,7 +2149,11 @@
       chessRoomPassOutput: $("#chess-room-pass-output"),
       chessRoomOutput: $("#chess-room-output"),
       joinChessRoomId: $("#join-chess-room-id"),
-      joinChessRoomPassword: $("#join-chess-room-password")
+      joinChessRoomPassword: $("#join-chess-room-password"),
+      chessSuggestion: $("#chess-suggestion"),
+      chessSuggestionMove: $("#chess-suggestion-move"),
+      chessSuggestionReason: $("#chess-suggestion-reason"),
+      chessCuriosityBox: $("#chess-curiosity-box")
     };
 
     function uid() {
@@ -2246,11 +2341,13 @@
     }
 
     function ensureChess() {
-      if (!window.Chess) {
+      const ChessCtor = window.Chess || (typeof Chess !== "undefined" ? Chess : null);
+      if (!ChessCtor) {
         showToast("Biblioteca de xadrez nao carregou. Verifique a internet.");
         return null;
       }
-      if (!chess) chess = new Chess();
+      window.Chess = ChessCtor;
+      if (!chess) chess = new ChessCtor();
       return chess;
     }
 
@@ -2350,6 +2447,7 @@
         els.chessWhitePlayer.textContent = chessRoom.players?.white || "Brancas";
         els.chessBlackPlayer.textContent = chessRoom.players?.black || "Aguardando";
       }
+      updateChessSuggestion();
     }
 
     function renderChessMoves() {
@@ -2459,6 +2557,7 @@
     }
 
     function cloneChess(game) {
+      ensureChess();
       const clone = new window.Chess();
       clone.load(game.fen());
       return clone;
@@ -2506,6 +2605,141 @@
       return score;
     }
 
+    function chessMoveReason(move) {
+      if (move.san?.includes("#")) return "porque entrega xeque-mate.";
+      if (move.san?.includes("+")) return "porque coloca o rei adversario em xeque e ganha iniciativa.";
+      if (move.captured) return `porque captura uma peca adversaria (${move.captured.toUpperCase()}) sem perder tempo.`;
+      if (move.flags?.includes("k") || move.flags?.includes("q")) return "porque faz o roque, protegendo o rei e ativando a torre.";
+      if (["e4", "d4", "e5", "d5"].includes(move.to)) return "porque ocupa o centro, uma das ideias mais importantes da abertura.";
+      if (["n", "b"].includes(move.piece)) return "porque desenvolve uma peca leve para uma casa mais ativa.";
+      if (move.promotion) return "porque transforma o peao em uma peca mais forte.";
+      return "porque melhora a posicao e mantem suas opcoes abertas.";
+    }
+
+    function casualSuggestion() {
+      if (!chess || chessMode !== "ai" || els.chessDifficulty.value !== "easy" || !canMoveCurrentTurn() || chessSelected || chessGameOver()) return null;
+      const moves = chess.moves({ verbose: true });
+      if (!moves.length) return null;
+      let best = moves[0];
+      let bestScore = -Infinity;
+      moves.forEach((move) => {
+        const clone = cloneChess(chess);
+        clone.move({ from: move.from, to: move.to, promotion: move.promotion || "q" });
+        const score = -evaluateChess(clone) + (move.captured ? 80 : 0) + (move.san?.includes("+") ? 35 : 0);
+        if (score > bestScore) {
+          bestScore = score;
+          best = move;
+        }
+      });
+      return { move: best, reason: chessMoveReason(best) };
+    }
+
+    function updateChessSuggestion() {
+      if (!els.chessSuggestion) return;
+      const suggestion = casualSuggestion();
+      chessSuggestedMove = suggestion?.move || null;
+      els.chessSuggestion.classList.toggle("hidden", !suggestion);
+      if (!suggestion) return;
+      els.chessSuggestionMove.textContent = `Sugestao: ${suggestion.move.san}`;
+      els.chessSuggestionReason.textContent = suggestion.reason;
+    }
+
+    function playChessSuggestion() {
+      if (!chessSuggestedMove || !canMoveCurrentTurn()) return;
+      const move = chess.move({
+        from: chessSuggestedMove.from,
+        to: chessSuggestedMove.to,
+        promotion: chessSuggestedMove.promotion || "q"
+      });
+      if (move) afterChessMove(move);
+    }
+
+    function chessAccessLink(roomId) {
+      return `${location.origin}${location.pathname}${location.search}#chess=${encodeURIComponent(roomId)}`;
+    }
+
+    async function chessCreateRemote(password, playerName) {
+      if (SUPABASE_ENABLED && supabaseClient) {
+        const { data, error } = await supabaseClient.rpc("banco_create_chess_room", {
+          p_password: password,
+          p_player_name: playerName
+        });
+        if (error || !data?.room) throw error || new Error("invalid chess room");
+        return { ...data, link: chessAccessLink(data.room.id) };
+      }
+      if (!CHESS_LOCAL_API) {
+        throw new Error("supabase required");
+      }
+      const response = await fetch("/api/chess/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, playerName })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "create failed");
+      return { ...payload, link: chessAccessLink(payload.room.id) };
+    }
+
+    async function chessJoinRemote(roomId, password, playerName) {
+      if (SUPABASE_ENABLED && supabaseClient) {
+        const { data, error } = await supabaseClient.rpc("banco_join_chess_room", {
+          p_room_code: roomId,
+          p_password: password,
+          p_player_name: playerName
+        });
+        if (error || !data?.room) throw error || new Error("invalid chess room");
+        return data;
+      }
+      if (!CHESS_LOCAL_API) {
+        throw new Error("supabase required");
+      }
+      const response = await fetch("/api/chess/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, password, playerName })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "join failed");
+      return payload;
+    }
+
+    async function chessUpdateRemote(roomId, password, nextState) {
+      if (SUPABASE_ENABLED && supabaseClient) {
+        const { data, error } = await supabaseClient.rpc("banco_update_chess_room", {
+          p_room_code: roomId,
+          p_password: password,
+          p_state: nextState
+        });
+        if (error || !data?.room) throw error || new Error("update failed");
+        return data;
+      }
+      if (!CHESS_LOCAL_API) throw new Error("supabase required");
+      const response = await fetch("/api/chess/move", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId, password, state: nextState })
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "update failed");
+      return payload;
+    }
+
+    async function chessGetRemote(roomId, password) {
+      if (SUPABASE_ENABLED && supabaseClient) {
+        const { data, error } = await supabaseClient.rpc("banco_get_chess_room", {
+          p_room_code: roomId,
+          p_password: password
+        });
+        if (error || !data?.room) throw error || new Error("not found");
+        return data;
+      }
+      if (!CHESS_LOCAL_API) throw new Error("supabase required");
+      const response = await fetch(`/api/chess/state?room=${encodeURIComponent(roomId)}&password=${encodeURIComponent(password)}`, { cache: "no-store" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error || "not found");
+      return payload;
+    }
+
     async function createChessRoom() {
       if (!ensureChess()) return;
       const password = els.chessRoomPassword.value.trim();
@@ -2513,19 +2747,22 @@
         showToast("Crie uma senha com pelo menos 3 caracteres.");
         return;
       }
+      if (!SUPABASE_ENABLED && !CHESS_LOCAL_API) {
+        showToast("Configure o Supabase para criar salas no site hospedado.");
+        return;
+      }
       resetChessGame();
-      const response = await fetch("/api/chess/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, playerName: els.chessPlayerName.value.trim() || "Brancas" })
-      });
-      const payload = await response.json();
-      if (!response.ok) {
+      let payload;
+      try {
+        payload = await chessCreateRemote(password, els.chessPlayerName.value.trim() || "Brancas");
+      } catch (error) {
+        console.warn("Chess room create failed", error);
         showToast("Nao foi possivel criar a sala.");
         return;
       }
       chessRoom = payload.room;
       chessPlayerColor = payload.color;
+      chessRoomPasswordValue = password;
       chessMode = "online";
       setChessMode("online");
       els.chessShareBox.classList.remove("hidden");
@@ -2547,18 +2784,21 @@
         showToast("Informe codigo da sala e senha.");
         return;
       }
-      const response = await fetch("/api/chess/join", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId, password, playerName: els.chessPlayerName.value.trim() || "Pretas" })
-      });
-      const payload = await response.json();
-      if (!response.ok) {
+      if (!SUPABASE_ENABLED && !CHESS_LOCAL_API) {
+        showToast("Configure o Supabase para entrar em salas no site hospedado.");
+        return;
+      }
+      let payload;
+      try {
+        payload = await chessJoinRemote(roomId, password, els.chessPlayerName.value.trim() || "Pretas");
+      } catch (error) {
+        console.warn("Chess room join failed", error);
         showToast("Sala ou senha invalidas.");
         return;
       }
       chessRoom = payload.room;
       chessPlayerColor = payload.color;
+      chessRoomPasswordValue = password;
       loadChessRoomState(payload.room);
       setChessMode("online");
       history.replaceState(null, "", `#chess=${encodeURIComponent(roomId)}`);
@@ -2578,15 +2818,13 @@
 
     async function pushChessRoomState() {
       if (!chessRoom) return;
-      const password = els.chessRoomPassword.value.trim() || els.joinChessRoomPassword.value.trim();
-      const response = await fetch("/api/chess/move", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: chessRoom.id, password, state: chessRoom.state })
-      });
-      if (response.ok) {
-        const payload = await response.json();
+      const password = chessRoomPasswordValue || els.chessRoomPassword.value.trim() || els.joinChessRoomPassword.value.trim();
+      try {
+        const payload = await chessUpdateRemote(chessRoom.id, password, chessRoom.state);
         chessRoom = payload.room;
+      } catch (error) {
+        console.warn("Chess move sync failed", error);
+        showToast("Nao foi possivel sincronizar o lance.");
       }
     }
 
@@ -2595,9 +2833,7 @@
       chessPollTimer = window.setInterval(async () => {
         if (!chessRoom) return;
         try {
-          const response = await fetch(`/api/chess/state?room=${encodeURIComponent(chessRoom.id)}&password=${encodeURIComponent(password)}`, { cache: "no-store" });
-          if (!response.ok) return;
-          const payload = await response.json();
+          const payload = await chessGetRemote(chessRoom.id, password);
           if ((payload.room?.revision || 0) <= (chessRoom.revision || 0)) return;
           loadChessRoomState(payload.room);
         } catch {
@@ -3628,9 +3864,15 @@
     });
     els.backHomeBtn?.addEventListener("click", showHome);
     $("#start-ai-chess-btn").addEventListener("click", startAiChess);
+    $("#chess-curiosity-btn").addEventListener("click", () => {
+      els.chessCuriosityBox?.classList.toggle("hidden");
+    });
+    $("#play-chess-suggestion-btn").addEventListener("click", playChessSuggestion);
+    els.chessDifficulty?.addEventListener("change", renderChess);
     $("#new-chess-btn").addEventListener("click", () => {
       chessRoom = null;
       chessPlayerColor = "white";
+      chessRoomPasswordValue = "";
       stopChessPolling();
       resetChessGame();
       els.chessShareBox?.classList.add("hidden");
