@@ -1116,7 +1116,24 @@
         radial-gradient(circle, color-mix(in srgb, var(--fx-color) 92%, #ffffff 8%) 0%, color-mix(in srgb, var(--fx-color) 74%, #000000 8%) 48%, transparent 70%);
       filter: drop-shadow(0 28px 70px color-mix(in srgb, var(--fx-color) 45%, transparent));
       opacity: 0;
-      animation: paymentFlash .96s ease forwards;
+      animation: paymentFlash 2.25s cubic-bezier(.16, 1, .3, 1) forwards;
+    }
+
+    .payment-flash::before,
+    .payment-flash::after {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border-radius: inherit;
+      border: 2px solid rgba(255, 255, 255, .68);
+      opacity: 0;
+      animation: paymentRing 2.25s ease-out forwards;
+    }
+
+    .payment-flash::after {
+      inset: -18px;
+      border-color: color-mix(in srgb, var(--fx-color) 48%, #ffffff 52%);
+      animation-delay: .18s;
     }
 
     .payment-flash strong {
@@ -1135,18 +1152,27 @@
       background: color-mix(in srgb, var(--fx-color) 80%, #ffd86a 20%);
       box-shadow: inset 0 0 0 3px rgba(255, 255, 255, .55), 0 10px 28px color-mix(in srgb, var(--fx-color) 35%, transparent);
       transform: translate(-50%, -50%);
-      animation: paymentCoin .86s ease-out forwards;
+      animation: paymentCoin 1.85s cubic-bezier(.16, 1, .3, 1) forwards;
     }
 
     @keyframes paymentFlash {
       0% { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
-      18% { opacity: .94; transform: translate(-50%, -50%) scale(1); }
+      16% { opacity: .96; transform: translate(-50%, -50%) scale(1); }
+      58% { opacity: .9; transform: translate(-50%, -50%) scale(1.06); }
       100% { opacity: 0; transform: translate(-50%, -50%) scale(1.24); }
+    }
+
+    @keyframes paymentRing {
+      0% { opacity: 0; transform: scale(.82); }
+      22% { opacity: .78; transform: scale(1); }
+      72% { opacity: .42; transform: scale(1.2); }
+      100% { opacity: 0; transform: scale(1.36); }
     }
 
     @keyframes paymentCoin {
       0% { opacity: 0; transform: translate(-50%, -50%) scale(.35); }
-      18% { opacity: 1; }
+      16% { opacity: 1; }
+      62% { opacity: .96; }
       100% {
         opacity: 0;
         transform: translate(calc(-50% + var(--coin-x)), calc(-50% + var(--coin-y))) scale(1.05);
@@ -1632,26 +1658,28 @@
       const now = ctx.currentTime;
       const master = ctx.createGain();
       master.gain.setValueAtTime(0.001, now);
-      master.gain.exponentialRampToValueAtTime(type === "receive" ? 0.18 : 0.12, now + 0.02);
-      master.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+      master.gain.exponentialRampToValueAtTime(type === "receive" ? 0.2 : 0.14, now + 0.04);
+      master.gain.setValueAtTime(type === "receive" ? 0.16 : 0.1, now + 0.42);
+      master.gain.exponentialRampToValueAtTime(0.001, now + 1.15);
       master.connect(ctx.destination);
 
       const notes = type === "receive"
-        ? [523.25, 659.25, 783.99, 1046.5]
-        : [392, 493.88, 659.25];
+        ? [523.25, 659.25, 783.99, 1046.5, 1318.51]
+        : [392, 493.88, 659.25, 783.99];
       notes.forEach((freq, index) => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        const start = now + index * 0.07;
+        const start = now + index * 0.13;
         osc.type = type === "receive" ? "triangle" : "sine";
         osc.frequency.setValueAtTime(freq, start);
         gain.gain.setValueAtTime(0.001, start);
-        gain.gain.exponentialRampToValueAtTime(0.45, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.42, start + 0.04);
+        gain.gain.setValueAtTime(0.18, start + 0.24);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.58);
         osc.connect(gain);
         gain.connect(master);
         osc.start(start);
-        osc.stop(start + 0.22);
+        osc.stop(start + 0.64);
       });
     }
 
@@ -1663,7 +1691,7 @@
       flash.innerHTML = `<strong>${escapeHtml(label)}</strong>`;
       els.paymentEffectLayer.appendChild(flash);
 
-      const coinCount = type === "receive" ? 18 : 12;
+      const coinCount = type === "receive" ? 24 : 16;
       for (let index = 0; index < coinCount; index += 1) {
         const coin = document.createElement("span");
         const angle = (Math.PI * 2 * index) / coinCount;
@@ -1672,7 +1700,7 @@
         coin.style.setProperty("--fx-color", color);
         coin.style.setProperty("--coin-x", `${Math.cos(angle) * distance}px`);
         coin.style.setProperty("--coin-y", `${Math.sin(angle) * distance}px`);
-        coin.style.animationDelay = `${index * 0.012}s`;
+        coin.style.animationDelay = `${index * 0.024}s`;
         els.paymentEffectLayer.appendChild(coin);
       }
 
@@ -1681,7 +1709,7 @@
         els.paymentEffectLayer.querySelectorAll(".payment-coin").forEach((coin) => {
           if (coin.getAnimations().every((animation) => animation.playState === "finished")) coin.remove();
         });
-      }, 1200);
+      }, 2900);
     }
 
     function runPaymentEffect(effect) {
