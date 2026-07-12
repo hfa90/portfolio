@@ -31,6 +31,15 @@ class BancoHandler(SimpleHTTPRequestHandler):
                 return
             self.send_json({"room": public_chess_room(room)})
             return
+        if parsed.path == "/api/chess/invite":
+            params = parse_qs(parsed.query)
+            room_id = (params.get("room") or [""])[0].strip()
+            room = CHESS_ROOMS.get(room_id)
+            if not room:
+                self.send_json({"error": "room not found"}, status=404)
+                return
+            self.send_json({"id": room_id, "white": room["players"].get("white") or "Outro jogador"})
+            return
         super().do_GET()
 
     def do_POST(self):
@@ -105,13 +114,13 @@ class BancoHandler(SimpleHTTPRequestHandler):
             if not room or room.get("password") != password:
                 self.send_json({"error": "room not found"}, status=404)
                 return
-            color = "black" if not room["players"].get("black") else "spectator"
-            if color == "black":
+            color = "black"
+            if not room["players"].get("black"):
                 room["players"]["black"] = str(payload.get("playerName") or "Pretas")[:24]
-                if room["state"].get("status") == "Aguardando oponente":
-                    room["state"]["status"] = "Partida em andamento"
-                room["revision"] += 1
-                room["updated_at"] = time.time()
+            if room["state"].get("status") == "Aguardando oponente":
+                room["state"]["status"] = "Partida em andamento"
+            room["revision"] += 1
+            room["updated_at"] = time.time()
             self.send_json({"room": public_chess_room(room), "color": color})
             return
 
