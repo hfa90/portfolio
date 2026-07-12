@@ -1367,9 +1367,18 @@
       box-shadow: inset 0 0 0 999px rgba(47, 128, 237, .18);
     }
 
+    .square.invalid-target {
+      animation: invalidPulse .42s ease;
+      box-shadow: inset 0 0 0 999px rgba(217, 67, 67, .26);
+    }
+
     .square:disabled {
       cursor: default;
       opacity: 1;
+    }
+
+    .square.inactive {
+      cursor: default;
     }
 
     .piece-white {
@@ -1412,6 +1421,23 @@
       transform: scale(.96);
     }
 
+    .chess-board.invalid-move {
+      animation: boardNudge .36s ease;
+    }
+
+    @keyframes boardNudge {
+      0%, 100% { transform: translateX(0); }
+      22% { transform: translateX(-6px); }
+      48% { transform: translateX(5px); }
+      72% { transform: translateX(-3px); }
+    }
+
+    @keyframes invalidPulse {
+      0% { transform: scale(1); }
+      42% { transform: scale(.9); }
+      100% { transform: scale(1); }
+    }
+
     .chess-status {
       width: 100%;
       display: flex;
@@ -1425,6 +1451,23 @@
 
     .chess-status strong {
       color: var(--ink);
+    }
+
+    .chess-timer-chip {
+      justify-self: center;
+      min-width: 112px;
+      padding: 9px 14px;
+      border-radius: var(--radius);
+      background: #172326;
+      color: #fff;
+      text-align: center;
+      font-weight: 850;
+      box-shadow: 0 16px 40px rgba(23, 35, 38, .22);
+    }
+
+    .chess-timer-chip.warning {
+      background: var(--danger);
+      animation: invalidPulse .8s ease infinite;
     }
 
     .chess-suggestion,
@@ -1480,6 +1523,12 @@
       background: var(--teal);
       color: #fff;
       border-color: var(--teal);
+    }
+
+    .chess-session-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
     }
 
     .chess-share {
@@ -1562,6 +1611,24 @@
     .invite-card p {
       color: var(--muted);
       line-height: 1.45;
+    }
+
+    .invalid-options {
+      display: grid;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      max-height: 190px;
+      overflow: auto;
+    }
+
+    .invalid-options li {
+      padding: 8px 10px;
+      border-radius: var(--radius);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      font-weight: 760;
     }
 
     @media (max-width: 1120px) {
@@ -1682,12 +1749,18 @@
       }
 
       .chess-board-wrap {
-        gap: 0;
+        gap: 8px;
       }
 
       .chess-status,
       .chess-suggestion {
         display: none;
+      }
+
+      .chess-timer-chip {
+        min-width: 96px;
+        padding: 7px 10px;
+        font-size: .9rem;
       }
 
       .intro {
@@ -2123,6 +2196,15 @@
                 Senha da sala
                 <input id="chess-room-password" maxlength="32" placeholder="Minimo 3 caracteres">
               </label>
+              <label>
+                Tempo do jogo
+                <select id="chess-time-limit">
+                  <option value="0" selected>Sem tempo</option>
+                  <option value="180000">3 minutos</option>
+                  <option value="300000">5 minutos</option>
+                  <option value="600000">10 minutos</option>
+                </select>
+              </label>
               <button class="primary-btn" id="create-chess-room-btn">
                 <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
                 Criar sala
@@ -2147,6 +2229,17 @@
                 </button>
               </div>
             </div>
+
+            <div class="chess-session-actions">
+              <button class="ghost-btn" id="leave-chess-btn">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"></path><path d="m17 16 4-4-4-4"></path><path d="M21 12H9"></path></svg>
+                Sair
+              </button>
+              <button class="danger-btn" id="end-chess-btn">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h12v12H6z"></path></svg>
+                Encerrar
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -2165,6 +2258,7 @@
               <span id="chess-suggestion-reason"></span>
               <button class="ghost-btn" id="play-chess-suggestion-btn">Jogar sugestao</button>
             </div>
+            <div class="chess-timer-chip hidden" id="chess-timer-chip">Sem tempo</div>
             <div class="chess-board" id="chess-board" aria-label="Tabuleiro de xadrez"></div>
           </div>
         </section>
@@ -2217,6 +2311,18 @@
       </button>
     </div>
   </div>
+  <div class="invite-modal hidden" id="invalid-chess-modal">
+    <div class="invite-card">
+      <h2>Lance nao permitido</h2>
+      <p id="invalid-chess-reason">Essa peca nao pode se mover assim.</p>
+      <strong id="invalid-chess-options-title">Opcoes dessa peca</strong>
+      <ul class="invalid-options" id="invalid-chess-options"></ul>
+      <button class="primary-btn" id="close-invalid-chess-btn">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+        Entendi
+      </button>
+    </div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./chess.min.js"></script>
@@ -2263,6 +2369,9 @@
     let chessSuggestedMove = null;
     let chessRoomPasswordValue = "";
     let chessDrag = null;
+    let chessManualStatus = "";
+    let chessClockTimer = null;
+    let chessSyncInFlight = false;
 
     const $ = (selector) => document.querySelector(selector);
     const money = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
@@ -2321,6 +2430,7 @@
       chessAiControls: $("#chess-ai-controls"),
       chessOnlineControls: $("#chess-online-controls"),
       chessRoomPassword: $("#chess-room-password"),
+      chessTimeLimit: $("#chess-time-limit"),
       chessShareBox: $("#chess-share-box"),
       chessRoomLink: $("#chess-room-link"),
       chessRoomPassOutput: $("#chess-room-pass-output"),
@@ -2337,7 +2447,15 @@
       chessInviteText: $("#chess-invite-text"),
       invitePlayerName: $("#invite-player-name"),
       inviteRoomPassword: $("#invite-room-password"),
-      acceptChessInviteBtn: $("#accept-chess-invite-btn")
+      acceptChessInviteBtn: $("#accept-chess-invite-btn"),
+      invalidChessModal: $("#invalid-chess-modal"),
+      invalidChessReason: $("#invalid-chess-reason"),
+      invalidChessOptionsTitle: $("#invalid-chess-options-title"),
+      invalidChessOptions: $("#invalid-chess-options"),
+      closeInvalidChessBtn: $("#close-invalid-chess-btn"),
+      chessTimerChip: $("#chess-timer-chip"),
+      leaveChessBtn: $("#leave-chess-btn"),
+      endChessBtn: $("#end-chess-btn")
     };
 
     function uid() {
@@ -2436,18 +2554,22 @@
       if (!ctx) return;
       if (ctx.state === "suspended") ctx.resume().catch(() => {});
       const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type === "pick" ? "triangle" : "sine";
-      osc.frequency.setValueAtTime(type === "pick" ? 440 : 660, now);
-      osc.frequency.exponentialRampToValueAtTime(type === "pick" ? 520 : 420, now + .12);
-      gain.gain.setValueAtTime(.001, now);
-      gain.gain.exponentialRampToValueAtTime(type === "pick" ? .07 : .11, now + .018);
-      gain.gain.exponentialRampToValueAtTime(.001, now + .2);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + .22);
+      const notes = type === "invalid" ? [180, 132] : [type === "pick" ? 440 : 660];
+      notes.forEach((freq, index) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const start = now + index * .08;
+        osc.type = type === "pick" ? "triangle" : type === "invalid" ? "sawtooth" : "sine";
+        osc.frequency.setValueAtTime(freq, start);
+        osc.frequency.exponentialRampToValueAtTime(type === "invalid" ? Math.max(80, freq * .72) : type === "pick" ? 520 : 420, start + .12);
+        gain.gain.setValueAtTime(.001, start);
+        gain.gain.exponentialRampToValueAtTime(type === "invalid" ? .09 : type === "pick" ? .07 : .11, start + .018);
+        gain.gain.exponentialRampToValueAtTime(.001, start + .2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(start);
+        osc.stop(start + .22);
+      });
     }
 
     async function copyText(value, message = "Copiado.") {
@@ -2490,8 +2612,61 @@
       document.body.classList.remove("chess-menu-open");
     }
 
+    function stopChessClock() {
+      if (chessClockTimer) window.clearInterval(chessClockTimer);
+      chessClockTimer = null;
+    }
+
+    function startChessClock() {
+      stopChessClock();
+      renderChessTimer();
+      chessClockTimer = window.setInterval(renderChessTimer, 1000);
+    }
+
+    function chessTimerState() {
+      return chessRoom?.state?.timer || null;
+    }
+
+    function createChessTimer(limitMs = 0) {
+      return {
+        limitMs: Math.max(0, Number(limitMs) || 0),
+        startedAt: null,
+        endsAt: null
+      };
+    }
+
+    function formatChessTime(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      return `${minutes}:${String(seconds).padStart(2, "0")}`;
+    }
+
+    function renderChessTimer() {
+      if (!els.chessTimerChip) return;
+      const timer = chessTimerState();
+      const limitMs = Number(timer?.limitMs || 0);
+      els.chessTimerChip.classList.toggle("hidden", !limitMs);
+      els.chessTimerChip.classList.remove("warning");
+      if (!limitMs) {
+        els.chessTimerChip.textContent = "Sem tempo";
+        return;
+      }
+      if (!timer?.endsAt) {
+        els.chessTimerChip.textContent = formatChessTime(limitMs);
+        return;
+      }
+      const remaining = Number(timer.endsAt) - Date.now();
+      els.chessTimerChip.textContent = formatChessTime(remaining);
+      els.chessTimerChip.classList.toggle("warning", remaining <= 30000);
+      if (remaining <= 0 && !chessSessionEnded()) {
+        endChessGame("Tempo encerrado.", { silent: true });
+      }
+    }
+
     function showHome() {
       stopChessPolling();
+      stopChessClock();
       roomLeft = true;
       closeDrawers();
       closeChessMenu();
@@ -2509,6 +2684,7 @@
 
     function showBankSetup() {
       stopChessPolling();
+      stopChessClock();
       roomLeft = false;
       closeChessMenu();
       els.homeScreen?.classList.add("hidden");
@@ -2546,7 +2722,10 @@
       els.chessAiControls?.classList.toggle("hidden", mode !== "ai");
       els.chessOnlineControls?.classList.toggle("hidden", mode !== "online");
       els.chessTitle.textContent = mode === "ai" ? "Partida contra IA" : "Sala online";
-      if (mode === "ai") stopChessPolling();
+      if (mode === "ai") {
+        stopChessPolling();
+        stopChessClock();
+      }
     }
 
     function ensureChess() {
@@ -2566,11 +2745,13 @@
       chessSelected = "";
       chessLegalTargets = new Set();
       chessLastMove = "";
+      chessManualStatus = "";
     }
 
     function startAiChess() {
       if (!ensureChess()) return;
       stopChessPolling();
+      stopChessClock();
       setChessMode("ai");
       chessRoom = null;
       chessPlayerColor = "white";
@@ -2608,7 +2789,7 @@
     }
 
     function canMoveCurrentTurn() {
-      if (!chess || chessGameOver()) return false;
+      if (!chess || chessGameOver() || chessSessionEnded()) return false;
       if (chessMode === "ai") return chess.turn() === "w";
       if (!chessRoom) return false;
       return (chess.turn() === "w" && chessPlayerColor === "white") || (chess.turn() === "b" && chessPlayerColor === "black");
@@ -2618,7 +2799,14 @@
       return Boolean(chess?.game_over?.() || chess?.isGameOver?.());
     }
 
+    function chessSessionEnded() {
+      return Boolean(chessManualStatus || chessRoom?.state?.result || /^Partida encerrada|^Tempo encerrado/.test(chessRoom?.state?.status || ""));
+    }
+
     function chessStatusText() {
+      if (chessManualStatus) return chessManualStatus;
+      if (chessRoom?.state?.result) return chessRoom.state.result;
+      if (/^Partida encerrada|^Tempo encerrado/.test(chessRoom?.state?.status || "")) return chessRoom.state.status;
       if (!chess) return "Escolha um modo para começar.";
       const turnName = chess.turn() === "w" ? "Brancas" : "Pretas";
       if (chess.in_checkmate?.()) return `Xeque-mate. ${turnName} perderam.`;
@@ -2643,7 +2831,9 @@
         if (chessLegalTargets.has(square)) button.classList.add("legal");
         if (lastMove.includes(square)) button.classList.add("last-move");
         button.dataset.square = square;
-        button.disabled = !canMoveCurrentTurn();
+        button.disabled = false;
+        button.classList.toggle("inactive", !canMoveCurrentTurn());
+        button.setAttribute("aria-disabled", String(!canMoveCurrentTurn()));
         const symbol = pieceSymbol(piece);
         button.innerHTML = symbol ? `<span class="${piece.color === "w" ? "piece-white" : "piece-black"}">${symbol}</span>` : "";
         button.draggable = Boolean(piece && canMoveCurrentTurn() && piece.color === chess.turn());
@@ -2662,6 +2852,7 @@
         els.chessWhitePlayer.textContent = chessRoom.players?.white || "Brancas";
         els.chessBlackPlayer.textContent = chessRoom.players?.black || "Aguardando";
       }
+      renderChessTimer();
       updateChessSuggestion();
     }
 
@@ -2679,11 +2870,94 @@
       els.chessMoves.innerHTML = rows.join("");
     }
 
+    function chessPieceName(piece) {
+      if (!piece) return "peca";
+      const color = piece.color === "w" ? "branca" : "preta";
+      const names = { p: "peao", n: "cavalo", b: "bispo", r: "torre", q: "dama", k: "rei" };
+      return `${names[piece.type] || "peca"} ${color}`;
+    }
+
+    function chessPieceRule(piece) {
+      const rules = {
+        p: "O peao anda uma casa para frente, duas apenas no primeiro movimento, e captura uma casa na diagonal.",
+        n: "O cavalo anda em L: duas casas em uma direcao e uma para o lado. Ele pode saltar por cima das outras pecas.",
+        b: "O bispo anda somente nas diagonais, quantas casas quiser, desde que o caminho esteja livre.",
+        r: "A torre anda em linha reta, na horizontal ou vertical, quantas casas quiser, desde que o caminho esteja livre.",
+        q: "A dama combina torre e bispo: anda em linha reta ou diagonal, com caminho livre.",
+        k: "O rei anda uma casa em qualquer direcao e nao pode entrar em xeque."
+      };
+      return rules[piece?.type] || "Essa peca precisa seguir o desenho de movimento dela e nao pode deixar o rei em xeque.";
+    }
+
+    function legalChessMoves(square) {
+      if (!chess || !square) return [];
+      try {
+        return chess.moves({ square, verbose: true }) || [];
+      } catch {
+        return [];
+      }
+    }
+
+    function runInvalidChessEffect(from, to) {
+      playChessSound("invalid");
+      els.chessBoard?.classList.remove("invalid-move");
+      void els.chessBoard?.offsetWidth;
+      els.chessBoard?.classList.add("invalid-move");
+      [from, to].filter(Boolean).forEach((square) => {
+        const item = els.chessBoard?.querySelector(`[data-square="${square}"]`);
+        if (!item) return;
+        item.classList.remove("invalid-target");
+        void item.offsetWidth;
+        item.classList.add("invalid-target");
+        window.setTimeout(() => item.classList.remove("invalid-target"), 520);
+      });
+      window.setTimeout(() => els.chessBoard?.classList.remove("invalid-move"), 420);
+    }
+
+    function invalidChessReason(from, to) {
+      if (chessSessionEnded()) return chessStatusText();
+      const piece = chessPieceAt(from);
+      const target = chessPieceAt(to);
+      if (!canMoveCurrentTurn()) return "Ainda nao e sua vez. Aguarde o outro jogador concluir o lance.";
+      if (!piece) return "Essa casa esta vazia. Primeiro escolha uma peca sua.";
+      if (piece.color !== chess.turn()) return `Essa e uma ${chessPieceName(piece)}. Agora e a vez das ${chess.turn() === "w" ? "brancas" : "pretas"}.`;
+      if (target?.color === piece.color) return "Essa casa ja esta ocupada por uma peca sua.";
+      return `${chessPieceRule(piece)} Esse lance especifico tambem pode estar bloqueado por outra peca ou deixaria seu rei em xeque.`;
+    }
+
+    function showInvalidChessMove(from, to = "") {
+      runInvalidChessEffect(from, to);
+      const piece = chessPieceAt(from);
+      const options = legalChessMoves(from);
+      if (!els.invalidChessModal) {
+        showToast("Lance nao permitido.");
+        return;
+      }
+      els.invalidChessReason.textContent = invalidChessReason(from, to);
+      els.invalidChessOptionsTitle.textContent = piece ? `Como mover o ${chessPieceName(piece)}` : "Opcoes disponiveis";
+      if (!piece || !options.length) {
+        els.invalidChessOptions.innerHTML = `<li>Nenhum lance legal para essa casa agora.</li>`;
+      } else {
+        els.invalidChessOptions.innerHTML = options
+          .slice(0, 14)
+          .map((move) => `<li>${escapeHtml(move.from)} -> ${escapeHtml(move.to)} (${escapeHtml(move.san)})</li>`)
+          .join("");
+      }
+      els.invalidChessModal.classList.remove("hidden");
+    }
+
     function onChessSquare(square) {
-      if (!chess || !canMoveCurrentTurn()) return;
+      if (!chess) return;
       const piece = chessPieceAt(square);
+      if (!canMoveCurrentTurn()) {
+        showInvalidChessMove(square, "");
+        return;
+      }
       if (!chessSelected) {
-        if (!piece || piece.color !== chess.turn()) return;
+        if (!piece || piece.color !== chess.turn()) {
+          showInvalidChessMove(square, "");
+          return;
+        }
         chessSelected = square;
         chessLegalTargets = new Set(chess.moves({ square, verbose: true }).map((move) => move.to));
         renderChess();
@@ -2695,10 +2969,12 @@
         renderChess();
         return;
       }
-      const move = chess.move({ from: chessSelected, to: square, promotion: "q" });
+      const from = chessSelected;
+      const move = chess.move({ from, to: square, promotion: "q" });
       chessSelected = "";
       chessLegalTargets = new Set();
       if (!move) {
+        showInvalidChessMove(from, square);
         if (piece?.color === chess.turn()) onChessSquare(square);
         else renderChess();
         return;
@@ -2714,11 +2990,15 @@
     }
 
     function moveChessPiece(from, to) {
-      if (!chess || !from || !to || !canMoveCurrentTurn()) return false;
+      if (!chess || !from || !to || !canMoveCurrentTurn()) {
+        showInvalidChessMove(from, to);
+        return false;
+      }
       const move = chess.move({ from, to, promotion: "q" });
       chessSelected = "";
       chessLegalTargets = new Set();
       if (!move) {
+        showInvalidChessMove(from, to);
         renderChess();
         return false;
       }
@@ -2805,7 +3085,8 @@
         lastMove: move ? `${move.from}-${move.to}` : chessRoom?.state?.lastMove || "",
         status: chessStatusText(),
         result: chessGameOver() ? chessStatusText() : "",
-        turn: chess.turn()
+        turn: chess.turn(),
+        timer: chessRoom?.state?.timer || createChessTimer(0)
       };
     }
 
@@ -2947,6 +3228,41 @@
       if (move) afterChessMove(move);
     }
 
+    function leaveChessGame() {
+      stopChessPolling();
+      stopChessClock();
+      chessRoom = null;
+      chessRoomPasswordValue = "";
+      chessPlayerColor = "white";
+      chessSelected = "";
+      chessLegalTargets = new Set();
+      chessManualStatus = "";
+      history.replaceState(null, "", `${location.pathname}${location.search}`);
+      closeChessMenu();
+      showHome();
+      showToast("Voce saiu do xadrez.");
+    }
+
+    async function endChessGame(message = "Partida encerrada.", options = {}) {
+      if (!chess) return;
+      if (!options.silent && !confirm("Encerrar esta partida de xadrez?")) return;
+      chessManualStatus = message;
+      if (chessRoom) {
+        const timer = chessRoom.state?.timer ? { ...chessRoom.state.timer, endedAt: Date.now() } : createChessTimer(0);
+        chessRoom.state = {
+          ...chessStatePayload(),
+          status: message,
+          result: message,
+          timer
+        };
+        await pushChessRoomState({ force: true });
+      }
+      renderChess();
+      renderChessTimer();
+      closeChessMenu();
+      if (!options.silent) showToast(message);
+    }
+
     function chessAccessLink(roomId) {
       return `${location.origin}${location.pathname}${location.search}#chess=${encodeURIComponent(roomId)}`;
     }
@@ -2994,11 +3310,12 @@
       if (chessRoom) els.chessInviteModal.classList.add("hidden");
     }
 
-    async function chessCreateRemote(password, playerName) {
+    async function chessCreateRemote(password, playerName, timeLimitMs = 0) {
       if (SUPABASE_ENABLED && supabaseClient) {
         const { data, error } = await supabaseClient.rpc("banco_create_chess_room", {
           p_password: password,
-          p_player_name: playerName
+          p_player_name: playerName,
+          p_time_limit_ms: timeLimitMs
         });
         if (error || !data?.room) throw error || new Error("invalid chess room");
         return { ...data, link: chessAccessLink(data.room.id) };
@@ -3009,7 +3326,7 @@
       const response = await fetch("/api/chess/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, playerName })
+        body: JSON.stringify({ password, playerName, timeLimitMs })
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error || "create failed");
@@ -3087,10 +3404,11 @@
         showToast("Configure o Supabase para criar salas no site hospedado.");
         return;
       }
+      const timeLimitMs = Number(els.chessTimeLimit?.value || 0);
       resetChessGame();
       let payload;
       try {
-        payload = await chessCreateRemote(password, els.chessPlayerName.value.trim() || "Brancas");
+        payload = await chessCreateRemote(password, els.chessPlayerName.value.trim() || "Brancas", timeLimitMs);
       } catch (error) {
         console.warn("Chess room create failed", error);
         showToast("Nao foi possivel criar a sala.");
@@ -3109,6 +3427,7 @@
       showChessScreen();
       renderChess();
       startChessPolling(password);
+      startChessClock();
       closeChessMenu();
       showToast("Sala de xadrez criada.");
     }
@@ -3141,6 +3460,7 @@
       history.replaceState(null, "", `#chess=${encodeURIComponent(roomId)}`);
       showChessScreen();
       startChessPolling(password);
+      startChessClock();
       closeChessMenu();
       showToast("Voce entrou como segundo jogador.");
     }
@@ -3152,17 +3472,23 @@
       if (room.state?.fen && room.state.fen !== "start") chess.load(room.state.fen);
       else resetChessGame();
       renderChess();
+      startChessClock();
     }
 
-    async function pushChessRoomState() {
+    async function pushChessRoomState(options = {}) {
       if (!chessRoom) return;
+      if (chessSyncInFlight && !options.force) return;
       const password = chessRoomPasswordValue || els.chessRoomPassword.value.trim() || els.joinChessRoomPassword.value.trim();
+      chessSyncInFlight = true;
       try {
         const payload = await chessUpdateRemote(chessRoom.id, password, chessRoom.state);
         chessRoom = payload.room;
+        renderChessTimer();
       } catch (error) {
         console.warn("Chess move sync failed", error);
         showToast("Nao foi possivel sincronizar o lance.");
+      } finally {
+        chessSyncInFlight = false;
       }
     }
 
@@ -3170,6 +3496,7 @@
       stopChessPolling();
       chessPollTimer = window.setInterval(async () => {
         if (!chessRoom) return;
+        if (chessSyncInFlight) return;
         try {
           const payload = await chessGetRemote(chessRoom.id, password);
           if ((payload.room?.revision || 0) <= (chessRoom.revision || 0)) return;
@@ -4218,17 +4545,27 @@
     els.chessMobileMenuBtn?.addEventListener("click", () => document.body.classList.add("chess-menu-open"));
     els.chessMobileBackdrop?.addEventListener("click", closeChessMenu);
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") closeChessMenu();
+      if (event.key === "Escape") {
+        closeChessMenu();
+        els.invalidChessModal?.classList.add("hidden");
+      }
     });
     els.acceptChessInviteBtn?.addEventListener("click", acceptChessInvite);
     els.inviteRoomPassword?.addEventListener("keydown", (event) => {
       if (event.key === "Enter") acceptChessInvite();
     });
+    els.closeInvalidChessBtn?.addEventListener("click", () => els.invalidChessModal?.classList.add("hidden"));
+    els.invalidChessModal?.addEventListener("click", (event) => {
+      if (event.target === els.invalidChessModal) els.invalidChessModal.classList.add("hidden");
+    });
+    els.leaveChessBtn?.addEventListener("click", leaveChessGame);
+    els.endChessBtn?.addEventListener("click", () => endChessGame());
     $("#new-chess-btn").addEventListener("click", () => {
       chessRoom = null;
       chessPlayerColor = "white";
       chessRoomPasswordValue = "";
       stopChessPolling();
+      stopChessClock();
       resetChessGame();
       els.chessShareBox?.classList.add("hidden");
       els.chessRoomBadge.textContent = chessMode === "ai" ? "Contra IA" : "Local";

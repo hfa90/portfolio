@@ -74,6 +74,12 @@ class BancoHandler(SimpleHTTPRequestHandler):
             if len(password) < 3:
                 self.send_json({"error": "password required"}, status=400)
                 return
+            try:
+                time_limit_ms = int(payload.get("timeLimitMs") or 0)
+            except (TypeError, ValueError):
+                time_limit_ms = 0
+            if time_limit_ms not in (0, 180000, 300000, 600000):
+                time_limit_ms = 0
             room_id = uuid.uuid4().hex[:8]
             now = time.time()
             CHESS_ROOMS[room_id] = {
@@ -93,7 +99,12 @@ class BancoHandler(SimpleHTTPRequestHandler):
                     "lastMove": "",
                     "status": "Aguardando oponente",
                     "result": "",
-                    "turn": "w"
+                    "turn": "w",
+                    "timer": {
+                        "limitMs": time_limit_ms,
+                        "startedAt": None,
+                        "endsAt": None
+                    }
                 }
             }
             self.send_json({
@@ -119,6 +130,13 @@ class BancoHandler(SimpleHTTPRequestHandler):
                 room["players"]["black"] = str(payload.get("playerName") or "Pretas")[:24]
             if room["state"].get("status") == "Aguardando oponente":
                 room["state"]["status"] = "Partida em andamento"
+                timer = room["state"].get("timer") or {}
+                limit_ms = int(timer.get("limitMs") or 0)
+                if limit_ms and not timer.get("endsAt"):
+                    now_ms = int(time.time() * 1000)
+                    timer["startedAt"] = now_ms
+                    timer["endsAt"] = now_ms + limit_ms
+                    room["state"]["timer"] = timer
             room["revision"] += 1
             room["updated_at"] = time.time()
             self.send_json({"room": public_chess_room(room), "color": color})
@@ -146,7 +164,12 @@ class BancoHandler(SimpleHTTPRequestHandler):
                 "lastMove": str(state.get("lastMove") or ""),
                 "status": str(state.get("status") or "Partida em andamento"),
                 "result": str(state.get("result") or ""),
-                "turn": str(state.get("turn") or "w")[:1]
+                "turn": str(state.get("turn") or "w")[:1],
+                "timer": state.get("timer") if isinstance(state.get("timer"), dict) else {
+                    "limitMs": 0,
+                    "startedAt": None,
+                    "endsAt": None
+                }
             }
             room["revision"] += 1
             room["updated_at"] = time.time()
