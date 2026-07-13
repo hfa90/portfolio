@@ -2783,7 +2783,7 @@ Bom apetite! 😋`;
         if ((pedidos || []).length > 0) {
           const { error } = await sb.from("acompanhamentos").update({ ativo: false }).eq("id", id);
           if (error) throw new Error(error.message);
-          return { acao: "desativado", mensagem: "Acompanhamento possui pedidos vinculados e foi desativado. O historico foi preservado." };
+          return { acao: "removido", mensagem: "Acompanhamento removido do cadastro. O historico foi preservado." };
         }
         const { error } = await sb.from("acompanhamentos").delete().eq("id", id);
         if (error) throw new Error(error.message);
@@ -2810,6 +2810,9 @@ Bom apetite! 😋`;
       } else {
         resp = Array.isArray(data) ? data[0] : data;
       }
+      if (tipo === "acompanhamentos" && resp?.acao === "desativado") {
+        resp = { acao: "removido", mensagem: "Acompanhamento removido do cadastro. O historico foi preservado." };
+      }
       alert(resp?.mensagem || "Operacao concluida.");
       await recarregar();
     }
@@ -2821,11 +2824,27 @@ Bom apetite! 😋`;
     // =====================================================================
     // PRATOS
     // =====================================================================
+    const SUGESTOES_PRATOS = [
+      "Feijão", "Arroz", "Bife de panela", "Picadinho", "Macarrão", "Ovo",
+      "Bife a cavalo", "Carne assada (fraldinha)", "Picanha", "Carne de sol",
+      "Baião de dois", "Peixe assado (tambaqui)", "Peixe frito (pacu)",
+      "Peixe frito (tambaqui)", "Peixe frito (sardinha)", "Frango assado",
+      "Frango grelhado", "Frango à parmegiana", "Strogonoff de frango",
+      "Strogonoff de carne", "Carne moída", "Almôndegas", "Costela assada",
+      "Linguiça acebolada", "Calabresa", "Panqueca de carne", "Panqueca de frango",
+      "Lasanha", "Escondidinho de carne seca", "Escondidinho de frango",
+      "Farofa", "Purê de batata", "Salada", "Vinagrete"
+    ];
+
     async function carregarPratos() {
       $("pratosLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("pratos")
+      const { data, error } = await sb.from("pratos")
         .select("*, fornecedor:fornecedores(id, nome)")
         .order("nome");
+      if (error) {
+        $("pratosLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar pratos: ${error.message}</div>`;
+        return;
+      }
       if (!data || data.length === 0) {
         $("pratosLista").innerHTML = '<div class="empty">Nenhum prato cadastrado.</div>';
         return;
@@ -2836,7 +2855,6 @@ Bom apetite! 😋`;
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço">${fmtBRL(p.preco)}</td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
-          <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalPrato(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirPrato('${p.id}')">Excluir</button>
@@ -2845,21 +2863,42 @@ Bom apetite! 😋`;
     }
 
     window.abrirModalPrato = async (p = null) => {
-      const { data: forns } = await sb.from("fornecedores").select("id, nome").eq("ativo", true).order("nome");
+      const { data: forns, error: fornsError } = await sb.from("fornecedores").select("id, nome").eq("ativo", true).order("nome");
       $("modalTitle").textContent = p ? "Editar prato" : "Novo prato";
       $("modalSave").classList.remove("hidden");
+      if (fornsError) {
+        $("modalBody").innerHTML = `<div class="alert alert-error show">Erro ao carregar fornecedores: ${fornsError.message}</div>`;
+        $("modalSave").classList.add("hidden");
+        $("modal").classList.add("show");
+        return;
+      }
+      const sugestoesHtml = SUGESTOES_PRATOS.map(nome =>
+        `<button type="button" class="btn btn-ghost btn-sm prato-sugestao" data-prato="${nome.replace(/"/g, "&quot;")}">${nome}</button>`
+      ).join("");
       $("modalBody").innerHTML = `
         <div class="field"><label>Fornecedor</label>
           <select id="pForn">
             ${(forns || []).map(f => `<option value="${f.id}" ${p?.fornecedor_id === f.id ? "selected" : ""}>${f.nome}</option>`).join("")}
           </select>
         </div>
-        <div class="field"><label>Nome do prato</label><input id="pNome" class="input" value="${p?.nome ?? ""}"/></div>
+        <div class="field"><label>Nome do prato</label><input id="pNome" class="input" list="listaPratosPopulares" value="${p?.nome ?? ""}"/>
+          <datalist id="listaPratosPopulares">${SUGESTOES_PRATOS.map(nome => `<option value="${nome}"></option>`).join("")}</datalist>
+        </div>
+        <div class="field">
+          <label>Opções rápidas</label>
+          <div style="display:flex; flex-wrap:wrap; gap:8px;">${sugestoesHtml}</div>
+        </div>
         <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2">${p?.descricao ?? ""}</textarea></div>
         <div class="field"><label>Preço (R$)</label><input id="pPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.preco ?? ""}"/></div>
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="pAtivo" ${p?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
+      $("modalBody").querySelectorAll(".prato-sugestao").forEach(btn => {
+        btn.addEventListener("click", () => {
+          $("pNome").value = btn.dataset.prato;
+          $("pNome").focus();
+        });
+      });
 
       $("modalSave").onclick = async () => {
         const payload = {
@@ -2890,7 +2929,7 @@ Bom apetite! 😋`;
     async function carregarAcompanhamentos() {
       $("acompLista").innerHTML = '<div class="loading">Carregando…</div>';
       const { data, error } = await sb.from("acompanhamentos")
-        .select("*, fornecedor:fornecedores(nome)").order("nome");
+        .select("*, fornecedor:fornecedores(nome)").eq("ativo", true).order("nome");
       if (error) {
         $("acompLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar acompanhamentos: ${error.message}</div>`;
         return;
