@@ -2761,11 +2761,23 @@ Bom apetite! 😋`;
       };
     };
 
+    async function excluirRegistroSeguro(tipo, id, nome, recarregar) {
+      if (!confirm(`Excluir ${nome}? Se existir historico vinculado, o registro sera apenas desativado.`)) return;
+      const { data, error } = await sb.rpc("admin_excluir_registro", {
+        p_tipo: tipo,
+        p_id: id
+      });
+      if (error) {
+        alert("Erro: " + error.message);
+        return;
+      }
+      const resp = Array.isArray(data) ? data[0] : data;
+      alert(resp?.mensagem || "Operacao concluida.");
+      await recarregar();
+    }
+
     window.excluirForn = async (id) => {
-      if (!confirm("Excluir este fornecedor?")) return;
-      const { error } = await sb.from("fornecedores").delete().eq("id", id);
-      if (error) alert("Erro: " + error.message);
-      carregarFornecedores();
+      await excluirRegistroSeguro("fornecedores", id, "este fornecedor", carregarFornecedores);
     };
 
     // =====================================================================
@@ -2786,6 +2798,7 @@ Bom apetite! 😋`;
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço">${fmtBRL(p.preco)}</td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
+          <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalPrato(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirPrato('${p.id}')">Excluir</button>
@@ -2830,10 +2843,7 @@ Bom apetite! 😋`;
     };
 
     window.excluirPrato = async (id) => {
-      if (!confirm("Excluir este prato?")) return;
-      const { error } = await sb.from("pratos").delete().eq("id", id);
-      if (error) alert("Erro: " + error.message);
-      carregarPratos();
+      await excluirRegistroSeguro("pratos", id, "este prato", carregarPratos);
     };
 
     // =====================================================================
@@ -2852,6 +2862,7 @@ Bom apetite! 😋`;
           <td><strong>${a.nome}</strong></td>
           <td data-label="Fornecedor">${a.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço extra">${Number(a.preco_extra) > 0 ? fmtBRL(a.preco_extra) : "Grátis"}</td>
+          <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalAcomp(${JSON.stringify(a).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirAcomp('${a.id}')">Excluir</button>
@@ -2869,6 +2880,7 @@ Bom apetite! 😋`;
         </div>
         <div class="field"><label>Nome</label><input id="aNome" class="input" value="${a?.nome ?? ""}"/></div>
         <div class="field"><label>Preço extra (R$) — 0 se grátis</label><input id="aPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${a?.preco_extra ?? 0}"/></div>`;
+      $("modalBody").insertAdjacentHTML("beforeend", `<div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="aAtivo" ${a?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`);
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
 
@@ -2876,7 +2888,8 @@ Bom apetite! 😋`;
         const payload = {
           fornecedor_id: $("aForn").value,
           nome: $("aNome").value.trim(),
-          preco_extra: parseFloat($("aPreco").value) || 0
+          preco_extra: parseFloat($("aPreco").value) || 0,
+          ativo: $("aAtivo").checked
         };
         if (!payload.nome) { $("modalAlert").textContent = "Informe o nome."; $("modalAlert").classList.add("show"); return; }
         const { error } = a
@@ -2888,9 +2901,7 @@ Bom apetite! 😋`;
     };
 
     window.excluirAcomp = async (id) => {
-      if (!confirm("Excluir este acompanhamento?")) return;
-      await sb.from("acompanhamentos").delete().eq("id", id);
-      carregarAcompanhamentos();
+      await excluirRegistroSeguro("acompanhamentos", id, "este acompanhamento", carregarAcompanhamentos);
     };
 
     // =====================================================================
@@ -2965,10 +2976,13 @@ Bom apetite! 😋`;
     };
 
     window.excluirColab = async (id) => {
+      await excluirRegistroSeguro("colaboradores", id, "este colaborador", carregarColaboradores);
+      return;
+      /*
       if (!confirm("Excluir este colaborador? O histórico será preservado.")) return;
-      const { error } = await sb.from("colaboradores").delete().eq("id", id);
       if (error) alert("Erro: " + error.message + "\n(Desative em vez de excluir se houver pedidos)");
       carregarColaboradores();
+      */
     };
 
     // =====================================================================
