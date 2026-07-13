@@ -37,6 +37,17 @@ interface PushPayload {
 
 type TipoNotificacao = "lembrete_limite" | "fiado_fechado" | "cardapio_novo" | "teste";
 
+function hojeSaoPauloISO(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 interface RequestBody {
   tipo: TipoNotificacao;
   colaborador_id?: string; // se omitido, envia para todos
@@ -261,15 +272,15 @@ async function montarPayload(
 ): Promise<PushPayload> {
   if (tipo === "lembrete_limite") {
     // Busca horários-limite de hoje
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeSaoPauloISO();
     const { data } = await supabase
       .from("cardapio_dia")
-      .select("horario_limite, fornecedor:fornecedores(nome)")
+      .select("horario_limite, fornecedor:fornecedores(nome, horario_limite)")
       .eq("data", hoje)
       .eq("disponivel", true)
       .limit(1);
 
-    const horario = data?.[0]?.horario_limite?.slice(0, 5) ?? "??:??";
+    const horario = (data?.[0]?.horario_limite || data?.[0]?.fornecedor?.horario_limite)?.slice(0, 5) ?? "??:??";
     return {
       title: minutos_antes <= 10 ? "⚠️ Últimos minutos!" : "⏰ Lembrete de pedido",
       body: minutos_antes <= 10

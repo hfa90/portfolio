@@ -7,6 +7,7 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 | Arquivo | Funcao |
 |---|---|
 | `banco.sql` | Banco completo para Supabase: tabelas, indices, RLS, RPCs, storage e dados iniciais |
+| `migracao-horarios-cardapio.sql` | Correcao pontual para aplicar em bases ja criadas: horarios do fornecedor, cardapio e data de Sao Paulo |
 | `marmita.html` | App do colaborador: login por matricula/PIN, cardapio, pedido, historico e pedido coletivo |
 | `admin.html` | Painel admin: pedidos, cardapio, fornecedores, pratos, acompanhamentos, colaboradores, financeiro e configuracoes |
 | `marmita-sw.js` | Service worker para cache e notificacoes |
@@ -23,6 +24,8 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 3. Em `SQL Editor`, rode o arquivo inteiro `banco.sql`.
 4. Em `Project Settings > API`, confirme `Project URL` e `anon/public key`.
 5. Se usar outro projeto, troque `window.SUPABASE_URL` e `window.SUPABASE_ANON` no topo de `marmita.html` e `admin.html`.
+
+Para um projeto Supabase que ja estava em uso antes desta correcao, rode apenas `migracao-horarios-cardapio.sql` no SQL Editor. Ela preserva os dados e corrige horarios antigos gravados no cardapio do dia.
 
 O SQL cria o perfil na tabela `admins` automaticamente quando encontrar o usuario de Auth com o email acima. Se voce rodou o SQL antes de criar o usuario no Auth, crie o usuario e rode novamente apenas o bloco `ADMIN INICIAL` no fim do `banco.sql`.
 

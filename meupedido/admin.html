@@ -1595,6 +1595,17 @@
     const $ = (id) => document.getElementById(id);
     const fmtBRL = (v) => "R$ " + Number(v ?? 0).toFixed(2).replace(".", ",");
     const fmtData = (d) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+    const dataLocalISO = (date = new Date()) => {
+      const d = new Date(date);
+      d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+      return d.toISOString().slice(0, 10);
+    };
+    const hojeISO = () => dataLocalISO();
+    const dataRelativaISO = (dias) => {
+      const d = new Date();
+      d.setDate(d.getDate() + dias);
+      return dataLocalISO(d);
+    };
 
     let adminAtual = null;
 
@@ -1732,11 +1743,11 @@
     // =====================================================================
     // PEDIDOS COLETIVOS
     // =====================================================================
-    $("coletivosFiltroData").value = new Date().toISOString().slice(0, 10);
+    $("coletivosFiltroData").value = hojeISO();
     $("coletivosFiltroData").addEventListener("change", carregarColetivos);
 
     async function carregarColetivos() {
-      const data = $("coletivosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const data = $("coletivosFiltroData").value || hojeISO();
       $("coletivosLista").innerHTML = '<div class="loading">Carregando\u2026</div>';
 
       const { data: grupos, error } = await sb.rpc("listar_pedidos_coletivos", { p_data: data });
@@ -1787,7 +1798,7 @@
 
     // PEDIDOS DO DIA
     // =====================================================================
-    $("pedidosFiltroData").value = new Date().toISOString().slice(0, 10);
+    $("pedidosFiltroData").value = hojeISO();
     $("pedidosFiltroData").addEventListener("change", carregarPedidos);
 
     // Controle de Abas na tela principal
@@ -1807,7 +1818,7 @@
 
     // FUNÇÃO PRINCIPAL DE CARREGAMENTO (Super Otimizada)
     async function carregarPedidos() {
-      const dataFiltro = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const dataFiltro = $("pedidosFiltroData").value || hojeISO();
       $("pedidosData").textContent = fmtData(dataFiltro);
 
       $("listaCaixa").innerHTML = '<div class="loading">Carregando caixa…</div>';
@@ -2205,7 +2216,7 @@ Bom apetite! 😋`;
     };
 
     $("btnGerarWA").addEventListener("click", async () => {
-      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos } = await sb.from("pedidos")
         .select(`
           preco_total, observacoes,
@@ -2264,7 +2275,7 @@ Bom apetite! 😋`;
     });
 
     $("btnExportarCSV").addEventListener("click", async () => {
-      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
           id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_status,
@@ -2329,7 +2340,7 @@ Bom apetite! 😋`;
     // PEDIDO COLETIVO (com frete dividido)
     // =====================================================================
     $("btnPedidoColetivo").addEventListener("click", async () => {
-      const data = $("pedidosFiltroData").value || new Date().toISOString().slice(0, 10);
+      const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos } = await sb.from("pedidos")
         .select(`
           id, preco_total, observacoes, forma_pagamento, status_pagamento,
@@ -2561,7 +2572,7 @@ Bom apetite! 😋`;
         setTimeout(() => btn.textContent = orig, 2000);
       });
     };
-    $("cardapioFiltroData").value = new Date().toISOString().slice(0, 10);
+    $("cardapioFiltroData").value = hojeISO();
     $("cardapioFiltroData").addEventListener("change", carregarCardapioAdmin);
 
     async function carregarCardapioAdmin() {
@@ -2637,13 +2648,11 @@ Bom apetite! 😋`;
     }
 
     $("btnCopiarOntem").addEventListener("click", () => {
-      const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
-      copiarCardapioDe(ontem.toISOString().slice(0, 10));
+      copiarCardapioDe(dataRelativaISO(-1));
     });
 
     $("btnCopiarSemana").addEventListener("click", () => {
-      const semanaPassada = new Date(); semanaPassada.setDate(semanaPassada.getDate() - 7);
-      copiarCardapioDe(semanaPassada.toISOString().slice(0, 10));
+      copiarCardapioDe(dataRelativaISO(-7));
     });
 
     $("btnCopiarCustom").addEventListener("click", () => {
@@ -2727,10 +2736,27 @@ Bom apetite! 😋`;
           $("modalAlert").textContent = "O horario inicial deve ser menor que o horario limite.";
           $("modalAlert").classList.add("show"); return;
         }
-        const { error } = f
-          ? await sb.from("fornecedores").update(payload).eq("id", f.id)
-          : await sb.from("fornecedores").insert(payload);
+        let fornecedorId = f?.id;
+        const { data: fornecedorSalvo, error } = f
+          ? await sb.from("fornecedores").update(payload).eq("id", f.id).select("id").single()
+          : await sb.from("fornecedores").insert(payload).select("id").single();
         if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
+        fornecedorId = fornecedorSalvo?.id || fornecedorId;
+
+        if (fornecedorId) {
+          const { error: syncError } = await sb.from("cardapio_dia")
+            .update({
+              horario_inicio: payload.horario_inicio,
+              horario_limite: payload.horario_limite
+            })
+            .eq("fornecedor_id", fornecedorId)
+            .gte("data", hojeISO());
+          if (syncError) {
+            $("modalAlert").textContent = "Fornecedor salvo, mas nao consegui atualizar os horarios dos cardapios ja publicados: " + syncError.message;
+            $("modalAlert").classList.add("show");
+            return;
+          }
+        }
         fecharModal(); carregarFornecedores();
       };
     };
@@ -2953,7 +2979,7 @@ Bom apetite! 😋`;
       $("finFornecedores").innerHTML = '<div class="loading">Carregando…</div>';
 
       const inicioMes = new Date(); inicioMes.setDate(1);
-      const inicioMesStr = inicioMes.toISOString().slice(0, 10);
+      const inicioMesStr = dataLocalISO(inicioMes);
       const { data: pedidosMes } = await sb.from("pedidos")
         .select("preco_total, status_pagamento, forma_pagamento")
         .gte("data", inicioMesStr)

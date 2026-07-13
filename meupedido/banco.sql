@@ -28,6 +28,7 @@ create table if not exists public.fornecedores (
   dias_atendimento integer[] not null default array[1,2,3,4,5],
   observacoes text,
   ativo boolean not null default true,
+  horario_inicio time without time zone not null default '00:00',
   horario_limite time without time zone not null default '11:00',
   criado_em timestamptz not null default now()
 );
@@ -89,6 +90,7 @@ create table if not exists public.cardapio_dia (
   fornecedor_id uuid not null references public.fornecedores(id) on update cascade on delete restrict,
   prato_id uuid not null references public.pratos(id) on update cascade on delete cascade,
   disponivel boolean not null default true,
+  horario_inicio time without time zone,
   horario_limite time without time zone,
   criado_em timestamptz not null default now()
 );
@@ -106,6 +108,10 @@ create table if not exists public.pedidos (
   status_pagamento text not null default 'pendente' check (status_pagamento in ('pendente','pago','cancelado')),
   pago_em timestamptz,
   comprovante_url text,
+  comprovante_status text not null default 'sem_comprovante' check (comprovante_status in ('sem_comprovante','enviado','aprovado','rejeitado')),
+  comprovante_motivo text,
+  comprovante_revisado_em timestamptz,
+  comprovante_revisado_por uuid references auth.users(id) on update cascade on delete set null,
   criado_em timestamptz not null default now()
 );
 
@@ -159,12 +165,60 @@ create table if not exists public.push_subscriptions (
 );
 
 -- Compatibilidade caso o projeto ja tenha sido criado com o schema antigo.
+alter table public.fornecedores add column if not exists horario_inicio time without time zone not null default '00:00';
 alter table public.fornecedores add column if not exists horario_limite time without time zone not null default '11:00';
+alter table public.cardapio_dia add column if not exists horario_inicio time without time zone;
 alter table public.cardapio_dia add column if not exists horario_limite time without time zone;
 alter table public.push_subscriptions add column if not exists user_agent text;
 alter table public.colaboradores add column if not exists empresa text;
 alter table public.colaboradores add column if not exists whatsapp text;
 alter table public.pedidos add column if not exists comprovante_url text;
+alter table public.pedidos add column if not exists comprovante_status text not null default 'sem_comprovante';
+alter table public.pedidos add column if not exists comprovante_motivo text;
+alter table public.pedidos add column if not exists comprovante_revisado_em timestamptz;
+alter table public.pedidos add column if not exists comprovante_revisado_por uuid references auth.users(id) on update cascade on delete set null;
+
+-- O horario valido do cardapio vem sempre do fornecedor. Versoes antigas
+-- gravavam uma copia em cardapio_dia; limpar evita limites antigos bloqueando pedidos.
+update public.cardapio_dia
+   set horario_inicio = null,
+       horario_limite = null
+ where horario_inicio is not null
+    or horario_limite is not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint
+     where conname = 'fornecedores_horario_janela_check'
+       and conrelid = 'public.fornecedores'::regclass
+  ) then
+    alter table public.fornecedores
+      add constraint fornecedores_horario_janela_check
+      check (horario_inicio < horario_limite);
+  end if;
+end $$;
+
+update public.pedidos
+   set comprovante_status = 'enviado'
+ where comprovante_url is not null
+   and comprovante_status = 'sem_comprovante'
+   and status_pagamento = 'pendente';
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint
+     where conname = 'pedidos_comprovante_status_check'
+       and conrelid = 'public.pedidos'::regclass
+  ) then
+    alter table public.pedidos
+      add constraint pedidos_comprovante_status_check
+      check (comprovante_status in ('sem_comprovante','enviado','aprovado','rejeitado'));
+  end if;
+end $$;
 
 do $$
 begin
@@ -382,24 +436,20 @@ create trigger configuracoes_touch
 before update on public.configuracoes
 for each row execute function public.touch_configuracoes();
 
-create or replace function public.preencher_horario_cardapio()
-returns trigger
-language plpgsql
+drop trigger if exists cardapio_horario_default on public.cardapio_dia;
+drop function if exists public.preencher_horario_cardapio();
+
+create or replace function public.hoje_sp()
+returns date
+language sql
+stable
 as $$
-begin
-  if new.horario_limite is null then
-    select f.horario_limite into new.horario_limite
-      from public.fornecedores f
-     where f.id = new.fornecedor_id;
-  end if;
-  return new;
-end;
+  select (now() at time zone 'America/Sao_Paulo')::date;
 $$;
 
-drop trigger if exists cardapio_horario_default on public.cardapio_dia;
-create trigger cardapio_horario_default
-before insert or update of fornecedor_id, horario_limite on public.cardapio_dia
-for each row execute function public.preencher_horario_cardapio();
+alter table public.cardapio_dia alter column data set default public.hoje_sp();
+alter table public.pedidos alter column data set default public.hoje_sp();
+alter table public.pedidos_coletivos alter column data set default public.hoje_sp();
 
 -- ---------------------------------------------------------------------------
 -- FUNCOES DE SEGURANCA E RPCS
@@ -517,6 +567,8 @@ begin
 end;
 $$;
 
+drop function if exists public.cardapio_hoje();
+
 create or replace function public.cardapio_hoje()
 returns table (
   cardapio_id uuid,
@@ -524,6 +576,7 @@ returns table (
   fornecedor_id uuid,
   fornecedor_nome text,
   fornecedor_pix text,
+  horario_inicio time without time zone,
   horario_limite time without time zone,
   prato_id uuid,
   prato_nome text,
@@ -541,7 +594,8 @@ as $$
     f.id,
     f.nome,
     f.chave_pix,
-    coalesce(cd.horario_limite, f.horario_limite),
+    f.horario_inicio,
+    f.horario_limite,
     p.id,
     p.nome,
     p.descricao,
@@ -549,13 +603,15 @@ as $$
   from public.cardapio_dia cd
   join public.fornecedores f on f.id = cd.fornecedor_id
   join public.pratos p on p.id = cd.prato_id
-  where cd.data = current_date
+  where cd.data = public.hoje_sp()
     and cd.disponivel = true
     and f.ativo = true
     and p.ativo = true
-    and extract(dow from current_date)::int = any(f.dias_atendimento)
+    and extract(dow from public.hoje_sp())::int = any(f.dias_atendimento)
   order by f.nome, p.nome;
 $$;
+
+drop function if exists public.meus_pedidos(uuid);
 
 create or replace function public.meus_pedidos(p_colaborador_id uuid)
 returns table (
@@ -567,6 +623,8 @@ returns table (
   forma_pagamento text,
   status_pagamento text,
   comprovante_url text,
+  comprovante_status text,
+  comprovante_motivo text,
   criado_em timestamptz,
   prato_nome text,
   fornecedor_nome text,
@@ -586,6 +644,8 @@ as $$
     pe.forma_pagamento,
     pe.status_pagamento,
     pe.comprovante_url,
+    pe.comprovante_status,
+    pe.comprovante_motivo,
     pe.criado_em,
     pr.nome,
     fo.nome,
@@ -597,7 +657,7 @@ as $$
   left join public.pedido_acompanhamentos pa on pa.pedido_id = pe.id
   left join public.acompanhamentos ac on ac.id = pa.acompanhamento_id
   where pe.colaborador_id = p_colaborador_id
-    and pe.data >= current_date - interval '180 days'
+    and pe.data >= public.hoje_sp() - interval '180 days'
   group by pe.id, pr.nome, fo.nome
   order by pe.data desc, pe.criado_em desc;
 $$;
@@ -649,6 +709,9 @@ declare
   v_pedidos_abertos text;
   v_acomp uuid;
   v_extra numeric(10,2);
+  v_horario_inicio time without time zone;
+  v_horario_limite time without time zone;
+  v_agora time without time zone;
 begin
   select valor into v_pedidos_abertos
     from public.configuracoes
@@ -677,15 +740,28 @@ begin
     raise exception 'Fornecedor invalido ou inativo.';
   end if;
 
-  if not exists (
-    select 1
+  select v_forn.horario_inicio,
+         v_forn.horario_limite
+    into v_horario_inicio, v_horario_limite
       from public.cardapio_dia cd
-     where cd.data = current_date
+     where cd.data = public.hoje_sp()
        and cd.prato_id = p_prato_id
        and cd.fornecedor_id = v_prato.fornecedor_id
        and cd.disponivel = true
-  ) then
+     limit 1;
+
+  if v_horario_limite is null then
     raise exception 'Este prato nao esta disponivel no cardapio de hoje.';
+  end if;
+
+  v_agora := (now() at time zone 'America/Sao_Paulo')::time;
+
+  if v_agora < coalesce(v_horario_inicio, '00:00'::time) then
+    raise exception 'Pedidos disponiveis a partir das % para este fornecedor.', to_char(v_horario_inicio, 'HH24:MI');
+  end if;
+
+  if v_agora > v_horario_limite then
+    raise exception 'Pedidos encerrados as % para este fornecedor.', to_char(v_horario_limite, 'HH24:MI');
   end if;
 
   v_total := v_prato.preco;
@@ -713,7 +789,7 @@ begin
     observacoes, forma_pagamento, status_pagamento
   )
   values (
-    p_colaborador_id, v_prato.fornecedor_id, p_prato_id, current_date, v_total,
+    p_colaborador_id, v_prato.fornecedor_id, p_prato_id, public.hoje_sp(), v_total,
     nullif(trim(coalesce(p_observacoes, '')), ''), p_forma_pagamento, 'pendente'
   )
   returning id into v_pedido_id;
@@ -739,7 +815,14 @@ set search_path = public
 as $$
 begin
   update public.pedidos
-     set comprovante_url = nullif(trim(coalesce(p_comprovante_url, '')), '')
+     set comprovante_url = nullif(trim(coalesce(p_comprovante_url, '')), ''),
+         comprovante_status = case
+           when nullif(trim(coalesce(p_comprovante_url, '')), '') is null then 'sem_comprovante'
+           else 'enviado'
+         end,
+         comprovante_motivo = null,
+         comprovante_revisado_em = null,
+         comprovante_revisado_por = null
    where id = p_pedido_id
      and colaborador_id = p_colaborador_id
      and forma_pagamento in ('pix_empresa','pix_fornecedor','fiado')
@@ -793,15 +876,16 @@ begin
     raise exception 'Apenas administradores podem copiar cardapio.';
   end if;
 
-  insert into public.cardapio_dia (data, fornecedor_id, prato_id, disponivel, horario_limite)
-  select p_data_destino, cd.fornecedor_id, cd.prato_id, cd.disponivel, cd.horario_limite
+  insert into public.cardapio_dia (data, fornecedor_id, prato_id, disponivel)
+  select p_data_destino, cd.fornecedor_id, cd.prato_id, cd.disponivel
     from public.cardapio_dia cd
    where cd.data = p_data_origem
      and cd.disponivel = true
   on conflict (data, prato_id) do update
      set disponivel = excluded.disponivel,
          fornecedor_id = excluded.fornecedor_id,
-         horario_limite = excluded.horario_limite;
+         horario_inicio = null,
+         horario_limite = null;
 
   get diagnostics v_count = row_count;
   return v_count;
@@ -828,6 +912,9 @@ declare
   v_obs text;
   v_total numeric(10,2) := 0;
   v_qtd integer := 0;
+  v_horario_inicio time without time zone;
+  v_horario_limite time without time zone;
+  v_agora time without time zone;
 begin
   if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) = 0 then
     raise exception 'Informe ao menos um item.';
@@ -839,7 +926,7 @@ begin
   end if;
 
   insert into public.pedidos_coletivos (colaborador_id, data, total, qtd_pessoas)
-  values (p_colaborador_id, current_date, 0, 0)
+  values (p_colaborador_id, public.hoje_sp(), 0, 0)
   returning id into v_coletivo_id;
 
   for v_item in select * from jsonb_array_elements(p_itens) loop
@@ -864,14 +951,28 @@ begin
       raise exception 'Fornecedor invalido no pedido coletivo.';
     end if;
 
-    if not exists (
-      select 1 from public.cardapio_dia cd
-       where cd.data = current_date
+    select v_forn.horario_inicio,
+           v_forn.horario_limite
+      into v_horario_inicio, v_horario_limite
+      from public.cardapio_dia cd
+       where cd.data = public.hoje_sp()
          and cd.prato_id = v_prato.id
          and cd.fornecedor_id = v_prato.fornecedor_id
          and cd.disponivel = true
-    ) then
+       limit 1;
+
+    if v_horario_limite is null then
       raise exception 'Um dos pratos nao esta no cardapio de hoje.';
+    end if;
+
+    v_agora := (now() at time zone 'America/Sao_Paulo')::time;
+
+    if v_agora < coalesce(v_horario_inicio, '00:00'::time) then
+      raise exception 'Pedidos disponiveis a partir das % para o fornecedor %.', to_char(v_horario_inicio, 'HH24:MI'), v_forn.nome;
+    end if;
+
+    if v_agora > v_horario_limite then
+      raise exception 'Pedidos encerrados as % para o fornecedor %.', to_char(v_horario_limite, 'HH24:MI'), v_forn.nome;
     end if;
 
     insert into public.pedidos (
@@ -882,7 +983,7 @@ begin
       p_colaborador_id,
       v_prato.fornecedor_id,
       v_prato.id,
-      current_date,
+      public.hoje_sp(),
       v_prato.preco,
       concat('[Coletivo: ', v_nome_pessoa, ']', case when v_obs is not null then ' ' || v_obs else '' end),
       'fiado',
@@ -1102,6 +1203,7 @@ grant select, insert, update, delete on all tables in schema public to authentic
 
 revoke all on function public.is_admin() from public;
 grant execute on function public.is_admin() to anon, authenticated;
+grant execute on function public.hoje_sp() to anon, authenticated;
 
 grant execute on function public.login_colaborador(text, text) to anon, authenticated;
 grant execute on function public.cardapio_hoje() to anon, authenticated;
@@ -1178,15 +1280,16 @@ values
   ('fechamento_fiado_dia_mes', '30')
 on conflict (chave) do update set valor = excluded.valor;
 
-insert into public.fornecedores (nome, whatsapp, endereco, chave_pix, dias_atendimento, horario_limite, ativo)
+insert into public.fornecedores (nome, whatsapp, endereco, chave_pix, dias_atendimento, horario_inicio, horario_limite, ativo)
 values
-  ('Restaurante da Dona Maria', '5592999990001', 'Centro', 'maria@restaurante.com', array[1,2,3,4,5], '11:00', true),
-  ('Marmitex do Ze', '5592999990002', 'Adrianopolis', 'ze@marmitex.com', array[1,2,3,4,5], '11:15', true)
+  ('Restaurante da Dona Maria', '5592999990001', 'Centro', 'maria@restaurante.com', array[1,2,3,4,5], '00:00', '11:00', true),
+  ('Marmitex do Ze', '5592999990002', 'Adrianopolis', 'ze@marmitex.com', array[1,2,3,4,5], '00:00', '11:15', true)
 on conflict (nome) do update
    set whatsapp = excluded.whatsapp,
        endereco = excluded.endereco,
        chave_pix = excluded.chave_pix,
        dias_atendimento = excluded.dias_atendimento,
+       horario_inicio = excluded.horario_inicio,
        horario_limite = excluded.horario_limite,
        ativo = true;
 
@@ -1241,7 +1344,7 @@ on conflict (matricula) do update
        ativo = true;
 
 insert into public.cardapio_dia (data, fornecedor_id, prato_id, disponivel)
-select current_date, p.fornecedor_id, p.id, true
+select public.hoje_sp(), p.fornecedor_id, p.id, true
   from public.pratos p
   join public.fornecedores f on f.id = p.fornecedor_id
  where p.ativo = true
