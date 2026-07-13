@@ -66,6 +66,7 @@
     html {
       -webkit-text-size-adjust: 100%;
       touch-action: manipulation;
+      overflow-y: auto;
     }
 
     html,
@@ -79,7 +80,8 @@
       line-height: 1.4;
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
-      overscroll-behavior-y: contain;
+      overflow-y: auto;
+      overscroll-behavior-y: auto;
     }
 
     body,
@@ -1681,39 +1683,6 @@
       await carregarMeusPedidos();
     }
 
-    function formatHorario(horario) {
-      return (horario || "").slice(0, 5) || "--:--";
-    }
-
-    function horarioEncerrado(horario) {
-      if (!horario) return false;
-      const [hh, mm] = horario.split(":").map(Number);
-      const agora = new Date();
-      const limite = new Date();
-      limite.setHours(hh || 0, mm || 0, 0, 0);
-      return agora > limite;
-    }
-
-    function horarioAindaNaoAbriu(horario) {
-      if (!horario) return false;
-      const [hh, mm] = horario.split(":").map(Number);
-      const agora = new Date();
-      const inicio = new Date();
-      inicio.setHours(hh || 0, mm || 0, 0, 0);
-      return agora < inicio;
-    }
-
-    function bloqueioHorario(item) {
-      if (!item) return null;
-      if (horarioAindaNaoAbriu(item.horario_inicio)) {
-        return { tipo: "inicio", texto: "Disponivel a partir das " + formatHorario(item.horario_inicio) };
-      }
-      if (horarioEncerrado(item.horario_limite)) {
-        return { tipo: "fim", texto: "Encerrado as " + formatHorario(item.horario_limite) };
-      }
-      return null;
-    }
-
     function pedidoStatusInfo(p) {
       const map = {
         aberto: "Pedido recebido",
@@ -1757,15 +1726,13 @@
         const fid = item.fornecedor_id;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
-            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix, horario_inicio: item.horario_inicio, horario_limite: item.horario_limite },
+            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
             pratos: []
           });
         }
         grupos.get(fid).pratos.push({
           id: item.prato_id, nome: item.prato_nome,
-          descricao: item.prato_descricao, preco: item.prato_preco,
-          horario_inicio: item.horario_inicio,
-          horario_limite: item.horario_limite
+          descricao: item.prato_descricao, preco: item.prato_preco
         });
       });
 
@@ -1785,27 +1752,14 @@
         </div>`;
       }
 
-      const todosBloqueadosHorario = data.every(item => !!bloqueioHorario(item));
-      if (pedidosAbertos && todosBloqueadosHorario) {
-        const horarios = data.map(item => item.horario_limite).filter(Boolean).sort();
-        const ultimoHorario = horarios[horarios.length - 1];
-        const aindaNaoAbriu = data.some(item => horarioAindaNaoAbriu(item.horario_inicio));
-        const primeiroHorario = data.map(item => item.horario_inicio).filter(Boolean).sort()[0];
-        html += `<div class="card" style="background:rgba(197,48,48,.08); border:1px solid rgba(197,48,48,.2); margin-bottom:16px;">
-          <div style="font-weight:600;">${aindaNaoAbriu ? "Pedidos ainda nao liberados" : "Pedidos encerrados"}</div>
-          <div class="small muted">${aindaNaoAbriu ? "O cardapio abre as " + formatHorario(primeiroHorario) + "." : "O horario limite de hoje foi " + formatHorario(ultimoHorario) + "."}</div>
-        </div>`;
-      }
-
       for (const { fornecedor, pratos } of grupos.values()) {
         html += `<div class="fornecedor-bloco">
           <div class="fornecedor-head">
             <h2>${fornecedor.nome}</h2>
-            <span class="small muted">Pedidos de ${formatHorario(fornecedor.horario_inicio)} ate ${formatHorario(fornecedor.horario_limite)}</span>
           </div>
           <div class="pratos-grid">`;
         pratos.forEach(p => {
-          const bloqueio = !pedidosAbertos ? { texto: "Pedidos fechados" } : bloqueioHorario(p);
+          const bloqueio = !pedidosAbertos ? { texto: "Pedidos fechados" } : null;
           html += `<div class="prato ${bloqueio ? 'prato-encerrado' : ''}" data-prato="${p.id}" data-fornecedor="${fornecedor.id}" ${bloqueio ? 'style="opacity:.55;"' : ''}>
             ${bloqueio ? '' : '<span class="prato-badge-add">+</span>'}
             <div class="prato-info">
@@ -2093,14 +2047,6 @@
     // MONTAR PEDIDO
     // =====================================================================
     async function abrirPedido(pratoId, fornecedorId) {
-      const itemCardapio = (state.cardapio || []).find(item => item.prato_id === pratoId);
-      const bloqueio = bloqueioHorario(itemCardapio);
-      if (bloqueio) {
-        alert(bloqueio.texto + " para este fornecedor.");
-        await carregarCardapio();
-        return;
-      }
-
       const { data: prato } = await sb.from("pratos")
         .select("id, nome, descricao, preco, fornecedor:fornecedores(id, nome, chave_pix)")
         .eq("id", pratoId).single();
@@ -2274,15 +2220,6 @@
       $("btnConfirmar").disabled = true; $("btnConfirmar").textContent = "Enviando…";
 
       const colab = getColab();
-      const itemCardapio = (state.cardapio || []).find(item => item.prato_id === state.selPrato?.id);
-      const bloqueio = bloqueioHorario(itemCardapio);
-      if (bloqueio) {
-        alertEl.textContent = bloqueio.texto + " para este fornecedor.";
-        alertEl.classList.add("show");
-        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
-        await carregarCardapio();
-        return;
-      }
       const total = calcTotal();
       const acompArr = [...state.selAcomp];
 

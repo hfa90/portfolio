@@ -7,7 +7,8 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 | Arquivo | Funcao |
 |---|---|
 | `banco.sql` | Banco completo para Supabase: tabelas, indices, RLS, RPCs, storage e dados iniciais |
-| `migracao-horarios-cardapio.sql` | Correcao pontual para aplicar em bases ja criadas: horarios do fornecedor, cardapio e data de Sao Paulo |
+| `migracao-remover-horarios-e-corrigir-exclusao.sql` | Correcao pontual para bases ja criadas: remove bloqueios por horario e corrige a exclusao segura |
+| `migracao-exclusao-segura.sql` | Correcao pontual para exclusao segura: exclui quando nao ha historico e desativa quando ha pedidos/pagamentos vinculados |
 | `marmita.html` | App do colaborador: login por matricula/PIN, cardapio, pedido, historico e pedido coletivo |
 | `admin.html` | Painel admin: pedidos, cardapio, fornecedores, pratos, acompanhamentos, colaboradores, financeiro e configuracoes |
 | `marmita-sw.js` | Service worker para cache e notificacoes |
@@ -25,7 +26,9 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 4. Em `Project Settings > API`, confirme `Project URL` e `anon/public key`.
 5. Se usar outro projeto, troque `window.SUPABASE_URL` e `window.SUPABASE_ANON` no topo de `marmita.html` e `admin.html`.
 
-Para um projeto Supabase que ja estava em uso antes desta correcao, rode apenas `migracao-horarios-cardapio.sql` no SQL Editor. Ela preserva os dados e corrige horarios antigos gravados no cardapio do dia.
+Para um projeto Supabase que ja estava em uso antes desta correcao, rode `migracao-remover-horarios-e-corrigir-exclusao.sql` no SQL Editor. Ela preserva os dados, faz o cardapio depender apenas do botao `Pedidos abertos` e corrige a RPC `admin_excluir_registro`.
+
+Se aparecer erro de chave estrangeira ao excluir fornecedor, prato, acompanhamento ou colaborador em uma instalacao antiga, a migracao acima ja cobre esse caso. O arquivo `migracao-exclusao-segura.sql` fica apenas como historico.
 
 O SQL cria o perfil na tabela `admins` automaticamente quando encontrar o usuario de Auth com o email acima. Se voce rodou o SQL antes de criar o usuario no Auth, crie o usuario e rode novamente apenas o bloco `ADMIN INICIAL` no fim do `banco.sql`.
 

@@ -60,6 +60,7 @@
       width: 100%;
       max-width: 100vw;
       overflow-x: hidden;
+      overflow-y: auto;
       background: var(--bg);
       color: var(--ink);
       font-family: var(--font-body);
@@ -69,7 +70,7 @@
       min-height: 100dvh;
       -webkit-font-smoothing: antialiased;
       -webkit-text-size-adjust: 100%;
-      overscroll-behavior-y: none;
+      overscroll-behavior-y: auto;
     }
 
     body {
@@ -2668,7 +2669,14 @@ Bom apetite! 😋`;
     // =====================================================================
     async function carregarFornecedores() {
       $("fornecedoresLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("fornecedores").select("*").order("nome");
+      const { data, error } = await sb
+        .from("fornecedores")
+        .select("id, nome, whatsapp, endereco, chave_pix, ativo, criado_em")
+        .order("nome");
+      if (error) {
+        $("fornecedoresLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar fornecedores: ${error.message}</div>`;
+        return;
+      }
       if (!data || data.length === 0) {
         $("fornecedoresLista").innerHTML = '<div class="empty">Nenhum fornecedor cadastrado.</div>';
         return;
@@ -2678,7 +2686,6 @@ Bom apetite! 😋`;
           ${data.map(f => `<tr>
             <td><strong>${f.nome}</strong></td>
             <td data-label="WhatsApp">${f.whatsapp}</td>
-            <td data-label="Janela">${(f.horario_inicio || "00:00").slice(0, 5)} - ${(f.horario_limite || "11:00").slice(0, 5)}</td>
             <td data-label="Pix"><span class="small muted">${f.chave_pix || "—"}</span></td>
             <td data-label="Status">${f.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
             <td class="actions">
@@ -2697,81 +2704,112 @@ Bom apetite! 😋`;
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="fWhats" class="input" inputmode="numeric" value="${f?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
         <div class="field"><label>Endereço</label><input id="fEnd" class="input" value="${f?.endereco ?? ""}"/></div>
         <div class="field"><label>Chave Pix</label><input id="fPix" class="input" value="${f?.chave_pix ?? ""}"/></div>
-        <div class="field"><label>Cardapio disponivel a partir de</label><input id="fHorarioInicio" class="input" type="time" value="${(f?.horario_inicio || "00:00").slice(0, 5)}"/></div>
-        <div class="field"><label>Horario limite para pedidos</label><input id="fHorario" class="input" type="time" value="${(f?.horario_limite || "11:00").slice(0, 5)}"/></div>
-        <div class="field"><label>Dias de atendimento</label>
-          <div class="checks" id="fDias"></div>
-        </div>
         <div class="field">
           <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="fAtivo" ${f?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label>
         </div>`;
-
-      const diasNomes = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-      const diasAtivos = new Set(f?.dias_atendimento || [1, 2, 3, 4, 5]);
-      $("fDias").innerHTML = diasNomes.map((n, i) =>
-        `<span class="check ${diasAtivos.has(i) ? "selected" : ""}" data-d="${i}">${n}</span>`).join("");
-      $("fDias").querySelectorAll(".check").forEach(c =>
-        c.addEventListener("click", () => c.classList.toggle("selected")));
 
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
 
       $("modalSave").onclick = async () => {
-        const dias = [...$("fDias").querySelectorAll(".check.selected")].map(x => Number(x.dataset.d));
+        const originalText = $("modalSave").textContent;
         const payload = {
           nome: $("fNome").value.trim(),
           whatsapp: $("fWhats").value.trim().replace(/\D/g, ""),
           endereco: $("fEnd").value.trim() || null,
           chave_pix: $("fPix").value.trim() || null,
-          horario_inicio: $("fHorarioInicio").value || "00:00",
-          horario_limite: $("fHorario").value || "11:00",
-          dias_atendimento: dias,
           ativo: $("fAtivo").checked
         };
         if (!payload.nome || !payload.whatsapp) {
           $("modalAlert").textContent = "Nome e WhatsApp são obrigatórios.";
           $("modalAlert").classList.add("show"); return;
         }
-        if (payload.horario_inicio >= payload.horario_limite) {
-          $("modalAlert").textContent = "O horario inicial deve ser menor que o horario limite.";
-          $("modalAlert").classList.add("show"); return;
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Salvando…";
+        try {
+          const { error } = f
+            ? await sb.from("fornecedores").update(payload).eq("id", f.id).select("id").single()
+            : await sb.from("fornecedores").insert(payload).select("id").single();
+          if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
+          fecharModal();
+          await carregarFornecedores();
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = originalText;
         }
-        let fornecedorId = f?.id;
-        const { data: fornecedorSalvo, error } = f
-          ? await sb.from("fornecedores").update(payload).eq("id", f.id).select("id").single()
-          : await sb.from("fornecedores").insert(payload).select("id").single();
-        if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
-        fornecedorId = fornecedorSalvo?.id || fornecedorId;
-
-        if (fornecedorId) {
-          const { error: syncError } = await sb.from("cardapio_dia")
-            .update({
-              horario_inicio: payload.horario_inicio,
-              horario_limite: payload.horario_limite
-            })
-            .eq("fornecedor_id", fornecedorId)
-            .gte("data", hojeISO());
-          if (syncError) {
-            $("modalAlert").textContent = "Fornecedor salvo, mas nao consegui atualizar os horarios dos cardapios ja publicados: " + syncError.message;
-            $("modalAlert").classList.add("show");
-            return;
-          }
-        }
-        fecharModal(); carregarFornecedores();
       };
     };
 
+    function rpcNaoExiste(error) {
+      return /Could not find the function|schema cache|PGRST202/i.test(error?.message || error?.details || error?.hint || "");
+    }
+
+    async function fallbackExcluirRegistro(tipo, id) {
+      const hoje = hojeISO();
+      if (tipo === "fornecedores") {
+        const [{ data: pedidos, error: e1 }, { data: coletivos, error: e2 }] = await Promise.all([
+          sb.from("pedidos").select("id").eq("fornecedor_id", id).limit(1),
+          sb.from("pedidos_coletivos_itens").select("id").eq("fornecedor_id", id).limit(1)
+        ]);
+        if (e1 || e2) throw new Error((e1 || e2).message);
+        const temHistorico = (pedidos || []).length > 0 || (coletivos || []).length > 0;
+        if (temHistorico) {
+          for (const op of [
+            sb.from("fornecedores").update({ ativo: false }).eq("id", id),
+            sb.from("pratos").update({ ativo: false }).eq("fornecedor_id", id),
+            sb.from("acompanhamentos").update({ ativo: false }).eq("fornecedor_id", id),
+            sb.from("cardapio_dia").delete().eq("fornecedor_id", id).gte("data", hoje)
+          ]) {
+            const { error } = await op;
+            if (error) throw new Error(error.message);
+          }
+          return { acao: "desativado", mensagem: "Fornecedor possui pedidos vinculados e foi desativado. O historico foi preservado." };
+        }
+        for (const op of [
+          sb.from("cardapio_dia").delete().eq("fornecedor_id", id),
+          sb.from("acompanhamentos").delete().eq("fornecedor_id", id),
+          sb.from("pratos").delete().eq("fornecedor_id", id),
+          sb.from("fornecedores").delete().eq("id", id)
+        ]) {
+          const { error } = await op;
+          if (error) throw new Error(error.message);
+        }
+        return { acao: "excluido", mensagem: "Fornecedor excluido definitivamente." };
+      }
+
+      if (tipo === "acompanhamentos") {
+        const { data: pedidos, error: e1 } = await sb.from("pedido_acompanhamentos").select("pedido_id").eq("acompanhamento_id", id).limit(1);
+        if (e1) throw new Error(e1.message);
+        if ((pedidos || []).length > 0) {
+          const { error } = await sb.from("acompanhamentos").update({ ativo: false }).eq("id", id);
+          if (error) throw new Error(error.message);
+          return { acao: "desativado", mensagem: "Acompanhamento possui pedidos vinculados e foi desativado. O historico foi preservado." };
+        }
+        const { error } = await sb.from("acompanhamentos").delete().eq("id", id);
+        if (error) throw new Error(error.message);
+        return { acao: "excluido", mensagem: "Acompanhamento excluido definitivamente." };
+      }
+
+      throw new Error("A funcao de exclusao segura nao existe no banco. Rode a migracao SQL para concluir esta operacao.");
+    }
+
     async function excluirRegistroSeguro(tipo, id, nome, recarregar) {
       if (!confirm(`Excluir ${nome}? Se existir historico vinculado, o registro sera apenas desativado.`)) return;
-      const { data, error } = await sb.rpc("admin_excluir_registro", {
-        p_tipo: tipo,
-        p_id: id
-      });
-      if (error) {
+      let resp;
+      const { data, error } = await sb.rpc("admin_excluir_registro", { p_tipo: tipo, p_id: id });
+      if (error && rpcNaoExiste(error)) {
+        try {
+          resp = await fallbackExcluirRegistro(tipo, id);
+        } catch (fallbackError) {
+          alert("Erro: " + fallbackError.message);
+          return;
+        }
+      } else if (error) {
         alert("Erro: " + error.message);
         return;
+      } else {
+        resp = Array.isArray(data) ? data[0] : data;
       }
-      const resp = Array.isArray(data) ? data[0] : data;
       alert(resp?.mensagem || "Operacao concluida.");
       await recarregar();
     }
@@ -2851,8 +2889,12 @@ Bom apetite! 😋`;
     // =====================================================================
     async function carregarAcompanhamentos() {
       $("acompLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("acompanhamentos")
+      const { data, error } = await sb.from("acompanhamentos")
         .select("*, fornecedor:fornecedores(nome)").order("nome");
+      if (error) {
+        $("acompLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar acompanhamentos: ${error.message}</div>`;
+        return;
+      }
       if (!data || data.length === 0) {
         $("acompLista").innerHTML = '<div class="empty">Nenhum acompanhamento cadastrado.</div>';
         return;

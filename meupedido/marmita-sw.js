@@ -1,7 +1,7 @@
 // marmita-sw.js — Service Worker para Web Push
 // Coloque na RAIZ do servidor (mesma pasta do marmita.html)
 
-const CACHE_NAME = "marmita-v2";
+const CACHE_NAME = "marmita-v3";
 const ASSETS_TO_CACHE = ["/marmita.html", "/admin.html", "/icon-192.png"];
 
 self.addEventListener("install", event => {
@@ -24,6 +24,18 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+  if (event.request.destination === "document" || url.pathname.endsWith(".html")) {
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request))
   );

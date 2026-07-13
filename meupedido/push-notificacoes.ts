@@ -2,7 +2,7 @@
  * Edge Function: push-notificacoes
  *
  * Dispara Web Push para colaboradores em 3 cenários:
- *   tipo "lembrete_limite"  → chamado pelo cron, avisa 30min antes do horário-limite
+ *   tipo "lembrete_limite"  → legado; nao usa mais horario-limite
  *   tipo "fiado_fechado"    → chamado pelo admin ao marcar pedidos como pagos
  *   tipo "cardapio_novo"    → chamado ao publicar cardápio do dia
  *
@@ -51,7 +51,7 @@ function hojeSaoPauloISO(): string {
 interface RequestBody {
   tipo: TipoNotificacao;
   colaborador_id?: string; // se omitido, envia para todos
-  minutos_antes?: number;  // para lembrete_limite (padrão: 30)
+  minutos_antes?: number;  // legado
 }
 
 // ─── VAPID helpers ───────────────────────────────────────────────────────────
@@ -271,21 +271,9 @@ async function montarPayload(
   minutos_antes = 30
 ): Promise<PushPayload> {
   if (tipo === "lembrete_limite") {
-    // Busca horários-limite de hoje
-    const hoje = hojeSaoPauloISO();
-    const { data } = await supabase
-      .from("cardapio_dia")
-      .select("horario_limite, fornecedor:fornecedores(nome, horario_limite)")
-      .eq("data", hoje)
-      .eq("disponivel", true)
-      .limit(1);
-
-    const horario = (data?.[0]?.horario_limite || data?.[0]?.fornecedor?.horario_limite)?.slice(0, 5) ?? "??:??";
     return {
-      title: minutos_antes <= 10 ? "⚠️ Últimos minutos!" : "⏰ Lembrete de pedido",
-      body: minutos_antes <= 10
-        ? `O cardápio fecha às ${horario}. Corre lá!`
-        : `Você tem ${minutos_antes} minutos para pedir. Limite: ${horario}.`,
+      title: "Cardapio disponivel",
+      body: "Os pedidos ficam disponiveis enquanto o administrador mantiver Pedidos abertos.",
       icon: "/icon-192.png",
       url: "/marmita.html"
     };
