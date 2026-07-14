@@ -1548,6 +1548,57 @@
       font-size: 28px;
     }
 
+    .admin-toast {
+      position: fixed;
+      left: 16px;
+      right: 16px;
+      bottom: calc(18px + var(--safe-bottom));
+      z-index: 140;
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 12px;
+      align-items: center;
+      background: #fff;
+      border: 1px solid rgba(217, 201, 173, .9);
+      border-left: 5px solid var(--brick);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: var(--shadow-lg);
+      transform: translateY(120%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 220ms ease, opacity 220ms ease;
+    }
+
+    .admin-toast.show {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .admin-toast-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(185, 74, 42, .12);
+      color: var(--brick);
+      font-size: 21px;
+    }
+
+    .admin-toast-title {
+      font-weight: 900;
+      color: var(--ink);
+      line-height: 1.15;
+    }
+
+    .admin-toast-msg {
+      color: var(--ink-soft);
+      font-size: .84rem;
+      margin-top: 2px;
+    }
+
     @media (max-width: 560px) {
       .cardapio-week {
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1976,6 +2027,14 @@
     </div>
   </div>
 
+  <div class="admin-toast" id="adminToast" role="alert" aria-live="polite">
+    <div class="admin-toast-icon" id="adminToastIcon">🔔</div>
+    <div>
+      <div class="admin-toast-title" id="adminToastTitle"></div>
+      <div class="admin-toast-msg" id="adminToastMsg"></div>
+    </div>
+  </div>
+
   <!-- ============================================================
        SCRIPT
        ============================================================ -->
@@ -2216,6 +2275,162 @@
       return data.publicUrl;
     }
 
+    let adminAudioCtx = null;
+    function desbloquearAudioAdmin() {
+      try {
+        adminAudioCtx = adminAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (adminAudioCtx.state === "suspended") adminAudioCtx.resume();
+      } catch { }
+    }
+
+    document.addEventListener("pointerdown", desbloquearAudioAdmin, { passive: true });
+    document.addEventListener("keydown", desbloquearAudioAdmin);
+
+    function tocarSomAdmin(tipo = "pedido") {
+      try {
+        desbloquearAudioAdmin();
+        if (!adminAudioCtx) return;
+        const notas = tipo === "comprovante" ? [740, 880] : [880, 660, 880];
+        const inicio = adminAudioCtx.currentTime;
+        notas.forEach((freq, i) => {
+          const osc = adminAudioCtx.createOscillator();
+          const gain = adminAudioCtx.createGain();
+          osc.type = "triangle";
+          osc.frequency.value = freq;
+          osc.connect(gain);
+          gain.connect(adminAudioCtx.destination);
+          const t0 = inicio + i * 0.12;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.11);
+          osc.start(t0);
+          osc.stop(t0 + 0.13);
+        });
+      } catch { }
+    }
+
+    let adminToastTimer = null;
+    function mostrarToastAdmin(icon, titulo, msg, duracao = 6500) {
+      const toast = $("adminToast");
+      $("adminToastIcon").textContent = icon;
+      $("adminToastTitle").textContent = titulo;
+      $("adminToastMsg").textContent = msg;
+      toast.classList.add("show");
+      clearTimeout(adminToastTimer);
+      adminToastTimer = setTimeout(() => toast.classList.remove("show"), duracao);
+    }
+
+    $("adminToast").addEventListener("click", () => navegar("pedidos"));
+
+    function secaoAtiva() {
+      return document.querySelector(".drawer-item.active")?.dataset?.section || "pedidos";
+    }
+
+    async function atualizarTelasOperacionaisSilencioso() {
+      const sec = secaoAtiva();
+      if (sec === "pedidos") await carregarPedidos({ silent: true });
+      if (sec === "financeiro") await carregarFinanceiro();
+      if (sec === "coletivos") await carregarColetivos();
+    }
+
+    const eventosAdminVistos = new Set();
+    function avisarAdminPedido(tipo, pedido = {}) {
+      const id = pedido.id || "sem-id";
+      const chave = `${tipo}:${id}:${pedido.comprovante_status || ""}:${pedido.comprovante_url || ""}`;
+      if (eventosAdminVistos.has(chave)) return;
+      eventosAdminVistos.add(chave);
+      if (eventosAdminVistos.size > 80) eventosAdminVistos.delete(eventosAdminVistos.values().next().value);
+
+      if (tipo === "comprovante") {
+        tocarSomAdmin("comprovante");
+        mostrarToastAdmin("🧾", "Comprovante recebido", "Um cliente anexou comprovante. Valide o pagamento no caixa.");
+        return;
+      }
+
+      tocarSomAdmin("pedido");
+      mostrarToastAdmin("🍱", "Novo pedido recebido", "Confira as informações, valide o pagamento e envie para a cozinha.");
+    }
+
+    let adminPedidosChannel = null;
+    let adminPedidosPollTimer = null;
+    let adminPedidosSnapshot = null;
+
+    async function consultarPedidosMonitorAdmin() {
+      const dataFiltro = hojeISO();
+      const { data, error } = await sb.from("pedidos")
+        .select(`
+          id, criado_em, data, status, status_pagamento, comprovante_status, comprovante_url,
+          prato:pratos(nome),
+          colaborador:colaboradores(nome)
+        `)
+        .or(`data.eq.${dataFiltro},status_pagamento.eq.pendente`)
+        .neq("status", "cancelado")
+        .order("criado_em", { ascending: true });
+      if (error) return [];
+      return data || [];
+    }
+
+    async function checarPedidosAdmin(inicial = false) {
+      const pedidos = await consultarPedidosMonitorAdmin();
+      const snapshot = new Map();
+      pedidos.forEach(p => snapshot.set(p.id, {
+        criado_em: p.criado_em || "",
+        comprovante_status: p.comprovante_status || "",
+        comprovante_url: p.comprovante_url || "",
+        status_pagamento: p.status_pagamento || "",
+        status: p.status || "",
+        pedido: p
+      }));
+
+      if (!inicial && adminPedidosSnapshot) {
+        for (const [id, atual] of snapshot.entries()) {
+          const anterior = adminPedidosSnapshot.get(id);
+          if (!anterior) avisarAdminPedido("novo", atual.pedido);
+          const comprovanteChegou = atual.comprovante_status === "enviado"
+            && atual.comprovante_url
+            && (!anterior || anterior.comprovante_status !== "enviado" || anterior.comprovante_url !== atual.comprovante_url);
+          if (comprovanteChegou) avisarAdminPedido("comprovante", atual.pedido);
+        }
+        await atualizarTelasOperacionaisSilencioso();
+      }
+
+      adminPedidosSnapshot = snapshot;
+    }
+
+    function iniciarMonitorPedidosAdmin() {
+      if (adminPedidosPollTimer) clearInterval(adminPedidosPollTimer);
+      if (adminPedidosChannel) sb.removeChannel(adminPedidosChannel);
+
+      checarPedidosAdmin(true);
+      adminPedidosPollTimer = setInterval(() => checarPedidosAdmin(false), 10000);
+
+      adminPedidosChannel = sb.channel("admin-pedidos-tempo-real")
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, async payload => {
+          avisarAdminPedido("novo", payload.new || {});
+          await checarPedidosAdmin(true);
+          await atualizarTelasOperacionaisSilencioso();
+        })
+        .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pedidos" }, async payload => {
+          const novo = payload.new || {};
+          const antigo = payload.old || {};
+          const comprovanteChegou = novo.comprovante_status === "enviado"
+            && novo.comprovante_url
+            && (antigo.comprovante_status !== "enviado" || antigo.comprovante_url !== novo.comprovante_url);
+          if (comprovanteChegou) avisarAdminPedido("comprovante", novo);
+          await checarPedidosAdmin(true);
+          await atualizarTelasOperacionaisSilencioso();
+        })
+        .subscribe();
+    }
+
+    function pararMonitorPedidosAdmin() {
+      if (adminPedidosPollTimer) clearInterval(adminPedidosPollTimer);
+      adminPedidosPollTimer = null;
+      adminPedidosSnapshot = null;
+      if (adminPedidosChannel) sb.removeChannel(adminPedidosChannel);
+      adminPedidosChannel = null;
+    }
+
     // =====================================================================
     // DRAWER
     // =====================================================================
@@ -2280,6 +2495,7 @@
       $("drawerBackdrop").classList.remove("hidden");
       $("nomeAdmin").textContent = adminAtual.nome;
       navegar("pedidos");
+      iniciarMonitorPedidosAdmin();
     }
 
     $("btnEntrar").addEventListener("click", entrar);
@@ -2306,6 +2522,7 @@
 
     $("btnSair").addEventListener("click", async () => {
       await sb.auth.signOut(); adminAtual = null;
+      pararMonitorPedidosAdmin();
       mostrarLogin();
     });
 
@@ -2424,12 +2641,15 @@
     });
 
     // FUNÇÃO PRINCIPAL DE CARREGAMENTO (Super Otimizada)
-    async function carregarPedidos() {
+    async function carregarPedidos(options = {}) {
+      const silent = !!options.silent;
       const dataFiltro = $("pedidosFiltroData").value || hojeISO();
       $("pedidosData").textContent = fmtData(dataFiltro);
 
-      $("listaCaixa").innerHTML = '<div class="loading">Carregando caixa…</div>';
-      $("pedidosLista").innerHTML = '<div class="loading">Carregando logística…</div>';
+      if (!silent) {
+        $("listaCaixa").innerHTML = '<div class="loading">Carregando caixa…</div>';
+        $("pedidosLista").innerHTML = '<div class="loading">Carregando logística…</div>';
+      }
 
       // Buscamos: Pedidos da data SELECIONADA *OU* pedidos PENDENTES de qualquer data (para cobrar fiados atrasados)
       const { data: pedidos, error } = await sb.from("pedidos")

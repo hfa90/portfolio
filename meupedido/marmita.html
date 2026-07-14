@@ -1806,6 +1806,7 @@
     async function concluirAutenticacao(resp) {
       setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, empresa: resp.empresa });
       atualizarHeaderCliente();
+      iniciarMonitorPedidosCliente();
       if (state.authDestino === "pedido") {
         showScreen("screen-pedido");
         $("pedidoAlert").textContent = "Identificacao confirmada. Agora pode confirmar o pedido.";
@@ -1939,6 +1940,7 @@
     // =====================================================================
     async function abrirHome() {
       atualizarHeaderCliente();
+      iniciarMonitorPedidosCliente();
       const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
       $("dataHoje").textContent = "Cardápio de " + hoje;
 
@@ -1971,9 +1973,9 @@
     function comprovanteStatusVisual(p) {
       if (p.comprovante_status === "rejeitado") {
         return {
-          icon: "!",
-          title: "Comprovante rejeitado",
-          desc: "Anexe o comprovante correto para o pagamento voltar para analise.",
+          icon: "⚠️",
+          title: "Ops, comprovante rejeitado",
+          desc: "O pagamento ainda nao foi confirmado. Anexe o comprovante correto deste pedido.",
           cls: "rejeitado"
         };
       }
@@ -2092,9 +2094,10 @@
       }
     }
 
-    async function carregarMeusPedidos() {
+    async function carregarMeusPedidos(options = {}) {
+      const silent = !!options.silent;
       const lista = $("meusPedidosList");
-      lista.innerHTML = '<div class="loading">Carregando…</div>';
+      if (!silent) lista.innerHTML = '<div class="loading">Carregando…</div>';
       const colab = getColab();
 
       if (!colab) {
@@ -2386,6 +2389,9 @@
     $("btnSair").addEventListener("click", async () => {
       if (getColab()) {
         clearColab();
+        if (pedidosClienteMonitorTimer) clearInterval(pedidosClienteMonitorTimer);
+        pedidosClienteMonitorTimer = null;
+        pedidosClienteSnapshot = null;
         atualizarHeaderCliente();
         ativarTab("cardapio");
         await carregarCardapio();
@@ -2849,19 +2855,66 @@
     const NOTIF_IGNORED_KEY = "marmita.notif_ignorado";
     let notifPermissao = typeof Notification !== "undefined" ? Notification.permission : "denied";
 
+    let audioCtx = null;
+    function desbloquearAudio() {
+      try {
+        audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === "suspended") audioCtx.resume();
+      } catch { }
+    }
+
+    document.addEventListener("pointerdown", desbloquearAudio, { passive: true });
+    document.addEventListener("keydown", desbloquearAudio);
+
+    function tocarSom(tipo = "info") {
+      try {
+        desbloquearAudio();
+        if (!audioCtx) return;
+        const notas = tipo === "alerta" ? [660, 520, 660] : [660, 880];
+        const inicio = audioCtx.currentTime;
+        notas.forEach((freq, i) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = freq;
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          const t0 = inicio + i * 0.13;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(tipo === "alerta" ? 0.16 : 0.1, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.12);
+          osc.start(t0);
+          osc.stop(t0 + 0.14);
+        });
+      } catch { }
+    }
+
     let toastTimer = null;
-    function mostrarToast(icon, titulo, msg, duracao = 4000) {
+    let toastAction = null;
+    function mostrarToast(icon, titulo, msg, duracao = 4000, onClick = null) {
       const t = document.getElementById("toastNotif");
       document.getElementById("toastIcon").textContent = icon;
       document.getElementById("toastTitle").textContent = titulo;
       document.getElementById("toastMsg").textContent = msg;
+      toastAction = typeof onClick === "function" ? onClick : null;
+      t.style.cursor = toastAction ? "pointer" : "";
       t.classList.add("show");
       clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => t.classList.remove("show"), duracao);
+      toastTimer = setTimeout(() => {
+        t.classList.remove("show");
+        toastAction = null;
+        t.style.cursor = "";
+      }, duracao);
     }
+
+    document.getElementById("toastNotif").addEventListener("click", (e) => {
+      if (e.target.closest(".toast-close")) return;
+      if (toastAction) toastAction();
+    });
 
     document.getElementById("toastClose").addEventListener("click", () => {
       document.getElementById("toastNotif").classList.remove("show");
+      toastAction = null;
       clearTimeout(toastTimer);
     });
 
@@ -2957,6 +3010,76 @@
       } catch (e) {
         mostrarToast(icon, titulo, corpo);
       }
+    }
+
+    function abrirMeusPedidosPorNotificacao() {
+      showScreen("screen-home");
+      ativarTab("meusPedidos");
+      carregarMeusPedidos({ silent: true });
+    }
+
+    function avisarComprovanteRejeitado(pedido) {
+      const prato = pedido.prato_nome || "seu pedido";
+      const motivo = pedido.comprovante_motivo ? ` Motivo: ${pedido.comprovante_motivo}` : "";
+      tocarSom("alerta");
+      notificarLocal(
+        "Comprovante rejeitado",
+        `${prato}: anexe o comprovante correto para o pagamento voltar para analise.`,
+        "⚠️"
+      );
+      mostrarToast(
+        "⚠️",
+        "Comprovante rejeitado",
+        `${prato}: o comprovante nao foi aceito.${motivo} Toque aqui para reenviar.`,
+        12000,
+        abrirMeusPedidosPorNotificacao
+      );
+    }
+
+    let pedidosClienteMonitorTimer = null;
+    let pedidosClienteSnapshot = null;
+
+    async function checarPedidosCliente(inicial = false) {
+      const colab = getColab();
+      if (!colab) {
+        pedidosClienteSnapshot = null;
+        return;
+      }
+
+      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+      if (error || !data) return;
+
+      const snapshot = new Map();
+      data.filter(p => p.status !== "cancelado").forEach(p => {
+        snapshot.set(p.id, {
+          comprovante_status: p.comprovante_status || "",
+          comprovante_motivo: p.comprovante_motivo || "",
+          status_pagamento: p.status_pagamento || "",
+          pedido: p
+        });
+      });
+
+      if (!inicial && pedidosClienteSnapshot) {
+        for (const [id, atual] of snapshot.entries()) {
+          const anterior = pedidosClienteSnapshot.get(id);
+          const virouRejeitado = atual.comprovante_status === "rejeitado"
+            && (!anterior || anterior.comprovante_status !== "rejeitado" || anterior.comprovante_motivo !== atual.comprovante_motivo);
+          if (virouRejeitado) avisarComprovanteRejeitado(atual.pedido);
+        }
+      }
+
+      pedidosClienteSnapshot = snapshot;
+
+      if (!document.getElementById("screen-home").classList.contains("hidden")) {
+        await carregarMeusPedidos({ silent: true });
+      }
+    }
+
+    async function iniciarMonitorPedidosCliente() {
+      if (pedidosClienteMonitorTimer) clearInterval(pedidosClienteMonitorTimer);
+      if (!getColab()) return;
+      await checarPedidosCliente(true);
+      pedidosClienteMonitorTimer = setInterval(() => checarPedidosCliente(false), 8000);
     }
 
     function notificarPedidoConfirmado(nomePrato, fornecedor) {
