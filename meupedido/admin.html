@@ -12,8 +12,8 @@
   <title>Marmita — painel administrativo</title>
 
   <script>
-    window.SUPABASE_URL = "https://cppvmfreprsgswbjpovn.supabase.co";
-    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwcHZtZnJlcHJzZ3N3Ympwb3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MTU5OTksImV4cCI6MjA5OTA5MTk5OX0.dYdUD5nqkYE8aTlbq6vhQzOcdfF6U3X6J30olS-TPZ8";
+    window.SUPABASE_URL = "https://nhfwekyforsofptffohz.supabase.co";
+    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZndla3lmb3Jzb2ZwdGZmb2h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjQzMDAsImV4cCI6MjA5ODQ0MDMwMH0.GIOhh5q8o5u3euNw45ZY026w3bwWmnz-CS6-a754TqM";
   </script>
 
   <style>
@@ -2854,7 +2854,6 @@ Bom apetite! 😋`;
           <td><strong>${p.nome}</strong>${p.descricao ? `<br/><span class="small muted">${p.descricao}</span>` : ""}</td>
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço">${fmtBRL(p.preco)}</td>
-          <td data-label="Imagem">${p.imagem_url ? '<span class="badge pago">sim</span>' : '<span class="small muted">—</span>'}</td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalPrato(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Editar</button>
@@ -2890,7 +2889,6 @@ Bom apetite! 😋`;
           <div style="display:flex; flex-wrap:wrap; gap:8px;">${sugestoesHtml}</div>
         </div>
         <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2">${p?.descricao ?? ""}</textarea></div>
-        <div class="field"><label>URL da imagem</label><input id="pImagem" class="input" type="url" value="${p?.imagem_url ?? ""}" placeholder="https://..."/></div>
         <div class="field"><label>Preço (R$)</label><input id="pPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.preco ?? ""}"/></div>
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="pAtivo" ${p?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
@@ -2903,7 +2901,6 @@ Bom apetite! 😋`;
       });
 
       $("modalSave").onclick = async () => {
-        const imagemUrl = $("pImagem").value.trim();
         const payload = {
           fornecedor_id: $("pForn").value,
           nome: $("pNome").value.trim(),
@@ -2911,7 +2908,6 @@ Bom apetite! 😋`;
           preco: parseFloat($("pPreco").value),
           ativo: $("pAtivo").checked
         };
-        if (imagemUrl || p?.imagem_url) payload.imagem_url = imagemUrl || null;
         if (!payload.nome || !payload.fornecedor_id || isNaN(payload.preco)) {
           $("modalAlert").textContent = "Preencha todos os campos."; $("modalAlert").classList.add("show"); return;
         }
@@ -2994,7 +2990,7 @@ Bom apetite! 😋`;
     // =====================================================================
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, whatsapp, ativo").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
@@ -3004,6 +3000,7 @@ Bom apetite! 😋`;
           <td><strong>${c.nome}</strong></td>
           <td data-label="Matrícula">${c.matricula || "—"}</td>
           <td data-label="Empresa">${c.empresa || "—"}</td>
+          <td data-label="Endereço">${c.endereco_empresa || "—"}</td>
           <td data-label="WhatsApp"><span class="small muted">${c.whatsapp || "—"}</span></td>
           <td data-label="Status">${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
@@ -3021,6 +3018,7 @@ Bom apetite! 😋`;
         <div class="field"><label>Nome</label><input id="cNome" class="input" value="${c?.nome ?? ""}"/></div>
         <div class="field"><label>Matrícula (login)</label><input id="cMat" class="input" inputmode="numeric" value="${c?.matricula ?? ""}"/></div>
         <div class="field"><label>Empresa (ex: RD Saúde, Ambev…)</label><input id="cSetor" class="input" value="${c?.empresa ?? ""}"/></div>
+        <div class="field"><label>Endereço da empresa</label><input id="cEndEmpresa" class="input" value="${c?.endereco_empresa ?? ""}" placeholder="Rua, unidade, setor ou ponto de entrega"/></div>
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="cWhats" class="input" inputmode="numeric" value="${c?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
         ${!c ? '<div class="field"><label>PIN (4 dígitos)</label><input id="cPin" class="input" maxlength="4" inputmode="numeric" placeholder="ex.: 1234"/></div>' : ""}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cAtivo" ${c?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
@@ -3032,6 +3030,7 @@ Bom apetite! 😋`;
           nome: $("cNome").value.trim(),
           matricula: $("cMat").value.trim() || null,
           empresa: $("cSetor").value.trim() || null,
+          endereco_empresa: $("cEndEmpresa").value.trim() || null,
           whatsapp: $("cWhats").value.trim().replace(/\D/g, "") || null,
           ativo: $("cAtivo").checked
         };
@@ -3321,3 +3320,5 @@ Bom apetite! 😋`;
 </body>
 
 </html>
+
+
