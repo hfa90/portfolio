@@ -12,8 +12,8 @@
   <title>Marmita — painel administrativo</title>
 
   <script>
-    window.SUPABASE_URL = "https://cppvmfreprsgswbjpovn.supabase.co";
-    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwcHZtZnJlcHJzZ3N3Ympwb3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MTU5OTksImV4cCI6MjA5OTA5MTk5OX0.dYdUD5nqkYE8aTlbq6vhQzOcdfF6U3X6J30olS-TPZ8";
+    window.SUPABASE_URL = "https://nhfwekyforsofptffohz.supabase.co";
+    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5oZndla3lmb3Jzb2ZwdGZmb2h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI4NjQzMDAsImV4cCI6MjA5ODQ0MDMwMH0.GIOhh5q8o5u3euNw45ZY026w3bwWmnz-CS6-a754TqM";
   </script>
 
   <style>
@@ -1349,6 +1349,55 @@
       min-width: 132px;
     }
 
+    .foto-mini {
+      width: 54px;
+      height: 54px;
+      border-radius: 10px;
+      object-fit: cover;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      display: block;
+    }
+
+    .foto-vazia {
+      width: 54px;
+      height: 54px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--bg-soft);
+      border: 1px dashed var(--line);
+      color: var(--ink-soft);
+      font-size: 20px;
+    }
+
+    .foto-picker {
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: #fff;
+    }
+
+    .foto-preview {
+      width: 92px;
+      height: 92px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+    }
+
+    .foto-preview.placeholder {
+      display: grid;
+      place-items: center;
+      color: var(--ink-soft);
+      font-size: 28px;
+    }
+
     @media (max-width: 560px) {
       .fiado-grid {
         grid-template-columns: 1fr;
@@ -1365,6 +1414,10 @@
       .fiado-total,
       .fiado-dias {
         text-align: left;
+      }
+
+      .foto-picker {
+        grid-template-columns: 1fr;
       }
     }
   </style>
@@ -1788,8 +1841,101 @@
       d.setDate(d.getDate() + dias);
       return dataLocalISO(d);
     };
+    const CARDAPIO_FOTOS_BUCKET = "cardapio-fotos";
 
     let adminAtual = null;
+
+    function fotoMiniHtml(url, alt = "Foto") {
+      return url
+        ? `<img class="foto-mini" src="${url}" alt="${alt}" loading="lazy">`
+        : `<span class="foto-vazia" aria-label="Sem foto">🍽️</span>`;
+    }
+
+    function fotoPickerHtml(id, url) {
+      return `
+        <div class="field">
+          <label>Foto real do item</label>
+          <div class="foto-picker">
+            ${url
+              ? `<img id="${id}Preview" class="foto-preview" src="${url}" alt="Foto atual">`
+              : `<div id="${id}Preview" class="foto-preview placeholder">🍽️</div>`}
+            <div>
+              <input id="${id}" class="input" type="file" accept="image/*" />
+              <p class="small muted" style="margin:8px 0 0;">Pode escolher JPG, PNG ou WEBP. O sistema salva em WEBP automaticamente.</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function ligarPreviewFoto(inputId, previewId) {
+      const input = $(inputId);
+      const preview = $(previewId);
+      input?.addEventListener("change", () => {
+        const file = input.files?.[0];
+        if (!file || !preview) return;
+        const url = URL.createObjectURL(file);
+        if (preview.tagName === "IMG") {
+          preview.src = url;
+        } else {
+          const img = document.createElement("img");
+          img.id = previewId;
+          img.className = "foto-preview";
+          img.src = url;
+          img.alt = "Preview da foto";
+          preview.replaceWith(img);
+        }
+      });
+    }
+
+    function imagemParaWebp(file, maxSize = 1200, quality = 0.86) {
+      return new Promise((resolve, reject) => {
+        if (!file.type.startsWith("image/")) {
+          reject(new Error("Selecione um arquivo de imagem."));
+          return;
+        }
+
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          let { width, height } = img;
+          const scale = Math.min(1, maxSize / Math.max(width, height));
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          URL.revokeObjectURL(objectUrl);
+
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error("Nao foi possivel converter a foto para WEBP."));
+              return;
+            }
+            resolve(blob);
+          }, "image/webp", quality);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("Nao foi possivel ler a imagem selecionada."));
+        };
+        img.src = objectUrl;
+      });
+    }
+
+    async function uploadFotoCardapio(tipo, id, file) {
+      if (!file) return null;
+      const webpBlob = await imagemParaWebp(file);
+      const path = `${tipo}/${id}-${Date.now()}.webp`;
+      const { error } = await sb.storage
+        .from(CARDAPIO_FOTOS_BUCKET)
+        .upload(path, webpBlob, { contentType: "image/webp", upsert: true });
+      if (error) throw error;
+      const { data } = sb.storage.from(CARDAPIO_FOTOS_BUCKET).getPublicUrl(path);
+      return data.publicUrl;
+    }
 
     // =====================================================================
     // DRAWER
@@ -3110,7 +3256,12 @@ Bom apetite! 😋`;
       }
       $("pratosLista").innerHTML = `<table class="tbl">
         <tbody>${data.map(p => `<tr>
-          <td><strong>${p.nome}</strong>${p.descricao ? `<br/><span class="small muted">${p.descricao}</span>` : ""}</td>
+          <td>
+            <div style="display:flex; gap:10px; align-items:center;">
+              ${fotoMiniHtml(p.foto_url, p.nome)}
+              <div><strong>${p.nome}</strong>${p.descricao ? `<br/><span class="small muted">${p.descricao}</span>` : ""}</div>
+            </div>
+          </td>
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço">${fmtBRL(p.preco)}</td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
@@ -3149,9 +3300,11 @@ Bom apetite! 😋`;
         </div>
         <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2">${p?.descricao ?? ""}</textarea></div>
         <div class="field"><label>Preço (R$)</label><input id="pPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.preco ?? ""}"/></div>
+        ${fotoPickerHtml("pFoto", p?.foto_url)}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="pAtivo" ${p?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
+      ligarPreviewFoto("pFoto", "pFotoPreview");
       $("modalBody").querySelectorAll(".prato-sugestao").forEach(btn => {
         btn.addEventListener("click", () => {
           $("pNome").value = btn.dataset.prato;
@@ -3170,11 +3323,31 @@ Bom apetite! 😋`;
         if (!payload.nome || !payload.fornecedor_id || isNaN(payload.preco)) {
           $("modalAlert").textContent = "Preencha todos os campos."; $("modalAlert").classList.add("show"); return;
         }
-        const { error } = p
-          ? await sb.from("pratos").update(payload).eq("id", p.id)
-          : await sb.from("pratos").insert(payload);
-        if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
-        fecharModal(); carregarPratos();
+        const originalText = $("modalSave").textContent;
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Salvando...";
+        try {
+          const resp = p
+            ? await sb.from("pratos").update(payload).eq("id", p.id).select("id").single()
+            : await sb.from("pratos").insert(payload).select("id").single();
+          if (resp.error) throw resp.error;
+
+          const fotoFile = $("pFoto").files?.[0];
+          if (fotoFile) {
+            $("modalSave").textContent = "Enviando foto...";
+            const fotoUrl = await uploadFotoCardapio("pratos", resp.data.id, fotoFile);
+            const { error: fotoError } = await sb.from("pratos").update({ foto_url: fotoUrl }).eq("id", resp.data.id);
+            if (fotoError) throw fotoError;
+          }
+
+          fecharModal(); carregarPratos();
+        } catch (error) {
+          $("modalAlert").textContent = error.message;
+          $("modalAlert").classList.add("show");
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = originalText;
+        }
       };
     };
 
@@ -3199,7 +3372,12 @@ Bom apetite! 😋`;
       }
       $("acompLista").innerHTML = `<table class="tbl">
         <tbody>${data.map(a => `<tr>
-          <td><strong>${a.nome}</strong></td>
+          <td>
+            <div style="display:flex; gap:10px; align-items:center;">
+              ${fotoMiniHtml(a.foto_url, a.nome)}
+              <strong>${a.nome}</strong>
+            </div>
+          </td>
           <td data-label="Fornecedor">${a.fornecedor?.nome ?? "—"}</td>
           <td data-label="Preço extra">${Number(a.preco_extra) > 0 ? fmtBRL(a.preco_extra) : "Grátis"}</td>
           <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
@@ -3220,9 +3398,10 @@ Bom apetite! 😋`;
         </div>
         <div class="field"><label>Nome</label><input id="aNome" class="input" value="${a?.nome ?? ""}"/></div>
         <div class="field"><label>Preço extra (R$) — 0 se grátis</label><input id="aPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${a?.preco_extra ?? 0}"/></div>`;
-      $("modalBody").insertAdjacentHTML("beforeend", `<div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="aAtivo" ${a?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`);
+      $("modalBody").insertAdjacentHTML("beforeend", `${fotoPickerHtml("aFoto", a?.foto_url)}<div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="aAtivo" ${a?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`);
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
+      ligarPreviewFoto("aFoto", "aFotoPreview");
 
       $("modalSave").onclick = async () => {
         const payload = {
@@ -3232,11 +3411,31 @@ Bom apetite! 😋`;
           ativo: $("aAtivo").checked
         };
         if (!payload.nome) { $("modalAlert").textContent = "Informe o nome."; $("modalAlert").classList.add("show"); return; }
-        const { error } = a
-          ? await sb.from("acompanhamentos").update(payload).eq("id", a.id)
-          : await sb.from("acompanhamentos").insert(payload);
-        if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
-        fecharModal(); carregarAcompanhamentos();
+        const originalText = $("modalSave").textContent;
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Salvando...";
+        try {
+          const resp = a
+            ? await sb.from("acompanhamentos").update(payload).eq("id", a.id).select("id").single()
+            : await sb.from("acompanhamentos").insert(payload).select("id").single();
+          if (resp.error) throw resp.error;
+
+          const fotoFile = $("aFoto").files?.[0];
+          if (fotoFile) {
+            $("modalSave").textContent = "Enviando foto...";
+            const fotoUrl = await uploadFotoCardapio("acompanhamentos", resp.data.id, fotoFile);
+            const { error: fotoError } = await sb.from("acompanhamentos").update({ foto_url: fotoUrl }).eq("id", resp.data.id);
+            if (fotoError) throw fotoError;
+          }
+
+          fecharModal(); carregarAcompanhamentos();
+        } catch (error) {
+          $("modalAlert").textContent = error.message;
+          $("modalAlert").classList.add("show");
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = originalText;
+        }
       };
     };
 
@@ -3579,3 +3778,5 @@ Bom apetite! 😋`;
 </body>
 
 </html>
+
+
