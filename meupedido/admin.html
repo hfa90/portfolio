@@ -1186,6 +1186,187 @@
       border-top: 1px dashed var(--line);
       padding-top: 12px;
     }
+
+    .fiado-panel {
+      border-left: 5px solid var(--mustard);
+      background: rgba(255, 250, 240, .88);
+    }
+
+    .fiado-panel-title {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .fiado-panel-title h2 {
+      margin: 0;
+    }
+
+    .fiado-summary {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .fiado-summary-item {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .fiado-summary-item span {
+      display: block;
+      color: var(--ink-soft);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .fiado-summary-item strong {
+      font-family: var(--font-display);
+      font-size: 1.18rem;
+      color: var(--ink);
+    }
+
+    .fiado-summary-item.danger strong {
+      color: var(--crimson);
+    }
+
+    .fiado-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 12px;
+    }
+
+    .fiado-card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: var(--shadow-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .fiado-card.atrasado {
+      border-color: #e09a9a;
+      background: #fff4f2;
+      box-shadow: 0 10px 30px -18px rgba(160, 31, 31, .55);
+    }
+
+    .fiado-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .fiado-card h3 {
+      margin: 0;
+      font-size: 1.05rem;
+    }
+
+    .fiado-meta {
+      color: var(--ink-soft);
+      font-size: .82rem;
+      margin-top: 3px;
+    }
+
+    .fiado-total {
+      text-align: right;
+      font-family: var(--font-display);
+      font-size: 1.35rem;
+      color: var(--brick);
+      white-space: nowrap;
+    }
+
+    .fiado-card.atrasado .fiado-total {
+      color: var(--crimson);
+    }
+
+    .fiado-alerta {
+      background: #ffe0dc;
+      color: var(--crimson);
+      border: 1px solid #efb3ac;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-weight: 800;
+      font-size: .84rem;
+    }
+
+    .fiado-compras {
+      border: 1px solid rgba(217, 201, 173, .75);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, .7);
+    }
+
+    .fiado-compra {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 10px;
+      border-top: 1px solid rgba(217, 201, 173, .75);
+    }
+
+    .fiado-compra:first-child {
+      border-top: 0;
+    }
+
+    .fiado-compra strong {
+      color: var(--ink);
+    }
+
+    .fiado-dias {
+      font-weight: 800;
+      color: var(--ink-soft);
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .fiado-dias.atrasado {
+      color: var(--crimson);
+    }
+
+    .fiado-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      border-top: 1px dashed var(--line);
+      padding-top: 12px;
+    }
+
+    .fiado-actions .btn {
+      flex: 1;
+      min-width: 132px;
+    }
+
+    @media (max-width: 560px) {
+      .fiado-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .fiado-card-head {
+        flex-direction: column;
+      }
+
+      .fiado-compra {
+        grid-template-columns: 1fr;
+      }
+
+      .fiado-total,
+      .fiado-dias {
+        text-align: left;
+      }
+    }
   </style>
 </head>
 
@@ -1831,7 +2012,7 @@
       id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
       prato:pratos ( nome ),
       fornecedor:fornecedores ( id, nome, whatsapp ),
-      colaborador:colaboradores ( id, nome, empresa, whatsapp ),
+      colaborador:colaboradores ( id, nome, matricula, empresa, whatsapp ),
       acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
     `)
         .or(`data.eq.${dataFiltro},status_pagamento.eq.pendente`)
@@ -1969,40 +2150,118 @@
         caixaHtml += `</div>`;
       }
 
-      // Bloco Fiado
-      // Bloco Fiado
+      // 3. Fiados em aberto, agrupados por colaborador.
       if (fiadosPendentes.length > 0) {
         const mapaFiado = new Map();
+        const hojeRef = new Date(`${hojeISO()}T12:00:00`);
+        const diasEmAberto = (dataPedido) => {
+          const compra = new Date(`${dataPedido}T12:00:00`);
+          return Math.max(0, Math.floor((hojeRef - compra) / 86400000));
+        };
+
         fiadosPendentes.forEach(p => {
           const colabId = p.colaborador?.id;
           if (!colabId) return;
-          if (!mapaFiado.has(colabId)) mapaFiado.set(colabId, { nome: p.colaborador.nome, zap: p.colaborador.whatsapp, total: 0, ids: [] });
-          mapaFiado.get(colabId).total += Number(p.preco_total);
-          mapaFiado.get(colabId).ids.push(p.id);
+          if (!mapaFiado.has(colabId)) {
+            mapaFiado.set(colabId, {
+              id: colabId,
+              nome: p.colaborador.nome,
+              matricula: p.colaborador.matricula || "",
+              empresa: p.colaborador.empresa || "",
+              zap: p.colaborador.whatsapp || "",
+              total: 0,
+              ids: [],
+              compras: [],
+              maxDias: 0,
+              dataMaisAntiga: p.data
+            });
+          }
+
+          const dados = mapaFiado.get(colabId);
+          const dias = diasEmAberto(p.data);
+          dados.total += Number(p.preco_total);
+          dados.ids.push(p.id);
+          dados.maxDias = Math.max(dados.maxDias, dias);
+          if (p.data < dados.dataMaisAntiga) dados.dataMaisAntiga = p.data;
+          dados.compras.push({
+            id: p.id,
+            data: p.data,
+            dias,
+            valor: Number(p.preco_total),
+            prato: p.prato?.nome || "Pedido",
+            fornecedor: p.fornecedor?.nome || "Fornecedor"
+          });
         });
 
-        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--crimson); margin-bottom: 24px;">
-      <h2 style="margin-bottom: 12px;">📒 Fiados — Devedores</h2>
-      <div class="devedores-grid">`;
-        for (const [colabId, dados] of mapaFiado.entries()) {
-          const waLink = dados.zap ? `https://wa.me/${dados.zap.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${dados.nome.split(' ')[0]}! Você tem ${fmtBRL(dados.total)} pendentes no fiado das marmitas. Quando puder, dá uma olhada lá no app! 😊`)}` : "#";
+        const devedores = [...mapaFiado.values()]
+          .map(d => ({
+            ...d,
+            atrasado: d.maxDias > 15,
+            compras: d.compras.sort((a, b) => a.data.localeCompare(b.data))
+          }))
+          .sort((a, b) => Number(b.atrasado) - Number(a.atrasado) || b.maxDias - a.maxDias || b.total - a.total);
+
+        const totalFiadoAberto = devedores.reduce((s, d) => s + d.total, 0);
+        const totalAtrasado = devedores.filter(d => d.atrasado).reduce((s, d) => s + d.total, 0);
+        const qtdAtrasados = devedores.filter(d => d.atrasado).length;
+        const compraMaisAntiga = devedores.reduce((menor, d) => !menor || d.dataMaisAntiga < menor ? d.dataMaisAntiga : menor, null);
+
+        caixaHtml += `<section class="glass-panel fiado-panel">
+          <div class="fiado-panel-title">
+            <div>
+              <h2>Fiados em aberto</h2>
+              <p class="small muted">Clientes com pagamento pendente no fiado. Cartoes em vermelho estao com compra ha mais de 15 dias.</p>
+            </div>
+          </div>
+          <div class="fiado-summary">
+            <div class="fiado-summary-item"><span>Total aberto</span><strong>${fmtBRL(totalFiadoAberto)}</strong></div>
+            <div class="fiado-summary-item"><span>Clientes devendo</span><strong>${devedores.length}</strong></div>
+            <div class="fiado-summary-item danger"><span>Atrasados +15 dias</span><strong>${qtdAtrasados}</strong></div>
+            <div class="fiado-summary-item danger"><span>Valor atrasado</span><strong>${fmtBRL(totalAtrasado)}</strong></div>
+            <div class="fiado-summary-item"><span>Compra mais antiga</span><strong>${compraMaisAntiga ? fmtData(compraMaisAntiga) : "-"}</strong></div>
+          </div>
+          <div class="fiado-grid">`;
+
+        for (const dados of devedores) {
+          const primeiroNome = (dados.nome || "Cliente").split(" ")[0];
+          const comprasMsg = dados.compras.map(c => `- ${fmtData(c.data)}: ${c.prato} (${fmtBRL(c.valor)})`).join("\n");
+          const waTexto = `Ola ${primeiroNome}! Consta um fiado em aberto no valor de ${fmtBRL(dados.total)}.\n\nCompras pendentes:\n${comprasMsg}\n\nPode regularizar, por favor?`;
+          const waLink = dados.zap ? `https://wa.me/${dados.zap.replace(/\D/g, "")}?text=${encodeURIComponent(waTexto)}` : "";
+          const alerta = dados.atrasado ? `<div class="fiado-alerta">Atrasado: compra mais antiga ha ${dados.maxDias} dias</div>` : "";
+          const meta = [dados.empresa, dados.matricula ? `Matricula ${dados.matricula}` : "", dados.zap ? `WhatsApp ${dados.zap}` : ""].filter(Boolean).join(" · ");
 
           caixaHtml += `
-        <div class="devedor-card">
-          <div class="devedor-header">
-            <div class="devedor-info">
-              <h3>${dados.nome}</h3>
-              <span class="pill">${dados.ids.length} pendente(s)</span>
-            </div>
-            <div class="devedor-total">${fmtBRL(dados.total)}</div>
-          </div>
-          <div class="devedor-actions">
-            ${dados.zap ? `<a href="${waLink}" target="_blank" class="btn btn-ghost btn-sm" style="flex:1; border-radius:12px;">📱 Cobrar</a>` : ""}
-            <button class="btn btn-primary btn-sm" style="flex:1; border-radius:12px;" onclick="marcarVariosPagos(this, '${dados.ids.join(',')}')">✅ Quitar Dívida</button>
-          </div>
-        </div>`;
+            <article class="fiado-card ${dados.atrasado ? "atrasado" : ""}">
+              <div class="fiado-card-head">
+                <div>
+                  <h3>${dados.nome}</h3>
+                  <div class="fiado-meta">${meta || "Cadastro sem empresa/telefone"}</div>
+                  <div class="fiado-meta">${dados.compras.length} compra(s) pendente(s) · desde ${fmtData(dados.dataMaisAntiga)}</div>
+                </div>
+                <div class="fiado-total">${fmtBRL(dados.total)}</div>
+              </div>
+              ${alerta}
+              <div class="fiado-compras">
+                ${dados.compras.map(c => `
+                  <div class="fiado-compra">
+                    <div>
+                      <strong>${fmtData(c.data)}</strong>
+                      <div class="small muted">${c.prato} · ${c.fornecedor}</div>
+                    </div>
+                    <div>
+                      <strong>${fmtBRL(c.valor)}</strong>
+                      <div class="fiado-dias ${c.dias > 15 ? "atrasado" : ""}">${c.dias === 0 ? "Hoje" : `${c.dias} dia(s)`}</div>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+              <div class="fiado-actions">
+                ${waLink ? `<a href="${waLink}" target="_blank" class="btn ${dados.atrasado ? "btn-danger" : "btn-ghost"} btn-sm">Cobrar</a>` : `<button class="btn btn-ghost btn-sm" disabled>Sem WhatsApp</button>`}
+                <button class="btn btn-primary btn-sm" onclick="marcarVariosPagos(this, '${dados.ids.join(",")}')">Quitar divida</button>
+              </div>
+            </article>`;
         }
-        caixaHtml += `</div></div>`;
+        caixaHtml += `</div></section>`;
       }
 
       $("listaCaixa").innerHTML = caixaHtml || '<div class="card empty">Tudo certo! Nenhum recebimento pendente no momento. 🎉</div>';
