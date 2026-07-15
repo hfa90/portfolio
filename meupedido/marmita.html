@@ -1593,6 +1593,7 @@
     <div id="coletivoLista" class="rise rise-2"></div>
     <button class="btn btn-secondary btn-block btn-pill rise rise-2" id="btnAddPessoa" style="margin-top:12px;">+
       Adicionar pessoa</button>
+    <div id="coletivoPagamentoArea" class="card rise rise-2" style="margin-top:14px;"></div>
     <div id="coletivoAlert" class="alert alert-error" style="margin-top:14px;"></div>
     <div class="coletivo-total-bar">
       <div>
@@ -1641,6 +1642,8 @@
     </div>
 
     <div id="pedidoAlert" class="alert alert-error" style="margin-top: 14px;"></div>
+
+    <div id="pedidoResumoValores" class="card hidden" style="margin-top:14px; padding:14px;"></div>
 
     <div class="totalbar">
       <div>
@@ -2022,13 +2025,14 @@
         const fid = item.fornecedor_id;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
-            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix },
+            fornecedor: { id: fid, nome: item.fornecedor_nome, chave_pix: item.fornecedor_pix, frete: Number(item.fornecedor_frete || 0) },
             pratos: []
           });
         }
         grupos.get(fid).pratos.push({
           id: item.prato_id, nome: item.prato_nome,
-          descricao: item.prato_descricao, foto_url: item.prato_foto_url, preco: item.prato_preco
+          descricao: item.prato_descricao, foto_url: item.prato_foto_url, preco: item.prato_preco,
+          fornecedor_frete: Number(item.fornecedor_frete || 0)
         });
       });
 
@@ -2065,6 +2069,7 @@
         html += `<div class="fornecedor-bloco">
           <div class="fornecedor-head">
             <h2>${fornecedor.nome}</h2>
+            ${fornecedor.frete > 0 ? `<span class="small muted">Frete ${fmtBRL(fornecedor.frete)}</span>` : ""}
           </div>
           <div class="pratos-grid">`;
         pratos.forEach(p => {
@@ -2080,7 +2085,10 @@
               ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
               ${bloqueio ? `<div class="prato-desc" style="color:var(--crimson); font-weight:600;">${bloqueio.texto}</div>` : ""}
             </div>
-            <div class="prato-preco">${fmtBRL(p.preco)}</div>
+            <div style="text-align:right;">
+              <div class="prato-preco">${fmtBRL(p.preco)}</div>
+              ${p.fornecedor_frete > 0 ? `<div class="small muted">+ frete ${fmtBRL(p.fornecedor_frete)}</div>` : ""}
+            </div>
           </div>`;
         });
         html += `</div></div>`;
@@ -2161,11 +2169,17 @@
             </div>`
           : "";
         const statusVisual = comprovanteStatusVisual(p) || pedidoStatusVisual(p);
-        const podeReenviar = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente";
-        const acaoComprovante = podeReenviar
+        const isPixPendente = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente";
+        const deveAnexar = isPixPendente && (!p.comprovante_status || ["sem_comprovante", "rejeitado"].includes(p.comprovante_status));
+        const aguardandoAnalise = isPixPendente && p.comprovante_status === "enviado";
+        const acaoComprovante = deveAnexar
           ? `<button class="btn btn-primary btn-sm btn-pill btn-block btn-reenviar-comprovante" data-pedido="${p.id}">
               ${p.comprovante_status === "rejeitado" ? "Anexar comprovante correto" : "Enviar comprovante"}
             </button>`
+          : aguardandoAnalise
+            ? `<div class="pedido-alerta" style="background:rgba(0,122,255,.08); color:var(--blue-ios);">
+                Comprovante enviado. Aguarde o administrador aprovar ou pedir correção.
+              </div>`
           : "";
         return `<div class="pedido-card">
           <div class="pedido-head">
@@ -2256,12 +2270,14 @@
       }
 
       if (totalPixPendente > 0) {
+        const pixEnviados = pixPendentes.filter(p => p.comprovante_status === "enviado").length;
+        const pixSemComprovante = pixPendentes.length - pixEnviados;
         html += `
           <div class="card" style="background: rgba(0,122,255,.04); border: 1px solid rgba(0,122,255,.12); margin-bottom:10px;">
             <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;">
               <div>
                 <div class="small" style="color: var(--blue-ios); font-weight: 600;">💰 PIX aguardando confirmação</div>
-                <div class="small muted">${pixPendentes.length} ${pixPendentes.length === 1 ? "pedido" : "pedidos"} com comprovante pendente</div>
+                <div class="small muted">${pixEnviados} em análise${pixSemComprovante ? ` · ${pixSemComprovante} sem comprovante` : ""}</div>
               </div>
               <div class="pedido-valor" style="color: var(--blue-ios);">${fmtBRL(totalPixPendente)}</div>
             </div>
@@ -2414,7 +2430,7 @@
     // =====================================================================
     async function abrirPedido(pratoId, fornecedorId) {
       const { data: prato } = await sb.from("pratos")
-        .select("id, nome, descricao, foto_url, preco, fornecedor:fornecedores(id, nome, chave_pix)")
+        .select("id, nome, descricao, foto_url, preco, fornecedor:fornecedores(id, nome, chave_pix, frete_entrega)")
         .eq("id", pratoId).single();
       const { data: acomp } = await sb.from("acompanhamentos")
         .select("id, nome, foto_url, preco_extra")
@@ -2495,10 +2511,29 @@
       state.acompanhamentos.forEach(a => {
         if (state.selAcomp.has(a.id)) total += Number(a.preco_extra);
       });
+      total += Number(state.selPrato?.fornecedor?.frete_entrega || 0);
       if (state.selPagamento === "fiado") total += FIADO_TAXA;
       return total;
     }
-    function atualizarTotal() { $("totalPreco").textContent = fmtBRL(calcTotal()); }
+    function atualizarTotal() {
+      const prato = Number(state.selPrato?.preco || 0);
+      const extras = state.acompanhamentos.reduce((s, a) => state.selAcomp.has(a.id) ? s + Number(a.preco_extra || 0) : s, 0);
+      const frete = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
+      const fiado = state.selPagamento === "fiado" ? FIADO_TAXA : 0;
+      const linhas = [
+        ["Prato", prato],
+        ...(extras > 0 ? [["Acompanhamentos", extras]] : []),
+        ...(frete > 0 ? [["Frete do fornecedor", frete]] : []),
+        ...(fiado > 0 ? [["Taxa do fiado", fiado]] : [])
+      ];
+      $("pedidoResumoValores").classList.toggle("hidden", linhas.length <= 1);
+      $("pedidoResumoValores").innerHTML = linhas.map(([label, valor]) => `
+        <div style="display:flex; justify-content:space-between; gap:12px; padding:4px 0;">
+          <span class="small muted">${label}</span><strong class="small">${fmtBRL(valor)}</strong>
+        </div>
+      `).join("");
+      $("totalPreco").textContent = fmtBRL(calcTotal());
+    }
 
     // =====================================================================
     // UPLOAD DE COMPROVANTE NA TELA DE SUCESSO
@@ -2626,6 +2661,7 @@
       const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
       const isFiado = state.selPagamento === "fiado";
       const precoBase = total - (isFiado ? FIADO_TAXA : 0);
+      const fretePedido = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
 
       const pixArea = $("sucessoPixArea");
       if (isPix) {
@@ -2682,6 +2718,7 @@
         <div>${state.selPrato.nome}</div>
         ${nomesAcomp.length ? `<div class="small muted" style="margin-top:6px;">+ ${nomesAcomp.join(", ")}</div>` : ""}
         ${$("obs").value.trim() ? `<div class="small" style="margin-top:6px;">📝 ${$("obs").value.trim()}</div>` : ""}
+        ${fretePedido > 0 ? `<div class="small muted" style="margin-top:8px;">Frete do fornecedor: ${fmtBRL(fretePedido)}</div>` : ""}
         <div style="margin-top:10px; display:flex; justify-content:space-between;">
           <span class="small muted">${payLabel}</span>
           <span>
@@ -3152,7 +3189,16 @@
     // =====================================================================
     // PEDIDO COLETIVO
     // =====================================================================
-    const coletivoState = { pessoas: [] };
+    const coletivoState = { pessoas: [], comprovanteFile: null };
+
+    async function garantirConfigEmpresa() {
+      if (state.configEmpresa?.pix_empresa) return state.configEmpresa;
+      const { data: config } = await sb.from("configuracoes")
+        .select("chave, valor")
+        .in("chave", ["pix_empresa", "nome_empresa"]);
+      state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
+      return state.configEmpresa;
+    }
 
     const _origShowScreen = showScreen;
     showScreen = function (id) {
@@ -3162,7 +3208,10 @@
     };
 
     $("fabColetivo").addEventListener("click", () => {
+      const ok = confirm("Pedido coletivo é somente via PIX Empresa.\n\nNão é possível comprar no fiado neste modo. Se o grupo escolher pratos de mais de um fornecedor, o frete configurado de cada fornecedor será aplicado e dividido entre os pedidos daquele fornecedor.");
+      if (!ok) return;
       coletivoState.pessoas = [];
+      coletivoState.comprovanteFile = null;
       renderColetivo();
       addPessoaColetivo();
       showScreen("screen-coletivo");
@@ -3176,7 +3225,7 @@
     $("btnAddPessoa").addEventListener("click", addPessoaColetivo);
 
     function addPessoaColetivo() {
-      coletivoState.pessoas.push({ nome: "", pratoId: "", fornecedorId: "", pratoNome: "", pratoPreco: 0, obs: "" });
+      coletivoState.pessoas.push({ nome: "", pratoId: "", fornecedorId: "", fornecedorNome: "", fornecedorFrete: 0, pratoNome: "", pratoPreco: 0, obs: "" });
       renderColetivo();
       const inputs = document.querySelectorAll(".ci-nome-input");
       if (inputs.length) inputs[inputs.length - 1].focus();
@@ -3200,7 +3249,8 @@
       for (const [forn, pratos] of fornGrupos) {
         optsHtml += '<optgroup label="' + forn + '">';
         pratos.forEach(p => {
-          optsHtml += '<option value="' + p.prato_id + '" data-fornecedor="' + p.fornecedor_id + '" data-preco="' + p.prato_preco + '" data-nome="' + p.prato_nome + '">' + p.prato_nome + ' \u2014 R$ ' + Number(p.prato_preco).toFixed(2).replace(".", ",") + '</option>';
+          const frete = Number(p.fornecedor_frete || 0);
+          optsHtml += '<option value="' + p.prato_id + '" data-fornecedor="' + p.fornecedor_id + '" data-fornecedor-nome="' + p.fornecedor_nome + '" data-frete="' + frete + '" data-preco="' + p.prato_preco + '" data-nome="' + p.prato_nome + '">' + p.prato_nome + ' \u2014 R$ ' + Number(p.prato_preco).toFixed(2).replace(".", ",") + (frete > 0 ? ' + frete' : '') + '</option>';
         });
         optsHtml += '</optgroup>';
       }
@@ -3228,6 +3278,8 @@
           const opt = el.selectedOptions[0];
           coletivoState.pessoas[idx].pratoId = el.value;
           coletivoState.pessoas[idx].fornecedorId = opt?.dataset?.fornecedor || "";
+          coletivoState.pessoas[idx].fornecedorNome = opt?.dataset?.fornecedorNome || "";
+          coletivoState.pessoas[idx].fornecedorFrete = Number(opt?.dataset?.frete || 0);
           coletivoState.pessoas[idx].pratoNome = opt?.dataset?.nome || "";
           coletivoState.pessoas[idx].pratoPreco = Number(opt?.dataset?.preco || 0);
           atualizarTotalColetivo();
@@ -3242,9 +3294,81 @@
       atualizarTotalColetivo();
     }
 
-    function atualizarTotalColetivo() {
-      const total = coletivoState.pessoas.reduce((s, p) => s + p.pratoPreco, 0);
+    function calcularTotaisColetivo() {
+      const fornecedores = new Map();
+      coletivoState.pessoas.forEach(p => {
+        if (!p.fornecedorId) return;
+        if (!fornecedores.has(p.fornecedorId)) {
+          fornecedores.set(p.fornecedorId, { nome: p.fornecedorNome || "Fornecedor", frete: Number(p.fornecedorFrete || 0), qtd: 0 });
+        }
+        fornecedores.get(p.fornecedorId).qtd += 1;
+      });
+
+      const subtotal = coletivoState.pessoas.reduce((s, p) => s + Number(p.pratoPreco || 0), 0);
+      const freteTotal = [...fornecedores.values()].reduce((s, f) => s + (f.qtd > 0 ? Number(f.frete || 0) : 0), 0);
+      return { subtotal, freteTotal, total: subtotal + freteTotal, fornecedores };
+    }
+
+    async function atualizarTotalColetivo() {
+      const { subtotal, freteTotal, total, fornecedores } = calcularTotaisColetivo();
       $("coletivoTotal").textContent = fmtBRL(total);
+
+      const area = $("coletivoPagamentoArea");
+      if (!area) return;
+      await garantirConfigEmpresa();
+      const pixEmpresa = state.configEmpresa.pix_empresa;
+      const freteLinhas = [...fornecedores.values()]
+        .filter(f => Number(f.frete || 0) > 0)
+        .map(f => `<div style="display:flex; justify-content:space-between; gap:10px;"><span class="small muted">${f.nome}: frete dividido por ${f.qtd}</span><strong class="small">${fmtBRL(f.frete)}</strong></div>`)
+        .join("");
+
+      area.innerHTML = `
+        <h3 style="margin-bottom:8px;">Pagamento do grupo</h3>
+        <div style="display:grid; gap:6px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between;"><span class="small muted">Pratos</span><strong>${fmtBRL(subtotal)}</strong></div>
+          ${freteLinhas || `<div class="small muted">Sem frete configurado para os fornecedores escolhidos.</div>`}
+          <div style="display:flex; justify-content:space-between; border-top:1px dashed var(--separator); padding-top:8px;"><strong>Total PIX</strong><strong style="color:var(--brick);">${fmtBRL(total)}</strong></div>
+        </div>
+        <div class="small muted" style="margin-bottom:10px;">Neste modo não há fiado. Faça o PIX e anexe o comprovante antes de enviar.</div>
+        ${pixEmpresa && total > 0 ? `<div id="coletivoPixQr" style="display:flex; justify-content:center; margin:10px 0;"></div>` : ""}
+        ${pixEmpresa ? `<button class="btn btn-secondary btn-block btn-pill btn-sm" id="btnCopiarPixColetivo" type="button">📋 Copiar código PIX</button>` : `<div class="alert alert-error show">PIX Empresa não configurado.</div>`}
+        <label class="btn btn-primary btn-block btn-pill" style="margin-top:10px;">
+          📎 Anexar comprovante do grupo
+          <input type="file" id="coletivoComprovanteInput" accept="image/*,application/pdf" style="display:none;" />
+        </label>
+        <div id="coletivoComprovanteNome" class="small muted" style="text-align:center; margin-top:8px;">${coletivoState.comprovanteFile ? coletivoState.comprovanteFile.name : "Nenhum comprovante anexado"}</div>
+      `;
+
+      if (pixEmpresa && total > 0) {
+        const payload = gerarPayloadPix({
+          chave: pixEmpresa,
+          nome: (state.configEmpresa.nome_empresa || "Empresa").slice(0, 25),
+          cidade: "MANAUS",
+          valor: total,
+          txid: "GRUPO" + Date.now().toString().slice(-10),
+          descricao: "Pedido coletivo"
+        });
+        area.dataset.pixPayload = payload;
+        const qr = $("coletivoPixQr");
+        if (qr) {
+          qr.innerHTML = "";
+          new QRCode(qr, { text: payload, width: 160, height: 160, colorDark: "#1c1c1e", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        }
+      }
+
+      $("btnCopiarPixColetivo")?.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(area.dataset.pixPayload || "");
+          mostrarToast("✅", "PIX copiado", "Cole no seu app de pagamentos.");
+        } catch {
+          mostrarToast("⚠️", "Copie manualmente", "Não foi possível copiar automaticamente.");
+        }
+      });
+
+      $("coletivoComprovanteInput")?.addEventListener("change", (e) => {
+        coletivoState.comprovanteFile = e.target.files?.[0] || null;
+        $("coletivoComprovanteNome").textContent = coletivoState.comprovanteFile ? coletivoState.comprovanteFile.name : "Nenhum comprovante anexado";
+      });
     }
 
     $("btnConfirmarColetivo").addEventListener("click", async () => {
@@ -3262,6 +3386,13 @@
       if (invalidos.length > 0) {
         alertEl.textContent = "Preencha o nome e selecione o prato de cada pessoa."; alertEl.classList.add("show"); return;
       }
+      await garantirConfigEmpresa();
+      if (!state.configEmpresa.pix_empresa) {
+        alertEl.textContent = "PIX Empresa não configurado. Avise o administrador."; alertEl.classList.add("show"); return;
+      }
+      if (!coletivoState.comprovanteFile) {
+        alertEl.textContent = "Faça o PIX e anexe o comprovante do grupo antes de enviar."; alertEl.classList.add("show"); return;
+      }
 
       $("btnConfirmarColetivo").disabled = true;
       $("btnConfirmarColetivo").textContent = "Enviando...";
@@ -3273,9 +3404,18 @@
         observacoes: p.obs.trim() || null
       }));
 
+      const comprovanteUrl = await uploadComprovante(`coletivo-${Date.now()}`, coletivoState.comprovanteFile);
+      if (!comprovanteUrl) {
+        alertEl.textContent = "Não consegui enviar o comprovante. Tente anexar novamente."; alertEl.classList.add("show");
+        $("btnConfirmarColetivo").disabled = false;
+        $("btnConfirmarColetivo").textContent = "Enviar todos";
+        return;
+      }
+
       const { data: coletivoId, error: errColetivo } = await sb.rpc("criar_pedido_coletivo", {
         p_colaborador_id: colab.id,
-        p_itens: itens
+        p_itens: itens,
+        p_comprovante_url: comprovanteUrl
       });
 
       $("btnConfirmarColetivo").disabled = false;
@@ -3289,10 +3429,14 @@
       $("coletivoSucessoMsg").textContent = enviados + " pedido" + (enviados > 1 ? "s" : "") + " registrado" + (enviados > 1 ? "s" : "") + " com sucesso.";
 
       let resumo = "";
+      const totaisColetivo = calcularTotaisColetivo();
       coletivoState.pessoas.forEach(p => {
         resumo += '<div class="pedido-card" style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between; align-items:center;"><div><div style="font-weight:600;">' + p.nome + '</div><div class="small muted">' + p.pratoNome + '</div>' + (p.obs ? '<div class="small muted" style="font-style:italic;">' + p.obs + '</div>' : '') + '</div><strong style="color:var(--brick);">' + fmtBRL(p.pratoPreco) + '</strong></div></div>';
       });
-      const totalG = coletivoState.pessoas.reduce((s, p) => s + p.pratoPreco, 0);
+      const totalG = totaisColetivo.total;
+      if (totaisColetivo.freteTotal > 0) {
+        resumo += '<div class="small muted" style="margin-top:8px;">Frete total dividido entre fornecedores: ' + fmtBRL(totaisColetivo.freteTotal) + '</div>';
+      }
       resumo += '<div style="display:flex; justify-content:space-between; margin-top:12px; padding-top:12px; border-top:1px solid var(--separator);"><strong>Total do grupo</strong><strong style="color:var(--brick); font-family:var(--font-display); font-size:20px;">' + fmtBRL(totalG) + '</strong></div>';
       $("coletivoSucessoResumo").innerHTML = resumo;
 

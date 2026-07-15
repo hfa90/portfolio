@@ -1238,6 +1238,29 @@
       flex-wrap: wrap;
     }
 
+    .cardapio-tools {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto auto;
+      gap: 8px;
+      align-items: center;
+      margin: 12px 0 16px;
+    }
+
+    .cardapio-toggle {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+      font-weight: 800;
+      color: var(--ink-soft);
+    }
+
+    .cardapio-fornecedor.is-collapsed .cardapio-week-mini,
+    .cardapio-fornecedor.is-collapsed .cardapio-pratos {
+      display: none;
+    }
+
     /* Login screen */
     .login-wrap {
       min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
@@ -1604,6 +1627,10 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
+      .cardapio-tools {
+        grid-template-columns: 1fr;
+      }
+
       .cardapio-prato-row {
         grid-template-columns: auto 1fr;
       }
@@ -1870,6 +1897,14 @@
         <button class="btn btn-ghost btn-sm" id="btnCopiarOntem">📋 Ontem</button>
         <button class="btn btn-ghost btn-sm" id="btnCopiarSemana">📅 Sem. passada</button>
         <button class="btn btn-ghost btn-sm" id="btnCopiarCustom">📆 Outra…</button>
+      </div>
+      <div class="cardapio-tools">
+        <input id="cardapioBusca" class="input" placeholder="Buscar fornecedor ou prato..." />
+        <label class="cardapio-toggle"><input type="checkbox" id="cardapioSomenteMarcados" /> Só marcados no dia</label>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-ghost btn-sm" id="btnExpandirCardapio" type="button">Expandir</button>
+          <button class="btn btn-ghost btn-sm" id="btnRecolherCardapio" type="button">Recolher</button>
+        </div>
       </div>
       <div id="cardapioLista" class="loading">Carregando…</div>
     </section>
@@ -3437,13 +3472,14 @@ Bom apetite! 😋`;
         const contagemFornecedor = semana.map(d => pratos.filter(p => semanaPorPrato.get(p.id)?.has(d)).length);
 
         html += `
-          <section class="cardapio-fornecedor">
+          <section class="cardapio-fornecedor" data-cardapio-fornecedor data-search="${(fornecedor.nome + " " + pratos.map(p => p.nome).join(" ")).toLowerCase()}">
             <div class="cardapio-fornecedor-head">
               <div>
                 <h3>${fornecedor.nome}</h3>
                 <p class="small muted">${selecionadosHoje} de ${pratos.length} prato(s) marcados para ${fmtData(data)}</p>
               </div>
               <div class="cardapio-actions">
+                <button class="btn btn-ghost btn-sm" data-cardapio-toggle type="button">Recolher</button>
                 <button class="btn btn-ghost btn-sm" data-cardapio-marcar="${fornecedor.id}">Marcar todos</button>
                 <button class="btn btn-ghost btn-sm" data-cardapio-limpar="${fornecedor.id}">Limpar dia</button>
               </div>
@@ -3456,7 +3492,7 @@ Bom apetite! 😋`;
                 const checked = ativosDia.has(p.id);
                 const diasPrato = semanaPorPrato.get(p.id) || new Set();
                 return `
-                  <label class="cardapio-prato-row ${checked ? "is-active" : ""}">
+                  <label class="cardapio-prato-row ${checked ? "is-active" : ""}" data-cardapio-prato data-search="${(fornecedor.nome + " " + p.nome).toLowerCase()}" data-marcado="${checked ? "1" : "0"}">
                     <input type="checkbox" ${checked ? "checked" : ""} data-prato="${p.id}" data-fornecedor="${fornecedor.id}" />
                     <span style="min-width:0;">
                       <span class="cardapio-prato-name">${p.nome}</span>
@@ -3477,6 +3513,14 @@ Bom apetite! 😋`;
         btn.addEventListener("click", () => {
           $("cardapioFiltroData").value = btn.dataset.cardapioDia;
           carregarCardapioAdmin();
+        });
+      });
+
+      $("cardapioLista").querySelectorAll("[data-cardapio-toggle]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const section = btn.closest("[data-cardapio-fornecedor]");
+          const fechado = section.classList.toggle("is-collapsed");
+          btn.textContent = fechado ? "Abrir" : "Recolher";
         });
       });
 
@@ -3519,7 +3563,41 @@ Bom apetite! 😋`;
           carregarCardapioAdmin();
         });
       });
+
+      aplicarFiltrosCardapio();
     }
+
+    function aplicarFiltrosCardapio() {
+      const termo = ($("cardapioBusca")?.value || "").trim().toLowerCase();
+      const somenteMarcados = !!$("cardapioSomenteMarcados")?.checked;
+      document.querySelectorAll("[data-cardapio-fornecedor]").forEach(section => {
+        let visiveis = 0;
+        section.querySelectorAll("[data-cardapio-prato]").forEach(row => {
+          const bateBusca = !termo || row.dataset.search.includes(termo);
+          const bateMarcado = !somenteMarcados || row.dataset.marcado === "1";
+          const mostrar = bateBusca && bateMarcado;
+          row.style.display = mostrar ? "" : "none";
+          if (mostrar) visiveis += 1;
+        });
+        const bateFornecedor = !termo || section.dataset.search.includes(termo);
+        section.style.display = visiveis > 0 || (bateFornecedor && !somenteMarcados) ? "" : "none";
+      });
+    }
+
+    $("cardapioBusca").addEventListener("input", aplicarFiltrosCardapio);
+    $("cardapioSomenteMarcados").addEventListener("change", aplicarFiltrosCardapio);
+    $("btnExpandirCardapio").addEventListener("click", () => {
+      document.querySelectorAll("[data-cardapio-fornecedor]").forEach(section => {
+        section.classList.remove("is-collapsed");
+        section.querySelector("[data-cardapio-toggle]").textContent = "Recolher";
+      });
+    });
+    $("btnRecolherCardapio").addEventListener("click", () => {
+      document.querySelectorAll("[data-cardapio-fornecedor]").forEach(section => {
+        section.classList.add("is-collapsed");
+        section.querySelector("[data-cardapio-toggle]").textContent = "Abrir";
+      });
+    });
 
     async function copiarCardapioDe(dataOrigem) {
       const dataDestino = $("cardapioFiltroData").value;
@@ -3559,7 +3637,7 @@ Bom apetite! 😋`;
       $("fornecedoresLista").innerHTML = '<div class="loading">Carregando…</div>';
       const { data, error } = await sb
         .from("fornecedores")
-        .select("id, nome, whatsapp, endereco, chave_pix, ativo, criado_em")
+        .select("id, nome, whatsapp, endereco, chave_pix, frete_entrega, ativo, criado_em")
         .order("nome");
       if (error) {
         $("fornecedoresLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar fornecedores: ${error.message}</div>`;
@@ -3575,6 +3653,7 @@ Bom apetite! 😋`;
             <td><strong>${f.nome}</strong></td>
             <td data-label="WhatsApp">${f.whatsapp}</td>
             <td data-label="Pix"><span class="small muted">${f.chave_pix || "—"}</span></td>
+            <td data-label="Frete">${fmtBRL(f.frete_entrega || 0)}</td>
             <td data-label="Status">${f.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
             <td class="actions">
               <button class="btn btn-ghost btn-sm" onclick='abrirModalForn(${JSON.stringify(f).replace(/'/g, "&apos;")})'>Editar</button>
@@ -3592,6 +3671,7 @@ Bom apetite! 😋`;
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="fWhats" class="input" inputmode="numeric" value="${f?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
         <div class="field"><label>Endereço</label><input id="fEnd" class="input" value="${f?.endereco ?? ""}"/></div>
         <div class="field"><label>Chave Pix</label><input id="fPix" class="input" value="${f?.chave_pix ?? ""}"/></div>
+        <div class="field"><label>Frete de entrega (R$)</label><input id="fFrete" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${f?.frete_entrega ?? 0}"/></div>
         <div class="field">
           <label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="fAtivo" ${f?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label>
         </div>`;
@@ -3606,6 +3686,7 @@ Bom apetite! 😋`;
           whatsapp: $("fWhats").value.trim().replace(/\D/g, ""),
           endereco: $("fEnd").value.trim() || null,
           chave_pix: $("fPix").value.trim() || null,
+          frete_entrega: parseFloat($("fFrete").value) || 0,
           ativo: $("fAtivo").checked
         };
         if (!payload.nome || !payload.whatsapp) {
