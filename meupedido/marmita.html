@@ -719,6 +719,11 @@
       background: #fff5ee;
     }
 
+    .pay-option.disabled {
+      opacity: .52;
+      cursor: not-allowed;
+    }
+
     .pay-icon {
       width: 40px;
       height: 40px;
@@ -1413,6 +1418,51 @@
       line-height: 1;
     }
 
+    .debt-popup-bg {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(28, 28, 30, .42);
+      z-index: 280;
+    }
+
+    .debt-popup-bg.show {
+      display: flex;
+    }
+
+    .debt-popup {
+      width: min(430px, 100%);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .debt-popup-title {
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 900;
+      margin: 0 0 6px;
+    }
+
+    .debt-popup-total {
+      font-family: var(--font-display);
+      font-size: 32px;
+      font-weight: 900;
+      color: var(--crimson);
+      margin: 12px 0;
+    }
+
+    .debt-actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
     /* Botão PIX flutuante na aba meus pedidos */
     .pix-fab {
       position: sticky;
@@ -1823,6 +1873,11 @@
       <div class="pix-copy-row">
         <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPix">📋 Copiar código PIX</button>
       </div>
+      <label class="btn btn-secondary btn-block btn-pill hidden" id="pixFiadoComprovanteWrap" style="margin-top:10px;">
+        📎 Anexar comprovante do fiado
+        <input type="file" id="pixFiadoComprovanteInput" accept="image/*,application/pdf" style="display:none;" />
+      </label>
+      <div id="pixFiadoComprovanteMsg" class="small muted hidden" style="text-align:center; margin-top:8px;"></div>
       <div id="pixAlert" class="alert alert-success" style="margin-top:12px;"></div>
     </div>
   </div>
@@ -1834,6 +1889,24 @@
       <div class="toast-msg" id="toastMsg"></div>
     </div>
     <button class="toast-close" id="toastClose" aria-label="Fechar">×</button>
+  </div>
+
+  <div class="debt-popup-bg" id="debtPopup">
+    <div class="debt-popup" role="alertdialog" aria-modal="true">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <p class="eyebrow">Fiado pendente</p>
+          <h2 class="debt-popup-title" id="debtTitle">Regularize seu débito</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="debtClose" aria-label="Fechar">×</button>
+      </div>
+      <p class="muted" id="debtMsg">Existe um valor em aberto no seu cadastro.</p>
+      <div class="debt-popup-total" id="debtTotal">R$ 0,00</div>
+      <div class="debt-actions">
+        <button class="btn btn-primary btn-block btn-pill" id="debtPayPix">Pagar via PIX</button>
+        <a class="btn btn-secondary btn-block btn-pill" id="debtWhatsapp" target="_blank" rel="noopener">Falar no WhatsApp</a>
+      </div>
+    </div>
   </div>
 
   <script type="module">
@@ -1904,9 +1977,10 @@
     }
 
     async function concluirAutenticacao(resp) {
-      setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, empresa: resp.empresa });
+      setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, empresa: resp.empresa, fiado_bloqueado: !!resp.fiado_bloqueado });
       atualizarHeaderCliente();
       iniciarMonitorPedidosCliente();
+      iniciarMonitorDebitoFiado();
       if (state.authDestino === "pedido") {
         showScreen("screen-pedido");
         $("pedidoAlert").textContent = "Identificacao confirmada. Agora pode confirmar o pedido.";
@@ -2042,6 +2116,7 @@
       pararAcompanhamentoPedido();
       atualizarHeaderCliente();
       iniciarMonitorPedidosCliente();
+      iniciarMonitorDebitoFiado();
       const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
       $("dataHoje").textContent = "Cardápio de " + hoje;
 
@@ -2055,6 +2130,7 @@
         fechado: "Sendo feito",
         enviado: "A caminho",
         entregue: "Chegou",
+        concluido: "Chegou",
         cancelado: "Cancelado"
       };
       return map[p.status] || p.status || "Pedido recebido";
@@ -2066,6 +2142,7 @@
         fechado: { icon: "🧑‍🍳", title: "Sendo feito", desc: "Seu pedido está em preparo.", cls: "fechado" },
         enviado: { icon: "🛵", title: "A caminho", desc: "Saiu para entrega ou retirada.", cls: "enviado" },
         entregue: { icon: "✅", title: "Chegou", desc: "Pedido entregue. Bom apetite!", cls: "entregue" },
+        concluido: { icon: "✅", title: "Chegou", desc: "Pedido concluído. Bom apetite!", cls: "entregue" },
         cancelado: { icon: "×", title: "Pedido cancelado", desc: "Este pedido foi cancelado.", cls: "cancelado" }
       };
       return map[p.status] || map.aberto;
@@ -2191,6 +2268,13 @@
           desc: "Pedido entregue. Bom apetite!",
           cls: "entregue",
           activeIndex: 3
+        },
+        concluido: {
+          icon: "✓",
+          title: "Chegou",
+          desc: "Pedido concluído. Bom apetite!",
+          cls: "entregue",
+          activeIndex: 3
         }
       };
       return map[p.status] || map.aberto;
@@ -2284,6 +2368,80 @@
         .subscribe();
 
       acompanhamentoPollTimer = setInterval(() => atualizarAcompanhamentoPedido(true), 5000);
+    }
+
+    let debitoFiadoTimer = null;
+    let ultimoResumoFiado = null;
+
+    async function obterResumoFiadoCliente() {
+      const colab = getColab();
+      if (!colab) return null;
+      const { data, error } = await sb.rpc("resumo_fiado_colaborador", { p_colaborador_id: colab.id });
+      if (error) {
+        console.warn("Erro resumo fiado:", error);
+        return null;
+      }
+      const resumo = Array.isArray(data) ? data[0] : data;
+      ultimoResumoFiado = resumo || null;
+      if (resumo && colab.fiado_bloqueado !== !!resumo.fiado_bloqueado) {
+        setColab({ ...colab, fiado_bloqueado: !!resumo.fiado_bloqueado });
+      }
+      return resumo || null;
+    }
+
+    function fecharPopupDebito() {
+      $("debtPopup").classList.remove("show");
+    }
+
+    async function mostrarPopupDebito(resumo) {
+      if (!resumo) return;
+      const total = Number(resumo.total_debito || 0);
+      const bloqueado = !!resumo.fiado_bloqueado;
+      if (total <= 0 && !bloqueado) {
+        fecharPopupDebito();
+        return;
+      }
+
+      $("debtTitle").textContent = bloqueado ? "Fiado bloqueado" : "Regularize seu fiado";
+      $("debtMsg").textContent = total > 0
+        ? `Você possui ${resumo.qtd_pedidos || 0} pedido(s) em aberto. Regularize o débito para voltar a comprar no fiado.`
+        : "O administrador bloqueou temporariamente sua compra no fiado. Fale com o administrador para regularizar.";
+      $("debtTotal").textContent = fmtBRL(total);
+      $("debtPayPix").disabled = total <= 0;
+
+      const numero = String(resumo.whatsapp_admin || "").replace(/\D/g, "");
+      $("debtWhatsapp").classList.toggle("hidden", !numero);
+      if (numero) {
+        const msg = `Olá, preciso regularizar meu fiado no valor de ${fmtBRL(total)}.`;
+        $("debtWhatsapp").href = `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+      }
+
+      $("debtPopup").classList.add("show");
+    }
+
+    async function checarDebitoFiado(exibir = true) {
+      const resumo = await obterResumoFiadoCliente();
+      const total = Number(resumo?.total_debito || 0);
+      if (resumo && (total > 0 || resumo.fiado_bloqueado)) {
+        if (exibir) await mostrarPopupDebito(resumo);
+      } else {
+        fecharPopupDebito();
+      }
+      return resumo;
+    }
+
+    function iniciarMonitorDebitoFiado() {
+      if (debitoFiadoTimer) clearInterval(debitoFiadoTimer);
+      if (!getColab()) return;
+      checarDebitoFiado(true);
+      debitoFiadoTimer = setInterval(() => checarDebitoFiado(true), 20000);
+    }
+
+    function pararMonitorDebitoFiado() {
+      if (debitoFiadoTimer) clearInterval(debitoFiadoTimer);
+      debitoFiadoTimer = null;
+      ultimoResumoFiado = null;
+      fecharPopupDebito();
     }
 
     async function carregarCardapio() {
@@ -2674,7 +2832,7 @@
       }
 
       const payOpt = document.querySelector(`.pay-option[data-pay="${dados.forma_pagamento}"]`);
-      if (payOpt && !payOpt.style.pointerEvents) {
+      if (payOpt && !payOpt.classList.contains("disabled")) {
         payOpt.classList.add("selected");
         state.selPagamento = dados.forma_pagamento;
       }
@@ -2700,6 +2858,7 @@
       if (getColab()) {
         clearColab();
         pararAcompanhamentoPedido();
+        pararMonitorDebitoFiado();
         if (pedidosClienteMonitorTimer) clearInterval(pedidosClienteMonitorTimer);
         pedidosClienteMonitorTimer = null;
         pedidosClienteSnapshot = null;
@@ -2713,6 +2872,7 @@
     $("btnSair2").addEventListener("click", () => {
       if (getColab()) {
         clearColab();
+        pararMonitorDebitoFiado();
         atualizarHeaderCliente();
         showScreen("screen-pedido");
       } else {
@@ -2770,12 +2930,23 @@
       });
 
       const pixEmpresa = state.configEmpresa.pix_empresa;
+      const resumoFiado = await checarDebitoFiado(false);
+      const fiadoBloqueado = !!resumoFiado?.fiado_bloqueado || Number(resumoFiado?.total_debito || 0) > 0;
       const opts = [
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
-        { id: "fiado", icon: "📒", title: "Fiado semanal", desc: "Acumula até o fechamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>" }
+        {
+          id: "fiado",
+          icon: "📒",
+          title: "Fiado semanal",
+          desc: fiadoBloqueado
+            ? "Indisponível: regularize seu débito para habilitar novamente."
+            : "Acumula até o fechamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>",
+          disabled: fiadoBloqueado,
+          motivo: "fiado"
+        }
       ];
       $("payOptions").innerHTML = opts.map(o => `
-    <div class="pay-option" data-pay="${o.id}" ${o.disabled ? 'style="opacity:.45; pointer-events:none;"' : ""}>
+    <div class="pay-option ${o.disabled ? "disabled" : ""}" data-pay="${o.id}" data-motivo="${o.motivo || ""}">
       <div class="pay-icon">${o.icon}</div>
       <div style="flex:1; min-width:0;">
         <div class="pay-title">${o.title}</div>
@@ -2787,6 +2958,11 @@
 
       $("payOptions").querySelectorAll(".pay-option").forEach(opt => {
         opt.addEventListener("click", () => {
+          if (opt.classList.contains("disabled")) {
+            if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
+            else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
+            return;
+          }
           $("payOptions").querySelectorAll(".pay-option").forEach(x => x.classList.remove("selected"));
           opt.classList.add("selected");
           state.selPagamento = opt.dataset.pay;
@@ -2931,6 +3107,13 @@
       if (!colab) {
         mostrarLogin("pedido", "Entre com sua matricula e PIN para confirmar este pedido.");
         return;
+      }
+      if (state.selPagamento === "fiado") {
+        const resumoFiado = await checarDebitoFiado(false);
+        if (resumoFiado?.fiado_bloqueado || Number(resumoFiado?.total_debito || 0) > 0) {
+          await mostrarPopupDebito(resumoFiado);
+          return;
+        }
       }
       $("btnConfirmar").disabled = true; $("btnConfirmar").textContent = "Enviando…";
 
@@ -3106,6 +3289,16 @@
       await carregarMeusPedidos();
     });
 
+    $("debtClose").addEventListener("click", fecharPopupDebito);
+    $("debtPayPix").addEventListener("click", async () => {
+      const resumo = ultimoResumoFiado || await obterResumoFiadoCliente();
+      const total = Number(resumo?.total_debito || 0);
+      if (total > 0) {
+        fecharPopupDebito();
+        await abrirPixSheet(total, "fiado");
+      }
+    });
+
 
     // =====================================================================
     // =====================================================================
@@ -3160,6 +3353,7 @@
     }
 
     let pixQrInstance = null;
+    let pixFiadoPedidoIds = [];
 
     async function abrirPixSheet(totalPendente, tipo = "fiado") {
       const colab = getColab();
@@ -3183,6 +3377,14 @@
         return;
       }
 
+      pixFiadoPedidoIds = [];
+      if (tipo === "fiado") {
+        const { data } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+        pixFiadoPedidoIds = (data || [])
+          .filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente" && p.status !== "cancelado")
+          .map(p => p.id);
+      }
+
       const payload = gerarPayloadPix({
         chave: config.pix_empresa,
         nome: (config.nome_empresa || "Empresa").slice(0, 25),
@@ -3199,6 +3401,11 @@
         ? "Saldo de fiado em aberto"
         : "PIX aguardando confirmação";
       document.getElementById("pixAlert").classList.remove("show");
+      document.getElementById("pixFiadoComprovanteWrap").classList.toggle("hidden", tipo !== "fiado");
+      document.getElementById("pixFiadoComprovanteMsg").classList.toggle("hidden", tipo !== "fiado");
+      document.getElementById("pixFiadoComprovanteMsg").textContent = tipo === "fiado"
+        ? "Anexe o comprovante para o administrador baixar o fiado."
+        : "";
 
       const canvas = document.getElementById("pixQrCanvas");
       canvas.innerHTML = "";
@@ -3239,6 +3446,43 @@
       } catch {
         alertEl.textContent = "Selecione e copie o código manualmente.";
         alertEl.className = "alert alert-error show";
+      }
+    });
+
+    document.getElementById("pixFiadoComprovanteInput").addEventListener("change", async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const msg = document.getElementById("pixFiadoComprovanteMsg");
+      const colab = getColab();
+      if (!colab) {
+        mostrarLogin("meusPedidos", "Entre novamente para anexar o comprovante.");
+        return;
+      }
+      if (!pixFiadoPedidoIds.length) {
+        msg.textContent = "Não encontrei pedidos de fiado pendentes para anexar.";
+        return;
+      }
+      msg.textContent = "Enviando comprovante...";
+      try {
+        for (const pedidoId of pixFiadoPedidoIds) {
+          const url = await uploadComprovante(pedidoId, file);
+          if (!url) throw new Error("Falha ao enviar arquivo.");
+          const { error } = await sb.rpc("anexar_comprovante_pedido", {
+            p_pedido_id: pedidoId,
+            p_colaborador_id: colab.id,
+            p_comprovante_url: url
+          });
+          if (error) throw error;
+        }
+        msg.textContent = "Comprovante enviado. Aguarde o administrador aprovar.";
+        mostrarToast("✅", "Comprovante enviado", "O administrador ja pode revisar o pagamento do fiado.");
+        await carregarMeusPedidos({ silent: true });
+        await checarDebitoFiado(false);
+      } catch (err) {
+        console.warn("Erro comprovante fiado:", err);
+        msg.textContent = err?.message || "Erro ao anexar comprovante.";
+      } finally {
+        e.target.value = "";
       }
     });
 
@@ -3577,7 +3821,10 @@
     });
     $("btnVoltarColetivo").addEventListener("click", () => showScreen("screen-home"));
     $("btnSairColetivo").addEventListener("click", async () => {
-      if (getColab()) clearColab();
+      if (getColab()) {
+        clearColab();
+        pararMonitorDebitoFiado();
+      }
       await abrirHome();
     });
     $("btnVoltarHomeColetivo").addEventListener("click", abrirHome);

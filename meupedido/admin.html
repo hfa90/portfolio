@@ -947,15 +947,16 @@
 
     .pedidos-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
     }
 
     .pedido-card {
       background: #ffffff;
       border: 1px solid rgba(0, 0, 0, 0.06);
       border-radius: 16px;
-      padding: 16px;
+      padding: 22px;
+      min-height: 210px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
       display: flex;
       flex-direction: column;
@@ -974,6 +975,7 @@
       justify-content: space-between;
       align-items: flex-start;
       gap: 8px;
+      min-height: 74px;
     }
 
     .pedido-card .pc-rodape {
@@ -982,6 +984,12 @@
       align-items: center;
       border-top: 1px solid var(--line);
       padding-top: 12px;
+    }
+
+    .pedido-card .btn-sm {
+      min-height: 38px;
+      padding: 0 12px;
+      white-space: nowrap;
     }
 
     /* ==================================================================
@@ -1627,6 +1635,95 @@
       margin-top: 2px;
     }
 
+    .admin-alert-bg {
+      position: fixed;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      background: rgba(42, 31, 23, .46);
+      z-index: 180;
+    }
+
+    .admin-alert-bg.show {
+      display: flex;
+    }
+
+    .admin-alert-card {
+      width: min(560px, 100%);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      box-shadow: var(--shadow-lg);
+      padding: 22px;
+      animation: alertPop 180ms ease-out;
+    }
+
+    @keyframes alertPop {
+      from {
+        transform: scale(.96);
+        opacity: 0;
+      }
+
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .admin-alert-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .admin-alert-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      background: rgba(185, 74, 42, .12);
+      color: var(--brick);
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
+    .admin-alert-close {
+      margin-left: auto;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      border: 0;
+      background: var(--bg-soft);
+      color: var(--ink-soft);
+      font-size: 20px;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .admin-alert-title {
+      font-family: var(--font-display);
+      font-size: 1.55rem;
+      font-weight: 900;
+      line-height: 1.08;
+      margin: 0 0 6px;
+    }
+
+    .admin-alert-msg {
+      color: var(--ink-soft);
+      font-size: 1rem;
+      margin: 0;
+    }
+
+    .admin-alert-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
     @media (max-width: 560px) {
       .cardapio-week {
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2028,6 +2125,10 @@
           <label>Chave Pix da empresa</label>
           <input id="cfgPixEmpresa" class="input" placeholder="email, CPF, telefone ou chave aleatória" />
         </div>
+        <div class="field">
+          <label>WhatsApp do administrador</label>
+          <input id="cfgWhatsappAdmin" class="input" inputmode="numeric" placeholder="5592999999999" />
+        </div>
         <div class="row">
           <div class="field">
             <label>Fechamento do fiado</label>
@@ -2079,6 +2180,23 @@
     <div>
       <div class="admin-toast-title" id="adminToastTitle"></div>
       <div class="admin-toast-msg" id="adminToastMsg"></div>
+    </div>
+  </div>
+
+  <div class="admin-alert-bg" id="adminAlertPopup" role="alertdialog" aria-modal="true">
+    <div class="admin-alert-card">
+      <div class="admin-alert-head">
+        <div class="admin-alert-icon" id="adminAlertIcon">🍱</div>
+        <div style="flex:1; min-width:0;">
+          <h2 class="admin-alert-title" id="adminAlertTitle">Novo pedido</h2>
+          <p class="admin-alert-msg" id="adminAlertMsg"></p>
+        </div>
+        <button class="admin-alert-close" id="adminAlertClose" aria-label="Fechar">×</button>
+      </div>
+      <div class="admin-alert-actions">
+        <button class="btn btn-ghost" id="adminAlertPedidos">Ver pedidos</button>
+        <button class="btn btn-primary" id="adminAlertOk">OK</button>
+      </div>
     </div>
   </div>
 
@@ -2449,6 +2567,24 @@
 
     $("adminToast").addEventListener("click", () => navegar("pedidos"));
 
+    function fecharAlertaAdmin() {
+      $("adminAlertPopup").classList.remove("show");
+    }
+
+    function mostrarAlertaAdmin(icon, titulo, msg) {
+      $("adminAlertIcon").textContent = icon;
+      $("adminAlertTitle").textContent = titulo;
+      $("adminAlertMsg").textContent = msg;
+      $("adminAlertPopup").classList.add("show");
+    }
+
+    $("adminAlertClose").addEventListener("click", fecharAlertaAdmin);
+    $("adminAlertOk").addEventListener("click", fecharAlertaAdmin);
+    $("adminAlertPedidos").addEventListener("click", () => {
+      fecharAlertaAdmin();
+      navegar("pedidos");
+    });
+
     function secaoAtiva() {
       return document.querySelector(".drawer-item.active")?.dataset?.section || "pedidos";
     }
@@ -2479,7 +2615,7 @@
         tocarSomAdmin("comprovante");
         const titulo = "Comprovante recebido";
         const corpo = `${cliente} anexou comprovante do pedido ${prato}.`;
-        mostrarToastAdmin("🧾", titulo, corpo);
+        mostrarAlertaAdmin("🧾", titulo, corpo);
         notificarAdminNativo(titulo, corpo);
         return;
       }
@@ -2487,7 +2623,7 @@
       tocarSomAdmin("pedido");
       const titulo = `Novo pedido de ${cliente}`;
       const corpo = `${prato}. Confira as informações, valide o pagamento e envie para a cozinha.`;
-      mostrarToastAdmin("🍱", titulo, corpo);
+      mostrarAlertaAdmin("🍱", titulo, corpo);
       notificarAdminNativo(titulo, corpo);
     }
 
@@ -2833,6 +2969,7 @@
       }
 
       const pedidosHoje = pedidos.filter(p => p.data === dataFiltro);
+      const pedidosOperacionaisHoje = pedidosHoje.filter(p => p.status !== "concluido");
 
       // STATS GERAIS DO DIA
       const totalDia = pedidosHoje.reduce((s, p) => s + Number(p.preco_total), 0);
@@ -2960,13 +3097,13 @@
       // ==========================================================
       // RENDERIZAÇÃO DA ABA 2: LOGÍSTICA (ENVIAR PARA COZINHA)
       // ==========================================================
-      if (pedidosHoje.length === 0) {
+      if (pedidosOperacionaisHoje.length === 0) {
         $("pedidosLista").innerHTML = '<div class="card empty">Nenhum pedido registrado para a data selecionada.</div>';
         return;
       }
 
       const gruposFornecedor = new Map();
-      pedidosHoje.forEach(p => {
+      pedidosOperacionaisHoje.forEach(p => {
         const fid = p.fornecedor?.id;
         if (!gruposFornecedor.has(fid)) gruposFornecedor.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
         gruposFornecedor.get(fid).pedidos.push(p);
@@ -2989,7 +3126,7 @@
 
         pedsForn.forEach(p => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
-          const statusLabel = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", cancelado: "Cancelado" }[p.status] || p.status;
+          const statusLabel = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", concluido: "Concluído", cancelado: "Cancelado" }[p.status] || p.status;
           const pixBloqueado = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento !== "pago";
           const acoesLogistica = pixBloqueado
             ? `<div class="small" style="margin:0; width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,122,255,.08); color:var(--blue-ios); font-weight:700;">Aguardando aprovação do PIX para avançar o preparo.</div>
@@ -2997,6 +3134,7 @@
             : `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'fechado')">Sendo feito</button>
                <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'enviado')">A caminho</button>
                <button class="btn btn-olive btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'entregue')">Chegou</button>
+               <button class="btn btn-primary btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'concluido')">Concluir</button>
                <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>`;
           logisticaHtml += `
         <div class="pedido-card">
@@ -3046,6 +3184,7 @@
 
     window.atualizarStatusPedido = async (id, status) => {
       if (status === "cancelado" && !confirm("Cancelar este pedido?")) return;
+      if (status === "concluido" && !confirm("Concluir este pedido e remover da lista operacional?")) return;
       try {
         if (status !== "cancelado") {
           const pedido = await buscarPedidoParaAcao(id);
@@ -4193,7 +4332,7 @@ Bom apetite! 😋`;
     // =====================================================================
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo, fiado_bloqueado").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
@@ -4205,9 +4344,11 @@ Bom apetite! 😋`;
           <td data-label="Empresa">${c.empresa || "—"}</td>
           <td data-label="Endereço">${c.endereco_empresa || "—"}</td>
           <td data-label="WhatsApp"><span class="small muted">${c.whatsapp || "—"}</span></td>
+          <td data-label="Fiado">${c.fiado_bloqueado ? '<span class="badge cancelado">bloqueado</span>' : '<span class="badge pago">liberado</span>'}</td>
           <td data-label="Status">${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalColab(${JSON.stringify(c).replace(/'/g, "&apos;")})'>Editar</button>
+            <button class="btn btn-ghost btn-sm" onclick="alternarFiadoColab('${c.id}', ${c.fiado_bloqueado ? "false" : "true"})">${c.fiado_bloqueado ? "Liberar fiado" : "Bloquear fiado"}</button>
             <button class="btn btn-ghost btn-sm" onclick="resetarPin('${c.id}', '${c.nome.replace(/'/g, "\\'")}')">🔑 PIN</button>
             <button class="btn btn-danger btn-sm" onclick="excluirColab('${c.id}')">Excluir</button>
           </td>
@@ -4224,6 +4365,7 @@ Bom apetite! 😋`;
         <div class="field"><label>Endereço da empresa</label><input id="cEndEmpresa" class="input" value="${c?.endereco_empresa ?? ""}" placeholder="Rua, unidade, setor ou ponto de entrega"/></div>
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="cWhats" class="input" inputmode="numeric" value="${c?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
         ${!c ? '<div class="field"><label>PIN (4 dígitos)</label><input id="cPin" class="input" maxlength="4" inputmode="numeric" placeholder="ex.: 1234"/></div>' : ""}
+        <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cFiadoBloq" ${c?.fiado_bloqueado ? "checked" : ""} style="width:20px;height:20px;"/> Bloquear compra no fiado</label></div>
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cAtivo" ${c?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
@@ -4235,6 +4377,7 @@ Bom apetite! 😋`;
           empresa: $("cSetor").value.trim() || null,
           endereco_empresa: $("cEndEmpresa").value.trim() || null,
           whatsapp: $("cWhats").value.trim().replace(/\D/g, "") || null,
+          fiado_bloqueado: $("cFiadoBloq").checked,
           ativo: $("cAtivo").checked
         };
         if (!payload.nome) { $("modalAlert").textContent = "Informe o nome."; $("modalAlert").classList.add("show"); return; }
@@ -4251,6 +4394,16 @@ Bom apetite! 😋`;
         }
         fecharModal(); carregarColaboradores();
       };
+    };
+
+    window.alternarFiadoColab = async (id, bloquear) => {
+      const msg = bloquear
+        ? "Bloquear compra no fiado para este colaborador?"
+        : "Liberar compra no fiado para este colaborador?";
+      if (!confirm(msg)) return;
+      const { error } = await sb.from("colaboradores").update({ fiado_bloqueado: bloquear }).eq("id", id);
+      if (error) alert("Erro: " + error.message);
+      await carregarColaboradores();
     };
 
     window.resetarPin = async (id, nome) => {
@@ -4431,6 +4584,7 @@ Bom apetite! 😋`;
       const map = Object.fromEntries((data || []).map(c => [c.chave, c.valor]));
       $("cfgNomeEmpresa").value = map.nome_empresa || "";
       $("cfgPixEmpresa").value = map.pix_empresa || "";
+      $("cfgWhatsappAdmin").value = map.whatsapp_admin || "";
       $("cfgFechPeriodo").value = map.fechamento_fiado_periodo || "semanal";
       $("cfgFechDiaSemana").value = map.fechamento_fiado_dia_semana || "5";
       $("cfgFechDiaMes").value = map.fechamento_fiado_dia_mes || "30";
@@ -4456,6 +4610,7 @@ Bom apetite! 😋`;
       const updates = [
         { chave: "nome_empresa", valor: $("cfgNomeEmpresa").value.trim() },
         { chave: "pix_empresa", valor: $("cfgPixEmpresa").value.trim() },
+        { chave: "whatsapp_admin", valor: $("cfgWhatsappAdmin").value.trim().replace(/\D/g, "") },
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
         { chave: "fechamento_fiado_dia_semana", valor: String($("cfgFechDiaSemana").value) },
         { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) }
