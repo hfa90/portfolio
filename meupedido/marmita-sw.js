@@ -1,7 +1,7 @@
 // marmita-sw.js — Service Worker para Web Push
 // Coloque na RAIZ do servidor (mesma pasta do marmita.html)
 
-const CACHE_NAME = "marmita-v6";
+const CACHE_NAME = "marmita-v7";
 const ASSETS_TO_CACHE = ["/marmita.html", "/admin.html", "/icon-192.png"];
 
 self.addEventListener("install", event => {

@@ -2229,6 +2229,9 @@
     const $ = (id) => document.getElementById(id);
     const fmtBRL = (v) => "R$ " + Number(v ?? 0).toFixed(2).replace(".", ",");
     const fmtData = (d) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
+    const fmtDataHora = (v) => v
+      ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "Nao registrado";
     const dataLocalISO = (date = new Date()) => {
       const d = new Date(date);
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
@@ -2280,6 +2283,7 @@
         dados.compras.push({
           id: p.id,
           data: p.data,
+          criado_em: p.criado_em,
           dias,
           valor: Number(p.preco_total),
           prato: p.prato?.nome || "Pedido",
@@ -2291,7 +2295,7 @@
         .map(d => ({
           ...d,
           atrasado: d.maxDias > 15,
-          compras: d.compras.sort((a, b) => a.data.localeCompare(b.data))
+          compras: d.compras.sort((a, b) => String(a.criado_em || a.data).localeCompare(String(b.criado_em || b.data)))
         }))
         .sort((a, b) => Number(b.atrasado) - Number(a.atrasado) || b.maxDias - a.maxDias || b.total - a.total);
 
@@ -2320,7 +2324,7 @@
 
       for (const dados of devedores) {
         const primeiroNome = (dados.nome || "Cliente").split(" ")[0];
-        const comprasMsg = dados.compras.map(c => `- ${fmtData(c.data)}: ${c.prato} (${fmtBRL(c.valor)})`).join("\n");
+        const comprasMsg = dados.compras.map(c => `- ${fmtDataHora(c.criado_em || `${c.data}T12:00:00`)}: ${c.prato} (${fmtBRL(c.valor)})`).join("\n");
         const waTexto = `Ola ${primeiroNome}! Consta um fiado em aberto no valor de ${fmtBRL(dados.total)}.\n\nCompras pendentes:\n${comprasMsg}\n\nPode regularizar, por favor?`;
         const waLink = dados.zap ? `https://wa.me/${dados.zap.replace(/\D/g, "")}?text=${encodeURIComponent(waTexto)}` : "";
         const alerta = dados.atrasado ? `<div class="fiado-alerta">Atrasado: compra mais antiga ha ${dados.maxDias} dias</div>` : "";
@@ -2341,7 +2345,7 @@
               ${dados.compras.map(c => `
                 <div class="fiado-compra">
                   <div>
-                    <strong>${fmtData(c.data)}</strong>
+                    <strong>${fmtDataHora(c.criado_em || `${c.data}T12:00:00`)}</strong>
                     <div class="small muted">${c.prato} - ${c.fornecedor}</div>
                   </div>
                   <div>
@@ -2971,7 +2975,7 @@
       // Buscamos: Pedidos da data SELECIONADA *OU* pedidos PENDENTES de qualquer data (para cobrar fiados atrasados)
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
-      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
+      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, fechado_em, enviado_em, entregue_em, concluido_em, cancelado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
       prato:pratos ( nome ),
       fornecedor:fornecedores ( id, nome, whatsapp ),
       colaborador:colaboradores ( id, nome, matricula, empresa, whatsapp ),
@@ -3146,6 +3150,19 @@
         pedsForn.forEach(p => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
           const statusLabel = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", concluido: "Concluído", cancelado: "Cancelado" }[p.status] || p.status;
+          const linhaTempo = [
+            ["Pedido feito", p.criado_em],
+            ["Pagamento confirmado", p.pago_em],
+            ["Sendo feito", p.fechado_em],
+            ["A caminho", p.enviado_em],
+            ["Chegou", p.entregue_em],
+            ["Concluido", p.concluido_em],
+            ["Cancelado", p.cancelado_em]
+          ].filter(([, valor]) => valor).map(([label, valor]) => `
+            <div class="small muted" style="display:flex; justify-content:space-between; gap:10px;">
+              <span>${label}</span><strong>${fmtDataHora(valor)}</strong>
+            </div>
+          `).join("");
           const pixBloqueado = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento !== "pago";
           const acoesLogistica = pixBloqueado
             ? `<div class="small" style="margin:0; width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,122,255,.08); color:var(--blue-ios); font-weight:700;">Aguardando aprovação do PIX para avançar o preparo.</div>
@@ -3167,6 +3184,9 @@
           <div class="pc-rodape">
              <div class="small muted">${payLabel[p.forma_pagamento]} · ${statusLabel}</div>
              <strong style="font-size: 1.1rem; color: var(--ink);">${fmtBRL(p.preco_total)}</strong>
+          </div>
+          <div style="display:grid; gap:5px; border-top:1px dashed var(--line); padding-top:8px; margin-top:8px;">
+            ${linhaTempo}
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
             ${acoesLogistica}
@@ -3217,8 +3237,16 @@
         alert("Erro ao validar pedido: " + (e.message || e));
         return;
       }
+      const agora = new Date().toISOString();
       const payload = { status };
-      if (status === "concluido") payload.concluido_em = new Date().toISOString();
+      const statusTimestamp = {
+        fechado: "fechado_em",
+        enviado: "enviado_em",
+        entregue: "entregue_em",
+        concluido: "concluido_em",
+        cancelado: "cancelado_em"
+      }[status];
+      if (statusTimestamp) payload[statusTimestamp] = agora;
       const { error } = await sb.from("pedidos").update(payload).eq("id", id.trim());
       if (error) {
         alert("Erro ao atualizar pedido: " + error.message);

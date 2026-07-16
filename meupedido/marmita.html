@@ -1552,6 +1552,58 @@
       font-size: 15px;
     }
 
+    .coletivo-match {
+      display: none;
+      margin: -2px 0 10px 36px;
+      padding: 10px 12px;
+      border: 1px solid rgba(91, 111, 57, .22);
+      border-radius: var(--radius-sm);
+      background: rgba(91, 111, 57, .08);
+      color: var(--ink);
+    }
+
+    .coletivo-match.show {
+      display: block;
+    }
+
+    .coletivo-match strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .fiado-deadline-card {
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: rgba(0, 122, 255, .07);
+      border: 1px solid rgba(0, 122, 255, .16);
+      display: grid;
+      gap: 6px;
+    }
+
+    .fiado-timer {
+      font-family: var(--font-display);
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--blue-ios);
+    }
+
+    .pedido-timeline {
+      display: grid;
+      gap: 5px;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 0.5px solid var(--separator);
+    }
+
+    .pedido-timeline-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--ink-soft);
+    }
+
     .coletivo-total-bar {
       position: fixed;
       bottom: 0;
@@ -1928,6 +1980,24 @@
     </div>
   </div>
 
+  <div class="debt-popup-bg" id="fiadoInfoPopup">
+    <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="fiadoInfoTitle">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <p class="eyebrow">Compra no fiado</p>
+          <h2 class="debt-popup-title" id="fiadoInfoTitle">Data limite do fiado</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="fiadoInfoClose" aria-label="Fechar">×</button>
+      </div>
+      <p class="muted" id="fiadoInfoMsg">Este pedido deverá ser pago no próximo pagamento.</p>
+      <div class="debt-popup-total" id="fiadoInfoData">--/--/----</div>
+      <p class="small muted" style="margin:0;">A taxa do fiado será somada ao pedido e o prazo aparecerá em Meus pedidos.</p>
+      <div class="debt-actions">
+        <button class="btn btn-primary btn-block btn-pill" id="fiadoInfoOk">Entendi</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
@@ -1943,12 +2013,41 @@
     const $ = (id) => document.getElementById(id);
     const fmtBRL = (v) => "R$ " + Number(v).toFixed(2).replace(".", ",");
     const fmtData = (d) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+    const fmtDataHora = (v) => v
+      ? new Date(v).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })
+      : "Nao registrado";
     const dataLocalISO = (date = new Date()) => {
       const d = new Date(date);
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
       return d.toISOString().slice(0, 10);
     };
     const hojeISO = () => dataLocalISO();
+    function proximoVencimentoFiado(base = new Date()) {
+      const d = new Date(base);
+      const ano = d.getFullYear();
+      const mes = d.getMonth();
+      const dia = d.getDate();
+      const ultimoDiaMes = (y, m) => new Date(y, m + 1, 0).getDate();
+      if (dia <= 15) return new Date(ano, mes, 15, 23, 59, 59, 999);
+      if (dia <= 30) return new Date(ano, mes, Math.min(30, ultimoDiaMes(ano, mes)), 23, 59, 59, 999);
+      return new Date(ano, mes + 1, 15, 23, 59, 59, 999);
+    }
+    function dataPedidoComoDate(p) {
+      return p?.criado_em ? new Date(p.criado_em) : new Date(`${p?.data || hojeISO()}T12:00:00`);
+    }
+    const fmtDataLimiteFiado = (date) => date.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+    function textoTimerFiado(vencimentoMs) {
+      const diff = Number(vencimentoMs) - Date.now();
+      if (!Number.isFinite(diff)) return "--";
+      if (diff <= 0) return "Vencido";
+      const totalSeg = Math.floor(diff / 1000);
+      const dias = Math.floor(totalSeg / 86400);
+      const horas = Math.floor((totalSeg % 86400) / 3600);
+      const mins = Math.floor((totalSeg % 3600) / 60);
+      const segs = totalSeg % 60;
+      return `${dias}d ${String(horas).padStart(2, "0")}h ${String(mins).padStart(2, "0")}m ${String(segs).padStart(2, "0")}s`;
+    }
     const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-sucesso", "screen-acompanhamento", "screen-coletivo", "screen-sucesso-coletivo"];
     function showScreen(id) {
       screens.forEach(s => $(s).classList.toggle("hidden", s !== id));
@@ -2302,6 +2401,17 @@
 
     function renderizarAcompanhamentoPedido(p) {
       const info = acompanhamentoInfo(p);
+      const timeline = [
+        ["Pedido feito", p.criado_em],
+        ["Pagamento confirmado", p.pago_em],
+        ["Sendo feito", p.fechado_em],
+        ["A caminho", p.enviado_em],
+        ["Entregue", p.entregue_em],
+        ["Concluido", p.concluido_em],
+        ["Cancelado", p.cancelado_em]
+      ].filter(([, valor]) => valor).map(([label, valor]) => `
+        <div class="pedido-timeline-row"><span>${label}</span><strong>${fmtDataHora(valor)}</strong></div>
+      `).join("");
       $("acompanharTitulo").textContent = info.title;
       $("acompanharSubtitulo").textContent = info.desc;
       $("acompanharBanner").className = `status-banner ${info.cls}`;
@@ -2320,6 +2430,7 @@
           <span class="small muted">${pagamentoStatusInfo(p)}</span>
           <strong style="color:var(--brick);">${fmtBRL(p.preco_total)}</strong>
         </div>
+        <div class="pedido-timeline">${timeline}</div>
       `;
 
       const isPix = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
@@ -2392,6 +2503,7 @@
 
     let debitoFiadoTimer = null;
     let ultimoResumoFiado = null;
+    let fiadoCountdownTimer = null;
 
     function totalFiadoAbertoResumo(resumo) {
       return Number(resumo?.total_aberto ?? resumo?.total_debito ?? 0);
@@ -2403,6 +2515,20 @@
 
     function qtdFiadoAbertoResumo(resumo) {
       return Number(resumo?.qtd_abertos ?? resumo?.qtd_pedidos ?? 0);
+    }
+
+    function atualizarTimersFiado() {
+      document.querySelectorAll("[data-fiado-timer]").forEach(el => {
+        el.textContent = textoTimerFiado(el.dataset.fiadoTimer);
+      });
+    }
+
+    function iniciarTimersFiado() {
+      if (fiadoCountdownTimer) clearInterval(fiadoCountdownTimer);
+      atualizarTimersFiado();
+      if (document.querySelector("[data-fiado-timer]")) {
+        fiadoCountdownTimer = setInterval(atualizarTimersFiado, 1000);
+      }
     }
 
     async function obterResumoFiadoCliente() {
@@ -2431,6 +2557,17 @@
 
     function fecharPopupPagarMaisTarde() {
       $("laterPayPopup").classList.remove("show");
+    }
+
+    function abrirPopupFiadoInfo() {
+      const vencimento = proximoVencimentoFiado(new Date());
+      $("fiadoInfoMsg").textContent = "Este pedido deverá ser pago até o próximo pagamento:";
+      $("fiadoInfoData").textContent = fmtDataLimiteFiado(vencimento);
+      $("fiadoInfoPopup").classList.add("show");
+    }
+
+    function fecharPopupFiadoInfo() {
+      $("fiadoInfoPopup").classList.remove("show");
     }
 
     async function mostrarPopupDebito(resumo) {
@@ -2639,11 +2776,48 @@
 
       const fmtDataLonga = (d) => new Date(d).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
 
+      const renderLinhaTempoPedido = (p) => {
+        const eventos = [
+          ["Pedido feito", p.criado_em],
+          ["Pagamento confirmado", p.pago_em],
+          ["Sendo feito", p.fechado_em],
+          ["A caminho", p.enviado_em],
+          ["Entregue", p.entregue_em],
+          ["Concluido", p.concluido_em],
+          ["Cancelado", p.cancelado_em]
+        ];
+        return `<div class="pedido-timeline">
+          ${eventos.filter(([, valor]) => valor).map(([label, valor]) => `
+            <div class="pedido-timeline-row">
+              <span>${label}</span>
+              <strong>${fmtDataHora(valor)}</strong>
+            </div>
+          `).join("")}
+        </div>`;
+      };
+
+      const renderFiadoPrazoPedido = (p) => {
+        if (!(p.forma_pagamento === "fiado" && p.status_pagamento === "pendente")) return "";
+        const vencimento = proximoVencimentoFiado(dataPedidoComoDate(p));
+        return `<div class="fiado-deadline-card">
+          <div class="small muted">Data limite para pagamento</div>
+          <strong>${fmtDataLimiteFiado(vencimento)}</strong>
+          <div class="fiado-timer" data-fiado-timer="${vencimento.getTime()}">${textoTimerFiado(vencimento.getTime())}</div>
+        </div>`;
+      };
+
       function renderPedidoCard(p) {
         const isFiado = p.forma_pagamento === "fiado" && p.status_pagamento === "pendente";
         const badgeClass = p.comprovante_status === "rejeitado" ? "rejeitado" : (isFiado ? "fiado" : p.status_pagamento);
         const badgeText = p.comprovante_status === "rejeitado" ? "Rejeitado" : (isFiado ? "Fiado" : p.status_pagamento);
-        const criado = p.criado_em ? new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+        const criado = fmtDataHora(p.criado_em);
+        const coletivoInfo = p.pedido_coletivo_id
+          ? `<div class="pedido-alerta" style="background:rgba(91,111,57,.09); color:var(--olive);">
+              Pedido em grupo feito por <strong>${esc(p.coletivo_criador_nome || "um colaborador")}</strong>
+              ${p.coletivo_criado_em ? ` em ${fmtDataHora(p.coletivo_criado_em)}` : ""}.
+              ${p.nome_pessoa ? `Item registrado para ${esc(p.nome_pessoa)}.` : ""}
+            </div>`
+          : "";
         const compMotivo = p.comprovante_status === "rejeitado"
           ? `<div class="pedido-alerta">
               <strong>Seu pagamento ainda nao foi confirmado.</strong><br>
@@ -2668,7 +2842,7 @@
           <div class="pedido-head">
             <div style="flex:1; min-width:0;">
               <div class="pedido-prato">${p.prato_nome ?? "—"}</div>
-              <div class="pedido-meta">${p.fornecedor_nome ?? ""} · ${fmtData(p.data)} as ${criado}</div>
+              <div class="pedido-meta">${p.fornecedor_nome ?? ""} · pedido feito em ${criado}</div>
               ${p.acompanhamentos ? `<div class="pedido-meta">+ ${p.acompanhamentos}</div>` : ""}
               ${p.observacoes ? `<div class="pedido-obs">📝 ${p.observacoes}</div>` : ""}
             </div>
@@ -2691,6 +2865,9 @@
               <div class="pedido-status-value">${pagamentoStatusInfo(p)}</div>
             </div>
           </div>
+          ${renderLinhaTempoPedido(p)}
+          ${renderFiadoPrazoPedido(p)}
+          ${coletivoInfo}
           ${compMotivo}
           <div class="pedido-foot">
             <span class="small muted">${payLabel[p.forma_pagamento] || p.forma_pagamento}</span>
@@ -2732,10 +2909,20 @@
 
       if (fiadosPendentes.length > 0) {
         const fiadoRows = fiadosPendentes.map(p => {
-          const d = new Date(p.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px dashed rgba(0,122,255,.12);">
-            <span class="small">${d} — ${p.prato_nome ?? "—"}</span>
-            <strong class="small" style="color:var(--blue-ios);">${fmtBRL(p.preco_total)}</strong>
+          const vencimento = proximoVencimentoFiado(dataPedidoComoDate(p));
+          return `<div style="padding:10px 0; border-bottom:1px dashed rgba(0,122,255,.12);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+              <div style="min-width:0;">
+                <strong class="small">${esc(p.prato_nome ?? "Pedido")}</strong>
+                <div class="small muted">${esc(p.fornecedor_nome || "")} · pedido feito em ${fmtDataHora(p.criado_em)}</div>
+                ${p.acompanhamentos ? `<div class="small muted">+ ${esc(p.acompanhamentos)}</div>` : ""}
+              </div>
+              <strong class="small" style="color:var(--blue-ios);">${fmtBRL(p.preco_total)}</strong>
+            </div>
+            <div class="fiado-deadline-card" style="margin-top:8px;">
+              <div class="small muted">Pagar ate ${fmtDataLimiteFiado(vencimento)}</div>
+              <div class="fiado-timer" data-fiado-timer="${vencimento.getTime()}">${textoTimerFiado(vencimento.getTime())}</div>
+            </div>
           </div>`;
         }).join("");
         html += `
@@ -2792,6 +2979,7 @@
       }
 
       lista.innerHTML = html;
+      iniciarTimersFiado();
 
       const btnPixFiado = document.getElementById("btnAbrirPixFiado");
       if (btnPixFiado) btnPixFiado.addEventListener("click", () => abrirPixSheet(totalFiado, "fiado"));
@@ -3014,6 +3202,7 @@
           opt.classList.add("selected");
           state.selPagamento = opt.dataset.pay;
           atualizarTotal();
+          if (state.selPagamento === "fiado") abrirPopupFiadoInfo();
           if (state.selPagamento === "pagar_mais_tarde") abrirPopupPagarMaisTarde();
         });
       });
@@ -3342,6 +3531,11 @@
     $("laterPayOk").addEventListener("click", fecharPopupPagarMaisTarde);
     $("laterPayPopup").addEventListener("click", e => {
       if (e.target === $("laterPayPopup")) fecharPopupPagarMaisTarde();
+    });
+    $("fiadoInfoClose").addEventListener("click", fecharPopupFiadoInfo);
+    $("fiadoInfoOk").addEventListener("click", fecharPopupFiadoInfo);
+    $("fiadoInfoPopup").addEventListener("click", e => {
+      if (e.target === $("fiadoInfoPopup")) fecharPopupFiadoInfo();
     });
 
     $("debtPayPix").addEventListener("click", async () => {
@@ -3851,6 +4045,7 @@
     // PEDIDO COLETIVO
     // =====================================================================
     const coletivoState = { pessoas: [], comprovanteFile: null };
+    const coletivoBuscaTimers = new Map();
 
     async function garantirConfigEmpresa() {
       if (state.configEmpresa?.pix_empresa) return state.configEmpresa;
@@ -3865,7 +4060,7 @@
     showScreen = function (id) {
       _origShowScreen(id);
       const fab = $("fabColetivo");
-      if (fab) fab.classList.toggle("hidden", id !== "screen-home");
+      if (fab) fab.classList.toggle("hidden", id !== "screen-home" || !!getColab());
     };
 
     $("fabColetivo").addEventListener("click", () => {
@@ -3889,10 +4084,64 @@
     $("btnAddPessoa").addEventListener("click", addPessoaColetivo);
 
     function addPessoaColetivo() {
-      coletivoState.pessoas.push({ nome: "", pratoId: "", fornecedorId: "", fornecedorNome: "", fornecedorFrete: 0, pratoNome: "", pratoPreco: 0, obs: "" });
+      coletivoState.pessoas.push({ nome: "", colaboradorId: "", matricula: "", empresa: "", matchMsg: "", pratoId: "", fornecedorId: "", fornecedorNome: "", fornecedorFrete: 0, pratoNome: "", pratoPreco: 0, obs: "" });
       renderColetivo();
       const inputs = document.querySelectorAll(".ci-nome-input");
       if (inputs.length) inputs[inputs.length - 1].focus();
+    }
+
+    function atualizarMatchColetivo(idx) {
+      const p = coletivoState.pessoas[idx];
+      const box = document.querySelector(`.coletivo-match[data-idx="${idx}"]`);
+      if (!box || !p) return;
+      if (p.colaboradorId) {
+        box.innerHTML = `<strong>${esc(p.nome)}</strong><span class="small muted">Matrícula ${esc(p.matricula || "-")} · ${esc(p.empresa || "Empresa nao informada")}</span>`;
+        box.classList.add("show");
+      } else if (p.matchMsg) {
+        box.innerHTML = `<span class="small muted">${esc(p.matchMsg)}</span>`;
+        box.classList.add("show");
+      } else {
+        box.classList.remove("show");
+        box.innerHTML = "";
+      }
+    }
+
+    async function buscarPessoaColetivo(idx, termo) {
+      const p = coletivoState.pessoas[idx];
+      if (!p) return;
+      if (!termo || termo.trim().length < 2) {
+        Object.assign(p, { colaboradorId: "", matricula: "", empresa: "", matchMsg: "" });
+        atualizarMatchColetivo(idx);
+        return;
+      }
+      p.matchMsg = "Procurando cadastro...";
+      atualizarMatchColetivo(idx);
+      const { data, error } = await sb.rpc("buscar_colaborador_coletivo", { p_busca: termo.trim() });
+      if (error) {
+        p.matchMsg = "Nao consegui consultar o cadastro agora.";
+        atualizarMatchColetivo(idx);
+        return;
+      }
+      const achados = data || [];
+      if (!achados.length) {
+        Object.assign(p, { colaboradorId: "", matricula: "", empresa: "", matchMsg: "Nenhum cadastro encontrado. Confira o nome ou matricula." });
+        atualizarMatchColetivo(idx);
+        return;
+      }
+      const pessoa = achados[0];
+      p.colaboradorId = pessoa.id;
+      p.nome = pessoa.nome;
+      p.matricula = pessoa.matricula || "";
+      p.empresa = pessoa.empresa || "";
+      p.matchMsg = achados.length > 1 ? `${achados.length} cadastros encontrados. Usando o mais parecido.` : "";
+      const input = document.querySelector(`.ci-nome-input[data-idx="${idx}"]`);
+      if (input && document.activeElement !== input) input.value = p.nome;
+      atualizarMatchColetivo(idx);
+    }
+
+    function agendarBuscaPessoaColetivo(idx, termo) {
+      if (coletivoBuscaTimers.has(idx)) clearTimeout(coletivoBuscaTimers.get(idx));
+      coletivoBuscaTimers.set(idx, setTimeout(() => buscarPessoaColetivo(idx, termo), 350));
     }
 
     function renderColetivo() {
@@ -3911,10 +4160,10 @@
         fornGrupos.get(item.fornecedor_nome).push(item);
       });
       for (const [forn, pratos] of fornGrupos) {
-        optsHtml += '<optgroup label="' + forn + '">';
+        optsHtml += '<optgroup label="' + esc(forn) + '">';
         pratos.forEach(p => {
           const frete = Number(p.fornecedor_frete || 0);
-          optsHtml += '<option value="' + p.prato_id + '" data-fornecedor="' + p.fornecedor_id + '" data-fornecedor-nome="' + p.fornecedor_nome + '" data-frete="' + frete + '" data-preco="' + p.prato_preco + '" data-nome="' + p.prato_nome + '">' + p.prato_nome + ' \u2014 R$ ' + Number(p.prato_preco).toFixed(2).replace(".", ",") + (frete > 0 ? ' + frete' : '') + '</option>';
+          optsHtml += '<option value="' + esc(p.prato_id) + '" data-fornecedor="' + esc(p.fornecedor_id) + '" data-fornecedor-nome="' + esc(p.fornecedor_nome) + '" data-frete="' + frete + '" data-preco="' + p.prato_preco + '" data-nome="' + esc(p.prato_nome) + '">' + esc(p.prato_nome) + ' \u2014 R$ ' + Number(p.prato_preco).toFixed(2).replace(".", ",") + (frete > 0 ? ' + frete' : '') + '</option>';
         });
         optsHtml += '</optgroup>';
       }
@@ -3925,16 +4174,29 @@
         return '<div class="coletivo-item" data-idx="' + i + '">' +
           '<div class="ci-head">' +
           '<span class="ci-num">' + (i + 1) + '</span>' +
-          '<input class="input ci-nome-input" type="text" placeholder="Nome da pessoa" value="' + (p.nome || '') + '" data-idx="' + i + '" style="flex:1; padding:10px 14px;" />' +
+          '<input class="input ci-nome-input" type="text" placeholder="Nome ou matrícula da pessoa" value="' + esc(p.nome || '') + '" data-idx="' + i + '" style="flex:1; padding:10px 14px;" />' +
           '<button class="ci-remove" data-idx="' + i + '">\u00d7</button>' +
           '</div>' +
+          '<div class="coletivo-match' + (p.colaboradorId || p.matchMsg ? ' show' : '') + '" data-idx="' + i + '">' +
+          (p.colaboradorId ? '<strong>' + esc(p.nome) + '</strong><span class="small muted">Matrícula ' + esc(p.matricula || "-") + ' · ' + esc(p.empresa || "Empresa nao informada") + '</span>' : esc(p.matchMsg || '')) +
+          '</div>' +
           '<select class="input ci-prato-select" data-idx="' + i + '" style="margin-bottom:8px;">' + opts + '</select>' +
-          '<input class="input" type="text" placeholder="Obs: sem cebola, etc. (opcional)" value="' + (p.obs || '') + '" data-idx="' + i + '" data-field="obs" style="padding:10px 14px; font-size:14px;" />' +
+          '<input class="input" type="text" placeholder="Obs: sem cebola, etc. (opcional)" value="' + esc(p.obs || '') + '" data-idx="' + i + '" data-field="obs" style="padding:10px 14px; font-size:14px;" />' +
           '</div>';
       }).join("");
 
       lista.querySelectorAll(".ci-nome-input").forEach(el => {
-        el.addEventListener("input", () => { coletivoState.pessoas[Number(el.dataset.idx)].nome = el.value; });
+        el.addEventListener("input", () => {
+          const idx = Number(el.dataset.idx);
+          const pessoa = coletivoState.pessoas[idx];
+          pessoa.nome = el.value;
+          pessoa.colaboradorId = "";
+          pessoa.matricula = "";
+          pessoa.empresa = "";
+          pessoa.matchMsg = el.value.trim().length >= 2 ? "Procurando cadastro..." : "";
+          atualizarMatchColetivo(idx);
+          agendarBuscaPessoaColetivo(idx, el.value);
+        });
       });
       lista.querySelectorAll(".ci-prato-select").forEach(el => {
         el.addEventListener("change", () => {
@@ -4046,9 +4308,9 @@
       if (coletivoState.pessoas.length === 0) {
         alertEl.textContent = "Adicione pelo menos uma pessoa."; alertEl.classList.add("show"); return;
       }
-      const invalidos = coletivoState.pessoas.filter(p => !p.nome.trim() || !p.pratoId);
+      const invalidos = coletivoState.pessoas.filter(p => !p.nome.trim() || !p.colaboradorId || !p.pratoId);
       if (invalidos.length > 0) {
-        alertEl.textContent = "Preencha o nome e selecione o prato de cada pessoa."; alertEl.classList.add("show"); return;
+        alertEl.textContent = "Selecione um colaborador cadastrado e um prato para cada pessoa."; alertEl.classList.add("show"); return;
       }
       await garantirConfigEmpresa();
       if (!state.configEmpresa.pix_empresa) {
@@ -4063,6 +4325,7 @@
 
       const itens = coletivoState.pessoas.map(p => ({
         nome: p.nome.trim(),
+        colaborador_id: p.colaboradorId,
         prato_id: p.pratoId,
         fornecedor_id: p.fornecedorId,
         observacoes: p.obs.trim() || null
