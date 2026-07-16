@@ -2154,6 +2154,30 @@
         <button class="btn btn-primary btn-block" id="btnSalvarConfig">Salvar configurações</button>
         <div id="cfgAlert" class="alert alert-success" style="margin-top: 12px;"></div>
       </div>
+
+      <div class="card" style="margin-top: 14px;">
+        <h2>Backup</h2>
+        <div class="row">
+          <div class="field">
+            <label>Horario do backup automatico</label>
+            <input id="cfgBackupHora" type="time" class="input" value="22:00" />
+          </div>
+          <div class="field">
+            <label>Pasta de destino</label>
+            <button class="btn btn-ghost btn-block" id="btnPastaBackup">Criar/selecionar C:\backup_marmita</button>
+          </div>
+        </div>
+        <button class="btn btn-olive btn-block" id="btnBackupManual">Fazer backup manual agora</button>
+        <div id="backupStatus" class="small muted" style="margin-top: 10px;">
+          Selecione a pasta uma vez para o navegador poder gravar os backups direto nela.
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 14px; border-color: rgba(220, 53, 69, .35);">
+        <h2>Limpeza do banco</h2>
+        <p class="small muted" style="margin-top: -4px;">Apaga pedidos, clientes, cardapio, fornecedores, pagamentos e registros operacionais. Admins e configuracoes ficam preservados.</p>
+        <button class="btn btn-danger btn-block" id="btnLimparBanco">Apagar dados do banco</button>
+      </div>
     </section>
   </main>
 
@@ -2795,6 +2819,7 @@
       if (adminNotifPermissao === "granted") registrarServiceWorkerAdmin();
       navegar("pedidos");
       iniciarMonitorPedidosAdmin();
+      iniciarBackupAutomatico();
     }
 
     $("btnEntrar").addEventListener("click", entrar);
@@ -2822,6 +2847,7 @@
     $("btnSair").addEventListener("click", async () => {
       await sb.auth.signOut(); adminAtual = null;
       pararMonitorPedidosAdmin();
+      clearInterval(backupTimer);
       mostrarLogin();
     });
 
@@ -3198,7 +3224,9 @@
         alert("Erro ao validar pedido: " + (e.message || e));
         return;
       }
-      const { error } = await sb.from("pedidos").update({ status }).eq("id", id.trim());
+      const payload = { status };
+      if (status === "concluido") payload.concluido_em = new Date().toISOString();
+      const { error } = await sb.from("pedidos").update(payload).eq("id", id.trim());
       if (error) {
         alert("Erro ao atualizar pedido: " + error.message);
         return;
@@ -3361,23 +3389,24 @@ Bom apetite! 😋`;
       const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos } = await sb.from("pedidos")
         .select(`
-          preco_total, observacoes,
+          preco_total, observacoes, status,
           prato:pratos ( nome ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
           colaborador:colaboradores ( nome ),
           acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
         `)
         .eq("data", data)
-        .neq("status", "cancelado")
         .order("criado_em");
 
-      if (!pedidos || pedidos.length === 0) {
+      const pedidosOperacionais = (pedidos || []).filter(p => !["cancelado", "concluido"].includes(p.status));
+
+      if (pedidosOperacionais.length === 0) {
         alert("Nenhum pedido para gerar mensagem.");
         return;
       }
 
       const grupos = new Map();
-      pedidos.forEach(p => {
+      pedidosOperacionais.forEach(p => {
         const fid = p.fornecedor?.id;
         if (!grupos.has(fid)) grupos.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
         grupos.get(fid).pedidos.push(p);
@@ -4434,16 +4463,29 @@ Bom apetite! 😋`;
 
       const inicioMes = new Date(); inicioMes.setDate(1);
       const inicioMesStr = dataLocalISO(inicioMes);
+      const hojeStr = hojeISO();
+      const inicioSemana = new Date();
+      inicioSemana.setDate(inicioSemana.getDate() - ((inicioSemana.getDay() + 6) % 7));
+      const inicioSemanaStr = dataLocalISO(inicioSemana);
       const { data: pedidosMes } = await sb.from("pedidos")
         .select("preco_total, status_pagamento, forma_pagamento")
         .gte("data", inicioMesStr)
         .neq("status", "cancelado");
+      const { data: concluidosMes } = await sb.from("pedidos")
+        .select("preco_total, concluido_em, data, status")
+        .eq("status", "concluido")
+        .gte("concluido_em", inicioMesStr);
 
       const totalMes = (pedidosMes || []).reduce((s, p) => s + Number(p.preco_total), 0);
       const totalPago = (pedidosMes || []).filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
       const totalPendente = totalMes - totalPago;
       const totalFiado = (pedidosMes || []).filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente").reduce((s, p) => s + Number(p.preco_total), 0);
       const totalPixPago = (pedidosMes || []).filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
+      const concluidos = (concluidosMes || []).filter(p => p.concluido_em);
+      const dataConclusao = (p) => dataLocalISO(new Date(p.concluido_em));
+      const concluidoHoje = concluidos.filter(p => dataConclusao(p) === hojeStr).reduce((s, p) => s + Number(p.preco_total), 0);
+      const concluidoSemana = concluidos.filter(p => dataConclusao(p) >= inicioSemanaStr).reduce((s, p) => s + Number(p.preco_total), 0);
+      const concluidoMes = concluidos.reduce((s, p) => s + Number(p.preco_total), 0);
 
       $("finStats").innerHTML = `
         <div class="stat"><div class="stat-label">Faturado mês</div><div class="stat-value brick">${fmtBRL(totalMes)}</div></div>
@@ -4451,6 +4493,9 @@ Bom apetite! 😋`;
         <div class="stat"><div class="stat-label">Pendente</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
         <div class="stat"><div class="stat-label">Fiado aberto</div><div class="stat-value" style="color:var(--blue-ios);">${fmtBRL(totalFiado)}</div></div>
         <div class="stat"><div class="stat-label">PIX confirmado</div><div class="stat-value olive">${fmtBRL(totalPixPago)}</div></div>
+        <div class="stat"><div class="stat-label">Concluido hoje</div><div class="stat-value brick">${fmtBRL(concluidoHoje)}</div></div>
+        <div class="stat"><div class="stat-label">Concluido semana</div><div class="stat-value brick">${fmtBRL(concluidoSemana)}</div></div>
+        <div class="stat"><div class="stat-label">Concluido mes</div><div class="stat-value brick">${fmtBRL(concluidoMes)}</div></div>
       `;
 
       // ---- FIADO: por colaborador com detalhes de cada pedido ----
@@ -4585,6 +4630,8 @@ Bom apetite! 😋`;
       $("cfgNomeEmpresa").value = map.nome_empresa || "";
       $("cfgPixEmpresa").value = map.pix_empresa || "";
       $("cfgWhatsappAdmin").value = map.whatsapp_admin || "";
+      backupHoraConfig = map.backup_hora || "22:00";
+      $("cfgBackupHora").value = backupHoraConfig;
       $("cfgFechPeriodo").value = map.fechamento_fiado_periodo || "semanal";
       $("cfgFechDiaSemana").value = map.fechamento_fiado_dia_semana || "5";
       $("cfgFechDiaMes").value = map.fechamento_fiado_dia_mes || "30";
@@ -4611,6 +4658,7 @@ Bom apetite! 😋`;
         { chave: "nome_empresa", valor: $("cfgNomeEmpresa").value.trim() },
         { chave: "pix_empresa", valor: $("cfgPixEmpresa").value.trim() },
         { chave: "whatsapp_admin", valor: $("cfgWhatsappAdmin").value.trim().replace(/\D/g, "") },
+        { chave: "backup_hora", valor: $("cfgBackupHora").value || "22:00" },
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
         { chave: "fechamento_fiado_dia_semana", valor: String($("cfgFechDiaSemana").value) },
         { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) }
@@ -4618,9 +4666,236 @@ Bom apetite! 😋`;
       for (const u of updates) {
         await sb.from("configuracoes").upsert(u, { onConflict: "chave" });
       }
+      backupHoraConfig = $("cfgBackupHora").value || "22:00";
       $("cfgAlert").textContent = "Configura\u00E7\u00F5es salvas com sucesso!";
       $("cfgAlert").classList.add("show");
       setTimeout(() => $("cfgAlert").classList.remove("show"), 3000);
+      verificarBackupAutomatico();
+    });
+
+    // =====================================================================
+    // BACKUP E LIMPEZA DO BANCO
+    // =====================================================================
+    const BACKUP_DB_NAME = "marmita_backup_db";
+    const BACKUP_STORE = "handles";
+    let backupTimer = null;
+    let backupDirHandle = null;
+    let backupHoraConfig = "22:00";
+
+    function setBackupStatus(msg) {
+      const el = $("backupStatus");
+      if (el) el.textContent = msg;
+    }
+
+    function abrirDbBackup() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(BACKUP_DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(BACKUP_STORE);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function salvarHandleBackup(handle) {
+      const db = await abrirDbBackup();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(BACKUP_STORE, "readwrite");
+        tx.objectStore(BACKUP_STORE).put(handle, "diretorio");
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      db.close();
+    }
+
+    async function carregarHandleBackup() {
+      try {
+        const db = await abrirDbBackup();
+        const handle = await new Promise((resolve, reject) => {
+          const tx = db.transaction(BACKUP_STORE, "readonly");
+          const req = tx.objectStore(BACKUP_STORE).get("diretorio");
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => reject(req.error);
+        });
+        db.close();
+        return handle;
+      } catch {
+        return null;
+      }
+    }
+
+    async function verificarPermissaoBackup(handle) {
+      if (!handle || !handle.queryPermission || !handle.requestPermission) return false;
+      const opts = { mode: "readwrite" };
+      if (await handle.queryPermission(opts) === "granted") return true;
+      return await handle.requestPermission(opts) === "granted";
+    }
+
+    async function montarDadosBackup() {
+      const tabelas = [
+        "configuracoes",
+        "fornecedores",
+        "pratos",
+        "acompanhamentos",
+        "cardapio_dia",
+        "colaboradores",
+        "pedidos",
+        "pedido_acompanhamentos",
+        "pagamentos",
+        "pedidos_coletivos",
+        "pedidos_coletivos_itens",
+        "push_subscriptions"
+      ];
+      const dump = {
+        gerado_em: new Date().toISOString(),
+        admin: adminAtual ? { id: adminAtual.id, nome: adminAtual.nome, email: adminAtual.email } : null,
+        tabelas: {}
+      };
+      for (const tabela of tabelas) {
+        const { data, error } = await sb.from(tabela).select("*");
+        if (error) throw new Error(`Erro ao ler ${tabela}: ${error.message}`);
+        dump.tabelas[tabela] = data || [];
+      }
+      return dump;
+    }
+
+    function nomeArquivoBackup() {
+      const agora = new Date();
+      const data = dataLocalISO(agora);
+      const hora = agora.toTimeString().slice(0, 8).replace(/:/g, "-");
+      return `backup-marmita-${data}-${hora}.json`;
+    }
+
+    async function baixarBackup(dados, arquivo) {
+      const json = JSON.stringify(dados, null, 2);
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = arquivo;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function gravarBackupEmPasta(dados, arquivo) {
+      if (!backupDirHandle) backupDirHandle = await carregarHandleBackup();
+      if (!backupDirHandle) return false;
+      const permitido = await verificarPermissaoBackup(backupDirHandle);
+      if (!permitido) return false;
+      const fileHandle = await backupDirHandle.getFileHandle(arquivo, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(JSON.stringify(dados, null, 2));
+      await writable.close();
+      return true;
+    }
+
+    async function executarBackup(auto = false) {
+      if (auto && !backupDirHandle) backupDirHandle = await carregarHandleBackup();
+      if (auto && !backupDirHandle) {
+        const avisoKey = `marmita.backup.aviso.${hojeISO()}`;
+        if (!localStorage.getItem(avisoKey)) {
+          mostrarToastAdmin("💾", "Backup pendente", "Selecione a pasta C:\\backup_marmita nas configuracoes para ativar o backup automatico.");
+          localStorage.setItem(avisoKey, "1");
+        }
+        return false;
+      }
+
+      setBackupStatus(auto ? "Fazendo backup automatico..." : "Fazendo backup manual...");
+      const dados = await montarDadosBackup();
+      const arquivo = nomeArquivoBackup();
+      const gravouNaPasta = await gravarBackupEmPasta(dados, arquivo);
+      if (!gravouNaPasta) {
+        if (auto) {
+          setBackupStatus("Backup automatico aguardando permissao da pasta.");
+          return false;
+        }
+        await baixarBackup(dados, arquivo);
+        setBackupStatus("O navegador nao liberou a pasta; o backup foi baixado como arquivo.");
+        return true;
+      }
+      setBackupStatus(`Backup salvo em ${backupDirHandle.name}\\${arquivo}`);
+      if (!auto) mostrarToastAdmin("💾", "Backup criado", "Arquivo salvo na pasta selecionada.");
+      return true;
+    }
+
+    async function verificarBackupAutomatico() {
+      if (!adminAtual) return;
+      const hora = backupHoraConfig || $("cfgBackupHora")?.value || "22:00";
+      const hoje = hojeISO();
+      const agoraHora = new Date().toTimeString().slice(0, 5);
+      const ultimaData = localStorage.getItem("marmita.backup.ultimoDia");
+      if (agoraHora < hora || ultimaData === hoje) return;
+      try {
+        const ok = await executarBackup(true);
+        if (ok) localStorage.setItem("marmita.backup.ultimoDia", hoje);
+      } catch (e) {
+        setBackupStatus(e.message || "Erro ao fazer backup automatico.");
+      }
+    }
+
+    async function iniciarBackupAutomatico() {
+      try {
+        const { data } = await sb.from("configuracoes").select("valor").eq("chave", "backup_hora").maybeSingle();
+        backupHoraConfig = data?.valor || backupHoraConfig || "22:00";
+        if ($("cfgBackupHora")) $("cfgBackupHora").value = backupHoraConfig;
+      } catch {
+        backupHoraConfig = backupHoraConfig || "22:00";
+      }
+      if (!backupDirHandle) backupDirHandle = await carregarHandleBackup();
+      clearInterval(backupTimer);
+      backupTimer = setInterval(verificarBackupAutomatico, 60000);
+      verificarBackupAutomatico();
+    }
+
+    $("btnPastaBackup").addEventListener("click", async () => {
+      if (!window.showDirectoryPicker) {
+        alert("Este navegador nao permite escolher uma pasta local. O backup manual sera baixado como arquivo.");
+        return;
+      }
+      try {
+        const dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        if (dir.name !== "backup_marmita" && !confirm("A pasta selecionada nao se chama backup_marmita. Deseja usar mesmo assim?")) return;
+        const permitido = await verificarPermissaoBackup(dir);
+        if (!permitido) {
+          alert("Permissao negada para gravar na pasta.");
+          return;
+        }
+        backupDirHandle = dir;
+        await salvarHandleBackup(dir);
+        setBackupStatus(`Pasta de backup selecionada: ${dir.name}.`);
+        mostrarToastAdmin("💾", "Pasta pronta", "Backups automaticos e manuais serao salvos nessa pasta.");
+        verificarBackupAutomatico();
+      } catch (e) {
+        if (e?.name !== "AbortError") alert(e.message || "Nao foi possivel selecionar a pasta.");
+      }
+    });
+
+    $("btnBackupManual").addEventListener("click", async () => {
+      try {
+        await executarBackup(false);
+      } catch (e) {
+        alert(e.message || "Erro ao fazer backup.");
+        setBackupStatus(e.message || "Erro ao fazer backup.");
+      }
+    });
+
+    $("btnLimparBanco").addEventListener("click", async () => {
+      const aviso = "Isto vai apagar pedidos, clientes, cardapio, fornecedores, pagamentos e historicos operacionais. Admins e configuracoes serao preservados.";
+      if (!confirm(aviso)) return;
+      const texto = prompt('Digite APAGAR para confirmar a limpeza do banco.');
+      if (texto !== "APAGAR") return;
+
+      try {
+        const { data, error } = await sb.rpc("admin_limpar_dados");
+        if (error) throw error;
+        alert(data || "Dados apagados com sucesso.");
+        carregarConfig();
+        const secAtiva = document.querySelector(".drawer-item.active")?.dataset?.section;
+        if (secAtiva) navegar(secAtiva);
+      } catch (e) {
+        alert(e.message || "Erro ao apagar dados do banco. Confira se a migracao admin_limpar_dados foi aplicada.");
+      }
     });
 
     // =====================================================================
