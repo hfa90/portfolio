@@ -1,7 +1,7 @@
 // marmita-sw.js — Service Worker para Web Push
 // Coloque na RAIZ do servidor (mesma pasta do marmita.html)
 
-const CACHE_NAME = "marmita-v3";
+const CACHE_NAME = "marmita-v5";
 const ASSETS_TO_CACHE = ["/marmita.html", "/admin.html", "/icon-192.png"];
 
 self.addEventListener("install", event => {
@@ -80,8 +80,10 @@ self.addEventListener("notificationclick", event => {
   const url = event.notification.data?.url || "/marmita.html";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+      const target = new URL(url, self.location.origin);
       for (const client of list) {
-        if (client.url.includes("marmita") && "focus" in client) {
+        const clientUrl = new URL(client.url);
+        if (clientUrl.pathname === target.pathname && "focus" in client) {
           client.postMessage({ type: "NOTIF_CLICK", url });
           return client.focus();
         }

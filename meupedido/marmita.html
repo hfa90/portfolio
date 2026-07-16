@@ -2637,6 +2637,8 @@
       }
       $("btnConfirmar").disabled = true; $("btnConfirmar").textContent = "Enviando…";
 
+      let pedidoCriado = false;
+      try {
       const total = calcTotal();
       const acompArr = [...state.selAcomp];
 
@@ -2650,13 +2652,12 @@
 
       if (errPedido) {
         console.error("Erro criar_pedido:", errPedido);
-        alertEl.textContent = "Erro ao registrar pedido: " + errPedido.message;
-        alertEl.classList.add("show");
-        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
-        return;
+        throw new Error(errPedido.message || "Erro ao registrar pedido.");
       }
+      if (!pedidoId) throw new Error("O servidor nao retornou o numero do pedido.");
 
       window.pedidoAtualId = pedidoId;
+      pedidoCriado = true;
 
       const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
       const isFiado = state.selPagamento === "fiado";
@@ -2684,17 +2685,23 @@
 
         $("sucessoPixValor").textContent = fmtBRL(total);
         $("sucessoPixCopiaCola").textContent = payload;
+        $("btnCopiarPixSucesso").classList.remove("hidden");
 
         const canvas = $("sucessoPixCanvas");
-        canvas.innerHTML = "";
-        new QRCode(canvas, {
-          text: payload,
-          width: 200,
-          height: 200,
-          colorDark: "#1c1c1e",
-          colorLight: "#ffffff",
-          correctLevel: QRCode.CorrectLevel.M
-        });
+        try {
+          canvas.innerHTML = "";
+          if (typeof QRCode === "undefined") throw new Error("QRCode indisponivel");
+          new QRCode(canvas, {
+            text: payload,
+            width: 200,
+            height: 200,
+            colorDark: "#1c1c1e",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } catch (qrError) {
+          console.warn("QR PIX nao renderizado:", qrError);
+        }
       } else {
         $("sucessoIcon").textContent = "🎉";
         $("sucessoTitulo").textContent = "Pedido confirmado!";
@@ -2739,7 +2746,41 @@
       `;
 
       showScreen("screen-sucesso");
-      $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+      } catch (e) {
+        console.error("Falha ao finalizar confirmacao:", e);
+        if (pedidoCriado) {
+          const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
+          $("sucessoIcon").textContent = isPix ? "📎" : "🎉";
+          $("sucessoTitulo").textContent = isPix ? "Pedido registrado" : "Pedido confirmado!";
+          $("sucessoSubtitulo").textContent = isPix
+            ? "Seu pedido foi registrado. Se a área do PIX não aparecer, acesse Meus pedidos para anexar o comprovante."
+            : "Seu pedido foi registrado com sucesso.";
+          $("sucessoPixArea").classList.toggle("hidden", !isPix);
+          if (isPix) {
+            $("sucessoPixValor").textContent = fmtBRL(calcTotal());
+            $("sucessoPixCopiaCola").textContent = "";
+            $("btnCopiarPixSucesso").classList.add("hidden");
+            $("pixComprovanteBtn").className = "btn btn-primary btn-block btn-pill";
+            $("pixComprovanteBtn").innerHTML = "📎 Anexar Comprovante";
+            $("pixComprovanteInput").disabled = false;
+            $("pixComprovanteInput").value = "";
+            $("pixComprovantePreview").classList.add("hidden");
+            pixComprovanteFile = null;
+          }
+          $("sucessoResumo").innerHTML = `
+            <div><strong>${state.selPrato?.fornecedor?.nome || "Fornecedor"}</strong></div>
+            <div>${state.selPrato?.nome || "Pedido registrado"}</div>
+            <div class="small muted" style="margin-top:6px;">Protocolo: ${window.pedidoAtualId || "pedido criado"}</div>
+          `;
+          mostrarToast("✅", "Pedido registrado", "O pedido foi salvo. Confira em Meus pedidos.");
+          showScreen("screen-sucesso");
+        } else {
+          alertEl.textContent = "Erro ao registrar pedido: " + (e?.message || "tente novamente.");
+          alertEl.classList.add("show");
+        }
+      } finally {
+        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+      }
     });
 
     $("btnCopiarPixSucesso").addEventListener("click", async () => {

@@ -214,6 +214,11 @@
       background: rgba(0, 0, 0, .06);
     }
 
+    .icon-btn.notif-on {
+      color: var(--brick);
+      background: rgba(185, 74, 42, .10);
+    }
+
     .hamburger {
       width: 22px;
       height: 16px;
@@ -1716,6 +1721,13 @@
       </span>
     </button>
     <div class="app-bar-title" id="appBarTitle">Pedidos</div>
+    <button class="icon-btn" id="btnAdminNotif" aria-label="Ativar notificações" title="Ativar notificações">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+        stroke-linecap="round" stroke-linejoin="round">
+        <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5" />
+        <path d="M9 17a3 3 0 0 0 6 0" />
+      </svg>
+    </button>
     <button class="icon-btn" id="btnRefresh" aria-label="Atualizar">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
         stroke-linecap="round" stroke-linejoin="round">
@@ -2344,6 +2356,86 @@
       } catch { }
     }
 
+    const ADMIN_NOTIF_URL = "/admin.html#pedidos";
+    let adminNotifPermissao = typeof Notification !== "undefined" ? Notification.permission : "denied";
+
+    function atualizarBotaoNotificacoesAdmin() {
+      const btn = $("btnAdminNotif");
+      if (!btn) return;
+      if (typeof Notification === "undefined") {
+        btn.classList.add("hidden");
+        return;
+      }
+      btn.classList.remove("hidden");
+      btn.classList.toggle("notif-on", adminNotifPermissao === "granted");
+      const texto = adminNotifPermissao === "granted" ? "Notificações ativadas" : "Ativar notificações";
+      btn.setAttribute("aria-label", texto);
+      btn.title = texto;
+    }
+
+    async function registrarServiceWorkerAdmin() {
+      if (!("serviceWorker" in navigator)) return null;
+      try {
+        const reg = await navigator.serviceWorker.register("/marmita-sw.js");
+        return await navigator.serviceWorker.ready || reg;
+      } catch (e) {
+        console.warn("Service Worker admin nao registrado:", e);
+        return null;
+      }
+    }
+
+    async function solicitarPermissaoAdminNotificacoes() {
+      if (typeof Notification === "undefined") {
+        mostrarToastAdmin("⚠️", "Não suportado", "Este navegador não suporta notificações.");
+        return;
+      }
+
+      try {
+        adminNotifPermissao = await Notification.requestPermission();
+        atualizarBotaoNotificacoesAdmin();
+        if (adminNotifPermissao === "granted") {
+          await registrarServiceWorkerAdmin();
+          mostrarToastAdmin("🔔", "Notificações ativadas", "Você receberá aviso do navegador quando o painel estiver em segundo plano.");
+        } else {
+          mostrarToastAdmin("⚠️", "Notificações bloqueadas", "Ative nas permissões do navegador para receber avisos em segundo plano.");
+        }
+      } catch (e) {
+        console.warn("Permissao de notificacao admin falhou:", e);
+        mostrarToastAdmin("⚠️", "Notificação não ativada", "Não foi possível pedir permissão neste navegador.");
+      }
+    }
+
+    async function notificarAdminNativo(titulo, corpo) {
+      if (adminNotifPermissao !== "granted") return;
+      if (document.visibilityState === "visible" && !document.hidden) return;
+
+      const options = {
+        body: corpo,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: "marmita-admin-pedido",
+        renotify: true,
+        data: { url: ADMIN_NOTIF_URL }
+      };
+
+      try {
+        const reg = await registrarServiceWorkerAdmin();
+        if (reg?.showNotification) {
+          await reg.showNotification(titulo, options);
+          return;
+        }
+        new Notification(titulo, options);
+      } catch (e) {
+        console.warn("Notificacao nativa admin falhou:", e);
+      }
+    }
+
+    $("btnAdminNotif").addEventListener("click", solicitarPermissaoAdminNotificacoes);
+    document.addEventListener("visibilitychange", () => {
+      adminNotifPermissao = typeof Notification !== "undefined" ? Notification.permission : "denied";
+      atualizarBotaoNotificacoesAdmin();
+    });
+
     let adminToastTimer = null;
     function mostrarToastAdmin(icon, titulo, msg, duracao = 6500) {
       const toast = $("adminToast");
@@ -2369,6 +2461,12 @@
     }
 
     const eventosAdminVistos = new Set();
+    function detalhesAvisoAdmin(pedido = {}) {
+      const cliente = pedido.colaborador?.nome || pedido.colaborador_nome || "Cliente";
+      const prato = pedido.prato?.nome || pedido.prato_nome || "pedido";
+      return { cliente, prato };
+    }
+
     function avisarAdminPedido(tipo, pedido = {}) {
       const id = pedido.id || "sem-id";
       const chave = `${tipo}:${id}:${pedido.comprovante_status || ""}:${pedido.comprovante_url || ""}`;
@@ -2376,14 +2474,21 @@
       eventosAdminVistos.add(chave);
       if (eventosAdminVistos.size > 80) eventosAdminVistos.delete(eventosAdminVistos.values().next().value);
 
+      const { cliente, prato } = detalhesAvisoAdmin(pedido);
       if (tipo === "comprovante") {
         tocarSomAdmin("comprovante");
-        mostrarToastAdmin("🧾", "Comprovante recebido", "Um cliente anexou comprovante. Valide o pagamento no caixa.");
+        const titulo = "Comprovante recebido";
+        const corpo = `${cliente} anexou comprovante do pedido ${prato}.`;
+        mostrarToastAdmin("🧾", titulo, corpo);
+        notificarAdminNativo(titulo, corpo);
         return;
       }
 
       tocarSomAdmin("pedido");
-      mostrarToastAdmin("🍱", "Novo pedido recebido", "Confira as informações, valide o pagamento e envie para a cozinha.");
+      const titulo = `Novo pedido de ${cliente}`;
+      const corpo = `${prato}. Confira as informações, valide o pagamento e envie para a cozinha.`;
+      mostrarToastAdmin("🍱", titulo, corpo);
+      notificarAdminNativo(titulo, corpo);
     }
 
     let adminPedidosChannel = null;
@@ -2403,6 +2508,23 @@
         .order("criado_em", { ascending: true });
       if (error) return [];
       return data || [];
+    }
+
+    async function consultarPedidoMonitorAdminPorId(id) {
+      if (!id) return null;
+      const { data, error } = await sb.from("pedidos")
+        .select(`
+          id, criado_em, data, status, status_pagamento, comprovante_status, comprovante_url,
+          prato:pratos(nome),
+          colaborador:colaboradores(nome)
+        `)
+        .eq("id", id)
+        .maybeSingle();
+      if (error) {
+        console.warn("Erro ao buscar pedido para notificacao:", error);
+        return null;
+      }
+      return data;
     }
 
     async function checarPedidosAdmin(inicial = false) {
@@ -2441,7 +2563,8 @@
 
       adminPedidosChannel = sb.channel("admin-pedidos-tempo-real")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, async payload => {
-          avisarAdminPedido("novo", payload.new || {});
+          const pedido = await consultarPedidoMonitorAdminPorId(payload.new?.id) || payload.new || {};
+          avisarAdminPedido("novo", pedido);
           await checarPedidosAdmin(true);
           await atualizarTelasOperacionaisSilencioso();
         })
@@ -2451,7 +2574,10 @@
           const comprovanteChegou = novo.comprovante_status === "enviado"
             && novo.comprovante_url
             && (antigo.comprovante_status !== "enviado" || antigo.comprovante_url !== novo.comprovante_url);
-          if (comprovanteChegou) avisarAdminPedido("comprovante", novo);
+          if (comprovanteChegou) {
+            const pedido = await consultarPedidoMonitorAdminPorId(novo.id) || novo;
+            avisarAdminPedido("comprovante", pedido);
+          }
           await checarPedidosAdmin(true);
           await atualizarTelasOperacionaisSilencioso();
         })
@@ -2529,6 +2655,8 @@
       $("drawer").classList.remove("hidden");
       $("drawerBackdrop").classList.remove("hidden");
       $("nomeAdmin").textContent = adminAtual.nome;
+      atualizarBotaoNotificacoesAdmin();
+      if (adminNotifPermissao === "granted") registrarServiceWorkerAdmin();
       navegar("pedidos");
       iniciarMonitorPedidosAdmin();
     }
