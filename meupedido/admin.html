@@ -2902,10 +2902,10 @@
           </div>
           <div class="actions">
             ${hasComprovante
-              ? `<button class="btn btn-primary btn-sm btn-pill" onclick="abrirModalComprovante('${p.comprovante_url}', '${p.id}', '${p.colaborador?.nome}')">Ver Comprovante</button>`
+              ? `<button class="btn btn-primary btn-sm btn-pill" onclick="abrirModalComprovante('${p.comprovante_url}', '${p.id}', '${p.colaborador?.nome}')">Ver Comprovante</button>
+                 <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard(this, '${p.id}')">Aprovar</button>`
               : `<span class="badge pendente" style="padding:6px 10px;">Aguardando cliente enviar</span>`
             }
-            <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard(this, '${p.id}')">Aprovar</button>
           </div>
         </div>`;
         });
@@ -2989,7 +2989,15 @@
 
         pedsForn.forEach(p => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
-          const statusLabel = { aberto: "Recebido", fechado: "Fechado", enviado: "Enviado", entregue: "Entregue", cancelado: "Cancelado" }[p.status] || p.status;
+          const statusLabel = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", cancelado: "Cancelado" }[p.status] || p.status;
+          const pixBloqueado = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento !== "pago";
+          const acoesLogistica = pixBloqueado
+            ? `<div class="small" style="margin:0; width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,122,255,.08); color:var(--blue-ios); font-weight:700;">Aguardando aprovação do PIX para avançar o preparo.</div>
+               <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>`
+            : `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'fechado')">Sendo feito</button>
+               <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'enviado')">A caminho</button>
+               <button class="btn btn-olive btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'entregue')">Chegou</button>
+               <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>`;
           logisticaHtml += `
         <div class="pedido-card">
           <div class="pc-topo">
@@ -3004,9 +3012,7 @@
              <strong style="font-size: 1.1rem; color: var(--ink);">${fmtBRL(p.preco_total)}</strong>
           </div>
           <div style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'enviado')">Enviado</button>
-            <button class="btn btn-olive btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'entregue')">Entregue</button>
-            <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>
+            ${acoesLogistica}
           </div>
         </div>`;
         });
@@ -3016,10 +3022,44 @@
       $("pedidosLista").innerHTML = logisticaHtml;
     }
 
+    function pedidoEhPix(pedido) {
+      return !!pedido && ["pix_empresa", "pix_fornecedor"].includes(pedido.forma_pagamento);
+    }
+
+    async function buscarPedidoParaAcao(id) {
+      const { data, error } = await sb.from("pedidos")
+        .select("id, forma_pagamento, status_pagamento, comprovante_url, comprovante_status")
+        .eq("id", id.trim())
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    }
+
+    async function validarPixComprovanteParaAprovar(id) {
+      const pedido = await buscarPedidoParaAcao(id);
+      if (!pedido) throw new Error("Pedido nao encontrado.");
+      if (pedidoEhPix(pedido) && (!pedido.comprovante_url || pedido.comprovante_status !== "enviado")) {
+        throw new Error("Este PIX so pode ser aprovado depois que o cliente enviar o comprovante.");
+      }
+      return pedido;
+    }
+
     window.atualizarStatusPedido = async (id, status) => {
-      const labels = { enviado: "enviado", entregue: "entregue", cancelado: "cancelado" };
       if (status === "cancelado" && !confirm("Cancelar este pedido?")) return;
-      const { error } = await sb.from("pedidos").update({ status }).eq("id", id);
+      try {
+        if (status !== "cancelado") {
+          const pedido = await buscarPedidoParaAcao(id);
+          if (!pedido) throw new Error("Pedido nao encontrado.");
+          if (pedidoEhPix(pedido) && pedido.status_pagamento !== "pago") {
+            alert("Aprove o comprovante do PIX antes de avançar o status do pedido.");
+            return;
+          }
+        }
+      } catch (e) {
+        alert("Erro ao validar pedido: " + (e.message || e));
+        return;
+      }
+      const { error } = await sb.from("pedidos").update({ status }).eq("id", id.trim());
       if (error) {
         alert("Erro ao atualizar pedido: " + error.message);
         return;
@@ -3032,17 +3072,25 @@
       btnRef.disabled = true;
       btnRef.innerHTML = "⏳ Processando...";
 
-      // Removido o pago_em que estava causando o Erro 400
-      await sb.from("pedidos").update({
-        status_pagamento: "pago",
-        pago_em: new Date().toISOString(),
-        comprovante_status: "aprovado",
-        comprovante_motivo: null,
-        comprovante_revisado_em: new Date().toISOString()
-      }).eq("id", id.trim());
+      try {
+        await validarPixComprovanteParaAprovar(id);
 
-      await carregarPedidos();
-      fecharModal();
+        const { error } = await sb.from("pedidos").update({
+          status_pagamento: "pago",
+          pago_em: new Date().toISOString(),
+          comprovante_status: "aprovado",
+          comprovante_motivo: null,
+          comprovante_revisado_em: new Date().toISOString()
+        }).eq("id", id.trim());
+
+        if (error) throw error;
+        await carregarPedidos();
+        fecharModal();
+      } catch (e) {
+        alert(e.message || "Erro ao aprovar pagamento.");
+        btnRef.disabled = false;
+        btnRef.innerHTML = originalText;
+      }
     };
 
     window.rejeitarComprovante = async (btnRef, id) => {
@@ -3150,19 +3198,24 @@ Bom apetite! 😋`;
     };
 
     window.marcarPago = async (id) => {
+      try {
+        await validarPixComprovanteParaAprovar(id);
 
-      // Removido o pago_em
-      await sb.from("pedidos").update({
-        status_pagamento: "pago",
-        pago_em: new Date().toISOString(),
-        comprovante_status: "aprovado",
-        comprovante_motivo: null,
-        comprovante_revisado_em: new Date().toISOString()
-      }).eq("id", id.trim());
+        const { error } = await sb.from("pedidos").update({
+          status_pagamento: "pago",
+          pago_em: new Date().toISOString(),
+          comprovante_status: "aprovado",
+          comprovante_motivo: null,
+          comprovante_revisado_em: new Date().toISOString()
+        }).eq("id", id.trim());
 
-      const secAtiva = document.querySelector(".drawer-item.active")?.dataset?.section;
-      if (secAtiva === "financeiro") carregarFinanceiro();
-      else carregarPedidos();
+        if (error) throw error;
+        const secAtiva = document.querySelector(".drawer-item.active")?.dataset?.section;
+        if (secAtiva === "financeiro") carregarFinanceiro();
+        else carregarPedidos();
+      } catch (e) {
+        alert(e.message || "Erro ao confirmar pagamento.");
+      }
     };
 
     $("btnGerarWA").addEventListener("click", async () => {
@@ -4279,7 +4332,9 @@ Bom apetite! 😋`;
           ? `<a href="${p.comprovante_url}" target="_blank" style="color:var(--olive); font-weight:600; font-size:13px;">🧾 Ver comprovante</a>`
           : `<span class="small" style="color:var(--crimson);">⚠️ Sem comprovante</span>`}
             </div>
-            <button class="btn btn-olive btn-sm" onclick="marcarPago('${p.id}')">✓ Confirmar</button>
+            ${p.comprovante_url
+          ? `<button class="btn btn-olive btn-sm" onclick="marcarPago('${p.id}')">✓ Confirmar</button>`
+          : `<span class="badge pendente" style="padding:6px 10px;">Aguardando comprovante</span>`}
           </div>
         </div>`).join("") || '<div class="card empty">Nenhum PIX pendente de confirmação.</div>';
 

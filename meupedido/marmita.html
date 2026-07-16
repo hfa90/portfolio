@@ -972,6 +972,77 @@
       color: var(--crimson);
     }
 
+    .status-live-card {
+      margin-top: 18px;
+      text-align: left;
+    }
+
+    .status-live-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .status-live-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--green-ios);
+      box-shadow: 0 0 0 6px rgba(52, 199, 89, .14);
+      flex-shrink: 0;
+    }
+
+    .status-steps {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .status-step {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, .025);
+      border: 1px solid rgba(0, 0, 0, .04);
+      opacity: .62;
+    }
+
+    .status-step.done,
+    .status-step.active {
+      opacity: 1;
+    }
+
+    .status-step.active {
+      background: rgba(185, 74, 42, .08);
+      border-color: rgba(185, 74, 42, .24);
+    }
+
+    .status-step-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, .7);
+      font-weight: 800;
+    }
+
+    .status-step-title {
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .status-step-desc {
+      font-size: 12px;
+      color: var(--ink-tertiary);
+      margin-top: 2px;
+    }
+
     .pedido-alerta {
       margin-top: 10px;
       padding: 9px 10px;
@@ -1701,6 +1772,29 @@
     </section>
   </main>
 
+  <main class="container hidden" id="screen-acompanhamento">
+    <header class="app-header rise">
+      <button class="btn btn-ghost btn-sm" id="btnAcompanharHome">← Cardápio</button>
+      <button class="btn btn-ghost btn-sm" id="btnAcompanharPedidos">Meus pedidos</button>
+    </header>
+
+    <section class="card card-lg rise rise-1">
+      <div class="status-live-head">
+        <div>
+          <p class="eyebrow">Acompanhamento em tempo real</p>
+          <h1 id="acompanharTitulo" style="font-size:28px;">Pedido recebido</h1>
+        </div>
+        <span class="status-live-dot" aria-hidden="true"></span>
+      </div>
+      <p class="muted" id="acompanharSubtitulo">Atualizando automaticamente.</p>
+
+      <div id="acompanharBanner" class="status-banner aberto"></div>
+      <div id="acompanharResumo" class="status-live-card"></div>
+      <div id="acompanharSteps" class="status-steps"></div>
+      <p class="small muted" id="acompanharAtualizado" style="margin-top:14px; text-align:center;"></p>
+    </section>
+  </main>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 
   <div class="pix-sheet-bg" id="pixSheetBg">
@@ -1763,7 +1857,7 @@
       return d.toISOString().slice(0, 10);
     };
     const hojeISO = () => dataLocalISO();
-    const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-sucesso", "screen-coletivo", "screen-sucesso-coletivo"];
+    const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-sucesso", "screen-acompanhamento", "screen-coletivo", "screen-sucesso-coletivo"];
     function showScreen(id) {
       screens.forEach(s => $(s).classList.toggle("hidden", s !== id));
       window.scrollTo(0, 0);
@@ -1945,6 +2039,7 @@
     // HOME (cardápio + meus pedidos)
     // =====================================================================
     async function abrirHome() {
+      pararAcompanhamentoPedido();
       atualizarHeaderCliente();
       iniciarMonitorPedidosCliente();
       const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
@@ -1957,9 +2052,9 @@
     function pedidoStatusInfo(p) {
       const map = {
         aberto: "Pedido recebido",
-        fechado: "Pedido fechado",
-        enviado: "Enviado ao fornecedor",
-        entregue: "Entregue",
+        fechado: "Sendo feito",
+        enviado: "A caminho",
+        entregue: "Chegou",
         cancelado: "Cancelado"
       };
       return map[p.status] || p.status || "Pedido recebido";
@@ -1968,9 +2063,9 @@
     function pedidoStatusVisual(p) {
       const map = {
         aberto: { icon: "🧾", title: "Pedido recebido", desc: "A cozinha ainda vai preparar.", cls: "aberto" },
-        fechado: { icon: "🧑‍🍳", title: "Em preparo", desc: "Seu pedido foi separado para preparo.", cls: "fechado" },
-        enviado: { icon: "🛵", title: "Pedido enviado", desc: "Saiu para entrega ou retirada.", cls: "enviado" },
-        entregue: { icon: "✅", title: "Pedido entregue", desc: "Entrega concluida para este cliente.", cls: "entregue" },
+        fechado: { icon: "🧑‍🍳", title: "Sendo feito", desc: "Seu pedido está em preparo.", cls: "fechado" },
+        enviado: { icon: "🛵", title: "A caminho", desc: "Saiu para entrega ou retirada.", cls: "enviado" },
+        entregue: { icon: "✅", title: "Chegou", desc: "Pedido entregue. Bom apetite!", cls: "entregue" },
         cancelado: { icon: "×", title: "Pedido cancelado", desc: "Este pedido foi cancelado.", cls: "cancelado" }
       };
       return map[p.status] || map.aberto;
@@ -2003,6 +2098,192 @@
       if (p.comprovante_status === "enviado") return "Comprovante em analise";
       if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) return "Aguardando comprovante";
       return "Pagamento pendente";
+    }
+
+    let acompanhamentoPedidoId = null;
+    let acompanhamentoChannel = null;
+    let acompanhamentoPollTimer = null;
+
+    function pararAcompanhamentoPedido() {
+      if (acompanhamentoPollTimer) clearInterval(acompanhamentoPollTimer);
+      acompanhamentoPollTimer = null;
+      if (acompanhamentoChannel) sb.removeChannel(acompanhamentoChannel);
+      acompanhamentoChannel = null;
+      acompanhamentoPedidoId = null;
+    }
+
+    async function buscarPedidoCliente(pedidoId) {
+      const colab = getColab();
+      if (!colab || !pedidoId) return null;
+      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+      if (error || !data) {
+        console.warn("Erro ao buscar acompanhamento:", error);
+        return null;
+      }
+      return data.find(p => p.id === pedidoId) || null;
+    }
+
+    function acompanhamentoInfo(p) {
+      if (p.status === "cancelado") {
+        return {
+          icon: "×",
+          title: "Pedido cancelado",
+          desc: "Este pedido foi cancelado pelo administrador.",
+          cls: "cancelado",
+          activeIndex: -1
+        };
+      }
+
+      const isPix = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
+      if (isPix && p.status_pagamento !== "pago") {
+        if (p.comprovante_status === "rejeitado") {
+          return {
+            icon: "!",
+            title: "Comprovante rejeitado",
+            desc: p.comprovante_motivo || "Envie um novo comprovante para o administrador revisar.",
+            cls: "rejeitado",
+            activeIndex: 0
+          };
+        }
+        if (p.comprovante_status === "enviado") {
+          return {
+            icon: "REC",
+            title: "Comprovante em análise",
+            desc: "O administrador recebeu o arquivo e precisa aprovar o PIX.",
+            cls: "enviado",
+            activeIndex: 0
+          };
+        }
+        return {
+          icon: "PIX",
+          title: "Aguardando comprovante",
+          desc: "Envie o comprovante para o pedido seguir para preparo.",
+          cls: "aberto",
+          activeIndex: 0
+        };
+      }
+
+      const map = {
+        aberto: {
+          icon: "OK",
+          title: isPix ? "Pagamento aprovado" : "Pedido recebido",
+          desc: isPix ? "Seu PIX foi aprovado. O pedido aguarda preparo." : "O pedido foi recebido e aguarda preparo.",
+          cls: "aberto",
+          activeIndex: 0
+        },
+        fechado: {
+          icon: "🍳",
+          title: "Sendo feito",
+          desc: "Seu pedido está em preparo.",
+          cls: "fechado",
+          activeIndex: 1
+        },
+        enviado: {
+          icon: "🛵",
+          title: "A caminho",
+          desc: "Seu pedido saiu para entrega ou retirada.",
+          cls: "enviado",
+          activeIndex: 2
+        },
+        entregue: {
+          icon: "✓",
+          title: "Chegou",
+          desc: "Pedido entregue. Bom apetite!",
+          cls: "entregue",
+          activeIndex: 3
+        }
+      };
+      return map[p.status] || map.aberto;
+    }
+
+    function renderizarAcompanhamentoPedido(p) {
+      const info = acompanhamentoInfo(p);
+      $("acompanharTitulo").textContent = info.title;
+      $("acompanharSubtitulo").textContent = info.desc;
+      $("acompanharBanner").className = `status-banner ${info.cls}`;
+      $("acompanharBanner").innerHTML = `
+        <div class="sb-icon">${info.icon}</div>
+        <div>
+          <div class="sb-title">${info.title}</div>
+          <div class="sb-desc">${info.desc}</div>
+        </div>
+      `;
+
+      $("acompanharResumo").innerHTML = `
+        <div><strong>${p.prato_nome || "Pedido"}</strong></div>
+        <div class="small muted">${p.fornecedor_nome || ""}${p.acompanhamentos ? " · " + p.acompanhamentos : ""}</div>
+        <div style="display:flex; justify-content:space-between; gap:12px; margin-top:10px;">
+          <span class="small muted">${pagamentoStatusInfo(p)}</span>
+          <strong style="color:var(--brick);">${fmtBRL(p.preco_total)}</strong>
+        </div>
+      `;
+
+      const isPix = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
+      const steps = [
+        {
+          icon: isPix ? "PIX" : "1",
+          title: isPix ? "Pagamento" : "Recebido",
+          desc: isPix
+            ? (p.status_pagamento === "pago" ? "PIX aprovado pelo administrador." : "Aguardando aprovação do comprovante.")
+            : "Pedido registrado no sistema."
+        },
+        { icon: "2", title: "Sendo feito", desc: "O fornecedor está preparando sua marmita." },
+        { icon: "3", title: "A caminho", desc: "Saiu para entrega ou retirada." },
+        { icon: "4", title: "Chegou", desc: "Pedido entregue." }
+      ];
+
+      $("acompanharSteps").innerHTML = steps.map((step, index) => {
+        const stateCls = info.activeIndex === -1 ? "" : (index < info.activeIndex ? "done" : (index === info.activeIndex ? "active" : ""));
+        return `
+          <div class="status-step ${stateCls}">
+            <div class="status-step-icon">${step.icon}</div>
+            <div>
+              <div class="status-step-title">${step.title}</div>
+              <div class="status-step-desc">${step.desc}</div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      $("acompanharAtualizado").textContent = `Atualizado às ${hora}`;
+    }
+
+    async function atualizarAcompanhamentoPedido(silent = false) {
+      if (!acompanhamentoPedidoId) return;
+      const pedido = await buscarPedidoCliente(acompanhamentoPedidoId);
+      if (!pedido) {
+        if (!silent) $("acompanharSubtitulo").textContent = "Não consegui carregar este pedido agora.";
+        return;
+      }
+      renderizarAcompanhamentoPedido(pedido);
+    }
+
+    async function iniciarAcompanhamentoPedido(pedidoId) {
+      if (!pedidoId) return;
+      pararAcompanhamentoPedido();
+      acompanhamentoPedidoId = pedidoId;
+      $("acompanharTitulo").textContent = "Carregando pedido";
+      $("acompanharSubtitulo").textContent = "Buscando o status mais recente.";
+      $("acompanharBanner").className = "status-banner aberto";
+      $("acompanharBanner").innerHTML = '<div class="sb-icon">...</div><div><div class="sb-title">Sincronizando</div><div class="sb-desc">Aguarde um instante.</div></div>';
+      $("acompanharResumo").innerHTML = "";
+      $("acompanharSteps").innerHTML = "";
+      $("acompanharAtualizado").textContent = "";
+      showScreen("screen-acompanhamento");
+
+      await atualizarAcompanhamentoPedido();
+
+      acompanhamentoChannel = sb.channel(`cliente-pedido-${pedidoId}`)
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "pedidos",
+          filter: `id=eq.${pedidoId}`
+        }, () => atualizarAcompanhamentoPedido(true))
+        .subscribe();
+
+      acompanhamentoPollTimer = setInterval(() => atualizarAcompanhamentoPedido(true), 5000);
     }
 
     async function carregarCardapio() {
@@ -2218,6 +2499,9 @@
           </div>
           <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator); display:grid; gap:8px;">
             ${acaoComprovante}
+            <button class="btn btn-secondary btn-sm btn-pill btn-block btn-acompanhar-pedido" data-pedido="${p.id}">
+              Acompanhar pedido
+            </button>
             <button class="btn btn-secondary btn-sm btn-pill btn-block btn-repetir" data-pedido="${p.id}">
               🔁 Pedir de novo
             </button>
@@ -2336,6 +2620,13 @@
           $("pixComprovanteInput").click();
         });
       });
+
+      lista.querySelectorAll(".btn-acompanhar-pedido").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await iniciarAcompanhamentoPedido(btn.dataset.pedido);
+        });
+      });
     }
 
     async function pedirDeNovo(pedidoId) {
@@ -2408,6 +2699,7 @@
     $("btnSair").addEventListener("click", async () => {
       if (getColab()) {
         clearColab();
+        pararAcompanhamentoPedido();
         if (pedidosClienteMonitorTimer) clearInterval(pedidosClienteMonitorTimer);
         pedidosClienteMonitorTimer = null;
         pedidosClienteSnapshot = null;
@@ -2560,27 +2852,32 @@
         reader.readAsDataURL(file);
       }
 
-      const comprovanteUrl = await uploadComprovante(window.pedidoAtualId, file);
-      if (comprovanteUrl) {
+      try {
+        const comprovanteUrl = await uploadComprovante(window.pedidoAtualId, file);
+        if (!comprovanteUrl) throw new Error("Nao foi possivel enviar o arquivo.");
+
         const colab = getColab();
         if (!colab) {
           mostrarLogin("meusPedidos", "Entre novamente para anexar o comprovante.");
           return;
         }
-        await sb.rpc("anexar_comprovante_pedido", {
+        const { error } = await sb.rpc("anexar_comprovante_pedido", {
           p_pedido_id: window.pedidoAtualId,
           p_colaborador_id: colab.id,
           p_comprovante_url: comprovanteUrl
         });
+        if (error) throw error;
         if (window.reenviandoComprovante) {
           window.reenviandoComprovante = false;
           mostrarToast("OK", "Comprovante enviado", "O administrador ja pode revisar o novo arquivo.");
-          await carregarMeusPedidos();
         }
         $("pixComprovanteBtn").classList.replace("btn-primary", "btn-olive");
         $("pixComprovanteBtn").textContent = "✅ Comprovante Enviado";
-      } else {
+        await iniciarAcompanhamentoPedido(window.pedidoAtualId);
+      } catch (err) {
+        console.warn("Erro ao anexar comprovante:", err);
         $("pixComprovanteBtn").textContent = "❌ Erro. Tentar novamente";
+        mostrarToast("⚠️", "Erro no comprovante", err?.message || "Tente enviar novamente.");
         window.reenviandoComprovante = false;
         $("pixComprovanteInput").disabled = false;
       }
@@ -2796,6 +3093,18 @@
     });
 
     $("btnVoltarHome").addEventListener("click", abrirHome);
+
+    $("btnAcompanharHome").addEventListener("click", async () => {
+      pararAcompanhamentoPedido();
+      await abrirHome();
+    });
+
+    $("btnAcompanharPedidos").addEventListener("click", async () => {
+      pararAcompanhamentoPedido();
+      showScreen("screen-home");
+      ativarTab("meusPedidos");
+      await carregarMeusPedidos();
+    });
 
 
     // =====================================================================
