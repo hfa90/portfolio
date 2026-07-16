@@ -1909,6 +1909,25 @@
     </div>
   </div>
 
+  <div class="debt-popup-bg" id="laterPayPopup">
+    <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="laterPayTitle">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <p class="eyebrow">Pagamento no expediente</p>
+          <h2 class="debt-popup-title" id="laterPayTitle">Pagar mais tarde</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="laterPayClose" aria-label="Fechar">×</button>
+      </div>
+      <p class="muted">
+        Esta opção é para colaboradores que estão no trabalho e não têm acesso ao celular no momento.
+        O pagamento deverá ser feito até o fim do expediente de hoje.
+      </p>
+      <div class="debt-actions">
+        <button class="btn btn-primary btn-block btn-pill" id="laterPayOk">Entendi</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
@@ -2171,6 +2190,7 @@
     function pagamentoStatusInfo(p) {
       if (p.status_pagamento === "pago") return "Pagamento confirmado";
       if (p.forma_pagamento === "fiado") return "Fiado em aberto";
+      if (p.forma_pagamento === "pagar_mais_tarde") return "Pagar ate o fim do expediente";
       if (p.comprovante_status === "rejeitado") return "Comprovante rejeitado";
       if (p.comprovante_status === "enviado") return "Comprovante em analise";
       if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) return "Aguardando comprovante";
@@ -2373,6 +2393,18 @@
     let debitoFiadoTimer = null;
     let ultimoResumoFiado = null;
 
+    function totalFiadoAbertoResumo(resumo) {
+      return Number(resumo?.total_aberto ?? resumo?.total_debito ?? 0);
+    }
+
+    function totalFiadoVencidoResumo(resumo) {
+      return Number(resumo?.total_debito || 0);
+    }
+
+    function qtdFiadoAbertoResumo(resumo) {
+      return Number(resumo?.qtd_abertos ?? resumo?.qtd_pedidos ?? 0);
+    }
+
     async function obterResumoFiadoCliente() {
       const colab = getColab();
       if (!colab) return null;
@@ -2393,9 +2425,18 @@
       $("debtPopup").classList.remove("show");
     }
 
+    function abrirPopupPagarMaisTarde() {
+      $("laterPayPopup").classList.add("show");
+    }
+
+    function fecharPopupPagarMaisTarde() {
+      $("laterPayPopup").classList.remove("show");
+    }
+
     async function mostrarPopupDebito(resumo) {
       if (!resumo) return;
-      const total = Number(resumo.total_debito || 0);
+      const total = totalFiadoVencidoResumo(resumo);
+      const totalAberto = totalFiadoAbertoResumo(resumo);
       const bloqueado = !!resumo.fiado_bloqueado;
       if (total <= 0 && !bloqueado) {
         fecharPopupDebito();
@@ -2404,15 +2445,15 @@
 
       $("debtTitle").textContent = bloqueado ? "Fiado bloqueado" : "Regularize seu fiado";
       $("debtMsg").textContent = total > 0
-        ? `Você possui ${resumo.qtd_pedidos || 0} pedido(s) em aberto. Regularize o débito para voltar a comprar no fiado.`
+        ? `Você possui ${resumo.qtd_pedidos || 0} pedido(s) de fiado vencido. Regularize o débito para voltar a comprar no fiado.`
         : "O administrador bloqueou temporariamente sua compra no fiado. Fale com o administrador para regularizar.";
-      $("debtTotal").textContent = fmtBRL(total);
-      $("debtPayPix").disabled = total <= 0;
+      $("debtTotal").textContent = fmtBRL(total > 0 ? total : totalAberto);
+      $("debtPayPix").disabled = totalAberto <= 0;
 
       const numero = String(resumo.whatsapp_admin || "").replace(/\D/g, "");
       $("debtWhatsapp").classList.toggle("hidden", !numero);
       if (numero) {
-        const msg = `Olá, preciso regularizar meu fiado no valor de ${fmtBRL(total)}.`;
+        const msg = `Olá, preciso regularizar meu fiado no valor de ${fmtBRL(total > 0 ? total : totalAberto)}.`;
         $("debtWhatsapp").href = `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
       }
 
@@ -2421,8 +2462,8 @@
 
     async function checarDebitoFiado(exibir = true) {
       const resumo = await obterResumoFiadoCliente();
-      const total = Number(resumo?.total_debito || 0);
-      if (resumo && (total > 0 || resumo.fiado_bloqueado)) {
+      const totalVencido = totalFiadoVencidoResumo(resumo);
+      if (resumo && (totalVencido > 0 || resumo.fiado_bloqueado)) {
         if (exibir) await mostrarPopupDebito(resumo);
       } else {
         fecharPopupDebito();
@@ -2593,7 +2634,7 @@
 
       const payLabel = {
         pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
-        dinheiro: "Dinheiro", fiado: "Fiado semanal"
+        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde"
       };
 
       const fmtDataLonga = (d) => new Date(d).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
@@ -2931,18 +2972,24 @@
 
       const pixEmpresa = state.configEmpresa.pix_empresa;
       const resumoFiado = await checarDebitoFiado(false);
-      const fiadoBloqueado = !!resumoFiado?.fiado_bloqueado || Number(resumoFiado?.total_debito || 0) > 0;
+      const fiadoBloqueado = !!resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0;
       const opts = [
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
         {
           id: "fiado",
           icon: "📒",
-          title: "Fiado semanal",
+          title: "Fiado",
           desc: fiadoBloqueado
-            ? "Indisponível: regularize seu débito para habilitar novamente."
-            : "Acumula até o fechamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>",
+            ? "Indisponível: regularize o fiado vencido para habilitar novamente."
+            : "Acumula até a data de pagamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>",
           disabled: fiadoBloqueado,
           motivo: "fiado"
+        },
+        {
+          id: "pagar_mais_tarde",
+          icon: "🕒",
+          title: "Pagar mais tarde",
+          desc: "Para pagar até o fim do expediente de hoje."
         }
       ];
       $("payOptions").innerHTML = opts.map(o => `
@@ -2967,6 +3014,7 @@
           opt.classList.add("selected");
           state.selPagamento = opt.dataset.pay;
           atualizarTotal();
+          if (state.selPagamento === "pagar_mais_tarde") abrirPopupPagarMaisTarde();
         });
       });
 
@@ -3110,7 +3158,7 @@
       }
       if (state.selPagamento === "fiado") {
         const resumoFiado = await checarDebitoFiado(false);
-        if (resumoFiado?.fiado_bloqueado || Number(resumoFiado?.total_debito || 0) > 0) {
+        if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
           await mostrarPopupDebito(resumoFiado);
           return;
         }
@@ -3205,7 +3253,7 @@
 
       const payLabel = {
         pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
-        dinheiro: "Dinheiro", fiado: "Fiado semanal"
+        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde"
       }[state.selPagamento];
 
       $("sucessoResumo").innerHTML = `
@@ -3290,9 +3338,15 @@
     });
 
     $("debtClose").addEventListener("click", fecharPopupDebito);
+    $("laterPayClose").addEventListener("click", fecharPopupPagarMaisTarde);
+    $("laterPayOk").addEventListener("click", fecharPopupPagarMaisTarde);
+    $("laterPayPopup").addEventListener("click", e => {
+      if (e.target === $("laterPayPopup")) fecharPopupPagarMaisTarde();
+    });
+
     $("debtPayPix").addEventListener("click", async () => {
       const resumo = ultimoResumoFiado || await obterResumoFiadoCliente();
-      const total = Number(resumo?.total_debito || 0);
+      const total = totalFiadoAbertoResumo(resumo);
       if (total > 0) {
         fecharPopupDebito();
         await abrirPixSheet(total, "fiado");
@@ -3314,7 +3368,10 @@
 
       const gui = fmt("00", "BR.GOV.BCB.PIX");
       const chaveField = fmt("01", chave.trim());
-      const descField = descricao ? fmt("02", descricao.slice(0, 72)) : "";
+      const descNorm = descricao
+        ? descricao.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ]/g, "").trim().slice(0, 72)
+        : "";
+      const descField = descNorm ? fmt("02", descNorm) : "";
       const mai = fmt("26", gui + chaveField + descField);
 
       const valorStr = Number(valor).toFixed(2);
@@ -3372,17 +3429,18 @@
         return;
       }
 
-      if (totalPendente <= 0) {
-        mostrarToast("✅", "Tudo pago!", "Você não tem saldo pendente.");
-        return;
-      }
-
       pixFiadoPedidoIds = [];
       if (tipo === "fiado") {
         const { data } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
-        pixFiadoPedidoIds = (data || [])
-          .filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente" && p.status !== "cancelado")
-          .map(p => p.id);
+        const fiadosPendentes = (data || [])
+          .filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente" && p.status !== "cancelado");
+        pixFiadoPedidoIds = fiadosPendentes.map(p => p.id);
+        totalPendente = fiadosPendentes.reduce((s, p) => s + Number(p.preco_total || 0), 0);
+      }
+
+      if (totalPendente <= 0) {
+        mostrarToast("✅", "Tudo pago!", "Você não tem saldo pendente.");
+        return;
       }
 
       const payload = gerarPayloadPix({

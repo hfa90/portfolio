@@ -2133,21 +2133,13 @@
           <div class="field">
             <label>Fechamento do fiado</label>
             <select id="cfgFechPeriodo">
-              <option value="semanal">Semanal</option>
+              <option value="quinzenal">Quinzenal (dias 15 e 30)</option>
               <option value="mensal">Mensal</option>
             </select>
           </div>
           <div class="field" id="cfgFechDiaWrap">
-            <label id="cfgFechDiaLabel">Dia da semana</label>
-            <select id="cfgFechDiaSemana">
-              <option value="0">Domingo</option>
-              <option value="1">Segunda</option>
-              <option value="2">Terça</option>
-              <option value="3">Quarta</option>
-              <option value="4">Quinta</option>
-              <option value="5">Sexta</option>
-              <option value="6">Sábado</option>
-            </select>
+            <label id="cfgFechDiaLabel">Dia do pagamento mensal</label>
+            <div id="cfgFechQuinzenalInfo" class="small muted" style="padding:11px 0;">Clientes pagam nos dias 15 e 30 de cada mês.</div>
             <input id="cfgFechDiaMes" type="number" min="1" max="31" class="input hidden" />
           </div>
         </div>
@@ -3044,8 +3036,8 @@
       const pixPendentes = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status !== "rejeitado");
       const pixRejeitados = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status === "rejeitado");
 
-      // 2. Dinheiro a Receber (Somente hoje)
-      const dinheiroHoje = pedidosHoje.filter(p => p.forma_pagamento === "dinheiro" && p.status_pagamento === "pendente");
+      // 2. Pagamentos presenciais a receber (Somente hoje)
+      const pagamentosPresenciaisHoje = pedidosHoje.filter(p => ["dinheiro", "pagar_mais_tarde"].includes(p.forma_pagamento) && p.status_pagamento === "pendente");
 
       let caixaHtml = "";
 
@@ -3094,16 +3086,17 @@
         caixaHtml += `</div>`;
       }
 
-      if (dinheiroHoje.length > 0) {
+      if (pagamentosPresenciaisHoje.length > 0) {
         caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--olive);">
-      <h2>Dinheiro - Receber na Entrega</h2>`;
-        dinheiroHoje.forEach(p => {
+      <h2>Pagamentos - Receber hoje</h2>`;
+        pagamentosPresenciaisHoje.forEach(p => {
+          const formaRecebimento = p.forma_pagamento === "pagar_mais_tarde" ? "Pagar mais tarde" : "Dinheiro";
           caixaHtml += `
         <div class="item-caixa">
           <div class="info-row">
             <div class="info">
               <strong style="font-size: 1.05rem;">${p.colaborador?.nome ?? "Desconhecido"}</strong>
-              <div class="small muted">${p.prato?.nome}</div>
+              <div class="small muted">${p.prato?.nome} - ${formaRecebimento}</div>
             </div>
             <strong style="color:var(--olive); font-size: 1.1rem;">${fmtBRL(p.preco_total)}</strong>
           </div>
@@ -3135,7 +3128,7 @@
         gruposFornecedor.get(fid).pedidos.push(p);
       });
 
-      const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado" };
+      const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde" };
       let logisticaHtml = "";
 
       for (const { fornecedor, pedidos: pedsForn } of gruposFornecedor.values()) {
@@ -3540,7 +3533,7 @@ Bom apetite! 😋`;
         grupos.get(fid).pedidos.push(p);
       });
 
-      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado" };
+      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde" };
 
       // Store seguro: guarda dados por fid sem passar JSON em onclick
       window._coletivoDados = window._coletivoDados || {};
@@ -4632,8 +4625,7 @@ Bom apetite! 😋`;
       $("cfgWhatsappAdmin").value = map.whatsapp_admin || "";
       backupHoraConfig = map.backup_hora || "22:00";
       $("cfgBackupHora").value = backupHoraConfig;
-      $("cfgFechPeriodo").value = map.fechamento_fiado_periodo || "semanal";
-      $("cfgFechDiaSemana").value = map.fechamento_fiado_dia_semana || "5";
+      $("cfgFechPeriodo").value = map.fechamento_fiado_periodo === "mensal" ? "mensal" : "quinzenal";
       $("cfgFechDiaMes").value = map.fechamento_fiado_dia_mes || "30";
       aplicarEstadoToggle(map.pedidos_abertos !== "false");
       ajustarFechDia();
@@ -4641,13 +4633,13 @@ Bom apetite! 😋`;
 
     function ajustarFechDia() {
       const periodo = $("cfgFechPeriodo").value;
-      if (periodo === "semanal") {
-        $("cfgFechDiaLabel").textContent = "Dia da semana";
-        $("cfgFechDiaSemana").classList.remove("hidden");
+      if (periodo === "quinzenal") {
+        $("cfgFechDiaLabel").textContent = "Datas de pagamento";
+        $("cfgFechQuinzenalInfo").classList.remove("hidden");
         $("cfgFechDiaMes").classList.add("hidden");
       } else {
-        $("cfgFechDiaLabel").textContent = "Dia do m\u00EAs";
-        $("cfgFechDiaSemana").classList.add("hidden");
+        $("cfgFechDiaLabel").textContent = "Dia do pagamento mensal";
+        $("cfgFechQuinzenalInfo").classList.add("hidden");
         $("cfgFechDiaMes").classList.remove("hidden");
       }
     }
@@ -4660,7 +4652,6 @@ Bom apetite! 😋`;
         { chave: "whatsapp_admin", valor: $("cfgWhatsappAdmin").value.trim().replace(/\D/g, "") },
         { chave: "backup_hora", valor: $("cfgBackupHora").value || "22:00" },
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
-        { chave: "fechamento_fiado_dia_semana", valor: String($("cfgFechDiaSemana").value) },
         { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) }
       ];
       for (const u of updates) {
