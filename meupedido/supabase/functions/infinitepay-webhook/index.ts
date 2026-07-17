@@ -89,6 +89,7 @@ Deno.serve(async (req) => {
     };
 
     if (checkBody?.paid === true) {
+      updatePayload.status = "aberto";
       updatePayload.status_pagamento = "pago";
       updatePayload.pago_em = new Date().toISOString();
       updatePayload.comprovante_status = "aprovado";

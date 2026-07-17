@@ -2621,6 +2621,10 @@
     }
 
     const eventosAdminVistos = new Set();
+    function pedidoVisivelOperacao(pedido = {}) {
+      return pedido.status && pedido.status !== "cancelado" && pedido.status !== "aguardando_pagamento";
+    }
+
     function detalhesAvisoAdmin(pedido = {}) {
       const cliente = pedido.colaborador?.nome || pedido.colaborador_nome || "Cliente";
       const prato = pedido.prato?.nome || pedido.prato_nome || "pedido";
@@ -2665,6 +2669,7 @@
         `)
         .or(`data.eq.${dataFiltro},status_pagamento.eq.pendente`)
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("criado_em", { ascending: true });
       if (error) return [];
       return data || [];
@@ -2684,7 +2689,7 @@
         console.warn("Erro ao buscar pedido para notificacao:", error);
         return null;
       }
-      return data;
+      return pedidoVisivelOperacao(data || {}) ? data : null;
     }
 
     async function checarPedidosAdmin(inicial = false) {
@@ -2724,6 +2729,7 @@
       adminPedidosChannel = sb.channel("admin-pedidos-tempo-real")
         .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, async payload => {
           const pedido = await consultarPedidoMonitorAdminPorId(payload.new?.id) || payload.new || {};
+          if (!pedidoVisivelOperacao(pedido)) return;
           avisarAdminPedido("novo", pedido);
           await checarPedidosAdmin(true);
           await atualizarTelasOperacionaisSilencioso();
@@ -2731,6 +2737,20 @@
         .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pedidos" }, async payload => {
           const novo = payload.new || {};
           const antigo = payload.old || {};
+          const virouPedidoOperacional = pedidoVisivelOperacao(novo) && (
+            antigo.status === "aguardando_pagamento"
+            || (
+              novo.forma_pagamento === "cartao_infinitepay"
+              && novo.status === "aberto"
+              && novo.status_pagamento === "pago"
+              && novo.pago_em
+              && antigo.pago_em !== novo.pago_em
+            )
+          );
+          if (virouPedidoOperacional) {
+            const pedido = await consultarPedidoMonitorAdminPorId(novo.id) || novo;
+            avisarAdminPedido("novo", pedido);
+          }
           const comprovanteChegou = novo.comprovante_status === "enviado"
             && novo.comprovante_url
             && (antigo.comprovante_status !== "enviado" || antigo.comprovante_url !== novo.comprovante_url);
@@ -2987,6 +3007,7 @@
     `)
         .or(`data.eq.${dataFiltro},status_pagamento.eq.pendente`)
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("criado_em", { ascending: true });
 
       if (error) {
@@ -3456,7 +3477,7 @@ Bom apetite! 😋`;
         .eq("data", data)
         .order("criado_em");
 
-      const pedidosOperacionais = (pedidos || []).filter(p => !["cancelado", "concluido"].includes(p.status));
+      const pedidosOperacionais = (pedidos || []).filter(p => !["aguardando_pagamento", "cancelado", "concluido"].includes(p.status));
 
       if (pedidosOperacionais.length === 0) {
         alert("Nenhum pedido para gerar mensagem.");
@@ -3515,6 +3536,7 @@ Bom apetite! 😋`;
         `)
         .eq("data", data)
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("criado_em");
 
       if (error) {
@@ -3580,6 +3602,7 @@ Bom apetite! 😋`;
         `)
         .eq("data", data)
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("criado_em");
 
       if (!pedidos || pedidos.length === 0) {
@@ -4528,7 +4551,8 @@ Bom apetite! 😋`;
       const { data: pedidosMes } = await sb.from("pedidos")
         .select("preco_total, status_pagamento, forma_pagamento")
         .gte("data", inicioMesStr)
-        .neq("status", "cancelado");
+        .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento");
       const { data: concluidosMes } = await sb.from("pedidos")
         .select("preco_total, concluido_em, data, status")
         .eq("status", "concluido")
@@ -4566,6 +4590,7 @@ Bom apetite! 😋`;
         `)
         .eq("forma_pagamento", "fiado").eq("status_pagamento", "pendente")
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("data", { ascending: false });
 
       $("finSaldos").innerHTML = renderFiadosAbertosAdmin(fiados || []);
@@ -4576,6 +4601,7 @@ Bom apetite! 😋`;
         .in("forma_pagamento", ["pix_empresa", "pix_fornecedor"])
         .eq("status_pagamento", "pendente")
         .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
         .order("data", { ascending: false });
 
       const pixHtml = (pixPend || []).map(p => `
@@ -4601,7 +4627,9 @@ Bom apetite! 😋`;
       // ---- Faturamento por fornecedor ----
       const { data: forn } = await sb.from("pedidos")
         .select("preco_total, fornecedor:fornecedores(id, nome)")
-        .gte("data", inicioMesStr).neq("status", "cancelado");
+        .gte("data", inicioMesStr)
+        .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento");
 
       const mapaF = new Map();
       (forn || []).forEach(p => {

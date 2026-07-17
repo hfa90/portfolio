@@ -1,28 +1,84 @@
--- Integracao InfinitePay Checkout
--- Rode este arquivo no SQL Editor do Supabase em bases ja existentes.
-
-alter table public.pedidos add column if not exists infinitepay_checkout_url text;
-alter table public.pedidos add column if not exists infinitepay_invoice_slug text;
-alter table public.pedidos add column if not exists infinitepay_transaction_nsu text;
-alter table public.pedidos add column if not exists infinitepay_receipt_url text;
-alter table public.pedidos add column if not exists infinitepay_capture_method text;
-alter table public.pedidos add column if not exists infinitepay_paid_amount numeric(10,2);
-alter table public.pedidos add column if not exists infinitepay_checked_em timestamptz;
-alter table public.pedidos add column if not exists infinitepay_payload jsonb;
-
-alter table public.pedidos drop constraint if exists pedidos_forma_pagamento_check;
-alter table public.pedidos
-  add constraint pedidos_forma_pagamento_check
-  check (forma_pagamento in ('pix_empresa','pix_fornecedor','dinheiro','fiado','pagar_mais_tarde','cartao_infinitepay'));
+-- InfinitePay: pedidos de cartao so viram operacionais apos pagamento confirmado.
+-- Rode em bases existentes que ja possuem a integracao InfinitePay.
 
 alter table public.pedidos drop constraint if exists pedidos_status_check;
 alter table public.pedidos
   add constraint pedidos_status_check
   check (status in ('aguardando_pagamento','aberto','fechado','enviado','entregue','concluido','cancelado'));
 
-insert into public.configuracoes (chave, valor)
-values ('infinitepay_handle', '')
-on conflict (chave) do nothing;
+drop function if exists public.meus_pedidos(uuid);
+
+create or replace function public.meus_pedidos(p_colaborador_id uuid)
+returns table (
+  id uuid,
+  data date,
+  preco_total numeric,
+  observacoes text,
+  status text,
+  forma_pagamento text,
+  status_pagamento text,
+  comprovante_url text,
+  comprovante_status text,
+  comprovante_motivo text,
+  criado_em timestamptz,
+  pago_em timestamptz,
+  fechado_em timestamptz,
+  enviado_em timestamptz,
+  entregue_em timestamptz,
+  concluido_em timestamptz,
+  cancelado_em timestamptz,
+  pedido_coletivo_id uuid,
+  nome_pessoa text,
+  coletivo_criado_em timestamptz,
+  coletivo_criador_nome text,
+  prato_nome text,
+  fornecedor_nome text,
+  acompanhamentos text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    pe.id,
+    pe.data,
+    pe.preco_total,
+    pe.observacoes,
+    pe.status,
+    pe.forma_pagamento,
+    pe.status_pagamento,
+    pe.comprovante_url,
+    pe.comprovante_status,
+    pe.comprovante_motivo,
+    pe.criado_em,
+    pe.pago_em,
+    pe.fechado_em,
+    pe.enviado_em,
+    pe.entregue_em,
+    pe.concluido_em,
+    pe.cancelado_em,
+    pe.pedido_coletivo_id,
+    pe.nome_pessoa,
+    pc.criado_em,
+    org.nome,
+    pr.nome,
+    fo.nome,
+    coalesce(string_agg(ac.nome, ', ' order by ac.nome), '') as acompanhamentos
+  from public.pedidos pe
+  join public.colaboradores c on c.id = pe.colaborador_id and c.ativo = true
+  join public.pratos pr on pr.id = pe.prato_id
+  join public.fornecedores fo on fo.id = pe.fornecedor_id
+  left join public.pedidos_coletivos pc on pc.id = pe.pedido_coletivo_id
+  left join public.colaboradores org on org.id = pc.colaborador_id
+  left join public.pedido_acompanhamentos pa on pa.pedido_id = pe.id
+  left join public.acompanhamentos ac on ac.id = pa.acompanhamento_id
+  where pe.colaborador_id = p_colaborador_id
+    and pe.data >= public.hoje_sp() - interval '180 days'
+    and pe.status <> 'aguardando_pagamento'
+  group by pe.id, pc.criado_em, org.nome, pr.nome, fo.nome
+  order by pe.data desc, pe.criado_em desc;
+$$;
 
 create or replace function public.criar_pedido(
   p_colaborador_id uuid,
@@ -169,4 +225,5 @@ begin
 end;
 $$;
 
+grant execute on function public.meus_pedidos(uuid) to anon, authenticated;
 grant execute on function public.criar_pedido(uuid, uuid, text, text, uuid[]) to anon, authenticated;

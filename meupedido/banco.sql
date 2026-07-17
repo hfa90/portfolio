@@ -104,7 +104,7 @@ create table if not exists public.pedidos (
   data date not null default current_date,
   preco_total numeric(10,2) not null check (preco_total >= 0),
   observacoes text,
-  status text not null default 'aberto' check (status in ('aberto','fechado','enviado','entregue','concluido','cancelado')),
+  status text not null default 'aberto' check (status in ('aguardando_pagamento','aberto','fechado','enviado','entregue','concluido','cancelado')),
   forma_pagamento text not null check (forma_pagamento in ('pix_empresa','pix_fornecedor','dinheiro','fiado','pagar_mais_tarde','cartao_infinitepay')),
   status_pagamento text not null default 'pendente' check (status_pagamento in ('pendente','pago','cancelado')),
   pago_em timestamptz,
@@ -219,7 +219,7 @@ alter table public.pedidos add column if not exists infinitepay_payload jsonb;
 alter table public.pedidos drop constraint if exists pedidos_status_check;
 alter table public.pedidos
   add constraint pedidos_status_check
-  check (status in ('aberto','fechado','enviado','entregue','concluido','cancelado'));
+  check (status in ('aguardando_pagamento','aberto','fechado','enviado','entregue','concluido','cancelado'));
 alter table public.pedidos drop constraint if exists pedidos_forma_pagamento_check;
 alter table public.pedidos
   add constraint pedidos_forma_pagamento_check
@@ -921,6 +921,7 @@ as $$
   left join public.acompanhamentos ac on ac.id = pa.acompanhamento_id
   where pe.colaborador_id = p_colaborador_id
     and pe.data >= public.hoje_sp() - interval '180 days'
+    and pe.status <> 'aguardando_pagamento'
   group by pe.id, pc.criado_em, org.nome, pr.nome, fo.nome
   order by pe.data desc, pe.criado_em desc;
 $$;
@@ -1185,11 +1186,12 @@ begin
 
   insert into public.pedidos (
     colaborador_id, fornecedor_id, prato_id, data, preco_total,
-    observacoes, forma_pagamento, status_pagamento
+    observacoes, forma_pagamento, status_pagamento, status
   )
   values (
     p_colaborador_id, v_prato.fornecedor_id, p_prato_id, public.hoje_sp(), v_total,
-    nullif(trim(coalesce(p_observacoes, '')), ''), p_forma_pagamento, 'pendente'
+    nullif(trim(coalesce(p_observacoes, '')), ''), p_forma_pagamento, 'pendente',
+    case when p_forma_pagamento = 'cartao_infinitepay' then 'aguardando_pagamento' else 'aberto' end
   )
   returning id into v_pedido_id;
 

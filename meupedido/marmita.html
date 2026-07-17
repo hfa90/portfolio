@@ -2247,6 +2247,7 @@
 
     function pedidoStatusInfo(p) {
       const map = {
+        aguardando_pagamento: "Aguardando pagamento",
         aberto: "Pedido recebido",
         fechado: "Sendo feito",
         enviado: "A caminho",
@@ -2259,6 +2260,7 @@
 
     function pedidoStatusVisual(p) {
       const map = {
+        aguardando_pagamento: { icon: "CARD", title: "Aguardando pagamento", desc: "Seu pedido ainda depende da confirmação da InfinitePay.", cls: "aberto" },
         aberto: { icon: "🧾", title: "Pedido recebido", desc: "A cozinha ainda vai preparar.", cls: "aberto" },
         fechado: { icon: "🧑‍🍳", title: "Sendo feito", desc: "Seu pedido está em preparo.", cls: "fechado" },
         enviado: { icon: "🛵", title: "A caminho", desc: "Saiu para entrega ou retirada.", cls: "enviado" },
@@ -2303,6 +2305,7 @@
     let acompanhamentoPedidoId = null;
     let acompanhamentoChannel = null;
     let acompanhamentoPollTimer = null;
+    let acompanhamentoAguardandoInfinitePay = false;
 
     function pararAcompanhamentoPedido() {
       if (acompanhamentoPollTimer) clearInterval(acompanhamentoPollTimer);
@@ -2310,6 +2313,7 @@
       if (acompanhamentoChannel) sb.removeChannel(acompanhamentoChannel);
       acompanhamentoChannel = null;
       acompanhamentoPedidoId = null;
+      acompanhamentoAguardandoInfinitePay = false;
     }
 
     async function buscarPedidoCliente(pedidoId) {
@@ -2404,6 +2408,7 @@
     }
 
     function renderizarAcompanhamentoPedido(p) {
+      acompanhamentoAguardandoInfinitePay = false;
       const info = acompanhamentoInfo(p);
       const timeline = [
         ["Pedido feito", p.criado_em],
@@ -2472,16 +2477,34 @@
       if (!acompanhamentoPedidoId) return;
       const pedido = await buscarPedidoCliente(acompanhamentoPedidoId);
       if (!pedido) {
-        if (!silent) $("acompanharSubtitulo").textContent = "Não consegui carregar este pedido agora.";
+        if (acompanhamentoAguardandoInfinitePay) {
+          $("acompanharTitulo").textContent = "Aguardando confirmação";
+          $("acompanharSubtitulo").textContent = "Assim que a InfinitePay confirmar o pagamento, o pedido será enviado para a cozinha.";
+          $("acompanharBanner").className = "status-banner aberto";
+          $("acompanharBanner").innerHTML = `
+            <div class="sb-icon">CARD</div>
+            <div>
+              <div class="sb-title">Pagamento em validação</div>
+              <div class="sb-desc">O pedido ainda não foi liberado para o administrador.</div>
+            </div>
+          `;
+          $("acompanharResumo").innerHTML = `<div class="small muted">Checkout: ${esc(acompanhamentoPedidoId)}</div>`;
+          $("acompanharSteps").innerHTML = "";
+          const hora = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          $("acompanharAtualizado").textContent = `Verificado às ${hora}`;
+        } else if (!silent) {
+          $("acompanharSubtitulo").textContent = "Não consegui carregar este pedido agora.";
+        }
         return;
       }
       renderizarAcompanhamentoPedido(pedido);
     }
 
-    async function iniciarAcompanhamentoPedido(pedidoId) {
+    async function iniciarAcompanhamentoPedido(pedidoId, options = {}) {
       if (!pedidoId) return;
       pararAcompanhamentoPedido();
       acompanhamentoPedidoId = pedidoId;
+      acompanhamentoAguardandoInfinitePay = !!options.aguardandoInfinitePay;
       $("acompanharTitulo").textContent = "Carregando pedido";
       $("acompanharSubtitulo").textContent = "Buscando o status mais recente.";
       $("acompanharBanner").className = "status-banner aberto";
@@ -4018,6 +4041,12 @@
       if (!inicial && pedidosClienteSnapshot) {
         for (const [id, atual] of snapshot.entries()) {
           const anterior = pedidosClienteSnapshot.get(id);
+          const confirmadoPelaInfinitePay = !anterior
+            && isInfinitePayPayment(atual.pedido?.forma_pagamento)
+            && atual.status_pagamento === "pago";
+          if (confirmadoPelaInfinitePay) {
+            notificarPedidoConfirmado(atual.pedido?.prato_nome || "Pedido", atual.pedido?.fornecedor_nome || "InfinitePay");
+          }
           const virouRejeitado = atual.comprovante_status === "rejeitado"
             && (!anterior || anterior.comprovante_status !== "rejeitado" || anterior.comprovante_motivo !== atual.comprovante_motivo);
           if (virouRejeitado) avisarComprovanteRejeitado(atual.pedido);
@@ -4445,14 +4474,14 @@
       window.pedidoAtualId = pedidoId;
 
       $("sucessoIcon").textContent = "💳";
-      $("sucessoTitulo").textContent = "Pagamento recebido";
-      $("sucessoSubtitulo").textContent = "Estamos confirmando o pedido pela InfinitePay. Acompanhe o status abaixo.";
+      $("sucessoTitulo").textContent = "Pagamento em confirmação";
+      $("sucessoSubtitulo").textContent = "Seu pedido só será enviado para a cozinha quando a InfinitePay confirmar o pagamento.";
       $("sucessoPixArea").classList.add("hidden");
-      $("sucessoResumo").innerHTML = `<div class="small muted">Pedido: ${esc(pedidoId)}</div>`;
+      $("sucessoResumo").innerHTML = `<div class="small muted">Checkout: ${esc(pedidoId)}</div>`;
       showScreen("screen-sucesso");
 
       window.history.replaceState({}, document.title, redirectBaseInfinitePay());
-      setTimeout(() => iniciarAcompanhamentoPedido(pedidoId), 1200);
+      setTimeout(() => iniciarAcompanhamentoPedido(pedidoId, { aguardandoInfinitePay: true }), 1200);
       return true;
     }
 
