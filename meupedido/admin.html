@@ -2649,6 +2649,7 @@
       <div class="section-head">
         <h1>Perfis de Admin</h1>
         <div class="sh-actions">
+          <button class="btn btn-primary btn-block" id="btnNovoAdmin">Novo admin</button>
           <button class="btn btn-ghost btn-block" id="btnAdminsAtualizar">Atualizar</button>
         </div>
       </div>
@@ -4057,6 +4058,7 @@
         </div>` : '<div class="card empty">Nenhuma auditoria registrada ainda.</div>';
     }
 
+    $("btnNovoAdmin").addEventListener("click", () => abrirModalAdmin(null));
     $("btnAdminsAtualizar").addEventListener("click", carregarAdmins);
     async function carregarAdmins() {
       $("adminsLista").innerHTML = '<div class="loading">Carregando admins...</div>';
@@ -4068,7 +4070,7 @@
       $("adminsLista").innerHTML = `
         <div class="card" style="margin-bottom:12px;">
           <strong>Seu perfil: ${perfilLabel[adminAtual?.perfil] || "Admin"}</strong>
-          <p class="small muted" style="margin:4px 0 0;">Novos admins devem ser criados primeiro no Supabase Auth e depois vinculados nesta tabela.</p>
+          <p class="small muted" style="margin:4px 0 0;">Novos admins devem existir primeiro no Supabase Auth. Depois vincule o e-mail aqui e escolha o perfil, inclusive Master.</p>
         </div>
         <table class="tbl"><tbody>${(data || []).map(a => `
           <tr>
@@ -4076,31 +4078,78 @@
             <td data-label="Perfil">${perfilLabel[a.perfil] || a.perfil}</td>
             <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
             <td class="actions">
-              <button class="btn btn-ghost btn-sm" onclick='abrirModalAdmin(${JSON.stringify(a).replace(/'/g, "&apos;")})' ${podeGerenciarAdmins() ? "" : "disabled"}>Editar perfil</button>
+              <button class="btn btn-ghost btn-sm" onclick='abrirModalAdmin(${JSON.stringify(a).replace(/'/g, "&apos;")})' ${podeGerenciarAdmins() ? "" : "disabled"}>Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="excluirAdminPerfil('${a.id}', '${jsArg(a.email)}')" ${podeGerenciarAdmins() ? "" : "disabled"}>Excluir</button>
             </td>
           </tr>`).join("")}</tbody></table>`;
     }
 
     window.abrirModalAdmin = (admin) => {
-      if (!podeGerenciarAdmins()) { alert("Somente perfil master pode editar admins."); return; }
-      $("modalTitle").textContent = "Perfil de admin";
+      if (!podeGerenciarAdmins()) { alert("Somente perfil master pode gerenciar admins."); return; }
+      const criando = !admin;
+      $("modalTitle").textContent = criando ? "Novo perfil de admin" : "Perfil de admin";
       $("modalSave").classList.remove("hidden");
+      $("modalSave").disabled = false;
+      $("modalSave").textContent = "Salvar";
+      $("modalAlert").classList.remove("show");
+      $("modalAlert").textContent = "";
       $("modalBody").innerHTML = `
-        <div class="field"><label>Nome</label><input id="admNome" class="input" value="${escHtml(admin.nome)}" /></div>
-        <div class="field"><label>Email</label><input class="input" value="${escHtml(admin.email)}" disabled /></div>
+        <div class="field"><label>Nome</label><input id="admNome" class="input" value="${escHtml(admin?.nome || "")}" placeholder="Nome do administrador" /></div>
+        <div class="field"><label>Email do login</label><input id="admEmail" class="input" type="email" value="${escHtml(admin?.email || "")}" ${criando ? "" : "disabled"} placeholder="admin@empresa.com" /></div>
         <div class="field"><label>Perfil</label><select id="admPerfil">
-          ${Object.keys(perfilLabel).map(p => `<option value="${p}" ${admin.perfil === p ? "selected" : ""}>${perfilLabel[p]}</option>`).join("")}
+          ${Object.keys(perfilLabel).map(p => `<option value="${p}" ${(admin?.perfil || "master") === p ? "selected" : ""}>${perfilLabel[p]}</option>`).join("")}
         </select></div>
-        <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="admAtivo" ${admin.ativo ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
+        <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="admAtivo" ${admin?.ativo === false ? "" : "checked"} style="width:20px;height:20px;"/> Ativo</label></div>
+        ${criando ? '<p class="small muted" style="margin:0;">Se o e-mail ainda nao existir em Authentication > Users, o Supabase vai recusar o vinculo.</p>' : ""}`;
       $("modal").classList.add("show");
       $("modalSave").onclick = async () => {
-        const payload = { nome: $("admNome").value.trim(), perfil: $("admPerfil").value, ativo: $("admAtivo").checked };
-        const { error } = await sb.from("admins").update(payload).eq("id", admin.id);
-        if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
-        await registrarAuditoria("alterou perfil de admin", "admins", admin.id, { email: admin.email, ...payload });
-        fecharModal();
-        carregarAdmins();
+        const payload = {
+          nome: $("admNome").value.trim(),
+          email: $("admEmail").value.trim().toLowerCase(),
+          perfil: $("admPerfil").value,
+          ativo: $("admAtivo").checked
+        };
+        if (!payload.nome || !payload.email) {
+          $("modalAlert").textContent = "Informe nome e e-mail.";
+          $("modalAlert").classList.add("show");
+          return;
+        }
+        const originalText = $("modalSave").textContent;
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Salvando...";
+        try {
+          const { data, error } = criando
+            ? await sb.rpc("admin_criar_perfil", {
+                p_email: payload.email,
+                p_nome: payload.nome,
+                p_perfil: payload.perfil,
+                p_ativo: payload.ativo
+              })
+            : await sb.rpc("admin_atualizar_perfil", {
+                p_admin_id: admin.id,
+                p_nome: payload.nome,
+                p_perfil: payload.perfil,
+                p_ativo: payload.ativo
+              });
+          if (error) { $("modalAlert").textContent = error.message; $("modalAlert").classList.add("show"); return; }
+          const adminId = criando ? data : admin.id;
+          await registrarAuditoria(criando ? "criou perfil de admin" : "alterou perfil de admin", "admins", adminId, payload);
+          fecharModal();
+          carregarAdmins();
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = originalText;
+        }
       };
+    };
+
+    window.excluirAdminPerfil = async (id, email) => {
+      if (!podeGerenciarAdmins()) { alert("Somente perfil master pode excluir admins."); return; }
+      if (!confirm(`Excluir o perfil administrativo de ${email}? O usuario do Supabase Auth nao sera apagado.`)) return;
+      const { error } = await sb.rpc("admin_excluir_perfil", { p_admin_id: id });
+      if (error) { alert(error.message); return; }
+      await registrarAuditoria("excluiu perfil de admin", "admins", id, { email });
+      carregarAdmins();
     };
 
     // PEDIDOS DO DIA
