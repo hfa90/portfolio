@@ -1,8 +1,7 @@
-// marmita-sw.js — Service Worker para Web Push
-// Coloque na RAIZ do servidor (mesma pasta do marmita.html)
+// marmita-sw.js - Service Worker para PWA e Web Push
 
-const CACHE_NAME = "marmita-v7";
-const ASSETS_TO_CACHE = ["/marmita.html", "/admin.html", "/icon-192.png"];
+const CACHE_NAME = "marmita-v8";
+const ASSETS_TO_CACHE = ["./marmita.html", "./admin.html", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -24,6 +23,7 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
+
   if (event.request.destination === "document" || url.pathname.endsWith(".html")) {
     event.respondWith(
       fetch(event.request)
@@ -32,55 +32,55 @@ self.addEventListener("fetch", event => {
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           return response;
         })
-        .catch(() => caches.match(event.request))
+        .catch(() => caches.match(event.request).then(cached => cached || caches.match("./marmita.html")))
     );
     return;
   }
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
-  );
+
+  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
 });
 
-// Push recebido (app fechado ou em background)
 self.addEventListener("push", event => {
   let data = {
-    title: "🍱 Marmita",
-    body: "Você tem uma notificação.",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    url: "/marmita.html"
+    title: "Marmita",
+    body: "Voce tem uma notificacao.",
+    icon: new URL("icon.svg", self.registration.scope).href,
+    badge: new URL("icon.svg", self.registration.scope).href,
+    url: "./marmita.html"
   };
+
   try {
     const parsed = event.data?.json();
     data = { ...data, ...parsed };
   } catch {
     if (event.data?.text()) data.body = event.data.text();
   }
+
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: data.icon,
       badge: data.badge,
       vibrate: [100, 50, 100, 50, 100],
-      tag: "marmita-push",
+      tag: data.tag || "marmita-push",
       renotify: true,
       data: { url: data.url },
       actions: [
-        { action: "abrir", title: "📲 Abrir" },
+        { action: "abrir", title: "Abrir" },
         { action: "fechar", title: "Dispensar" }
       ]
     })
   );
 });
 
-// Clique na notificação
 self.addEventListener("notificationclick", event => {
   event.notification.close();
   if (event.action === "fechar") return;
-  const url = event.notification.data?.url || "/marmita.html";
+
+  const url = event.notification.data?.url || "./marmita.html";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
-      const target = new URL(url, self.location.origin);
+      const target = new URL(url, self.registration.scope);
       for (const client of list) {
         const clientUrl = new URL(client.url);
         if (clientUrl.pathname === target.pathname && "focus" in client) {
@@ -88,12 +88,11 @@ self.addEventListener("notificationclick", event => {
           return client.focus();
         }
       }
-      if (clients.openWindow) return clients.openWindow(url);
+      if (clients.openWindow) return clients.openWindow(target.href);
     })
   );
 });
 
-// Re-subscribe quando o browser rotaciona a chave VAPID
 self.addEventListener("pushsubscriptionchange", event => {
   event.waitUntil(
     self.registration.pushManager.subscribe({
