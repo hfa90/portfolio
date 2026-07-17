@@ -8,9 +8,13 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 |---|---|
 | `banco.sql` | Banco completo para Supabase: tabelas, indices, RLS, RPCs, storage e dados iniciais |
 | `migracao-remover-horarios-e-corrigir-exclusao.sql` | Correcao pontual para bases ja criadas: remove bloqueios por horario e corrige a exclusao segura |
+| `migracao-remover-timer-pedidos.sql` | Correcao direta para remover o erro "Pedidos disponiveis a partir das..." da RPC de pedidos |
 | `migracao-exclusao-segura.sql` | Correcao pontual para exclusao segura: exclui quando nao ha historico e desativa quando ha pedidos/pagamentos vinculados |
+| `migracao-infinitepay.sql` | Adiciona checkout InfinitePay por cartao, campos de reconciliacao e atualiza a RPC de criacao de pedido |
 | `marmita.html` | App do colaborador: login por matricula/PIN, cardapio, pedido, historico e pedido coletivo |
 | `admin.html` | Painel admin: pedidos, cardapio, fornecedores, pratos, acompanhamentos, colaboradores, financeiro e configuracoes |
+| `supabase/functions/infinitepay-create-link` | Edge Function que cria o pedido e chama `POST /links` da InfinitePay |
+| `supabase/functions/infinitepay-webhook` | Edge Function publica que recebe webhook, chama `/payment_check` e marca o pedido como pago |
 | `marmita-sw.js` | Service worker para cache e notificacoes |
 | `push-notificacoes.ts` | Edge Function opcional para envio de Web Push |
 | `vapid.txt` | Chaves VAPID atuais |
@@ -26,9 +30,25 @@ Sistema de pedidos de marmita com tela do colaborador, painel administrativo, co
 4. Em `Project Settings > API`, confirme `Project URL` e `anon/public key`.
 5. Se usar outro projeto, troque `window.SUPABASE_URL` e `window.SUPABASE_ANON` no topo de `marmita.html` e `admin.html`.
 
-Para um projeto Supabase que ja estava em uso antes desta correcao, rode `migracao-remover-horarios-e-corrigir-exclusao.sql` no SQL Editor. Ela preserva os dados, faz o cardapio depender apenas do botao `Pedidos abertos` e corrige a RPC `admin_excluir_registro`.
+Para um projeto Supabase que ja estava em uso antes desta correcao, rode `migracao-remover-horarios-e-corrigir-exclusao.sql` no SQL Editor. Ela preserva os dados, faz o cardapio depender apenas do botao `Pedidos abertos`, corrige a RPC `admin_excluir_registro`, adiciona imagem opcional aos pratos e habilita "mais pedidos hoje".
+
+Se o cliente ainda vir erro como `Pedidos disponiveis a partir das 21:00`, rode `migracao-remover-timer-pedidos.sql` no SQL Editor. Esse erro vem da funcao `criar_pedido` que fica no Supabase, nao do HTML.
 
 Se aparecer erro de chave estrangeira ao excluir fornecedor, prato, acompanhamento ou colaborador em uma instalacao antiga, a migracao acima ja cobre esse caso. O arquivo `migracao-exclusao-segura.sql` fica apenas como historico.
+
+## InfinitePay
+
+Para habilitar pagamento por cartao:
+
+1. Rode `migracao-infinitepay.sql` no SQL Editor se a base ja existe. Em uma base nova, `banco.sql` ja inclui esses campos.
+2. Habilite o Checkout Integrado no app/web da InfinitePay e copie sua InfiniteTag.
+3. No painel admin, preencha `InfiniteTag da InfinitePay` em Configuracoes. Tambem e possivel salvar o valor direto na tabela `configuracoes`, chave `infinitepay_handle`.
+
+`INFINITEPAY_HANDLE` e `INFINITEPAY_WEBHOOK_URL` podem ser usados como secrets opcionais nas Edge Functions. Se `INFINITEPAY_WEBHOOK_URL` nao for informado, a funcao usa `https://<project-ref>.supabase.co/functions/v1/infinitepay-webhook`.
+
+4. Publique as funcoes `infinitepay-create-link` e `infinitepay-webhook`. O arquivo `supabase/config.toml` deixa apenas o webhook sem JWT para a InfinitePay conseguir chamar.
+
+Fluxo implementado: frontend chama `infinitepay-create-link`, a funcao cria o pedido com `cartao_infinitepay`, chama `POST /links`, redireciona o cliente para o checkout e o webhook confirma via `/payment_check` antes de marcar `status_pagamento = pago`.
 
 O SQL cria o perfil na tabela `admins` automaticamente quando encontrar o usuario de Auth com o email acima. Se voce rodou o SQL antes de criar o usuario no Auth, crie o usuario e rode novamente apenas o bloco `ADMIN INICIAL` no fim do `banco.sql`.
 

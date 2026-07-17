@@ -2066,6 +2066,9 @@
     };
 
     window.pedidoAtualId = null;
+    const INFINITEPAY_PAYMENT = "cartao_infinitepay";
+    const INFINITEPAY_PENDING_KEY = "marmita.infinitepay.pending";
+    const isInfinitePayPayment = (forma) => forma === INFINITEPAY_PAYMENT;
 
     // =====================================================================
     // LOGIN
@@ -2288,6 +2291,7 @@
 
     function pagamentoStatusInfo(p) {
       if (p.status_pagamento === "pago") return "Pagamento confirmado";
+      if (isInfinitePayPayment(p.forma_pagamento)) return "Aguardando InfinitePay";
       if (p.forma_pagamento === "fiado") return "Fiado em aberto";
       if (p.forma_pagamento === "pagar_mais_tarde") return "Pagar ate o fim do expediente";
       if (p.comprovante_status === "rejeitado") return "Comprovante rejeitado";
@@ -2771,7 +2775,8 @@
 
       const payLabel = {
         pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
-        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde"
+        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde",
+        cartao_infinitepay: "Cartao InfinitePay"
       };
 
       const fmtDataLonga = (d) => new Date(d).toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
@@ -3162,6 +3167,12 @@
       const resumoFiado = await checarDebitoFiado(false);
       const fiadoBloqueado = !!resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0;
       const opts = [
+        {
+          id: INFINITEPAY_PAYMENT,
+          icon: "💳",
+          title: "Cartão",
+          desc: "Pague com cartão no checkout seguro da InfinitePay."
+        },
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
         {
           id: "fiado",
@@ -3318,6 +3329,38 @@
       }
     });
 
+    function redirectBaseInfinitePay() {
+      const url = new URL(window.location.href);
+      url.search = "";
+      url.hash = "";
+      return url.toString();
+    }
+
+    async function criarCheckoutInfinitePay(colab, acompArr) {
+      const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
+        body: {
+          colaborador_id: colab.id,
+          prato_id: state.selPrato.id,
+          observacoes: $("obs").value.trim() || null,
+          acompanhamentos: acompArr,
+          redirect_url: redirectBaseInfinitePay()
+        }
+      });
+
+      if (error) throw new Error(error.message || "Erro ao chamar checkout InfinitePay.");
+      if (!data?.success || !data?.checkout_url || !data?.pedido_id) {
+        throw new Error(data?.message || "InfinitePay nao retornou o link de pagamento.");
+      }
+
+      window.pedidoAtualId = data.pedido_id;
+      localStorage.setItem(INFINITEPAY_PENDING_KEY, JSON.stringify({
+        pedido_id: data.pedido_id,
+        checkout_url: data.checkout_url,
+        criado_em: new Date().toISOString()
+      }));
+      window.location.href = data.checkout_url;
+    }
+
     async function uploadComprovante(pedidoId, file) {
       if (!file) return null;
       try {
@@ -3358,6 +3401,12 @@
       try {
       const total = calcTotal();
       const acompArr = [...state.selAcomp];
+
+      if (isInfinitePayPayment(state.selPagamento)) {
+        $("btnConfirmar").textContent = "Abrindo checkout...";
+        await criarCheckoutInfinitePay(colab, acompArr);
+        return;
+      }
 
       const { data: pedidoId, error: errPedido } = await sb.rpc("criar_pedido", {
         p_colaborador_id: colab.id,
@@ -3442,7 +3491,8 @@
 
       const payLabel = {
         pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
-        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde"
+        dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde",
+        cartao_infinitepay: "Cartao InfinitePay"
       }[state.selPagamento];
 
       $("sucessoResumo").innerHTML = `
@@ -4370,7 +4420,31 @@
       showScreen("screen-sucesso-coletivo");
     });
 
-    abrirHome();
+    async function tratarRetornoInfinitePay() {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("infinitepay") !== "retorno") return false;
+
+      const pedidoId = params.get("pedido_id") || params.get("order_nsu");
+      if (!pedidoId) return false;
+
+      localStorage.removeItem(INFINITEPAY_PENDING_KEY);
+      window.pedidoAtualId = pedidoId;
+
+      $("sucessoIcon").textContent = "💳";
+      $("sucessoTitulo").textContent = "Pagamento recebido";
+      $("sucessoSubtitulo").textContent = "Estamos confirmando o pedido pela InfinitePay. Acompanhe o status abaixo.";
+      $("sucessoPixArea").classList.add("hidden");
+      $("sucessoResumo").innerHTML = `<div class="small muted">Pedido: ${esc(pedidoId)}</div>`;
+      showScreen("screen-sucesso");
+
+      window.history.replaceState({}, document.title, redirectBaseInfinitePay());
+      setTimeout(() => iniciarAcompanhamentoPedido(pedidoId), 1200);
+      return true;
+    }
+
+    (async () => {
+      if (!(await tratarRetornoInfinitePay())) abrirHome();
+    })();
   </script>
 </body>
 

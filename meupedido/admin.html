@@ -2129,6 +2129,10 @@
           <label>WhatsApp do administrador</label>
           <input id="cfgWhatsappAdmin" class="input" inputmode="numeric" placeholder="5592999999999" />
         </div>
+        <div class="field">
+          <label>InfiniteTag da InfinitePay</label>
+          <input id="cfgInfinitePayHandle" class="input" placeholder="sua_infinite_tag" />
+        </div>
         <div class="row">
           <div class="field">
             <label>Fechamento do fiado</label>
@@ -3009,12 +3013,13 @@
       pedidosHoje.forEach(p => {
         const fid = p.fornecedor?.id || "sem-fornecedor";
         if (!resumoFornecedor.has(fid)) {
-          resumoFornecedor.set(fid, { nome: p.fornecedor?.nome || "Sem fornecedor", qtd: 0, total: 0, pix: 0, dinheiro: 0, fiado: 0, comprovantes: 0 });
+          resumoFornecedor.set(fid, { nome: p.fornecedor?.nome || "Sem fornecedor", qtd: 0, total: 0, pix: 0, cartao: 0, dinheiro: 0, fiado: 0, comprovantes: 0 });
         }
         const r = resumoFornecedor.get(fid);
         r.qtd += 1;
         r.total += Number(p.preco_total);
         if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) r.pix += Number(p.preco_total);
+        if (p.forma_pagamento === "cartao_infinitepay") r.cartao += Number(p.preco_total);
         if (p.forma_pagamento === "dinheiro") r.dinheiro += Number(p.preco_total);
         if (p.forma_pagamento === "fiado") r.fiado += Number(p.preco_total);
         if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente") r.comprovantes += 1;
@@ -3026,6 +3031,7 @@
           <div class="resumo-line"><span>Marmitas</span><strong>${r.qtd}</strong></div>
           <div class="resumo-line"><span>Total</span><strong>${fmtBRL(r.total)}</strong></div>
           <div class="resumo-line"><span>PIX</span><strong>${fmtBRL(r.pix)}</strong></div>
+          <div class="resumo-line"><span>Cartao</span><strong>${fmtBRL(r.cartao)}</strong></div>
           <div class="resumo-line"><span>Dinheiro</span><strong>${fmtBRL(r.dinheiro)}</strong></div>
           <div class="resumo-line"><span>Fiado</span><strong>${fmtBRL(r.fiado)}</strong></div>
           <div class="resumo-line"><span>Comprovantes pendentes</span><strong>${r.comprovantes}</strong></div>
@@ -3039,6 +3045,7 @@
       // 1. PIX Aguardando Aprovação
       const pixPendentes = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status !== "rejeitado");
       const pixRejeitados = pedidos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente" && p.comprovante_status === "rejeitado");
+      const cartaoPendentes = pedidos.filter(p => p.forma_pagamento === "cartao_infinitepay" && p.status_pagamento === "pendente");
 
       // 2. Pagamentos presenciais a receber (Somente hoje)
       const pagamentosPresenciaisHoje = pedidosHoje.filter(p => ["dinheiro", "pagar_mais_tarde"].includes(p.forma_pagamento) && p.status_pagamento === "pendente");
@@ -3065,6 +3072,25 @@
                  <button class="btn btn-olive btn-sm" style="border-radius: 8px;" onclick="marcarPagoDashboard(this, '${p.id}')">Aprovar</button>`
               : `<span class="badge pendente" style="padding:6px 10px;">Aguardando cliente enviar</span>`
             }
+          </div>
+        </div>`;
+        });
+        caixaHtml += `</div>`;
+      }
+
+      if (cartaoPendentes.length > 0) {
+        caixaHtml += `<div class="glass-panel" style="border-left: 4px solid var(--brick);">
+      <h2>Cartao - Aguardando InfinitePay</h2>`;
+        cartaoPendentes.forEach(p => {
+          caixaHtml += `
+        <div class="item-caixa">
+          <div class="info-row">
+            <div class="info">
+              <strong style="font-size: 1.05rem;">${p.colaborador?.nome ?? "Desconhecido"}</strong>
+              <div class="small muted">${fmtData(p.data)} - ${p.prato?.nome}</div>
+              <div class="small muted">O webhook marca como pago automaticamente apos a confirmacao.</div>
+            </div>
+            <strong style="color:var(--brick); font-size: 1.1rem;">${fmtBRL(p.preco_total)}</strong>
           </div>
         </div>`;
         });
@@ -3132,7 +3158,7 @@
         gruposFornecedor.get(fid).pedidos.push(p);
       });
 
-      const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde" };
+      const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde", cartao_infinitepay: "Cartao InfinitePay" };
       let logisticaHtml = "";
 
       for (const { fornecedor, pedidos: pedsForn } of gruposFornecedor.values()) {
@@ -3163,9 +3189,12 @@
               <span>${label}</span><strong>${fmtDataHora(valor)}</strong>
             </div>
           `).join("");
-          const pixBloqueado = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento !== "pago";
-          const acoesLogistica = pixBloqueado
-            ? `<div class="small" style="margin:0; width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,122,255,.08); color:var(--blue-ios); font-weight:700;">Aguardando aprovação do PIX para avançar o preparo.</div>
+          const pagamentoOnlinePendente = ["pix_empresa", "pix_fornecedor", "cartao_infinitepay"].includes(p.forma_pagamento) && p.status_pagamento !== "pago";
+          const mensagemBloqueio = p.forma_pagamento === "cartao_infinitepay"
+            ? "Aguardando confirmacao da InfinitePay para avançar o preparo."
+            : "Aguardando aprovação do PIX para avançar o preparo.";
+          const acoesLogistica = pagamentoOnlinePendente
+            ? `<div class="small" style="margin:0; width:100%; padding:8px 10px; border-radius:8px; background:rgba(0,122,255,.08); color:var(--blue-ios); font-weight:700;">${mensagemBloqueio}</div>
                <button class="btn btn-danger btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'cancelado')">Cancelar</button>`
             : `<button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'fechado')">Sendo feito</button>
                <button class="btn btn-ghost btn-sm" style="flex:1;" onclick="atualizarStatusPedido('${p.id}', 'enviado')">A caminho</button>
@@ -3203,6 +3232,12 @@
       return !!pedido && ["pix_empresa", "pix_fornecedor"].includes(pedido.forma_pagamento);
     }
 
+    function pedidoOnlinePendente(pedido) {
+      return !!pedido
+        && ["pix_empresa", "pix_fornecedor", "cartao_infinitepay"].includes(pedido.forma_pagamento)
+        && pedido.status_pagamento !== "pago";
+    }
+
     async function buscarPedidoParaAcao(id) {
       const { data, error } = await sb.from("pedidos")
         .select("id, forma_pagamento, status_pagamento, comprovante_url, comprovante_status")
@@ -3228,8 +3263,10 @@
         if (status !== "cancelado") {
           const pedido = await buscarPedidoParaAcao(id);
           if (!pedido) throw new Error("Pedido nao encontrado.");
-          if (pedidoEhPix(pedido) && pedido.status_pagamento !== "pago") {
-            alert("Aprove o comprovante do PIX antes de avançar o status do pedido.");
+          if (pedidoOnlinePendente(pedido)) {
+            alert(pedido.forma_pagamento === "cartao_infinitepay"
+              ? "Aguarde a InfinitePay confirmar o pagamento antes de avançar o pedido."
+              : "Aprove o comprovante do PIX antes de avançar o status do pedido.");
             return;
           }
         }
@@ -3561,7 +3598,7 @@ Bom apetite! 😋`;
         grupos.get(fid).pedidos.push(p);
       });
 
-      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde" };
+      const payLabel = { pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde", cartao_infinitepay: "Cartao InfinitePay" };
 
       // Store seguro: guarda dados por fid sem passar JSON em onclick
       window._coletivoDados = window._coletivoDados || {};
@@ -4651,6 +4688,7 @@ Bom apetite! 😋`;
       $("cfgNomeEmpresa").value = map.nome_empresa || "";
       $("cfgPixEmpresa").value = map.pix_empresa || "";
       $("cfgWhatsappAdmin").value = map.whatsapp_admin || "";
+      $("cfgInfinitePayHandle").value = map.infinitepay_handle || "";
       backupHoraConfig = map.backup_hora || "22:00";
       $("cfgBackupHora").value = backupHoraConfig;
       $("cfgFechPeriodo").value = map.fechamento_fiado_periodo === "mensal" ? "mensal" : "quinzenal";
@@ -4678,6 +4716,7 @@ Bom apetite! 😋`;
         { chave: "nome_empresa", valor: $("cfgNomeEmpresa").value.trim() },
         { chave: "pix_empresa", valor: $("cfgPixEmpresa").value.trim() },
         { chave: "whatsapp_admin", valor: $("cfgWhatsappAdmin").value.trim().replace(/\D/g, "") },
+        { chave: "infinitepay_handle", valor: $("cfgInfinitePayHandle").value.trim().replace(/^\$/, "") },
         { chave: "backup_hora", valor: $("cfgBackupHora").value || "22:00" },
         { chave: "fechamento_fiado_periodo", valor: $("cfgFechPeriodo").value },
         { chave: "fechamento_fiado_dia_mes", valor: String($("cfgFechDiaMes").value || 30) }
