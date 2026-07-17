@@ -2577,7 +2577,7 @@
               <input id="fidMeta" class="input" type="number" min="1" max="999" />
             </div>
             <div class="field">
-              <label>Pontos por marmita paga</label>
+              <label>Pontos por marmita/lanche pago</label>
               <input id="fidPontos" class="input" type="number" min="1" max="99" />
             </div>
           </div>
@@ -2746,7 +2746,7 @@
 
       <div class="card" style="margin-top: 14px; border-color: rgba(220, 53, 69, .35);">
         <h2>Limpeza do banco</h2>
-        <p class="small muted" style="margin-top: -4px;">Apaga pedidos, clientes, cardapio, fornecedores, pagamentos e registros operacionais. Admins e configuracoes ficam preservados.</p>
+        <p class="small muted" style="margin-top: -4px;">Apaga clientes, pratos, fornecedores, cardapio, financeiro, historicos, auditoria, favoritos e fidelidade. Preserva apenas perfis Master e configuracoes do site.</p>
         <button class="btn btn-danger btn-block" id="btnLimparBanco">Apagar dados do banco</button>
       </div>
     </section>
@@ -3843,7 +3843,7 @@
           <span class="badge ${ativo ? "pago" : "cancelado"}">${ativo ? "pontua" : "pausado"}</span>
         </div>
         <p class="small muted" style="margin:8px 0 0;">
-          A cada marmita paga, o cliente recebe ${pontos} ponto(s). Ao completar ${meta} pedido(s) pagos, ganha: <strong>${escHtml(desc)}</strong>.
+          A cada marmita ou lanche pago, o cliente recebe ${pontos} ponto(s). Bebidas e sobremesas não pontuam. Ao completar ${meta} pedido(s) pagos, ganha: <strong>${escHtml(desc)}</strong>.
         </p>`;
     }
 
@@ -5479,6 +5479,12 @@ Bom apetite! 😋`;
       "Lasanha", "Escondidinho de carne seca", "Escondidinho de frango",
       "Farofa", "Purê de batata", "Salada", "Vinagrete"
     ];
+    const CATEGORIAS_PRATOS = {
+      marmita: "Marmita",
+      bebida: "Bebida",
+      sobremesa: "Sobremesa",
+      lanche: "Lanche"
+    };
 
     async function carregarPratos() {
       $("pratosLista").innerHTML = '<div class="loading">Carregando…</div>';
@@ -5502,6 +5508,7 @@ Bom apetite! 😋`;
             </div>
           </td>
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
+          <td data-label="Categoria">${CATEGORIAS_PRATOS[p.categoria || "marmita"] || "Marmita"}</td>
           <td data-label="Preço">${fmtBRL(p.preco)}</td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
@@ -5533,6 +5540,11 @@ Bom apetite! 😋`;
         <div class="field"><label>Nome do prato</label><input id="pNome" class="input" list="listaPratosPopulares" value="${p?.nome ?? ""}"/>
           <datalist id="listaPratosPopulares">${SUGESTOES_PRATOS.map(nome => `<option value="${nome}"></option>`).join("")}</datalist>
         </div>
+        <div class="field"><label>Categoria</label>
+          <select id="pCategoria">
+            ${Object.entries(CATEGORIAS_PRATOS).map(([value, label]) => `<option value="${value}" ${(p?.categoria || "marmita") === value ? "selected" : ""}>${label}</option>`).join("")}
+          </select>
+        </div>
         <div class="field">
           <label>Opções rápidas</label>
           <div style="display:flex; flex-wrap:wrap; gap:8px;">${sugestoesHtml}</div>
@@ -5555,6 +5567,7 @@ Bom apetite! 😋`;
         const payload = {
           fornecedor_id: $("pForn").value,
           nome: $("pNome").value.trim(),
+          categoria: $("pCategoria").value,
           descricao: $("pDesc").value.trim() || null,
           preco: parseFloat($("pPreco").value),
           ativo: $("pAtivo").checked
@@ -6081,7 +6094,13 @@ Bom apetite! 😋`;
         "pagamentos",
         "pedidos_coletivos",
         "pedidos_coletivos_itens",
-        "push_subscriptions"
+        "push_subscriptions",
+        "cliente_favoritos",
+        "cliente_preferencias",
+        "pedido_avaliacoes",
+        "cliente_fidelidade_eventos",
+        "auditoria_admin",
+        "admins"
       ];
       const dump = {
         gerado_em: new Date().toISOString(),
@@ -6219,7 +6238,7 @@ Bom apetite! 😋`;
     });
 
     $("btnLimparBanco").addEventListener("click", async () => {
-      const aviso = "Isto vai apagar pedidos, clientes, cardapio, fornecedores, pagamentos e historicos operacionais. Admins e configuracoes serao preservados.";
+      const aviso = "Isto vai apagar clientes, pratos, fornecedores, cardapio, financeiro, historicos, auditoria, favoritos e fidelidade. Apenas perfis Master e configuracoes do site serao preservados.";
       if (!confirm(aviso)) return;
       const texto = prompt('Digite APAGAR para confirmar a limpeza do banco.');
       if (texto !== "APAGAR") return;

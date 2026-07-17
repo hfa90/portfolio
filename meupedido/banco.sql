@@ -38,6 +38,7 @@ create table if not exists public.pratos (
   nome text not null,
   descricao text,
   foto_url text,
+  categoria text not null default 'marmita' check (categoria in ('marmita','bebida','sobremesa','lanche')),
   preco numeric(10,2) not null check (preco >= 0),
   ativo boolean not null default true,
   criado_em timestamptz not null default now()
@@ -205,6 +206,11 @@ alter table public.colaboradores add column if not exists endereco_empresa text;
 alter table public.colaboradores add column if not exists whatsapp text;
 alter table public.colaboradores add column if not exists fiado_bloqueado boolean not null default false;
 alter table public.pratos add column if not exists foto_url text;
+alter table public.pratos add column if not exists categoria text not null default 'marmita';
+alter table public.pratos drop constraint if exists pratos_categoria_check;
+alter table public.pratos
+  add constraint pratos_categoria_check
+  check (categoria in ('marmita','bebida','sobremesa','lanche'));
 alter table public.acompanhamentos add column if not exists foto_url text;
 notify pgrst, 'reload schema';
 alter table public.pedidos add column if not exists comprovante_url text;
@@ -803,26 +809,34 @@ security definer
 set search_path = public
 as $$
 begin
-  if not public.is_admin() then
-    raise exception 'Acesso negado.' using errcode = '42501';
+  if not public.is_admin_master() then
+    raise exception 'Somente perfil master pode apagar os dados do banco.' using errcode = '42501';
   end if;
 
-  truncate table
-    public.pedido_acompanhamentos,
-    public.pedidos_coletivos_itens,
-    public.pedidos_coletivos,
-    public.pagamentos,
-    public.pedidos,
-    public.cardapio_dia,
-    public.acompanhamentos,
-    public.pratos,
-    public.fornecedores,
-    public.push_subscriptions,
-    public.login_tentativas,
-    public.colaboradores
-  restart identity cascade;
+  execute 'truncate table ' || array_to_string(array[
+    'public.cliente_fidelidade_eventos',
+    'public.pedido_avaliacoes',
+    'public.cliente_preferencias',
+    'public.cliente_favoritos',
+    'public.auditoria_admin',
+    'public.pedido_acompanhamentos',
+    'public.pedidos_coletivos_itens',
+    'public.pedidos_coletivos',
+    'public.pagamentos',
+    'public.pedidos',
+    'public.cardapio_dia',
+    'public.acompanhamentos',
+    'public.pratos',
+    'public.fornecedores',
+    'public.push_subscriptions',
+    'public.login_tentativas',
+    'public.colaboradores'
+  ], ', ') || ' restart identity cascade';
 
-  return 'Dados operacionais apagados. Admins e configuracoes foram preservados.';
+  delete from public.admins
+   where perfil <> 'master';
+
+  return 'Dados do banco apagados. Apenas perfis Master e configuracoes do site foram preservados.';
 end;
 $$;
 
@@ -1019,6 +1033,7 @@ returns table (
   prato_nome text,
   prato_descricao text,
   prato_foto_url text,
+  prato_categoria text,
   prato_preco numeric
 )
 language sql
@@ -1039,6 +1054,7 @@ as $$
     p.nome,
     p.descricao,
     p.foto_url,
+    coalesce(p.categoria, 'marmita'),
     p.preco
   from public.cardapio_dia cd
   join public.fornecedores f on f.id = cd.fornecedor_id
@@ -1858,6 +1874,8 @@ revoke all on function public.admin_excluir_perfil(uuid) from public;
 revoke all on function public.admin_excluir_perfil(uuid) from anon;
 grant execute on function public.admin_excluir_perfil(uuid) to authenticated;
 grant execute on function public.admin_excluir_registro(text, uuid) to authenticated;
+revoke all on function public.admin_limpar_dados() from public;
+revoke all on function public.admin_limpar_dados() from anon;
 grant execute on function public.admin_limpar_dados() to authenticated;
 grant execute on function public.login_colaborador(text, text) to anon, authenticated;
 grant execute on function public.cadastrar_colaborador_publico(text, text, text, text, text, text) to anon, authenticated;
@@ -2524,6 +2542,15 @@ begin
     return new;
   end if;
 
+  if not exists (
+    select 1
+      from public.pratos pr
+     where pr.id = new.prato_id
+       and coalesce(pr.categoria, 'marmita') in ('marmita', 'lanche')
+  ) then
+    return new;
+  end if;
+
   if tg_op = 'UPDATE' and old.status_pagamento = 'pago' then
     return new;
   end if;
@@ -2536,9 +2563,11 @@ begin
   select count(*)::integer
     into v_indice
     from public.pedidos p
+    join public.pratos pr on pr.id = p.prato_id
    where p.colaborador_id = new.colaborador_id
      and p.status_pagamento = 'pago'
-     and p.status <> 'cancelado';
+     and p.status <> 'cancelado'
+     and coalesce(pr.categoria, 'marmita') in ('marmita', 'lanche');
 
   v_indice := greatest(coalesce(v_indice, 1), 1);
   v_recompensa := cfg.pedidos_meta > 0 and (v_indice % cfg.pedidos_meta = 0);
@@ -2548,7 +2577,7 @@ begin
     v_msg := 'Voce completou ' || cfg.pedidos_meta || ' pedido(s) pagos no programa de fidelidade e ganhou: ' || cfg.recompensa_descricao || '.';
   else
     v_titulo := 'Ponto de fidelidade recebido';
-    v_msg := 'Voce recebeu ' || cfg.pontos_por_pedido || ' ponto(s) por comprar uma marmita hoje. Faltam ' || (cfg.pedidos_meta - (v_indice % cfg.pedidos_meta)) || ' pedido(s) pago(s) para ganhar: ' || cfg.recompensa_descricao || '.';
+    v_msg := 'Voce recebeu ' || cfg.pontos_por_pedido || ' ponto(s) por comprar hoje. Faltam ' || (cfg.pedidos_meta - (v_indice % cfg.pedidos_meta)) || ' pedido(s) pago(s) para ganhar: ' || cfg.recompensa_descricao || '.';
   end if;
 
   insert into public.cliente_fidelidade_eventos (
