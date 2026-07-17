@@ -3336,6 +3336,20 @@
       return url.toString();
     }
 
+    async function mensagemErroFuncao(error, fallback) {
+      const defaultMessage = error?.message || fallback;
+      const context = error?.context;
+      if (!context) return defaultMessage;
+
+      try {
+        const response = typeof context.clone === "function" ? context.clone() : context;
+        const body = typeof response.json === "function" ? await response.json() : null;
+        return body?.message || body?.error || defaultMessage;
+      } catch {
+        return defaultMessage;
+      }
+    }
+
     async function criarCheckoutInfinitePay(colab, acompArr) {
       const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
         body: {
@@ -3347,7 +3361,7 @@
         }
       });
 
-      if (error) throw new Error(error.message || "Erro ao chamar checkout InfinitePay.");
+      if (error) throw new Error(await mensagemErroFuncao(error, "Erro ao chamar checkout InfinitePay."));
       if (!data?.success || !data?.checkout_url || !data?.pedido_id) {
         throw new Error(data?.message || "InfinitePay nao retornou o link de pagamento.");
       }
