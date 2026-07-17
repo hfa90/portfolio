@@ -1861,6 +1861,46 @@
     .status-energy span.on {
       background: var(--olive);
     }
+
+    .loyalty-popup-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 70;
+      background: rgba(28, 28, 30, .42);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .loyalty-popup-bg.show {
+      display: flex;
+    }
+
+    .loyalty-popup {
+      width: min(420px, 100%);
+      background: var(--paper);
+      border-radius: 24px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      text-align: center;
+      border: 1px solid rgba(210, 152, 34, .28);
+    }
+
+    .loyalty-popup-icon {
+      width: 78px;
+      height: 78px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      background: #1c1c1e;
+      color: var(--mustard);
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      box-shadow: var(--shadow-sm);
+    }
   </style>
 </head>
 
@@ -2169,6 +2209,16 @@
     <button class="btn btn-ghost btn-sm btn-pill" id="btnInstallDismiss" style="color:#fff;">Agora não</button>
   </div>
 
+  <div class="loyalty-popup-bg" id="fidelidadePopup">
+    <div class="loyalty-popup">
+      <div class="loyalty-popup-icon" id="fidelidadePopupIcon">★</div>
+      <p class="eyebrow" style="margin-bottom:6px;">Programa de fidelidade</p>
+      <h1 id="fidelidadePopupTitulo" style="font-size:26px;">Ponto recebido</h1>
+      <p id="fidelidadePopupMsg" class="muted"></p>
+      <button class="btn btn-primary btn-block btn-pill" id="btnFidelidadePopupOk">Entendi</button>
+    </div>
+  </div>
+
   <div class="pix-sheet-bg" id="pixSheetBg">
     <div class="pix-sheet">
       <div class="pix-handle"></div>
@@ -2375,6 +2425,7 @@
       atualizarHeaderCliente();
       iniciarMonitorPedidosCliente();
       iniciarMonitorDebitoFiado();
+      checarFidelidadeEventos({ delay: 20000 });
       if (state.authDestino === "pedido") {
         showScreen("screen-pedido");
         $("pedidoAlert").textContent = "Identificacao confirmada. Agora pode confirmar o pedido.";
@@ -2522,6 +2573,7 @@
 
       showScreen("screen-home");
       await carregarCardapio();
+      checarFidelidadeEventos({ delay: 20000 });
     }
 
     function pedidoStatusInfo(p) {
@@ -2979,6 +3031,17 @@
       }
     }
 
+    async function obterFidelidadeResumo() {
+      const colab = getColab();
+      if (!colab) return null;
+      const { data, error } = await sb.rpc("fidelidade_resumo", { p_colaborador_id: colab.id });
+      if (error) {
+        console.warn("Resumo fidelidade:", error.message);
+        return null;
+      }
+      return Array.isArray(data) ? data[0] : data;
+    }
+
     async function renderResumoClienteRapido() {
       const alvo = $("clienteResumoRapido");
       const colab = getColab();
@@ -2992,17 +3055,22 @@
         $("btnResumoLogin")?.addEventListener("click", () => mostrarLogin("home", "Entre para personalizar o cardapio."));
         return;
       }
-      const { data } = await sb.rpc("perfil_cliente", { p_colaborador_id: colab.id });
+      const [{ data }, fidelidade] = await Promise.all([
+        sb.rpc("perfil_cliente", { p_colaborador_id: colab.id }),
+        obterFidelidadeResumo()
+      ]);
       const perfil = Array.isArray(data) ? data[0] : data;
       if (!perfil) { alvo.innerHTML = ""; return; }
-      const pontos = Number(perfil.pontos || 0);
-      const meta = 100;
-      const pct = Math.min(100, Math.round((pontos % meta) / meta * 100));
+      const pontos = Number(fidelidade?.pontos || 0);
+      const meta = Number(fidelidade?.pedidos_meta || 10);
+      const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
+      const pct = Math.min(100, Math.round(((pedidosPontuados % meta) / meta) * 100));
+      const ativo = fidelidade?.ativa === true;
       alvo.innerHTML = `<div class="loyalty-card">
-        <div class="small muted">Programa de fidelidade</div>
+        <div class="small muted">Programa de fidelidade ${ativo ? "" : "pausado"}</div>
         <div class="loyalty-points">${pontos}</div>
-        <p class="small" style="margin:4px 0 0;">pontos acumulados · ${meta - (pontos % meta || meta)} para a próxima recompensa</p>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct || (pontos ? 100 : 0)}%;"></div></div>
+        <p class="small" style="margin:4px 0 0;">${ativo ? `${fidelidade?.faltam || meta} pedido(s) pago(s) para ganhar: ${esc(fidelidade?.recompensa_descricao || "recompensa")}` : "O administrador pode ativar ou pausar o plano a qualquer momento."}</p>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct || (pedidosPontuados ? 100 : 0)}%;"></div></div>
         <div class="quick-row" style="position:relative; z-index:1; margin-top:12px;">
           <button class="quick-chip" id="btnIrFavoritos">Favoritos (${perfil.favoritos || 0})</button>
           <button class="quick-chip" id="btnIrPerfil">Perfil</button>
@@ -3470,7 +3538,10 @@
         return;
       }
       alvo.innerHTML = '<div class="loading">Carregando perfil...</div>';
-      const { data, error } = await sb.rpc("perfil_cliente", { p_colaborador_id: colab.id });
+      const [{ data, error }, fidelidade] = await Promise.all([
+        sb.rpc("perfil_cliente", { p_colaborador_id: colab.id }),
+        obterFidelidadeResumo()
+      ]);
       if (error) {
         alvo.innerHTML = `<div class="alert alert-error show">${error.message}</div>`;
         return;
@@ -3481,15 +3552,17 @@
         return;
       }
       state.perfilCliente = p;
-      const pontos = Number(p.pontos || 0);
-      const meta = 100;
-      const faltam = meta - (pontos % meta || meta);
+      const pontos = Number(fidelidade?.pontos || 0);
+      const meta = Number(fidelidade?.pedidos_meta || 10);
+      const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
+      const faltam = Number(fidelidade?.faltam || meta);
+      const ativo = fidelidade?.ativa === true;
       alvo.innerHTML = `
         <div class="loyalty-card">
-          <div class="small muted">Clube da Marmita</div>
+          <div class="small muted">Clube da Marmita ${ativo ? "" : "pausado"}</div>
           <div class="loyalty-points">${pontos}</div>
-          <p class="small">Cada pedido pago soma 10 pontos. Faltam ${faltam} para a próxima recompensa.</p>
-          <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100, Math.round((pontos % meta) / meta * 100)) || (pontos ? 100 : 0)}%;"></div></div>
+          <p class="small">${ativo ? `Cada marmita paga soma ponto. Faltam ${faltam} pedido(s) pago(s) para ganhar: ${esc(fidelidade?.recompensa_descricao || "recompensa")}.` : "O plano de fidelidade está pausado pelo administrador."}</p>
+          <div class="progress-track"><div class="progress-fill" style="width:${Math.min(100, Math.round(((pedidosPontuados % meta) / meta) * 100)) || (pedidosPontuados ? 100 : 0)}%;"></div></div>
         </div>
         <div class="profile-grid">
           <div class="stat-mini"><div class="stat-mini-label">Pedidos</div><div class="stat-mini-value brick">${p.total_pedidos || 0}</div></div>
@@ -4663,7 +4736,10 @@
             && atual.status_pagamento === "pago";
           if (confirmadoPelaInfinitePay) {
             notificarPedidoConfirmado(atual.pedido?.prato_nome || "Pedido", atual.pedido?.fornecedor_nome || "InfinitePay");
+            checarFidelidadeEventos({ delay: 20000 });
           }
+          const virouPago = anterior && anterior.status_pagamento !== "pago" && atual.status_pagamento === "pago";
+          if (virouPago) checarFidelidadeEventos({ delay: 20000 });
           const virouRejeitado = atual.comprovante_status === "rejeitado"
             && (!anterior || anterior.comprovante_status !== "rejeitado" || anterior.comprovante_motivo !== atual.comprovante_motivo);
           if (virouRejeitado) avisarComprovanteRejeitado(atual.pedido);
@@ -4697,6 +4773,48 @@
         `${nomePrato} de ${fornecedor} foi registrado com sucesso.`
       );
     }
+
+    let fidelidadePopupTimer = null;
+    let fidelidadeEventosAtuais = [];
+
+    async function checarFidelidadeEventos({ delay = 20000 } = {}) {
+      const colab = getColab();
+      if (!colab) return;
+      const { data, error } = await sb.rpc("fidelidade_eventos_pendentes", { p_colaborador_id: colab.id });
+      if (error || !data || data.length === 0) return;
+      clearTimeout(fidelidadePopupTimer);
+      fidelidadePopupTimer = setTimeout(() => mostrarPopupFidelidade(data), delay);
+    }
+
+    function mostrarPopupFidelidade(eventos) {
+      if (!eventos?.length || !getColab()) return;
+      fidelidadeEventosAtuais = eventos;
+      const recompensas = eventos.filter(e => e.recompensa_gerada);
+      const totalPontos = eventos.reduce((s, e) => s + Number(e.pontos || 0), 0);
+      const principal = recompensas[0] || eventos[0];
+      $("fidelidadePopupIcon").textContent = recompensas.length ? "🏆" : "★";
+      $("fidelidadePopupTitulo").textContent = principal.titulo || (recompensas.length ? "Recompensa liberada!" : "Ponto recebido");
+      $("fidelidadePopupMsg").textContent = eventos.length === 1
+        ? principal.mensagem
+        : `Voce recebeu ${totalPontos} ponto(s) em ${eventos.length} pedido(s) pago(s). ${recompensas.length ? "Uma recompensa foi liberada: " + (principal.recompensa_descricao || "") + "." : "Continue comprando para liberar sua recompensa."}`;
+      $("fidelidadePopup").classList.add("show");
+      tocarSom(recompensas.length ? "alerta" : "info");
+    }
+
+    $("btnFidelidadePopupOk")?.addEventListener("click", async () => {
+      const colab = getColab();
+      const ids = fidelidadeEventosAtuais.map(e => e.id).filter(Boolean);
+      $("fidelidadePopup").classList.remove("show");
+      fidelidadeEventosAtuais = [];
+      if (colab && ids.length) {
+        await sb.rpc("marcar_fidelidade_eventos_vistos", {
+          p_colaborador_id: colab.id,
+          p_eventos: ids
+        });
+        await renderResumoClienteRapido();
+        if (!$("tab-perfil").classList.contains("hidden")) await carregarPerfilCliente();
+      }
+    });
 
     let fiadorPollTimer = null;
     let ultimoStatusFiado = null;

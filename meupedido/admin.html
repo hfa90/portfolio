@@ -1257,6 +1257,20 @@
       gap: 6px;
     }
 
+    .payment-card {
+      border: 1px solid var(--separator);
+      border-radius: var(--radius);
+      background: rgba(255, 250, 240, .72);
+      padding: 12px;
+    }
+
+    .payment-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+
     .kitchen-board {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -2332,6 +2346,10 @@
         <span class="di-icon">▥</span>
         <span>Relatórios</span>
       </button>
+      <button class="drawer-item" data-section="fidelidade">
+        <span class="di-icon">★</span>
+        <span>Fidelidade</span>
+      </button>
       <button class="drawer-item" data-section="whatsapp">
         <span class="di-icon">☎</span>
         <span>WhatsApp</span>
@@ -2533,6 +2551,59 @@
       </div>
       <p class="muted small">Visão bonita de vendas, formas de pagamento, pratos, fornecedores e movimento diário.</p>
       <div id="relatoriosConteudo" class="loading">Carregando…</div>
+    </section>
+
+    <!-- ============ Fidelidade ============ -->
+    <section id="section-fidelidade" class="hidden rise rise-1">
+      <div class="section-head">
+        <h1>Programa de Fidelidade</h1>
+        <div class="sh-actions">
+          <button class="btn btn-ghost btn-block" id="btnFidelidadeAtualizar">Atualizar</button>
+          <button class="btn btn-primary btn-block" id="btnSalvarFidelidade">Salvar plano</button>
+        </div>
+      </div>
+      <p class="muted small">O plano é opcional. Você pode ativar ou desativar quando quiser; a pontuação só nasce quando um pedido é marcado como pago.</p>
+
+      <div class="tool-grid">
+        <div class="tool-card">
+          <h3>Regra do plano</h3>
+          <label class="small" style="display:flex; gap:8px; align-items:center; margin:10px 0 14px;">
+            <input id="fidAtiva" type="checkbox" style="width:22px;height:22px;" />
+            Plano ativo para novos pagamentos
+          </label>
+          <div class="row">
+            <div class="field">
+              <label>Pedidos pagos para ganhar</label>
+              <input id="fidMeta" class="input" type="number" min="1" max="999" />
+            </div>
+            <div class="field">
+              <label>Pontos por marmita paga</label>
+              <input id="fidPontos" class="input" type="number" min="1" max="99" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Tipo da recompensa</label>
+            <select id="fidTipo">
+              <option value="desconto">Desconto na próxima marmita</option>
+              <option value="coca_2l">Coca-Cola 2 litros</option>
+              <option value="sobremesa">Sobremesa</option>
+              <option value="marmita">Marmita inteira</option>
+              <option value="personalizado">Personalizado</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Descrição que o cliente verá</label>
+            <textarea id="fidDescricao" class="input" rows="3" placeholder="Ex.: uma Coca-Cola 2 litros no próximo pedido"></textarea>
+          </div>
+          <div id="fidPreview" class="payment-card"></div>
+          <div id="fidAlert" class="alert alert-success" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="tool-card">
+          <h3>Movimento do plano</h3>
+          <div id="fidResumoAdmin" class="loading">Carregando…</div>
+        </div>
+      </div>
     </section>
 
     <!-- ============ WhatsApp ============ -->
@@ -3291,6 +3362,7 @@
       colaboradores: "Colaboradores",
       financeiro: "Financeiro",
       relatorios: "Relatórios",
+      fidelidade: "Fidelidade",
       whatsapp: "WhatsApp",
       cozinha: "Modo Cozinha",
       auditoria: "Auditoria",
@@ -3392,7 +3464,7 @@
 
     const secoesPorPerfil = {
       master: null,
-      gestor: ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "whatsapp", "cozinha", "auditoria", "config"],
+      gestor: ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "config"],
       financeiro: ["pedidos", "prioridades", "financeiro", "relatorios", "whatsapp", "auditoria"],
       cozinha: ["prioridades", "cozinha", "whatsapp"]
     };
@@ -3462,6 +3534,7 @@
       colaboradores: carregarColaboradores,
       financeiro: carregarFinanceiro,
       relatorios: carregarRelatorios,
+      fidelidade: carregarFidelidade,
       whatsapp: carregarWhatsApp,
       cozinha: carregarModoCozinha,
       auditoria: carregarAuditoria,
@@ -3476,7 +3549,7 @@
       }
       document.querySelectorAll(".drawer-item[data-section]").forEach(b =>
         b.classList.toggle("active", b.dataset.section === section));
-      ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
+      ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
         $("section-" + s).classList.toggle("hidden", s !== section);
       });
       $("appBarTitle").textContent = SECTION_TITLES[section] || "";
@@ -3737,6 +3810,135 @@
           </div>`;
       } catch (e) {
         $("relatoriosConteudo").innerHTML = `<div class="alert alert-error show">${e.message || e}</div>`;
+      }
+    }
+
+    const fidDefaults = {
+      fidelidade_ativa: "false",
+      fidelidade_pedidos_meta: "10",
+      fidelidade_recompensa_tipo: "desconto",
+      fidelidade_recompensa_descricao: "Desconto na proxima marmita",
+      fidelidade_pontos_por_pedido: "1"
+    };
+
+    function fidelidadeDescricaoPorTipo(tipo) {
+      return {
+        desconto: "Desconto na próxima marmita",
+        coca_2l: "Coca-Cola 2 litros",
+        sobremesa: "Sobremesa",
+        marmita: "Marmita inteira",
+        personalizado: "Recompensa personalizada"
+      }[tipo] || "Recompensa personalizada";
+    }
+
+    function atualizarPreviewFidelidade() {
+      const ativo = $("fidAtiva")?.checked;
+      const meta = Number($("fidMeta")?.value || 10);
+      const pontos = Number($("fidPontos")?.value || 1);
+      const desc = $("fidDescricao")?.value.trim() || fidelidadeDescricaoPorTipo($("fidTipo")?.value);
+      $("fidPreview").innerHTML = `
+        <div class="payment-card-head">
+          <strong>${ativo ? "Plano ativo" : "Plano desativado"}</strong>
+          <span class="badge ${ativo ? "pago" : "cancelado"}">${ativo ? "pontua" : "pausado"}</span>
+        </div>
+        <p class="small muted" style="margin:8px 0 0;">
+          A cada marmita paga, o cliente recebe ${pontos} ponto(s). Ao completar ${meta} pedido(s) pagos, ganha: <strong>${escHtml(desc)}</strong>.
+        </p>`;
+    }
+
+    ["fidAtiva", "fidMeta", "fidPontos", "fidTipo", "fidDescricao"].forEach(id => {
+      document.addEventListener("input", e => {
+        if (e.target?.id === id) atualizarPreviewFidelidade();
+      });
+      document.addEventListener("change", e => {
+        if (e.target?.id === id) {
+          if (id === "fidTipo" && !$("fidDescricao").value.trim()) {
+            $("fidDescricao").value = fidelidadeDescricaoPorTipo($("fidTipo").value);
+          }
+          atualizarPreviewFidelidade();
+        }
+      });
+    });
+
+    $("btnFidelidadeAtualizar").addEventListener("click", carregarFidelidade);
+    $("btnSalvarFidelidade").addEventListener("click", salvarFidelidade);
+
+    async function carregarFidelidade() {
+      $("fidResumoAdmin").innerHTML = '<div class="loading">Carregando fidelidade...</div>';
+      const { data: cfg, error } = await sb.from("configuracoes")
+        .select("chave, valor")
+        .in("chave", Object.keys(fidDefaults));
+      if (error) {
+        $("fidResumoAdmin").innerHTML = `<div class="alert alert-error show">${error.message}</div>`;
+        return;
+      }
+      const map = { ...fidDefaults, ...Object.fromEntries((cfg || []).map(c => [c.chave, c.valor])) };
+      $("fidAtiva").checked = map.fidelidade_ativa === "true";
+      $("fidMeta").value = map.fidelidade_pedidos_meta || "10";
+      $("fidPontos").value = map.fidelidade_pontos_por_pedido || "1";
+      $("fidTipo").value = map.fidelidade_recompensa_tipo || "desconto";
+      $("fidDescricao").value = map.fidelidade_recompensa_descricao || fidelidadeDescricaoPorTipo($("fidTipo").value);
+      atualizarPreviewFidelidade();
+
+      const [{ count: totalEventos }, { count: pendentes }, { data: recompensas }] = await Promise.all([
+        sb.from("cliente_fidelidade_eventos").select("id", { count: "exact", head: true }),
+        sb.from("cliente_fidelidade_eventos").select("id", { count: "exact", head: true }).is("visualizado_em", null),
+        sb.from("cliente_fidelidade_eventos")
+          .select("id, titulo, recompensa_descricao, criado_em, colaborador:colaboradores(nome)")
+          .eq("recompensa_gerada", true)
+          .order("criado_em", { ascending: false })
+          .limit(6)
+      ]);
+
+      $("fidResumoAdmin").innerHTML = `
+        <div class="dashboard-grid">
+          <div class="metric-card"><div class="metric-label">Eventos gerados</div><div class="metric-value">${totalEventos || 0}</div><div class="metric-note">pedidos pagos pontuados</div></div>
+          <div class="metric-card"><div class="metric-label">Avisos pendentes</div><div class="metric-value" style="color:var(--mustard);">${pendentes || 0}</div><div class="metric-note">clientes ainda não viram</div></div>
+        </div>
+        <div style="margin-top:12px;">
+          <strong>Últimas recompensas</strong>
+          ${(recompensas || []).length ? `<div class="audit-list" style="margin-top:8px;">
+            ${recompensas.map(r => `<article class="audit-item">
+              <strong>${escHtml(r.colaborador?.nome || "Cliente")}</strong>
+              <div class="small muted">${escHtml(r.recompensa_descricao || "Recompensa")} · ${fmtDataHora(r.criado_em)}</div>
+            </article>`).join("")}
+          </div>` : '<div class="card empty" style="margin-top:8px;">Nenhuma recompensa gerada ainda.</div>'}
+        </div>`;
+    }
+
+    async function salvarFidelidade() {
+      const meta = Math.max(1, Number($("fidMeta").value || 1));
+      const pontos = Math.max(1, Number($("fidPontos").value || 1));
+      const tipo = $("fidTipo").value;
+      const descricao = $("fidDescricao").value.trim() || fidelidadeDescricaoPorTipo(tipo);
+      const updates = [
+        { chave: "fidelidade_ativa", valor: $("fidAtiva").checked ? "true" : "false" },
+        { chave: "fidelidade_pedidos_meta", valor: String(meta) },
+        { chave: "fidelidade_recompensa_tipo", valor: tipo },
+        { chave: "fidelidade_recompensa_descricao", valor: descricao },
+        { chave: "fidelidade_pontos_por_pedido", valor: String(pontos) }
+      ];
+      $("btnSalvarFidelidade").disabled = true;
+      $("btnSalvarFidelidade").textContent = "Salvando...";
+      try {
+        for (const u of updates) await sb.from("configuracoes").upsert(u, { onConflict: "chave" });
+        await registrarAuditoria("salvou programa de fidelidade", "configuracoes", "fidelidade", {
+          ativa: $("fidAtiva").checked,
+          meta,
+          pontos,
+          tipo,
+          descricao
+        });
+        $("fidAlert").textContent = "Programa de fidelidade salvo com sucesso.";
+        $("fidAlert").classList.add("show");
+        setTimeout(() => $("fidAlert").classList.remove("show"), 3000);
+        await carregarFidelidade();
+      } catch (e) {
+        $("fidAlert").textContent = e.message || "Erro ao salvar fidelidade.";
+        $("fidAlert").className = "alert alert-error show";
+      } finally {
+        $("btnSalvarFidelidade").disabled = false;
+        $("btnSalvarFidelidade").textContent = "Salvar plano";
       }
     }
 
