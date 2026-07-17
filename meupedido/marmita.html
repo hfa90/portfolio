@@ -1780,8 +1780,7 @@
 
     .story-categories {
       margin: 14px 0 18px;
-      display: grid;
-      gap: 14px;
+      display: block;
     }
 
     .story-category-head {
@@ -1789,6 +1788,7 @@
       align-items: baseline;
       justify-content: space-between;
       padding: 0 2px;
+      margin-bottom: 10px;
     }
 
     .story-category-head h2 {
@@ -1865,6 +1865,24 @@
       color: var(--brick);
       font-weight: 800;
       margin-top: 2px;
+    }
+
+    .story-category-pill {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 18px;
+      padding: 0 7px;
+      margin-top: 4px;
+      border-radius: 999px;
+      background: rgba(185, 74, 42, .1);
+      color: var(--ink-soft);
+      font-size: 10px;
+      font-weight: 800;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .story-viewer {
@@ -1950,7 +1968,8 @@
     }
 
     .story-close,
-    .story-fav {
+    .story-fav,
+    .story-nav {
       width: 42px;
       height: 42px;
       border: 0;
@@ -1965,6 +1984,22 @@
 
     .story-fav.active {
       background: var(--brick);
+    }
+
+    .story-nav {
+      position: absolute;
+      top: 50%;
+      z-index: 3;
+      transform: translateY(-50%);
+      font-size: 28px;
+    }
+
+    .story-nav.prev {
+      left: 12px;
+    }
+
+    .story-nav.next {
+      right: 12px;
     }
 
     .story-viewer-bottom {
@@ -1993,6 +2028,52 @@
       border-radius: 999px;
       font-size: 18px;
       box-shadow: 0 14px 34px rgba(185, 74, 42, .38);
+    }
+
+    .smart-offer-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      background: rgba(0, 0, 0, .38);
+      display: none;
+      align-items: flex-end;
+      padding: 18px;
+    }
+
+    .smart-offer-bg.show {
+      display: flex;
+    }
+
+    .smart-offer {
+      width: 100%;
+      max-width: 460px;
+      margin: 0 auto;
+      background: var(--paper);
+      border-radius: 26px;
+      padding: 18px;
+      box-shadow: 0 18px 46px rgba(42, 31, 23, .24);
+    }
+
+    .smart-offer-card {
+      display: grid;
+      grid-template-columns: 74px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 18px;
+      background: rgba(185, 74, 42, .08);
+      margin: 12px 0;
+    }
+
+    .smart-offer-img {
+      width: 74px;
+      height: 74px;
+      border-radius: 18px;
+      object-fit: cover;
+      background: var(--bg-soft);
+      display: grid;
+      place-items: center;
+      font-size: 30px;
     }
 
     .payment-helper,
@@ -2538,6 +2619,8 @@
 
   <div id="storyViewer" class="story-viewer" aria-hidden="true">
     <div id="storyViewerMedia" class="story-viewer-media"></div>
+    <button id="storyPrevBtn" class="story-nav prev" type="button" aria-label="Story anterior">‹</button>
+    <button id="storyNextBtn" class="story-nav next" type="button" aria-label="Próximo story">›</button>
     <div class="story-viewer-top">
       <div class="story-progress"><span></span></div>
       <div id="storyFornecedor" class="story-supplier">Fornecedor</div>
@@ -2550,6 +2633,19 @@
       <h2 id="storyTitulo" class="story-viewer-title">Item</h2>
       <p id="storyDescricao" class="story-viewer-desc"></p>
       <button id="storyComprarBtn" class="btn btn-primary story-buy" type="button">Comprar</button>
+    </div>
+  </div>
+
+  <div id="smartOfferPopup" class="smart-offer-bg" aria-hidden="true">
+    <div class="smart-offer" role="dialog" aria-modal="true" aria-labelledby="smartOfferTitle">
+      <p class="eyebrow" id="smartOfferEyebrow">Combina bem</p>
+      <h2 id="smartOfferTitle" style="font-size:24px;">Que tal acompanhar?</h2>
+      <p id="smartOfferMsg" class="muted small" style="margin:4px 0 0;"></p>
+      <div id="smartOfferItem" class="smart-offer-card"></div>
+      <div class="debt-actions">
+        <button id="smartOfferAccept" class="btn btn-primary btn-block btn-pill" type="button">Ver sugestão</button>
+        <button id="smartOfferSkip" class="btn btn-ghost btn-block btn-pill" type="button">Agora não</button>
+      </div>
     </div>
   </div>
 
@@ -2618,6 +2714,12 @@
       cardapioFiltro: "todos",
       perfilCliente: null,
       storyItem: null,
+      storyList: [],
+      storyIndex: -1,
+      ultimaMarmitaEscolhida: null,
+      smartOfferItem: null,
+      suprimirProximaSugestao: false,
+      pedidosAbertos: true,
       selPrato: null,
       selAcomp: new Set(),
       selPagamento: null,
@@ -3362,59 +3464,70 @@
     function renderizarStoriesCardapio(itens, pedidosAbertos) {
       const box = $("storyCategorias");
       if (!box) return;
-      const grupos = new Map(Object.keys(CATEGORIAS_STORY).map(c => [c, []]));
-      itens.forEach(item => {
-        const categoria = categoriaProduto(item.prato_categoria);
-        if (grupos.has(categoria)) grupos.get(categoria).push(item);
-      });
-      const categoriasComItens = [...grupos.entries()].filter(([, arr]) => arr.length > 0);
-      if (!categoriasComItens.length) {
+      const ordem = Object.keys(CATEGORIAS_STORY);
+      const stories = (itens || [])
+        .filter(item => CATEGORIAS_STORY[categoriaProduto(item.prato_categoria)])
+        .sort((a, b) => {
+          const ca = categoriaProduto(a.prato_categoria);
+          const cb = categoriaProduto(b.prato_categoria);
+          return ordem.indexOf(ca) - ordem.indexOf(cb) || String(a.prato_nome).localeCompare(String(b.prato_nome));
+        });
+      state.storyList = stories;
+      if (!stories.length) {
         box.classList.add("hidden");
         box.innerHTML = "";
         return;
       }
-      box.innerHTML = categoriasComItens.map(([categoria, arr]) => {
-        const meta = CATEGORIAS_STORY[categoria];
-        return `<section class="story-category" data-story-category="${categoria}">
-          <div class="story-category-head">
-            <h2>${meta.label}</h2>
-            <span class="small muted">${arr.length} item${arr.length === 1 ? "" : "s"}</span>
-          </div>
-          <div class="story-strip">
-            ${arr.map(item => {
-              const search = esc(`${meta.label} ${item.fornecedor_nome} ${item.prato_nome} ${item.prato_descricao || ""}`.toLowerCase());
-              const foto = item.prato_foto_url
-                ? `<img src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}" loading="lazy">`
-                : meta.icon;
-              return `<button class="story-item" type="button"
-                data-story-item
-                data-story-categoria="${categoria}"
-                data-prato="${item.prato_id}"
-                data-fornecedor="${item.fornecedor_id}"
-                data-preco="${Number(item.prato_preco || 0)}"
-                data-foto="${item.prato_foto_url ? "1" : "0"}"
-                data-search="${search}">
-                <span class="story-ring"><span class="story-photo">${foto}</span></span>
-                <span class="story-label">${esc(item.prato_nome)}</span>
-                <span class="story-price">${fmtBRL(item.prato_preco)}</span>
-              </button>`;
-            }).join("")}
-          </div>
-        </section>`;
-      }).join("");
+      const contagem = stories.reduce((acc, item) => {
+        const c = categoriaProduto(item.prato_categoria);
+        acc[c] = (acc[c] || 0) + 1;
+        return acc;
+      }, {});
+      box.innerHTML = `<section class="story-category">
+        <div class="story-category-head">
+          <h2>Stories</h2>
+          <span class="small muted">${stories.length} item${stories.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="story-strip">
+          ${stories.map((item, index) => {
+            const categoria = categoriaProduto(item.prato_categoria);
+            const meta = CATEGORIAS_STORY[categoria];
+            const search = esc(`${meta.label} ${item.fornecedor_nome} ${item.prato_nome} ${item.prato_descricao || ""}`.toLowerCase());
+            const foto = item.prato_foto_url
+              ? `<img src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}" loading="lazy">`
+              : meta.icon;
+            return `<button class="story-item" type="button"
+              data-story-item
+              data-story-index="${index}"
+              data-story-categoria="${categoria}"
+              data-prato="${item.prato_id}"
+              data-fornecedor="${item.fornecedor_id}"
+              data-preco="${Number(item.prato_preco || 0)}"
+              data-foto="${item.prato_foto_url ? "1" : "0"}"
+              data-search="${search}">
+              <span class="story-ring"><span class="story-photo">${foto}</span></span>
+              <span class="story-label">${esc(item.prato_nome)}</span>
+              <span class="story-price">${fmtBRL(item.prato_preco)}</span>
+              <span class="story-category-pill">${meta.label}</span>
+            </button>`;
+          }).join("")}
+        </div>
+        <div class="small muted" style="padding:0 2px;">${Object.entries(contagem).map(([c, qtd]) => `${CATEGORIAS_STORY[c].label}: ${qtd}`).join(" · ")}</div>
+      </section>`;
       box.classList.remove("hidden");
       box.querySelectorAll("[data-story-item]").forEach(btn => {
         btn.addEventListener("click", () => {
-          const item = itens.find(x => x.prato_id === btn.dataset.prato);
-          if (item) abrirStoryProduto(item, pedidosAbertos);
+          const index = Number(btn.dataset.storyIndex || 0);
+          abrirStoryProduto(stories[index], pedidosAbertos, index);
         });
       });
     }
 
-    function abrirStoryProduto(item, pedidosAbertos = true) {
+    function abrirStoryProduto(item, pedidosAbertos = true, index = -1) {
       const categoria = categoriaProduto(item.prato_categoria);
       const meta = CATEGORIAS_STORY[categoria] || { icon: "🍽️" };
       state.storyItem = item;
+      state.storyIndex = index >= 0 ? index : state.storyList.findIndex(x => x.prato_id === item.prato_id);
       $("storyViewerMedia").innerHTML = item.prato_foto_url
         ? `<img src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}">`
         : `<div class="story-viewer-fallback">${meta.icon}</div>`;
@@ -3426,6 +3539,8 @@
       $("storyFavBtn").textContent = favorito ? "♥" : "♡";
       $("storyComprarBtn").disabled = !pedidosAbertos;
       $("storyComprarBtn").textContent = pedidosAbertos ? `Comprar por ${fmtBRL(item.prato_preco)}` : "Pedidos fechados";
+      $("storyPrevBtn").classList.toggle("hidden", state.storyList.length <= 1);
+      $("storyNextBtn").classList.toggle("hidden", state.storyList.length <= 1);
       $("storyViewer").classList.add("show");
       $("storyViewer").setAttribute("aria-hidden", "false");
     }
@@ -3434,6 +3549,90 @@
       $("storyViewer").classList.remove("show");
       $("storyViewer").setAttribute("aria-hidden", "true");
       state.storyItem = null;
+    }
+
+    function navegarStory(delta) {
+      if (!state.storyList.length) return;
+      const total = state.storyList.length;
+      const nextIndex = (state.storyIndex + delta + total) % total;
+      abrirStoryProduto(state.storyList[nextIndex], state.pedidosAbertos, nextIndex);
+    }
+
+    const normalizarItemCardapio = (item) => ({
+      prato_id: item.prato_id || item.id,
+      fornecedor_id: item.fornecedor_id || item.fornecedor?.id,
+      fornecedor_nome: item.fornecedor_nome || item.fornecedor?.nome || "Fornecedor",
+      prato_nome: item.prato_nome || item.nome,
+      prato_descricao: item.prato_descricao || item.descricao || "",
+      prato_foto_url: item.prato_foto_url || item.foto_url || "",
+      prato_categoria: categoriaProduto(item.prato_categoria || item.categoria),
+      prato_preco: Number(item.prato_preco ?? item.preco ?? 0)
+    });
+
+    function escolherSugestao(categorias, excluirId = null) {
+      const cats = Array.isArray(categorias) ? categorias : [categorias];
+      const candidatos = (state.cardapio || [])
+        .map(normalizarItemCardapio)
+        .filter(item => cats.includes(categoriaProduto(item.prato_categoria)) && item.prato_id !== excluirId);
+      if (!candidatos.length) return null;
+      return candidatos[Math.floor(Math.random() * candidatos.length)];
+    }
+
+    function abrirOfertaInteligente({ titulo, mensagem, item, cta }) {
+      if (!item) return;
+      state.smartOfferItem = item;
+      $("smartOfferTitle").textContent = titulo;
+      $("smartOfferMsg").textContent = mensagem;
+      $("smartOfferAccept").textContent = cta || `Ver ${item.prato_nome}`;
+      $("smartOfferItem").innerHTML = `
+        ${item.prato_foto_url ? `<img class="smart-offer-img" src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}" loading="lazy">` : `<div class="smart-offer-img">🍱</div>`}
+        <div style="min-width:0;">
+          <strong>${esc(item.prato_nome)}</strong>
+          <div class="small muted">${esc(item.fornecedor_nome)} · ${fmtBRL(item.prato_preco)}</div>
+        </div>`;
+      $("smartOfferPopup").classList.add("show");
+      $("smartOfferPopup").setAttribute("aria-hidden", "false");
+    }
+
+    function fecharOfertaInteligente() {
+      $("smartOfferPopup").classList.remove("show");
+      $("smartOfferPopup").setAttribute("aria-hidden", "true");
+      state.smartOfferItem = null;
+    }
+
+    function sugerirComplementoPedido(prato) {
+      const itemAtual = normalizarItemCardapio(prato);
+      const categoria = categoriaProduto(itemAtual.prato_categoria);
+      if (state.suprimirProximaSugestao) {
+        state.suprimirProximaSugestao = false;
+        if (categoria === "marmita") state.ultimaMarmitaEscolhida = itemAtual;
+        return;
+      }
+      if (categoria === "marmita") {
+        state.ultimaMarmitaEscolhida = itemAtual;
+        const bebida = escolherSugestao("bebida", itemAtual.prato_id);
+        if (bebida) {
+          setTimeout(() => abrirOfertaInteligente({
+            titulo: "Uma bebida gelada combina bem",
+            mensagem: `Para acompanhar ${itemAtual.prato_nome}, separamos uma sugestao rapida.`,
+            item: bebida,
+            cta: `Ver bebida por ${fmtBRL(bebida.prato_preco)}`
+          }), 450);
+        }
+        return;
+      }
+
+      if (categoria === "bebida" && !state.ultimaMarmitaEscolhida) {
+        const marmita = escolherSugestao("marmita", itemAtual.prato_id);
+        if (marmita) {
+          setTimeout(() => abrirOfertaInteligente({
+            titulo: "Quer uma marmita para acompanhar?",
+            mensagem: `Antes de fechar a bebida, escolha uma marmita para acompanhar ${itemAtual.prato_nome}.`,
+            item: marmita,
+            cta: `Escolher marmita por ${fmtBRL(marmita.prato_preco)}`
+          }), 450);
+        }
+      }
     }
 
     async function carregarCardapio() {
@@ -3450,6 +3649,7 @@
       if (error) { lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`; return; }
 
       const pedidosAbertos = cfgAberto?.valor !== "false";
+      state.pedidosAbertos = pedidosAbertos;
 
       if (!data || data.length === 0) {
         $("storyCategorias")?.classList.add("hidden");
@@ -4066,6 +4266,14 @@
     });
 
     $("storyCloseBtn")?.addEventListener("click", fecharStoryProduto);
+    $("storyPrevBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navegarStory(-1);
+    });
+    $("storyNextBtn")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      navegarStory(1);
+    });
     $("storyViewer")?.addEventListener("click", (e) => {
       if (e.target === $("storyViewer")) fecharStoryProduto();
     });
@@ -4084,6 +4292,17 @@
       const item = state.storyItem;
       if (!item || $("storyComprarBtn").disabled) return;
       fecharStoryProduto();
+      await abrirPedido(item.prato_id, item.fornecedor_id);
+    });
+    $("smartOfferSkip")?.addEventListener("click", fecharOfertaInteligente);
+    $("smartOfferPopup")?.addEventListener("click", (e) => {
+      if (e.target === $("smartOfferPopup")) fecharOfertaInteligente();
+    });
+    $("smartOfferAccept")?.addEventListener("click", async () => {
+      const item = state.smartOfferItem;
+      if (!item) return;
+      fecharOfertaInteligente();
+      state.suprimirProximaSugestao = true;
       await abrirPedido(item.prato_id, item.fornecedor_id);
     });
 
@@ -4118,7 +4337,7 @@
     // =====================================================================
     async function abrirPedido(pratoId, fornecedorId) {
       const { data: prato } = await sb.from("pratos")
-        .select("id, nome, descricao, foto_url, preco, fornecedor:fornecedores(id, nome, chave_pix, frete_entrega)")
+        .select("id, nome, descricao, foto_url, categoria, preco, fornecedor:fornecedores(id, nome, chave_pix, frete_entrega)")
         .eq("id", pratoId).single();
       const { data: acomp } = await sb.from("acompanhamentos")
         .select("id, nome, foto_url, preco_extra")
@@ -4234,6 +4453,7 @@
       }
       atualizarHeaderCliente();
       showScreen("screen-pedido");
+      sugerirComplementoPedido(prato);
     }
 
     const FIADO_TAXA = 10.00;
