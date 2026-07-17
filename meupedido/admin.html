@@ -1670,6 +1670,78 @@
       display: none;
     }
 
+    .stories-admin-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+      align-items: start;
+    }
+
+    .story-admin-col {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .story-admin-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .story-admin-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .story-admin-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .story-admin-card {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, .54);
+    }
+
+    .story-admin-photo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: linear-gradient(135deg, rgba(185, 74, 42, .12), rgba(94, 107, 58, .14));
+      border: 3px solid rgba(185, 74, 42, .18);
+      color: var(--brick);
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .story-admin-photo img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .story-admin-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
     /* Login screen */
     .login-wrap {
       min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom));
@@ -2284,6 +2356,10 @@
         </span>
         Cardápio
       </button>
+      <button class="drawer-item" data-section="stories">
+        <span class="di-icon">◉</span>
+        <span>Stories</span>
+      </button>
       <button class="drawer-item" data-section="fornecedores">
         <span class="di-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
@@ -2473,6 +2549,19 @@
         </div>
       </div>
       <div id="cardapioLista" class="loading">Carregando…</div>
+    </section>
+
+    <!-- ============ Stories ============ -->
+    <section id="section-stories" class="hidden rise rise-1">
+      <div class="section-head">
+        <h1>Publicações de Stories</h1>
+        <div class="sh-actions">
+          <button class="btn btn-primary btn-block" onclick="abrirModalStory()">+ Nova publicação</button>
+        </div>
+      </div>
+      <p class="muted small">Publique bebidas, sobremesas e lanches com foto. Eles aparecem para todos no cardápio como stories e só somem quando forem retirados daqui.</p>
+      <div id="storiesResumo" class="stats"></div>
+      <div id="storiesLista" class="loading">Carregando…</div>
     </section>
 
     <!-- ============ Fornecedores ============ -->
@@ -3357,6 +3446,7 @@
       coletivos: "Coletivos",
       prioridades: "Prioridades",
       cardapio: "Cardápio",
+      stories: "Stories",
       fornecedores: "Fornecedores",
       pratos: "Pratos",
       acomp: "Acompanhamentos",
@@ -3465,7 +3555,7 @@
 
     const secoesPorPerfil = {
       master: null,
-      gestor: ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "config"],
+      gestor: ["pedidos", "coletivos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "config"],
       financeiro: ["pedidos", "prioridades", "financeiro", "relatorios", "whatsapp", "auditoria"],
       cozinha: ["prioridades", "cozinha", "whatsapp"]
     };
@@ -3529,6 +3619,7 @@
       coletivos: carregarColetivos,
       prioridades: carregarPrioridades,
       cardapio: carregarCardapioAdmin,
+      stories: carregarStories,
       fornecedores: carregarFornecedores,
       pratos: carregarPratos,
       acomp: carregarAcompanhamentos,
@@ -3550,7 +3641,7 @@
       }
       document.querySelectorAll(".drawer-item[data-section]").forEach(b =>
         b.classList.toggle("active", b.dataset.section === section));
-      ["pedidos", "coletivos", "prioridades", "cardapio", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
+      ["pedidos", "coletivos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
         $("section-" + s).classList.toggle("hidden", s !== section);
       });
       $("appBarTitle").textContent = SECTION_TITLES[section] || "";
@@ -5059,6 +5150,7 @@ Bom apetite! 😋`;
         sb.from("pratos")
           .select("id, nome, preco, ativo, fornecedor:fornecedores(id, nome, ativo)")
           .eq("ativo", true)
+          .eq("categoria", "marmita")
           .order("nome"),
         sb.from("cardapio_dia")
           .select("id, prato_id, fornecedor_id, data")
@@ -5466,6 +5558,164 @@ Bom apetite! 😋`;
     };
 
     // =====================================================================
+    // STORIES: BEBIDAS, SOBREMESAS E LANCHES
+    // =====================================================================
+    const CATEGORIAS_STORIES = {
+      bebida: { label: "Bebidas", icon: "🥤" },
+      sobremesa: { label: "Sobremesas", icon: "🍰" },
+      lanche: { label: "Lanches", icon: "🥪" }
+    };
+
+    const storyPhotoHtml = (item) => item?.foto_url
+      ? `<div class="story-admin-photo"><img src="${item.foto_url}" alt="${escHtml(item.nome)}" loading="lazy"></div>`
+      : `<div class="story-admin-photo">${CATEGORIAS_STORIES[item?.categoria]?.icon || "◉"}</div>`;
+
+    async function carregarStories() {
+      $("storiesLista").innerHTML = '<div class="loading">Carregando publicações…</div>';
+      const { data, error } = await sb.from("pratos")
+        .select("*, fornecedor:fornecedores(id, nome, ativo)")
+        .in("categoria", Object.keys(CATEGORIAS_STORIES))
+        .order("categoria")
+        .order("nome");
+
+      if (error) {
+        $("storiesLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar stories: ${error.message}</div>`;
+        return;
+      }
+
+      const itens = data || [];
+      const publicados = itens.filter(i => i.ativo && i.fornecedor?.ativo);
+      $("storiesResumo").innerHTML = `
+        <div class="metric-card"><div class="metric-label">Publicados</div><div class="metric-value">${publicados.length}</div><div class="metric-note">visíveis para clientes</div></div>
+        <div class="metric-card"><div class="metric-label">Bebidas</div><div class="metric-value">${itens.filter(i => i.categoria === "bebida").length}</div><div class="metric-note">cadastradas</div></div>
+        <div class="metric-card"><div class="metric-label">Sobremesas</div><div class="metric-value">${itens.filter(i => i.categoria === "sobremesa").length}</div><div class="metric-note">cadastradas</div></div>
+        <div class="metric-card"><div class="metric-label">Lanches</div><div class="metric-value">${itens.filter(i => i.categoria === "lanche").length}</div><div class="metric-note">pontuam fidelidade</div></div>`;
+
+      if (itens.length === 0) {
+        $("storiesLista").innerHTML = '<div class="card empty">Nenhuma publicação criada ainda. Use “Nova publicação” para começar.</div>';
+        return;
+      }
+
+      $("storiesLista").innerHTML = `<div class="stories-admin-grid">
+        ${Object.entries(CATEGORIAS_STORIES).map(([categoria, meta]) => {
+          const arr = itens.filter(i => i.categoria === categoria);
+          return `<section class="story-admin-col">
+            <div class="story-admin-head">
+              <h2>${meta.icon} ${meta.label}</h2>
+              <button class="btn btn-ghost btn-sm" onclick="abrirModalStory(null, '${categoria}')">Adicionar</button>
+            </div>
+            <div class="story-admin-list">
+              ${arr.length ? arr.map(item => `
+                <article class="story-admin-card">
+                  ${storyPhotoHtml(item)}
+                  <div style="min-width:0;">
+                    <strong>${escHtml(item.nome)}</strong>
+                    <div class="small muted">${escHtml(item.fornecedor?.nome || "Fornecedor")} · ${fmtBRL(item.preco)}</div>
+                    <div style="margin-top:6px;">${item.ativo && item.fornecedor?.ativo ? '<span class="badge pago">publicado</span>' : '<span class="badge cancelado">retirado</span>'}</div>
+                    <div class="story-admin-actions">
+                      <button class="btn btn-ghost btn-sm" onclick='abrirModalStory(${JSON.stringify(item).replace(/'/g, "&apos;")})'>Editar</button>
+                      <button class="btn ${item.ativo ? "btn-danger" : "btn-olive"} btn-sm" onclick="alternarStoryPublicado('${item.id}', ${item.ativo ? "false" : "true"})">${item.ativo ? "Retirar" : "Republicar"}</button>
+                      <button class="btn btn-ghost btn-sm" onclick="excluirStory('${item.id}')">Excluir</button>
+                    </div>
+                  </div>
+                </article>`).join("") : '<div class="small muted">Nenhuma publicação nesta categoria.</div>'}
+            </div>
+          </section>`;
+        }).join("")}
+      </div>`;
+    }
+
+    window.abrirModalStory = async (item = null, categoriaInicial = "bebida") => {
+      const { data: forns, error: fornsError } = await sb.from("fornecedores").select("id, nome").eq("ativo", true).order("nome");
+      $("modalTitle").textContent = item ? "Editar publicação" : "Nova publicação";
+      $("modalSave").classList.remove("hidden");
+      $("modalSave").disabled = false;
+      $("modalSave").textContent = "Salvar";
+      $("modalAlert").classList.remove("show");
+
+      if (fornsError || !forns?.length) {
+        $("modalBody").innerHTML = `<div class="alert alert-error show">${fornsError?.message || "Cadastre um fornecedor ativo antes de publicar stories."}</div>`;
+        $("modalSave").classList.add("hidden");
+        $("modal").classList.add("show");
+        return;
+      }
+
+      const categoriaAtual = item?.categoria || categoriaInicial || "bebida";
+      $("modalBody").innerHTML = `
+        <div class="field"><label>Categoria do story</label>
+          <select id="storyCategoria">
+            ${Object.entries(CATEGORIAS_STORIES).map(([value, meta]) => `<option value="${value}" ${categoriaAtual === value ? "selected" : ""}>${meta.label}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field"><label>Fornecedor</label>
+          <select id="storyForn">
+            ${forns.map(f => `<option value="${f.id}" ${item?.fornecedor_id === f.id ? "selected" : ""}>${escHtml(f.nome)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field"><label>Nome da publicação</label><input id="storyNome" class="input" value="${escHtml(item?.nome || "")}" placeholder="Ex.: Coca-Cola 2L, Pudim, X-salada" /></div>
+        <div class="field"><label>Descrição</label><textarea id="storyDesc" rows="2" placeholder="Texto curto que aparece no story">${escHtml(item?.descricao || "")}</textarea></div>
+        <div class="field"><label>Preço (R$)</label><input id="storyPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${item?.preco ?? ""}" /></div>
+        ${fotoPickerHtml("storyFoto", item?.foto_url)}
+        <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="storyAtivo" ${item?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Publicado no story</label></div>`;
+      $("modal").classList.add("show");
+      ligarPreviewFoto("storyFoto", "storyFotoPreview");
+
+      $("modalSave").onclick = async () => {
+        const payload = {
+          fornecedor_id: $("storyForn").value,
+          categoria: $("storyCategoria").value,
+          nome: $("storyNome").value.trim(),
+          descricao: $("storyDesc").value.trim() || null,
+          preco: parseFloat($("storyPreco").value),
+          ativo: $("storyAtivo").checked
+        };
+        if (!payload.nome || !payload.fornecedor_id || isNaN(payload.preco)) {
+          $("modalAlert").textContent = "Informe fornecedor, nome e preço.";
+          $("modalAlert").classList.add("show");
+          return;
+        }
+        const originalText = $("modalSave").textContent;
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Salvando...";
+        try {
+          const resp = item
+            ? await sb.from("pratos").update(payload).eq("id", item.id).select("id").single()
+            : await sb.from("pratos").insert(payload).select("id").single();
+          if (resp.error) throw resp.error;
+
+          const fotoFile = $("storyFoto").files?.[0];
+          if (fotoFile) {
+            $("modalSave").textContent = "Enviando foto...";
+            const fotoUrl = await uploadFotoCardapio("stories", resp.data.id, fotoFile);
+            const { error: fotoError } = await sb.from("pratos").update({ foto_url: fotoUrl }).eq("id", resp.data.id);
+            if (fotoError) throw fotoError;
+          }
+
+          await registrarAuditoria(item ? "editou story" : "criou story", "pratos", resp.data.id, payload);
+          fecharModal();
+          carregarStories();
+        } catch (error) {
+          $("modalAlert").textContent = error.message;
+          $("modalAlert").classList.add("show");
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = originalText;
+        }
+      };
+    };
+
+    window.alternarStoryPublicado = async (id, ativo) => {
+      const { error } = await sb.from("pratos").update({ ativo }).eq("id", id);
+      if (error) return alert(error.message);
+      await registrarAuditoria(ativo ? "republicou story" : "retirou story", "pratos", id, { ativo });
+      carregarStories();
+    };
+
+    window.excluirStory = async (id) => {
+      await excluirRegistroSeguro("pratos", id, "esta publicação", carregarStories);
+    };
+
+    // =====================================================================
     // PRATOS
     // =====================================================================
     const SUGESTOES_PRATOS = [
@@ -5490,6 +5740,7 @@ Bom apetite! 😋`;
       $("pratosLista").innerHTML = '<div class="loading">Carregando…</div>';
       const { data, error } = await sb.from("pratos")
         .select("*, fornecedor:fornecedores(id, nome)")
+        .eq("categoria", "marmita")
         .order("nome");
       if (error) {
         $("pratosLista").innerHTML = `<div class="alert alert-error show">Erro ao carregar pratos: ${error.message}</div>`;

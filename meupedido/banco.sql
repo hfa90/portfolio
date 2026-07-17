@@ -1041,30 +1041,66 @@ stable
 security definer
 set search_path = public
 as $$
-  select
-    cd.id,
-    cd.data,
-    f.id,
-    f.nome,
-    f.chave_pix,
-    coalesce(f.frete_entrega, 0),
-    null::time,
-    null::time,
-    p.id,
-    p.nome,
-    p.descricao,
-    p.foto_url,
-    coalesce(p.categoria, 'marmita'),
-    p.preco
-  from public.cardapio_dia cd
-  join public.fornecedores f on f.id = cd.fornecedor_id
-  join public.pratos p on p.id = cd.prato_id
-  where cd.data = public.hoje_sp()
-    and cd.disponivel = true
-    and f.ativo = true
-    and p.ativo = true
-    and extract(dow from public.hoje_sp())::int = any(f.dias_atendimento)
-  order by f.nome, p.nome;
+  select *
+  from (
+    select
+      cd.id as cardapio_id,
+      cd.data as data,
+      f.id as fornecedor_id,
+      f.nome as fornecedor_nome,
+      f.chave_pix as fornecedor_pix,
+      coalesce(f.frete_entrega, 0) as fornecedor_frete,
+      null::time as horario_inicio,
+      null::time as horario_limite,
+      p.id as prato_id,
+      p.nome as prato_nome,
+      p.descricao as prato_descricao,
+      p.foto_url as prato_foto_url,
+      coalesce(p.categoria, 'marmita') as prato_categoria,
+      p.preco as prato_preco
+    from public.cardapio_dia cd
+    join public.fornecedores f on f.id = cd.fornecedor_id
+    join public.pratos p on p.id = cd.prato_id
+    where cd.data = public.hoje_sp()
+      and cd.disponivel = true
+      and f.ativo = true
+      and p.ativo = true
+      and coalesce(p.categoria, 'marmita') = 'marmita'
+      and extract(dow from public.hoje_sp())::int = any(f.dias_atendimento)
+
+    union all
+
+    select
+      null::uuid,
+      public.hoje_sp(),
+      f.id,
+      f.nome,
+      f.chave_pix,
+      coalesce(f.frete_entrega, 0),
+      null::time,
+      null::time,
+      p.id,
+      p.nome,
+      p.descricao,
+      p.foto_url,
+      coalesce(p.categoria, 'marmita'),
+      p.preco
+    from public.pratos p
+    join public.fornecedores f on f.id = p.fornecedor_id
+    where p.ativo = true
+      and f.ativo = true
+      and coalesce(p.categoria, 'marmita') in ('bebida', 'sobremesa', 'lanche')
+  ) itens
+  order by
+    case prato_categoria
+      when 'marmita' then 0
+      when 'bebida' then 1
+      when 'sobremesa' then 2
+      when 'lanche' then 3
+      else 4
+    end,
+    fornecedor_nome,
+    prato_nome;
 $$;
 
 drop function if exists public.meus_pedidos(uuid);
@@ -1368,7 +1404,7 @@ begin
     raise exception 'Fornecedor invalido ou inativo.';
   end if;
 
-  if not exists (
+  if coalesce(v_prato.categoria, 'marmita') = 'marmita' and not exists (
     select 1
       from public.cardapio_dia cd
      where cd.data = public.hoje_sp()
@@ -1590,7 +1626,7 @@ begin
       raise exception 'Fornecedor invalido no pedido coletivo.';
     end if;
 
-    if not exists (
+    if coalesce(v_prato.categoria, 'marmita') = 'marmita' and not exists (
       select 1
         from public.cardapio_dia cd
        where cd.data = public.hoje_sp()
