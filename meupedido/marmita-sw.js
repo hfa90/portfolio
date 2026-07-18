@@ -1,6 +1,6 @@
 // marmita-sw.js - Service Worker para PWA e Web Push
 
-const CACHE_NAME = "marmita-v8";
+const CACHE_NAME = "marmita-v9";
 const ASSETS_TO_CACHE = ["./marmita.html", "./admin.html", "./manifest.webmanifest", "./icon.svg"];
 
 self.addEventListener("install", event => {
@@ -64,6 +64,8 @@ self.addEventListener("push", event => {
       vibrate: [100, 50, 100, 50, 100],
       tag: data.tag || "marmita-push",
       renotify: true,
+      requireInteraction: data.requireInteraction !== false,
+      timestamp: Date.now(),
       data: { url: data.url },
       actions: [
         { action: "abrir", title: "Abrir" },

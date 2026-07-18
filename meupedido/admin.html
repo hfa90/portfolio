@@ -3165,7 +3165,15 @@
     }
 
     const ADMIN_NOTIF_URL = "/admin.html#pedidos";
+    const VAPID_PUBLIC_KEY = "BAuF3u4tWK84I2dHFN0fkKnZDBol3xK7WbGQrE7GntWxKNznJ10ZJ6VqCprvdutUqMYmNFrn6lgIW69sjg9aQTY";
     let adminNotifPermissao = typeof Notification !== "undefined" ? Notification.permission : "denied";
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = "=".repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
 
     function atualizarBotaoNotificacoesAdmin() {
       const btn = $("btnAdminNotif");
@@ -3192,6 +3200,34 @@
       }
     }
 
+    async function registrarPushAdmin() {
+      if (!adminAtual) return;
+      if (!("PushManager" in window)) {
+        mostrarToastAdmin("⚠️", "Push indisponível", "Este navegador não suporta Push em segundo plano.");
+        return;
+      }
+
+      const reg = await registrarServiceWorkerAdmin();
+      if (!reg?.pushManager) throw new Error("Service Worker indisponível para Push.");
+
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+      }
+
+      const j = sub.toJSON();
+      const { error } = await sb.rpc("salvar_admin_push_subscription", {
+        p_endpoint: j.endpoint,
+        p_p256dh: j.keys.p256dh,
+        p_auth: j.keys.auth,
+        p_user_agent: navigator.userAgent.slice(0, 200)
+      });
+      if (error) throw error;
+    }
+
     async function solicitarPermissaoAdminNotificacoes() {
       if (typeof Notification === "undefined") {
         mostrarToastAdmin("⚠️", "Não suportado", "Este navegador não suporta notificações.");
@@ -3202,8 +3238,8 @@
         adminNotifPermissao = await Notification.requestPermission();
         atualizarBotaoNotificacoesAdmin();
         if (adminNotifPermissao === "granted") {
-          await registrarServiceWorkerAdmin();
-          mostrarToastAdmin("🔔", "Notificações ativadas", "Você receberá aviso do navegador quando o painel estiver em segundo plano.");
+          await registrarPushAdmin();
+          mostrarToastAdmin("🔔", "Notificações ativadas", "Você receberá aviso do navegador mesmo com o painel minimizado.");
         } else {
           mostrarToastAdmin("⚠️", "Notificações bloqueadas", "Ative nas permissões do navegador para receber avisos em segundo plano.");
         }
@@ -3256,6 +3292,16 @@
     }
 
     $("adminToast").addEventListener("click", () => navegar("pedidos"));
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", async (event) => {
+        if (event.data?.type !== "NOTIF_CLICK") return;
+        if (adminAtual) {
+          navegar("pedidos");
+          await carregarPedidos({ silent: true });
+        }
+      });
+    }
 
     function fecharAlertaAdmin() {
       $("adminAlertPopup").classList.remove("show");
@@ -3510,7 +3556,7 @@
       $("drawerBackdrop").classList.remove("hidden");
       $("nomeAdmin").textContent = `${adminAtual.nome} · ${perfilLabel[adminAtual.perfil] || "Admin"}`;
       atualizarBotaoNotificacoesAdmin();
-      if (adminNotifPermissao === "granted") registrarServiceWorkerAdmin();
+      if (adminNotifPermissao === "granted") registrarPushAdmin().catch(e => console.warn("Push admin nao registrado:", e));
       aplicarPerfilAdmin();
       navegar(primeiraSecaoPermitida());
       iniciarMonitorPedidosAdmin();
