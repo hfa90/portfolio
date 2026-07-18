@@ -2636,6 +2636,9 @@
           <input type="date" id="relInicio" class="input" />
           <input type="date" id="relFim" class="input" />
           <button class="btn btn-primary btn-block" id="btnRelatoriosAtualizar">Gerar</button>
+          <button class="btn btn-secondary btn-block" id="btnRelPdfDiario">PDF diário</button>
+          <button class="btn btn-secondary btn-block" id="btnRelPdfSemanal">PDF semanal</button>
+          <button class="btn btn-secondary btn-block" id="btnRelPdfMensal">PDF mensal</button>
         </div>
       </div>
       <p class="muted small">Visão bonita de vendas, formas de pagamento, pratos, fornecedores e movimento diário.</p>
@@ -3914,6 +3917,9 @@
     $("relInicio").value = dataRelativaISO(-30);
     $("relFim").value = hojeISO();
     $("btnRelatoriosAtualizar").addEventListener("click", carregarRelatorios);
+    $("btnRelPdfDiario").addEventListener("click", () => gerarRelatorioPdf("diario"));
+    $("btnRelPdfSemanal").addEventListener("click", () => gerarRelatorioPdf("semanal"));
+    $("btnRelPdfMensal").addEventListener("click", () => gerarRelatorioPdf("mensal"));
     async function carregarRelatorios() {
       const inicio = $("relInicio").value || dataRelativaISO(-30);
       const fim = $("relFim").value || hojeISO();
@@ -3949,6 +3955,317 @@
           </div>`;
       } catch (e) {
         $("relatoriosConteudo").innerHTML = `<div class="alert alert-error show">${e.message || e}</div>`;
+      }
+    }
+
+    const REL_PAY_LABEL = {
+      pix_empresa: "Pix Empresa",
+      pix_fornecedor: "Pix Fornecedor",
+      dinheiro: "Dinheiro",
+      fiado: "Fiado",
+      pagar_mais_tarde: "Pagar mais tarde",
+      cartao_infinitepay: "InfinitePay"
+    };
+    const REL_STATUS_LABEL = {
+      aberto: "Recebido",
+      fechado: "Em preparo",
+      enviado: "Enviado",
+      entregue: "Entregue",
+      concluido: "Concluido",
+      cancelado: "Cancelado",
+      aguardando_pagamento: "Aguardando pagamento"
+    };
+
+    function periodoRelatorioPdf(tipo) {
+      const base = new Date(`${$("relFim").value || hojeISO()}T12:00:00`);
+      const dataISO = d => dataLocalISO(d);
+      if (tipo === "diario") {
+        return { inicio: dataISO(base), fim: dataISO(base), titulo: "Relatorio diario" };
+      }
+      if (tipo === "semanal") {
+        const inicio = new Date(base);
+        inicio.setDate(base.getDate() - 6);
+        return { inicio: dataISO(inicio), fim: dataISO(base), titulo: "Relatorio semanal" };
+      }
+      const inicio = new Date(base.getFullYear(), base.getMonth(), 1, 12);
+      const fim = new Date(base.getFullYear(), base.getMonth() + 1, 0, 12);
+      return { inicio: dataISO(inicio), fim: dataISO(fim), titulo: "Relatorio mensal" };
+    }
+
+    function valorPedidos(arr) {
+      return arr.reduce((s, p) => s + Number(p.preco_total || 0), 0);
+    }
+
+    function acompTextoRelatorio(p) {
+      const itens = p.acompanhamentos || [];
+      return itens
+        .map(item => {
+          const qtd = Number(item.quantidade || 1);
+          const nome = item.acompanhamento?.nome || "Acompanhamento";
+          return `${qtd > 1 ? `${qtd}x ` : ""}${nome}`;
+        })
+        .join(", ");
+    }
+
+    function agruparRelatorio(pedidos, keyFn, labelFn = keyFn) {
+      const map = new Map();
+      pedidos.forEach(p => {
+        const key = keyFn(p) || "Nao informado";
+        if (!map.has(key)) map.set(key, { nome: labelFn(p) || key, qtd: 0, total: 0, pago: 0, pendente: 0 });
+        const item = map.get(key);
+        const valor = Number(p.preco_total || 0);
+        item.qtd += 1;
+        item.total += valor;
+        if (p.status_pagamento === "pago") item.pago += valor;
+        else item.pendente += valor;
+      });
+      return [...map.values()].sort((a, b) => b.total - a.total);
+    }
+
+    async function buscarPedidosRelatorioPdf(inicio, fim) {
+      const { data, error } = await sb.from("pedidos")
+        .select(`
+          id, data, criado_em, pago_em, preco_total, quantidade, observacoes, nome_pessoa,
+          forma_pagamento, status_pagamento, status, comprovante_status, comprovante_url,
+          pedido_coletivo_id, infinitepay_paid_amount,
+          prato:pratos(nome, categoria),
+          fornecedor:fornecedores(nome),
+          colaborador:colaboradores(nome, matricula, empresa, whatsapp),
+          acompanhamentos:pedido_acompanhamentos(
+            quantidade,
+            acompanhamento:acompanhamentos(nome, preco_extra)
+          )
+        `)
+        .gte("data", inicio)
+        .lte("data", fim)
+        .order("data", { ascending: true })
+        .order("criado_em", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async function carregarBibliotecaPdf() {
+      const [{ jsPDF }, autoTableMod] = await Promise.all([
+        import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm"),
+        import("https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.2/+esm")
+      ]);
+      const autoTable = autoTableMod.default || autoTableMod.autoTable;
+      if (!autoTable) throw new Error("Biblioteca de tabelas do PDF indisponivel.");
+      return { jsPDF, autoTable };
+    }
+
+    function addTituloPdf(doc, periodo, totalPaginasTexto = "") {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(periodo.titulo, 14, 16);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.text(`${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)}${totalPaginasTexto}`, 14, 22);
+      doc.text(`Gerado em ${fmtDataHora(new Date().toISOString())}`, 14, 27);
+    }
+
+    function addRodapePdf(doc) {
+      const total = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= total; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(120);
+        doc.text(`Marmita - Relatorio financeiro | Pagina ${i} de ${total}`, 14, 288);
+      }
+      doc.setTextColor(0);
+    }
+
+    function linhasResumoFinanceiro(pedidos) {
+      const ativos = pedidos.filter(p => p.status !== "cancelado");
+      const cancelados = pedidos.filter(p => p.status === "cancelado");
+      const pagos = ativos.filter(p => p.status_pagamento === "pago");
+      const pendentes = ativos.filter(p => p.status_pagamento !== "pago");
+      const fiado = ativos.filter(p => p.forma_pagamento === "fiado");
+      const fiadoAberto = fiado.filter(p => p.status_pagamento !== "pago");
+      const pixPendente = ativos.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento !== "pago");
+      const pixAprovar = pixPendente.filter(p => p.comprovante_status === "enviado" && p.comprovante_url);
+      const presenciais = ativos.filter(p => ["dinheiro", "pagar_mais_tarde"].includes(p.forma_pagamento) && p.status_pagamento !== "pago");
+      const total = valorPedidos(ativos);
+      const recebido = valorPedidos(pagos);
+      const pendente = valorPedidos(pendentes);
+      return [
+        ["Pedidos considerados", String(ativos.length), "Cancelados fora do faturamento: " + cancelados.length],
+        ["Faturamento bruto", fmtBRL(total), "Soma dos pedidos nao cancelados"],
+        ["Recebido confirmado", fmtBRL(recebido), `${pagos.length} pedido(s) pagos`],
+        ["A receber", fmtBRL(pendente), `${pendentes.length} pedido(s) pendentes`],
+        ["Fiado em aberto", fmtBRL(valorPedidos(fiadoAberto)), `${fiadoAberto.length} pedido(s)`],
+        ["PIX aguardando", fmtBRL(valorPedidos(pixPendente)), `${pixAprovar.length} comprovante(s) para aprovar`],
+        ["Presencial pendente", fmtBRL(valorPedidos(presenciais)), "Dinheiro ou pagar mais tarde"],
+        ["Ticket medio", fmtBRL(ativos.length ? total / ativos.length : 0), "Faturamento / pedidos considerados"]
+      ];
+    }
+
+    function linhasPedidosDetalhados(pedidos) {
+      return pedidos.map(p => [
+        fmtData(p.data),
+        fmtDataHora(p.criado_em),
+        p.colaborador?.nome || p.nome_pessoa || "Cliente",
+        p.colaborador?.empresa || "-",
+        `${Number(p.quantidade || 1)}x ${p.prato?.nome || "Pedido"}`,
+        p.fornecedor?.nome || "Fornecedor",
+        acompTextoRelatorio(p) || "-",
+        REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento,
+        p.status_pagamento === "pago" ? "Pago" : "Pendente",
+        REL_STATUS_LABEL[p.status] || p.status,
+        fmtBRL(p.preco_total),
+        p.observacoes || "-"
+      ]);
+    }
+
+    async function gerarRelatorioPdf(tipo) {
+      const botoes = ["btnRelPdfDiario", "btnRelPdfSemanal", "btnRelPdfMensal"].map($).filter(Boolean);
+      botoes.forEach(b => { b.disabled = true; });
+      const periodo = periodoRelatorioPdf(tipo);
+      const nomeArquivo = `relatorio-${tipo}-${periodo.inicio}-a-${periodo.fim}.pdf`;
+      try {
+        mostrarToastAdmin("📄", "Gerando PDF", "Montando relatório financeiro detalhado...");
+        const [pedidos, libs] = await Promise.all([
+          buscarPedidosRelatorioPdf(periodo.inicio, periodo.fim),
+          carregarBibliotecaPdf()
+        ]);
+        const { jsPDF, autoTable } = libs;
+        const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        const ativos = pedidos.filter(p => p.status !== "cancelado");
+        const pagos = ativos.filter(p => p.status_pagamento === "pago");
+        const pendentes = ativos.filter(p => p.status_pagamento !== "pago");
+        const fiados = ativos.filter(p => p.forma_pagamento === "fiado");
+        const fiadosAbertos = fiados.filter(p => p.status_pagamento !== "pago");
+
+        addTituloPdf(doc, periodo);
+        doc.setFontSize(10);
+        doc.text("Resumo executivo", 14, 38);
+        autoTable(doc, {
+          startY: 43,
+          head: [["Indicador", "Valor", "Leitura"]],
+          body: linhasResumoFinanceiro(pedidos),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [185, 74, 42] },
+          columnStyles: { 0: { fontStyle: "bold" }, 1: { halign: "right" } }
+        });
+
+        const porPagamento = agruparRelatorio(ativos, p => p.forma_pagamento, p => REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento);
+        const porFornecedor = agruparRelatorio(ativos, p => p.fornecedor?.nome);
+        const porCliente = agruparRelatorio(ativos, p => p.colaborador?.nome || p.nome_pessoa).slice(0, 12);
+        const porProduto = agruparRelatorio(ativos, p => p.prato?.nome).slice(0, 12);
+        const porDia = agruparRelatorio(ativos, p => p.data, p => fmtData(p.data));
+
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Forma de pagamento", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porPagamento.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "striped",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [94, 107, 58] }
+        });
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        autoTable(doc, {
+          startY: 36,
+          head: [["Dia", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porDia.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [42, 31, 23] }
+        });
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Fornecedor", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porFornecedor.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [42, 31, 23] }
+        });
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        autoTable(doc, {
+          startY: 36,
+          head: [["Produto", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porProduto.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [185, 74, 42] }
+        });
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Cliente", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porCliente.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [185, 74, 42] }
+        });
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        autoTable(doc, {
+          startY: 36,
+          head: [["Cliente", "Empresa", "Pedido", "Data", "Pagamento", "Status", "Valor", "Obs"]],
+          body: fiadosAbertos.map(p => [
+            p.colaborador?.nome || p.nome_pessoa || "Cliente",
+            p.colaborador?.empresa || "-",
+            `${Number(p.quantidade || 1)}x ${p.prato?.nome || "Pedido"}`,
+            fmtData(p.data),
+            REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento,
+            p.status_pagamento === "pago" ? "Pago" : "Pendente",
+            fmtBRL(p.preco_total),
+            p.observacoes || "-"
+          ]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 7, cellPadding: 1.8 },
+          headStyles: { fillColor: [160, 31, 31] },
+          didDrawPage: () => addTituloPdf(doc, periodo)
+        });
+        if (!fiadosAbertos.length) doc.text("Nenhum fiado em aberto no periodo.", 14, 44);
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        autoTable(doc, {
+          startY: 36,
+          head: [["Data", "Hora", "Cliente", "Empresa", "Produto", "Fornecedor", "Acompanhamentos", "Pagamento", "Pgto", "Pedido", "Valor", "Observacoes"]],
+          body: linhasPedidosDetalhados(ativos),
+          theme: "striped",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 6.2, cellPadding: 1.3, overflow: "linebreak" },
+          headStyles: { fillColor: [42, 31, 23] },
+          columnStyles: {
+            0: { cellWidth: 16 },
+            1: { cellWidth: 22 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: 20 },
+            4: { cellWidth: 30 },
+            5: { cellWidth: 24 },
+            6: { cellWidth: 28 },
+            7: { cellWidth: 20 },
+            8: { cellWidth: 16 },
+            9: { cellWidth: 18 },
+            10: { cellWidth: 16, halign: "right" }
+          },
+          didDrawPage: () => addTituloPdf(doc, periodo)
+        });
+
+        addRodapePdf(doc);
+        doc.save(nomeArquivo);
+        mostrarToastAdmin("✅", "PDF gerado", `${pedidos.length} pedido(s) analisados no relatório.`);
+      } catch (e) {
+        console.warn("PDF relatorio:", e);
+        mostrarToastAdmin("⚠️", "Erro no PDF", e?.message || "Não foi possível gerar o relatório.");
+        alert("Erro ao gerar PDF: " + (e?.message || e));
+      } finally {
+        botoes.forEach(b => { b.disabled = false; });
       }
     }
 
