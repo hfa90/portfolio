@@ -1810,6 +1810,23 @@
       padding: 0 14px;
       min-height: 48px;
       box-shadow: var(--shadow-sm);
+      transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
+    }
+
+    .search-box:focus-within,
+    .search-box.searching {
+      background: rgba(255, 250, 240, .98);
+      border-color: rgba(185, 74, 42, .42);
+      box-shadow: 0 12px 30px rgba(42, 31, 23, .12);
+      transform: translateY(-1px);
+    }
+
+    .search-icon {
+      transition: transform 220ms ease;
+    }
+
+    .search-box.searching .search-icon {
+      transform: scale(1.08) rotate(-6deg);
     }
 
     .search-box input {
@@ -1819,6 +1836,51 @@
       min-height: 42px;
       font-size: 15px;
       box-shadow: none;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-clear {
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 50%;
+      background: rgba(118, 118, 128, .12);
+      color: var(--ink-soft);
+      display: none;
+      place-items: center;
+      cursor: pointer;
+      font-size: 17px;
+      line-height: 1;
+      padding: 0;
+    }
+
+    .search-box.searching .search-clear {
+      display: grid;
+    }
+
+    .search-insights {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: -2px;
+      color: var(--ink-soft);
+    }
+
+    .search-insights.show {
+      display: flex;
+    }
+
+    .search-suggest {
+      border: 0;
+      background: rgba(185, 74, 42, .10);
+      color: var(--brick);
+      border-radius: 999px;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
     }
 
     .filter-row,
@@ -2238,14 +2300,30 @@
       position: fixed;
       inset: 0;
       z-index: 55;
-      background: rgba(0, 0, 0, .38);
-      display: none;
+      background: rgba(0, 0, 0, 0);
+      display: flex;
       align-items: flex-end;
       padding: 18px;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 520ms ease, visibility 0s linear 520ms, background-color 520ms ease;
     }
 
     .smart-offer-bg.show {
-      display: flex;
+      background: rgba(0, 0, 0, .38);
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition: opacity 520ms ease, background-color 520ms ease;
+    }
+
+    .smart-offer-bg.closing {
+      background: rgba(0, 0, 0, 0);
+      opacity: 0;
+      visibility: visible;
+      pointer-events: none;
+      transition: opacity 520ms ease, background-color 520ms ease;
     }
 
     .smart-offer {
@@ -2256,14 +2334,21 @@
       border-radius: 26px;
       padding: 18px;
       box-shadow: 0 18px 46px rgba(42, 31, 23, .24);
-      transform: translateY(110%);
-      transition: transform 260ms cubic-bezier(.2, .8, .2, 1);
+      opacity: .98;
+      transform: translateY(calc(100% + 34px));
+      transition: transform 560ms cubic-bezier(.22, .86, .28, 1), opacity 420ms ease;
       touch-action: none;
       will-change: transform;
     }
 
     .smart-offer-bg.show .smart-offer {
       transform: translateY(0);
+      opacity: 1;
+    }
+
+    .smart-offer-bg.closing .smart-offer {
+      transform: translateY(calc(100% + 34px));
+      opacity: .98;
     }
 
     .smart-offer-handle {
@@ -2532,9 +2617,11 @@
     <div id="tab-cardapio" class="rise rise-3">
       <div class="client-toolbar">
         <div class="search-box">
-          <span>🔎</span>
+          <span class="search-icon">🔎</span>
           <input id="cardapioBusca" type="search" placeholder="Buscar prato, fornecedor ou detalhe..." />
+          <button id="cardapioBuscaLimpar" class="search-clear" type="button" aria-label="Limpar busca">×</button>
         </div>
+        <div id="cardapioBuscaInsights" class="search-insights small" aria-live="polite"></div>
         <div class="filter-row">
           <button class="filter-chip active" data-cardapio-filtro="todos">Todos</button>
           <button class="filter-chip" data-cardapio-filtro="favoritos">Favoritos</button>
@@ -3766,28 +3853,111 @@
       $("btnIrPedidosRapido")?.addEventListener("click", () => { ativarTab("meusPedidos"); carregarMeusPedidos(); });
     }
 
+    function normalizarBusca(valor) {
+      return String(valor || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\w\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    }
+
+    function termosBusca(termo) {
+      const base = normalizarBusca(termo).split(" ").filter(Boolean);
+      const extras = [];
+      const mapa = {
+        refri: ["bebida", "coca", "fanta", "refrigerante"],
+        refrigerante: ["bebida", "coca", "fanta"],
+        suco: ["bebida"],
+        beber: ["bebida"],
+        barato: ["economico"],
+        economico: ["barato"],
+        doce: ["sobremesa"],
+        sobremesa: ["doce"],
+        almoco: ["marmita"],
+        comida: ["marmita"],
+        prato: ["marmita"]
+      };
+      base.forEach(t => extras.push(...(mapa[t] || [])));
+      return [...new Set([...base, ...extras])];
+    }
+
+    function pontuarBuscaCardapio(card, tokens) {
+      if (!tokens.length) return 1;
+      const texto = normalizarBusca(card.dataset.search || "");
+      const categoria = normalizarBusca(card.dataset.categoria || "");
+      const preco = Number(card.dataset.preco || 0);
+      let score = 0;
+      for (const token of tokens) {
+        if (token === "economico" || token === "barato") {
+          if (preco > 0 && preco <= 25) score += 2;
+          continue;
+        }
+        if (categoria === token) score += 4;
+        if (texto.includes(token)) score += texto.startsWith(token) ? 5 : 3;
+        else if (texto.split(" ").some(palavra => palavra.startsWith(token))) score += 2;
+      }
+      return score;
+    }
+
+    function atualizarInsightsBusca(total, termo) {
+      const box = $("cardapioBuscaInsights");
+      const searchBox = $("cardapioBusca")?.closest(".search-box");
+      if (!box || !searchBox) return;
+      const ativo = !!normalizarBusca(termo);
+      searchBox.classList.toggle("searching", ativo);
+      if (!ativo) {
+        box.classList.remove("show");
+        box.innerHTML = "";
+        return;
+      }
+      const sugestao = total ? "Limpar" : "Ver marmitas";
+      box.classList.add("show");
+      box.innerHTML = `
+        <span>${total} resultado${total === 1 ? "" : "s"} para "${esc(termo.trim())}"</span>
+        <button class="search-suggest" id="cardapioBuscaSugestao" type="button">${sugestao}</button>
+      `;
+      $("cardapioBuscaSugestao")?.addEventListener("click", () => {
+        if (total) {
+          $("cardapioBusca").value = "";
+        } else {
+          $("cardapioBusca").value = "marmita";
+          state.cardapioFiltro = "todos";
+          document.querySelectorAll("[data-cardapio-filtro]").forEach(b => b.classList.toggle("active", b.dataset.cardapioFiltro === "todos"));
+        }
+        aplicarFiltrosCardapio();
+        $("cardapioBusca")?.focus();
+      });
+    }
+
     function aplicarFiltrosCardapio() {
-      const termo = ($("cardapioBusca")?.value || "").trim().toLowerCase();
+      const termo = ($("cardapioBusca")?.value || "").trim();
+      const tokens = termosBusca(termo);
       const filtro = state.cardapioFiltro || "todos";
+      let totalVisivel = 0;
       document.querySelectorAll("[data-cardapio-card]").forEach(card => {
-        const texto = card.dataset.search || "";
         const preco = Number(card.dataset.preco || 0);
         const favorito = state.favoritos.has(card.dataset.prato);
         const comFoto = card.dataset.foto === "1";
-        const passaTexto = !termo || texto.includes(termo);
+        const score = pontuarBuscaCardapio(card, tokens);
+        const passaTexto = !tokens.length || score > 0;
         const passaFiltro =
           filtro === "todos" ||
           (filtro === "favoritos" && favorito) ||
           (filtro === "economicos" && preco <= 25) ||
           (filtro === "com-foto" && comFoto);
-        card.style.display = passaTexto && passaFiltro ? "" : "none";
+        const visivel = passaTexto && passaFiltro;
+        card.style.display = visivel ? "" : "none";
+        card.style.order = visivel && tokens.length ? String(-score) : "";
+        if (visivel) totalVisivel++;
       });
       document.querySelectorAll("[data-story-item]").forEach(card => {
-        const texto = card.dataset.search || "";
         const preco = Number(card.dataset.preco || 0);
         const favorito = state.favoritos.has(card.dataset.prato);
         const comFoto = card.dataset.foto === "1";
-        const passaTexto = !termo || texto.includes(termo);
+        const score = pontuarBuscaCardapio(card, tokens);
+        const passaTexto = !tokens.length || score > 0;
         const passaFiltro =
           filtro === "todos" ||
           (filtro === "favoritos" && favorito) ||
@@ -3795,6 +3965,7 @@
           (filtro === "com-foto" && comFoto);
         card.style.display = passaTexto && passaFiltro ? "" : "none";
       });
+      atualizarInsightsBusca(totalVisivel, termo);
     }
 
     function renderizarStoriesCardapio(itens, pedidosAbertos) {
@@ -3838,6 +4009,7 @@
               data-story-categoria="${categoria}"
               data-prato="${item.prato_id}"
               data-fornecedor="${item.fornecedor_id}"
+              data-categoria="${categoria}"
               data-preco="${Number(item.prato_preco || 0)}"
               data-foto="${item.prato_foto_url ? "1" : "0"}"
               data-search="${search}">
@@ -3918,9 +4090,13 @@
       return candidatos[Math.floor(Math.random() * candidatos.length)];
     }
 
+    let smartOfferCloseTimer = null;
+
     function abrirOfertaInteligente({ titulo, mensagem, item, cta }) {
       if (!item) return;
+      clearTimeout(smartOfferCloseTimer);
       state.smartOfferItem = item;
+      $("smartOfferPopup").classList.remove("closing");
       $("smartOfferTitle").textContent = titulo;
       $("smartOfferMsg").textContent = mensagem;
       $("smartOfferAccept").textContent = cta || "Adicionar ao carrinho";
@@ -3930,14 +4106,24 @@
           <strong>${esc(item.prato_nome)}</strong>
           <div class="small muted">${esc(item.fornecedor_nome)} · ${fmtBRL(item.prato_preco)}</div>
         </div>`;
-      $("smartOfferPopup").classList.add("show");
       $("smartOfferPopup").setAttribute("aria-hidden", "false");
+      requestAnimationFrame(() => $("smartOfferPopup").classList.add("show"));
     }
 
     function fecharOfertaInteligente() {
-      $("smartOfferPopup").classList.remove("show");
-      $("smartOfferPopup").setAttribute("aria-hidden", "true");
-      state.smartOfferItem = null;
+      const popup = $("smartOfferPopup");
+      if (!popup.classList.contains("show")) {
+        state.smartOfferItem = null;
+        popup.setAttribute("aria-hidden", "true");
+        return;
+      }
+      popup.classList.add("closing");
+      clearTimeout(smartOfferCloseTimer);
+      smartOfferCloseTimer = setTimeout(() => {
+        popup.classList.remove("show", "closing");
+        popup.setAttribute("aria-hidden", "true");
+        state.smartOfferItem = null;
+      }, 560);
     }
 
     function sugerirComplementoPedido(prato) {
@@ -4083,7 +4269,7 @@
             ? `<div class="small muted">${estoqueDisponivel <= 5 ? `Restam ${estoqueDisponivel}` : `${estoqueDisponivel} disponiveis`}</div>`
             : "";
           const favorito = state.favoritos.has(p.id);
-          html += `<div class="prato ${bloqueio ? 'prato-encerrado' : ''}" data-cardapio-card data-prato="${p.id}" data-fornecedor="${fornecedor.id}" data-preco="${Number(p.preco || 0)}" data-foto="${p.foto_url ? "1" : "0"}" data-search="${esc((fornecedor.nome + " " + p.nome + " " + (p.descricao || "")).toLowerCase())}" ${bloqueio ? 'style="opacity:.55;"' : ''}>
+          html += `<div class="prato ${bloqueio ? 'prato-encerrado' : ''}" data-cardapio-card data-prato="${p.id}" data-fornecedor="${fornecedor.id}" data-categoria="${p.categoria}" data-preco="${Number(p.preco || 0)}" data-foto="${p.foto_url ? "1" : "0"}" data-search="${esc((fornecedor.nome + " " + p.nome + " " + (p.descricao || "") + " " + categoriaInfo.label).toLowerCase())}" ${bloqueio ? 'style="opacity:.55;"' : ''}>
             ${bloqueio ? '' : '<span class="prato-badge-add">+</span>'}
             <button class="favorite-btn ${favorito ? "active" : ""}" data-fav-prato="${p.id}" type="button" aria-label="Favoritar prato">${favorito ? "♥" : "♡"}</button>
             ${fotoHtml}
@@ -4621,7 +4807,16 @@
       });
     });
 
-    $("cardapioBusca")?.addEventListener("input", aplicarFiltrosCardapio);
+    let cardapioBuscaTimer = null;
+    $("cardapioBusca")?.addEventListener("input", () => {
+      clearTimeout(cardapioBuscaTimer);
+      cardapioBuscaTimer = setTimeout(aplicarFiltrosCardapio, 90);
+    });
+    $("cardapioBuscaLimpar")?.addEventListener("click", () => {
+      $("cardapioBusca").value = "";
+      aplicarFiltrosCardapio();
+      $("cardapioBusca").focus();
+    });
     document.querySelectorAll("[data-cardapio-filtro]").forEach(btn => {
       btn.addEventListener("click", () => {
         state.cardapioFiltro = btn.dataset.cardapioFiltro;
