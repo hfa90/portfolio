@@ -772,6 +772,104 @@
       opacity: 1;
     }
 
+    .quantity-card {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .quantity-control {
+      display: grid;
+      grid-template-columns: 44px 64px 44px;
+      align-items: center;
+      border: 1px solid var(--separator);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--paper);
+      flex: 0 0 auto;
+    }
+
+    .quantity-control button {
+      width: 44px;
+      height: 44px;
+      border: none;
+      background: rgba(118, 118, 128, .08);
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--brick);
+      cursor: pointer;
+    }
+
+    .quantity-control input {
+      width: 64px;
+      height: 44px;
+      border: none;
+      text-align: center;
+      font: 800 18px var(--font-rounded);
+      color: var(--ink);
+      background: transparent;
+    }
+
+    .quantity-control input:focus {
+      outline: none;
+    }
+
+    .totalbar-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .cart-fab {
+      position: fixed;
+      right: 18px;
+      bottom: calc(18px + var(--safe-bottom));
+      z-index: 11;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: none;
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: var(--ink);
+      color: #fff;
+      font-weight: 800;
+      box-shadow: var(--shadow-lg);
+      cursor: pointer;
+    }
+
+    .cart-count {
+      display: inline-grid;
+      place-items: center;
+      min-width: 22px;
+      height: 22px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: var(--brick);
+      color: #fff;
+      font-size: 12px;
+    }
+
+    .cart-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--separator);
+    }
+
+    .cart-item:last-child {
+      border-bottom: none;
+    }
+
+    .cart-empty {
+      text-align: center;
+      padding: 38px 18px;
+    }
+
     /* Bottom bar */
     .totalbar {
       position: fixed;
@@ -2403,6 +2501,12 @@
     <span style="font-size:20px;">👥</span> Pedido coletivo
   </button>
 
+  <button class="cart-fab hidden" id="btnCarrinho">
+    <span>🛒</span>
+    <span id="carrinhoResumoFab">Carrinho</span>
+    <span class="cart-count" id="carrinhoQtdFab">0</span>
+  </button>
+
   <main class="container hidden" id="screen-coletivo" style="padding-bottom: 110px;">
     <header class="app-header rise">
       <button class="btn btn-ghost btn-sm" id="btnVoltarColetivo">← Voltar</button>
@@ -2449,6 +2553,18 @@
       <p class="muted" id="pedidoDesc"></p>
     </div>
 
+    <div class="card rise rise-2 quantity-card" style="margin-top: 14px;">
+      <div>
+        <h3 style="margin-bottom:4px;">Quantidade</h3>
+        <p class="small muted" style="margin:0;">Escolha quantas unidades deste produto.</p>
+      </div>
+      <div class="quantity-control" aria-label="Quantidade do pedido">
+        <button type="button" id="qtdMenos" aria-label="Diminuir quantidade">−</button>
+        <input id="pedidoQtd" type="number" inputmode="numeric" min="1" max="99" value="1" aria-label="Quantidade" />
+        <button type="button" id="qtdMais" aria-label="Aumentar quantidade">+</button>
+      </div>
+    </div>
+
     <div class="card rise rise-2" style="margin-top: 14px;">
       <h3 style="margin-bottom:10px;">Acompanhamentos</h3>
       <div id="acompList" class="chips"></div>
@@ -2474,7 +2590,42 @@
         <div class="small muted">Total</div>
         <div class="total" id="totalPreco">R$ 0,00</div>
       </div>
-      <button id="btnConfirmar" class="btn btn-primary btn-pill">Confirmar pedido</button>
+      <div class="totalbar-actions">
+        <button id="btnAdicionarCarrinho" class="btn btn-secondary btn-pill">Adicionar</button>
+        <button id="btnConfirmar" class="btn btn-primary btn-pill">Confirmar pedido</button>
+      </div>
+    </div>
+  </main>
+
+  <main class="container hidden" id="screen-carrinho" style="padding-bottom: 110px;">
+    <header class="app-header rise">
+      <button class="btn btn-ghost btn-sm" id="btnVoltarCarrinho">← Cardápio</button>
+      <button class="btn btn-ghost btn-sm" id="btnLimparCarrinho">Limpar</button>
+    </header>
+
+    <div class="rise rise-1">
+      <p class="eyebrow">🛒 Seu carrinho</p>
+      <h1 style="font-size:28px;">Revise os itens</h1>
+      <p class="muted small">O frete é cobrado uma vez por fornecedor. A taxa do fiado entra uma vez no carrinho.</p>
+    </div>
+
+    <div id="carrinhoLista" class="card rise rise-2" style="margin-top:14px;"></div>
+
+    <div class="rise rise-3" style="margin-top: 18px;">
+      <div class="section-title" style="margin-top: 0;">Forma de pagamento</div>
+      <div class="pay-options" id="carrinhoPayOptions"></div>
+      <div id="carrinhoPagamentoAjuda" class="payment-helper hidden"></div>
+    </div>
+
+    <div id="carrinhoAlert" class="alert alert-error" style="margin-top: 14px;"></div>
+    <div id="carrinhoResumoValores" class="card hidden" style="margin-top:14px; padding:14px;"></div>
+
+    <div class="totalbar">
+      <div>
+        <div class="small muted">Total</div>
+        <div class="total" id="carrinhoTotalPreco">R$ 0,00</div>
+      </div>
+      <button id="btnFinalizarCarrinho" class="btn btn-primary btn-pill">Finalizar carrinho</button>
     </div>
   </main>
 
@@ -2709,9 +2860,28 @@
     });
 
     const COLAB_KEY = "marmita.colaborador";
-    const getColab = () => { try { return JSON.parse(localStorage.getItem(COLAB_KEY)); } catch { return null; } };
+    const getColab = () => {
+      try {
+        const c = JSON.parse(localStorage.getItem(COLAB_KEY));
+        return c?.id && c?.session_token ? c : null;
+      } catch {
+        return null;
+      }
+    };
     const setColab = (c) => localStorage.setItem(COLAB_KEY, JSON.stringify(c));
     const clearColab = () => localStorage.removeItem(COLAB_KEY);
+    const temSessaoCliente = (colab = getColab()) => !!(colab?.id && colab?.session_token);
+    const clienteAuthParams = (colab = getColab()) => ({
+      p_colaborador_id: colab?.id || null,
+      p_session_token: colab?.session_token || ""
+    });
+    function exigirSessaoCliente(destino = "home", mensagem = "Entre novamente para continuar.") {
+      const colab = getColab();
+      if (temSessaoCliente(colab)) return colab;
+      clearColab();
+      mostrarLogin(destino, mensagem);
+      return null;
+    }
 
     const $ = (id) => document.getElementById(id);
     const fmtBRL = (v) => "R$ " + Number(v).toFixed(2).replace(".", ",");
@@ -2751,7 +2921,7 @@
       const segs = totalSeg % 60;
       return `${dias}d ${String(horas).padStart(2, "0")}h ${String(mins).padStart(2, "0")}m ${String(segs).padStart(2, "0")}s`;
     }
-    const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-sucesso", "screen-acompanhamento", "screen-coletivo", "screen-sucesso-coletivo"];
+    const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-carrinho", "screen-sucesso", "screen-acompanhamento", "screen-coletivo", "screen-sucesso-coletivo"];
     function showScreen(id) {
       screens.forEach(s => $(s).classList.toggle("hidden", s !== id));
       window.scrollTo(0, 0);
@@ -2775,10 +2945,14 @@
       selPrato: null,
       selAcomp: new Set(),
       selPagamento: null,
+      pedidoQtd: 1,
+      carrinho: [],
+      carrinhoPagamento: null,
       authDestino: "home"
     };
 
     window.pedidoAtualId = null;
+    window.pedidoAtualIds = [];
     const INFINITEPAY_PAYMENT = "cartao_infinitepay";
     const INFINITEPAY_PENDING_KEY = "marmita.infinitepay.pending";
     const isInfinitePayPayment = (forma) => forma === INFINITEPAY_PAYMENT;
@@ -2817,7 +2991,15 @@
     }
 
     async function concluirAutenticacao(resp) {
-      setColab({ id: resp.id, nome: resp.nome, matricula: resp.matricula, empresa: resp.empresa, fiado_bloqueado: !!resp.fiado_bloqueado });
+      setColab({
+        id: resp.id,
+        nome: resp.nome,
+        matricula: resp.matricula,
+        empresa: resp.empresa,
+        fiado_bloqueado: !!resp.fiado_bloqueado,
+        session_token: resp.session_token || "",
+        session_expires_at: resp.session_expires_at || null
+      });
       atualizarHeaderCliente();
       iniciarMonitorPedidosCliente();
       iniciarMonitorDebitoFiado();
@@ -3046,7 +3228,7 @@
     async function buscarPedidoCliente(pedidoId) {
       const colab = getColab();
       if (!colab || !pedidoId) return null;
-      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
       if (error || !data) {
         console.warn("Erro ao buscar acompanhamento:", error);
         return null;
@@ -3303,7 +3485,7 @@
     async function obterResumoFiadoCliente() {
       const colab = getColab();
       if (!colab) return null;
-      const { data, error } = await sb.rpc("resumo_fiado_colaborador", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("resumo_fiado_colaborador", clienteAuthParams(colab));
       if (error) {
         console.warn("Erro resumo fiado:", error);
         return null;
@@ -3395,7 +3577,7 @@
       const colab = getColab();
       state.favoritos = new Set();
       if (!colab) return;
-      const { data } = await sb.rpc("meus_favoritos", { p_colaborador_id: colab.id });
+      const { data } = await sb.rpc("meus_favoritos", clienteAuthParams(colab));
       state.favoritos = new Set((data || []).map(x => x.prato_id));
     }
 
@@ -3409,7 +3591,8 @@
       try {
         const { data, error } = await sb.rpc("alternar_favorito", {
           p_colaborador_id: colab.id,
-          p_prato_id: pratoId
+          p_prato_id: pratoId,
+          p_session_token: colab.session_token || ""
         });
         if (error) throw error;
         const ativo = !!data;
@@ -3430,7 +3613,7 @@
     async function obterFidelidadeResumo() {
       const colab = getColab();
       if (!colab) return null;
-      const { data, error } = await sb.rpc("fidelidade_resumo", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("fidelidade_resumo", clienteAuthParams(colab));
       if (error) {
         console.warn("Resumo fidelidade:", error.message);
         return null;
@@ -3452,7 +3635,7 @@
         return;
       }
       const [{ data }, fidelidade] = await Promise.all([
-        sb.rpc("perfil_cliente", { p_colaborador_id: colab.id }),
+        sb.rpc("perfil_cliente", clienteAuthParams(colab)),
         obterFidelidadeResumo()
       ]);
       const perfil = Array.isArray(data) ? data[0] : data;
@@ -3713,10 +3896,11 @@
       }
 
       renderizarStoriesCardapio(data || [], pedidosAbertos);
-      const marmitas = (data || []).filter(item => categoriaProduto(item.prato_categoria) === "marmita");
+      const produtosVendaveis = (data || []).filter(item => ["marmita", "bebida", "sobremesa", "lanche"].includes(categoriaProduto(item.prato_categoria)));
+      const marmitas = produtosVendaveis.filter(item => categoriaProduto(item.prato_categoria) === "marmita");
 
       const grupos = new Map();
-      marmitas.forEach(item => {
+      produtosVendaveis.forEach(item => {
         const fid = item.fornecedor_id;
         if (!grupos.has(fid)) {
           grupos.set(fid, {
@@ -3728,7 +3912,9 @@
           id: item.prato_id, nome: item.prato_nome,
           descricao: item.prato_descricao, foto_url: item.prato_foto_url, preco: item.prato_preco,
           categoria: categoriaProduto(item.prato_categoria),
-          fornecedor_frete: Number(item.fornecedor_frete || 0)
+          fornecedor_frete: Number(item.fornecedor_frete || 0),
+          estoque_total: item.estoque_total,
+          estoque_disponivel: item.estoque_disponivel
         });
       });
 
@@ -3744,7 +3930,7 @@
         </div>
         <div class="menu-hero-meta">
           <span class="menu-pill">${grupos.size} fornecedor${grupos.size === 1 ? "" : "es"}</span>
-          <span class="menu-pill">${marmitas.length} marmita${marmitas.length === 1 ? "" : "s"}</span>
+          <span class="menu-pill">${produtosVendaveis.length} produto${produtosVendaveis.length === 1 ? "" : "s"}</span>
           <span class="menu-pill">${pedidosAbertos ? "Pedidos abertos" : "Pedidos fechados"}</span>
         </div>
       </div>`;
@@ -3761,8 +3947,10 @@
         </div>`;
       }
 
-      if (marmitas.length === 0) {
-        html += '<div class="card empty"><div class="empty-icon">🍱</div><p>Nenhuma marmita publicada hoje.<br/>Confira as categorias acima.</p></div>';
+      renderizarBotaoCarrinho();
+
+      if (produtosVendaveis.length === 0) {
+        html += '<div class="card empty"><div class="empty-icon">🍱</div><p>Nenhum produto publicado hoje.<br/>Confira as categorias acima.</p></div>';
       }
 
       for (const { fornecedor, pratos } of grupos.values()) {
@@ -3773,10 +3961,19 @@
           </div>
           <div class="pratos-grid">`;
         pratos.forEach(p => {
-          const bloqueio = !pedidosAbertos ? { texto: "Pedidos fechados" } : null;
+          const estoqueDisponivel = p.estoque_disponivel === null || p.estoque_disponivel === undefined ? null : Number(p.estoque_disponivel);
+          const bloqueio = !pedidosAbertos
+            ? { texto: "Pedidos fechados" }
+            : estoqueDisponivel === 0
+              ? { texto: "Esgotado hoje" }
+              : null;
+          const categoriaInfo = CATEGORIAS_STORY[p.categoria] || CATEGORIAS_STORY.marmita;
           const fotoHtml = p.foto_url
             ? `<div class="prato-visual"><img src="${p.foto_url}" alt="${p.nome}" loading="lazy"></div>`
             : `<div class="prato-visual">🍽️</div>`;
+          const estoqueHtml = estoqueDisponivel !== null
+            ? `<div class="small muted">${estoqueDisponivel <= 5 ? `Restam ${estoqueDisponivel}` : `${estoqueDisponivel} disponiveis`}</div>`
+            : "";
           const favorito = state.favoritos.has(p.id);
           html += `<div class="prato ${bloqueio ? 'prato-encerrado' : ''}" data-cardapio-card data-prato="${p.id}" data-fornecedor="${fornecedor.id}" data-preco="${Number(p.preco || 0)}" data-foto="${p.foto_url ? "1" : "0"}" data-search="${esc((fornecedor.nome + " " + p.nome + " " + (p.descricao || "")).toLowerCase())}" ${bloqueio ? 'style="opacity:.55;"' : ''}>
             ${bloqueio ? '' : '<span class="prato-badge-add">+</span>'}
@@ -3784,12 +3981,14 @@
             ${fotoHtml}
             <div class="prato-info">
               <div class="prato-nome">${p.nome}</div>
+              <div class="small muted">${categoriaInfo.label}</div>
               ${p.descricao ? `<div class="prato-desc">${p.descricao}</div>` : ""}
               ${bloqueio ? `<div class="prato-desc" style="color:var(--crimson); font-weight:600;">${bloqueio.texto}</div>` : ""}
             </div>
             <div style="text-align:right;">
               <div class="prato-preco">${fmtBRL(p.preco)}</div>
               ${p.fornecedor_frete > 0 ? `<div class="small muted">+ frete ${fmtBRL(p.fornecedor_frete)}</div>` : ""}
+              ${estoqueHtml}
             </div>
           </div>`;
         });
@@ -3828,7 +4027,7 @@
         return;
       }
 
-      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
 
       if (error) {
         lista.innerHTML = `<div class="alert alert-error show">Erro: ${error.message}</div>`;
@@ -3939,7 +4138,7 @@
         return `<div class="pedido-card">
           <div class="pedido-head">
             <div style="flex:1; min-width:0;">
-              <div class="pedido-prato">${p.prato_nome ?? "—"}</div>
+              <div class="pedido-prato">${Number(p.quantidade || 1) > 1 ? `${p.quantidade}x ` : ""}${p.prato_nome ?? "—"}</div>
               <div class="pedido-meta">${p.fornecedor_nome ?? ""} · pedido feito em ${criado}</div>
               ${p.acompanhamentos ? `<div class="pedido-meta">+ ${p.acompanhamentos}</div>` : ""}
               ${p.observacoes ? `<div class="pedido-obs">📝 ${p.observacoes}</div>` : ""}
@@ -4012,7 +4211,7 @@
           return `<div style="padding:10px 0; border-bottom:1px dashed rgba(0,122,255,.12);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
               <div style="min-width:0;">
-                <strong class="small">${esc(p.prato_nome ?? "Pedido")}</strong>
+                <strong class="small">${Number(p.quantidade || 1) > 1 ? `${p.quantidade}x ` : ""}${esc(p.prato_nome ?? "Pedido")}</strong>
                 <div class="small muted">${esc(p.fornecedor_nome || "")} · pedido feito em ${fmtDataHora(p.criado_em)}</div>
                 ${p.acompanhamentos ? `<div class="small muted">+ ${esc(p.acompanhamentos)}</div>` : ""}
               </div>
@@ -4135,7 +4334,7 @@
       }
       alvo.innerHTML = '<div class="loading">Carregando perfil...</div>';
       const [{ data, error }, fidelidade] = await Promise.all([
-        sb.rpc("perfil_cliente", { p_colaborador_id: colab.id }),
+        sb.rpc("perfil_cliente", clienteAuthParams(colab)),
         obterFidelidadeResumo()
       ]);
       if (error) {
@@ -4206,7 +4405,8 @@
           p_endereco_empresa: $("perfilEndereco").value.trim(),
           p_pagamento_preferido: $("perfilPagamento").value || null,
           p_observacoes: $("perfilObs").value.trim() || null,
-          p_receber_notificacoes: $("perfilNotif").checked
+          p_receber_notificacoes: $("perfilNotif").checked,
+          p_session_token: colab.session_token || ""
         };
         const { error } = await sb.rpc("salvar_perfil_cliente", payload);
         if (error) throw error;
@@ -4230,7 +4430,8 @@
         p_colaborador_id: colab.id,
         p_pedido_id: pedidoId,
         p_nota: nota,
-        p_comentario: comentario
+        p_comentario: comentario,
+        p_session_token: colab.session_token || ""
       });
       if (error) {
         mostrarToast("⚠️", "Avaliação não salva", error.message || "Tente novamente.");
@@ -4249,7 +4450,8 @@
       }
       const { data, error } = await sb.rpc("buscar_pedido", {
         p_pedido_id: pedidoId,
-        p_colaborador_id: colab.id
+        p_colaborador_id: colab.id,
+        p_session_token: colab.session_token || ""
       });
       if (error || !data || data.length === 0) {
         alert("Não consegui carregar este pedido.");
@@ -4271,6 +4473,7 @@
       }
 
       await abrirPedido(dados.prato_id, dados.fornecedor_id);
+      setQuantidadePedido(dados.quantidade || 1);
 
       if (dados.acompanhamentos && dados.acompanhamentos.length > 0) {
         dados.acompanhamentos.forEach(acompId => {
@@ -4400,18 +4603,26 @@
       const { data: config } = await sb.from("configuracoes")
         .select("chave, valor")
         .in("chave", ["pix_empresa", "nome_empresa"]);
+      const itemCardapio = (state.cardapio || []).find(item => item.prato_id === pratoId);
+      if (prato && itemCardapio) {
+        prato.estoque_total = itemCardapio.estoque_total;
+        prato.estoque_disponivel = itemCardapio.estoque_disponivel;
+      }
 
       state.selPrato = prato;
       state.selAcomp = new Set();
       state.selPagamento = null;
+      state.pedidoQtd = 1;
       state.acompanhamentos = acomp || [];
       state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
 
       window.pedidoAtualId = null;
+      window.pedidoAtualIds = [];
 
       $("pedidoFornecedor").textContent = prato.fornecedor.nome;
       $("pedidoPrato").textContent = prato.nome;
       $("pedidoDesc").textContent = prato.descricao || "";
+      if ($("pedidoQtd")) $("pedidoQtd").value = "1";
       document.querySelectorAll(".pedido-prato-foto").forEach(el => el.remove());
       $("pedidoDesc").insertAdjacentHTML("beforebegin", prato.foto_url ? `<img class="pedido-prato-foto" src="${prato.foto_url}" alt="${prato.nome}" loading="lazy">` : "");
       $("obs").value = "";
@@ -4494,7 +4705,7 @@
       atualizarTotal();
       const colab = getColab();
       if (colab) {
-        const { data: perfilData } = await sb.rpc("perfil_cliente", { p_colaborador_id: colab.id });
+        const { data: perfilData } = await sb.rpc("perfil_cliente", clienteAuthParams(colab));
         const pref = (Array.isArray(perfilData) ? perfilData[0] : perfilData)?.pagamento_preferido;
         const payOpt = pref ? document.querySelector(`.pay-option[data-pay="${pref}"]:not(.disabled)`) : null;
         if (payOpt) {
@@ -4512,23 +4723,43 @@
 
     const FIADO_TAXA = 10.00;
 
+    function normalizarQuantidadePedido(valor) {
+      const n = Number.parseInt(valor, 10);
+      return Math.min(99, Math.max(1, Number.isFinite(n) ? n : 1));
+    }
+
+    function setQuantidadePedido(valor) {
+      let qtd = normalizarQuantidadePedido(valor);
+      const estoque = state.selPrato?.estoque_disponivel === null || state.selPrato?.estoque_disponivel === undefined
+        ? null
+        : Number(state.selPrato.estoque_disponivel);
+      if (estoque !== null) qtd = Math.max(1, Math.min(qtd, estoque));
+      state.pedidoQtd = qtd;
+      if ($("pedidoQtd")) $("pedidoQtd").value = String(state.pedidoQtd);
+      atualizarTotal();
+    }
+
     function calcTotal() {
+      if (!state.selPrato) return 0;
+      const qtd = normalizarQuantidadePedido(state.pedidoQtd);
       let total = Number(state.selPrato.preco);
       state.acompanhamentos.forEach(a => {
         if (state.selAcomp.has(a.id)) total += Number(a.preco_extra);
       });
+      total *= qtd;
       total += Number(state.selPrato?.fornecedor?.frete_entrega || 0);
       if (state.selPagamento === "fiado") total += FIADO_TAXA;
       return total;
     }
     function atualizarTotal() {
+      const qtd = normalizarQuantidadePedido(state.pedidoQtd);
       const prato = Number(state.selPrato?.preco || 0);
       const extras = state.acompanhamentos.reduce((s, a) => state.selAcomp.has(a.id) ? s + Number(a.preco_extra || 0) : s, 0);
       const frete = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
       const fiado = state.selPagamento === "fiado" ? FIADO_TAXA : 0;
       const linhas = [
-        ["Prato", prato],
-        ...(extras > 0 ? [["Acompanhamentos", extras]] : []),
+        [`Produto (${qtd}x)`, prato * qtd],
+        ...(extras > 0 ? [[`Acompanhamentos (${qtd}x)`, extras * qtd]] : []),
         ...(frete > 0 ? [["Frete do fornecedor", frete]] : []),
         ...(fiado > 0 ? [["Taxa do fiado", fiado]] : [])
       ];
@@ -4579,6 +4810,341 @@
       box.classList.remove("hidden");
     }
 
+    function novoIdLocal() {
+      return crypto?.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random());
+    }
+
+    function renderizarBotaoCarrinho() {
+      const btn = $("btnCarrinho");
+      if (!btn) return;
+      const qtd = state.carrinho.reduce((s, item) => s + Number(item.quantidade || 1), 0);
+      btn.classList.toggle("hidden", qtd === 0 || !state.pedidosAbertos);
+      $("carrinhoQtdFab").textContent = String(qtd);
+      $("carrinhoResumoFab").textContent = qtd === 1 ? "1 item" : `${qtd} itens`;
+    }
+
+    function totalItemCarrinho(item) {
+      return (Number(item.preco || 0) + Number(item.acompTotal || 0)) * Number(item.quantidade || 1);
+    }
+
+    function detalhesCarrinho(pagamento = state.carrinhoPagamento) {
+      const fretes = new Map();
+      let produtos = 0;
+      state.carrinho.forEach(item => {
+        produtos += totalItemCarrinho(item);
+        const frete = Number(item.fornecedor?.frete_entrega || 0);
+        if (frete > 0 && !fretes.has(item.fornecedor.id)) fretes.set(item.fornecedor.id, { nome: item.fornecedor.nome, valor: frete });
+      });
+      const freteTotal = [...fretes.values()].reduce((s, f) => s + f.valor, 0);
+      const fiado = pagamento === "fiado" ? FIADO_TAXA : 0;
+      return { produtos, fretes: [...fretes.values()], freteTotal, fiado, total: produtos + freteTotal + fiado };
+    }
+
+    function itemAtualParaCarrinho() {
+      const acompIds = [...state.selAcomp];
+      const acompSelecionados = state.acompanhamentos.filter(a => state.selAcomp.has(a.id));
+      return {
+        localId: novoIdLocal(),
+        prato_id: state.selPrato.id,
+        nome: state.selPrato.nome,
+        categoria: categoriaProduto(state.selPrato.categoria),
+        preco: Number(state.selPrato.preco || 0),
+        quantidade: normalizarQuantidadePedido(state.pedidoQtd),
+        observacoes: $("obs").value.trim() || null,
+        acompanhamentos: acompIds,
+        acompanhamentoNomes: acompSelecionados.map(a => a.nome),
+        acompTotal: acompSelecionados.reduce((s, a) => s + Number(a.preco_extra || 0), 0),
+        fornecedor: {
+          id: state.selPrato.fornecedor.id,
+          nome: state.selPrato.fornecedor.nome,
+          chave_pix: state.selPrato.fornecedor.chave_pix,
+          frete_entrega: Number(state.selPrato.fornecedor.frete_entrega || 0)
+        }
+      };
+    }
+
+    function adicionarAtualAoCarrinho() {
+      if (!state.selPrato) return;
+      state.carrinho.push(itemAtualParaCarrinho());
+      renderizarBotaoCarrinho();
+      mostrarToast("🛒", "Item adicionado", "Continue escolhendo ou abra o carrinho para finalizar.");
+      abrirHome();
+    }
+
+    function payloadItensCarrinho() {
+      return state.carrinho.map(item => ({
+        prato_id: item.prato_id,
+        quantidade: Number(item.quantidade || 1),
+        observacoes: item.observacoes || null,
+        acompanhamentos: item.acompanhamentos || []
+      }));
+    }
+
+    async function renderizarCarrinho() {
+      pararAcompanhamentoPedido();
+      atualizarHeaderCliente();
+      if (!state.carrinho.length) {
+        $("carrinhoLista").innerHTML = '<div class="cart-empty"><div class="empty-icon">🛒</div><p>Carrinho vazio.</p><button class="btn btn-primary btn-pill" id="btnCarrinhoVazioVoltar">Ver cardápio</button></div>';
+        $("carrinhoPayOptions").innerHTML = "";
+        $("carrinhoResumoValores").classList.add("hidden");
+        $("carrinhoTotalPreco").textContent = fmtBRL(0);
+        $("btnFinalizarCarrinho").disabled = true;
+        $("btnCarrinhoVazioVoltar")?.addEventListener("click", abrirHome);
+        showScreen("screen-carrinho");
+        return;
+      }
+
+      $("btnFinalizarCarrinho").disabled = false;
+      const [{ data: config }, resumoFiado] = await Promise.all([
+        sb.from("configuracoes").select("chave, valor").in("chave", ["pix_empresa", "nome_empresa"]),
+        checarDebitoFiado(false)
+      ]);
+      state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
+      const fiadoBloqueado = !!resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0;
+
+      $("carrinhoLista").innerHTML = state.carrinho.map(item => `
+        <div class="cart-item" data-cart-item="${item.localId}">
+          <div style="min-width:0;">
+            <strong>${item.quantidade}x ${esc(item.nome)}</strong>
+            <div class="small muted">${esc(item.fornecedor.nome)}</div>
+            ${item.acompanhamentoNomes?.length ? `<div class="small muted">+ ${esc(item.acompanhamentoNomes.join(", "))}</div>` : ""}
+            ${item.observacoes ? `<div class="small">Obs: ${esc(item.observacoes)}</div>` : ""}
+          </div>
+          <div style="text-align:right;">
+            <strong>${fmtBRL(totalItemCarrinho(item))}</strong>
+            <button class="btn btn-ghost btn-sm" data-remover-cart="${item.localId}" type="button">Remover</button>
+          </div>
+        </div>
+      `).join("");
+
+      $("carrinhoLista").querySelectorAll("[data-remover-cart]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.carrinho = state.carrinho.filter(item => item.localId !== btn.dataset.removerCart);
+          renderizarBotaoCarrinho();
+          renderizarCarrinho();
+        });
+      });
+
+      const pixEmpresa = state.configEmpresa.pix_empresa;
+      const opts = [
+        { id: INFINITEPAY_PAYMENT, icon: "💳", title: "Cartão", desc: "Pague todos os itens no checkout seguro da InfinitePay." },
+        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
+        {
+          id: "fiado",
+          icon: "📒",
+          title: "Fiado",
+          desc: fiadoBloqueado
+            ? "Indisponível: regularize o fiado vencido para habilitar novamente."
+            : "A taxa de R$10,00 entra uma vez no carrinho.",
+          disabled: fiadoBloqueado,
+          motivo: "fiado"
+        },
+        { id: "pagar_mais_tarde", icon: "🕒", title: "Pagar mais tarde", desc: "Para pagar até o fim do expediente de hoje." }
+      ];
+
+      $("carrinhoPayOptions").innerHTML = opts.map(o => `
+        <div class="pay-option ${o.disabled ? "disabled" : ""} ${state.carrinhoPagamento === o.id ? "selected" : ""}" data-cart-pay="${o.id}" data-motivo="${o.motivo || ""}">
+          <div class="pay-icon">${o.icon}</div>
+          <div style="flex:1; min-width:0;">
+            <div class="pay-title">${o.title}</div>
+            <div class="pay-desc">${o.desc}</div>
+          </div>
+          <div class="pay-check">✓</div>
+        </div>
+      `).join("");
+
+      $("carrinhoPayOptions").querySelectorAll(".pay-option").forEach(opt => {
+        opt.addEventListener("click", () => {
+          if (opt.classList.contains("disabled")) {
+            if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
+            else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
+            return;
+          }
+          $("carrinhoPayOptions").querySelectorAll(".pay-option").forEach(x => x.classList.remove("selected"));
+          opt.classList.add("selected");
+          state.carrinhoPagamento = opt.dataset.cartPay;
+          atualizarCarrinhoTotal();
+        });
+      });
+
+      atualizarCarrinhoTotal();
+      showScreen("screen-carrinho");
+    }
+
+    function atualizarCarrinhoTotal() {
+      const resumo = detalhesCarrinho();
+      const linhas = [
+        ["Produtos", resumo.produtos],
+        ...resumo.fretes.map(f => [`Frete ${f.nome}`, f.valor]),
+        ...(resumo.fiado > 0 ? [["Taxa do fiado", resumo.fiado]] : [])
+      ];
+      $("carrinhoResumoValores").classList.toggle("hidden", linhas.length <= 1);
+      $("carrinhoResumoValores").innerHTML = linhas.map(([label, valor]) => `
+        <div style="display:flex; justify-content:space-between; gap:12px; padding:4px 0;">
+          <span class="small muted">${esc(label)}</span><strong class="small">${fmtBRL(valor)}</strong>
+        </div>
+      `).join("");
+      $("carrinhoTotalPreco").textContent = fmtBRL(resumo.total);
+      const box = $("carrinhoPagamentoAjuda");
+      if (!state.carrinhoPagamento) {
+        box.classList.add("hidden");
+        return;
+      }
+      const info = {
+        cartao_infinitepay: "O carrinho inteiro será enviado para a InfinitePay em uma única cobrança.",
+        pix_empresa: "Pague o total por PIX e anexe um comprovante para liberar todos os itens.",
+        fiado: "O carrinho entra agora no seu fiado com a taxa aplicada uma vez.",
+        pagar_mais_tarde: "Os itens entram como pendentes para pagamento ainda hoje."
+      }[state.carrinhoPagamento] || "";
+      box.innerHTML = `<strong>${esc($("carrinhoPayOptions").querySelector(".pay-option.selected .pay-title")?.textContent || "Pagamento")}</strong><div class="small muted" style="margin-top:4px;">${info}</div>`;
+      box.classList.remove("hidden");
+    }
+
+    async function criarCheckoutInfinitePayCarrinho(colab) {
+      const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
+        body: {
+          colaborador_id: colab.id,
+          itens: payloadItensCarrinho(),
+          session_token: colab.session_token || "",
+          redirect_url: redirectBaseInfinitePay()
+        }
+      });
+      if (error) throw new Error(await mensagemErroFuncao(error, "Erro ao chamar checkout InfinitePay."));
+      if (!data?.success || !data?.checkout_url || !data?.pedido_id) {
+        throw new Error(data?.message || "InfinitePay nao retornou o link de pagamento.");
+      }
+      window.pedidoAtualId = data.pedido_id;
+      window.pedidoAtualIds = data.pedido_ids || [data.pedido_id];
+      localStorage.setItem(INFINITEPAY_PENDING_KEY, JSON.stringify({
+        pedido_id: data.pedido_id,
+        pedido_ids: window.pedidoAtualIds,
+        pedido_carrinho_id: data.pedido_carrinho_id || null,
+        checkout_url: data.checkout_url,
+        criado_em: new Date().toISOString()
+      }));
+      state.carrinho = [];
+      renderizarBotaoCarrinho();
+      window.location.href = data.checkout_url;
+    }
+
+    async function finalizarCarrinho() {
+      const alertEl = $("carrinhoAlert");
+      alertEl.classList.remove("show");
+      if (!state.carrinho.length) return;
+      if (!state.carrinhoPagamento) {
+        alertEl.textContent = "Escolha a forma de pagamento.";
+        alertEl.classList.add("show");
+        return;
+      }
+      const colab = getColab();
+      if (!colab) {
+        mostrarLogin("home", "Entre com sua matricula e PIN para finalizar o carrinho.");
+        return;
+      }
+      if (state.carrinhoPagamento === "fiado") {
+        const resumoFiado = await checarDebitoFiado(false);
+        if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
+          await mostrarPopupDebito(resumoFiado);
+          return;
+        }
+      }
+
+      $("btnFinalizarCarrinho").disabled = true;
+      $("btnFinalizarCarrinho").textContent = isInfinitePayPayment(state.carrinhoPagamento) ? "Abrindo checkout..." : "Enviando...";
+      try {
+        if (isInfinitePayPayment(state.carrinhoPagamento)) {
+          await criarCheckoutInfinitePayCarrinho(colab);
+          return;
+        }
+
+        const resumo = detalhesCarrinho();
+        const { data, error } = await sb.rpc("criar_pedido_carrinho", {
+          p_colaborador_id: colab.id,
+          p_itens: payloadItensCarrinho(),
+          p_forma_pagamento: state.carrinhoPagamento,
+          p_observacoes: null,
+          p_session_token: colab.session_token || ""
+        });
+        if (error) throw error;
+
+        const resp = typeof data === "string" ? JSON.parse(data) : data;
+        const pedidoIds = resp?.pedido_ids || (resp?.pedido_id ? [resp.pedido_id] : []);
+        if (!pedidoIds.length) throw new Error("O servidor nao retornou os pedidos do carrinho.");
+
+        window.pedidoAtualId = resp.pedido_id || pedidoIds[0];
+        window.pedidoAtualIds = pedidoIds;
+        const total = Number(resp?.total || resumo.total);
+        const isPix = state.carrinhoPagamento === "pix_empresa";
+        const isFiado = state.carrinhoPagamento === "fiado";
+        const itensResumo = [...state.carrinho];
+        const payLabel = {
+          pix_empresa: "Pix Empresa",
+          fiado: "Fiado",
+          pagar_mais_tarde: "Pagar mais tarde",
+          cartao_infinitepay: "Cartao InfinitePay"
+        }[state.carrinhoPagamento] || state.carrinhoPagamento;
+
+        $("sucessoIcon").textContent = isPix ? "📎" : "🎉";
+        $("sucessoTitulo").textContent = isPix ? "Aguardando comprovante" : "Carrinho confirmado!";
+        $("sucessoSubtitulo").textContent = isPix
+          ? "Faça o PIX e anexe o comprovante para todos os itens seguirem para a cozinha."
+          : "O administrador já foi notificado.";
+        $("sucessoPixArea").classList.toggle("hidden", !isPix);
+
+        if (isPix) {
+          const payload = gerarPayloadPix({
+            chave: state.configEmpresa.pix_empresa,
+            nome: (state.configEmpresa.nome_empresa || "Empresa").slice(0, 25),
+            cidade: "MANAUS",
+            valor: total,
+            txid: "CAR" + String(resp.pedido_carrinho_id || window.pedidoAtualId).replace(/-/g, "").slice(0, 12).toUpperCase(),
+            descricao: "Carrinho " + colab.nome.split(" ")[0]
+          });
+          $("sucessoPixValor").textContent = fmtBRL(total);
+          $("sucessoPixCopiaCola").textContent = payload;
+          $("btnCopiarPixSucesso").classList.remove("hidden");
+          const canvas = $("sucessoPixCanvas");
+          try {
+            canvas.innerHTML = "";
+            if (typeof QRCode === "undefined") throw new Error("QRCode indisponivel");
+            new QRCode(canvas, { text: payload, width: 200, height: 200, colorDark: "#1c1c1e", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+          } catch (qrError) {
+            console.warn("QR PIX nao renderizado:", qrError);
+          }
+        } else {
+          notificarPedidoConfirmado(`${itensResumo.length} itens`, "Carrinho");
+          mostrarToast("✅", "Carrinho confirmado!", "Todos os itens foram registrados.");
+        }
+
+        $("pixComprovanteBtn").className = "btn btn-primary btn-block btn-pill";
+        $("pixComprovanteBtn").innerHTML = "📎 Anexar Comprovante";
+        $("pixComprovanteInput").disabled = false;
+        $("pixComprovanteInput").value = "";
+        $("pixComprovantePreview").classList.add("hidden");
+        pixComprovanteFile = null;
+
+        $("sucessoResumo").innerHTML = `
+          <div><strong>${itensResumo.length} item${itensResumo.length === 1 ? "" : "s"} no carrinho</strong></div>
+          ${itensResumo.map(item => `<div class="small" style="margin-top:6px;">${item.quantidade}x ${esc(item.nome)} <span class="muted">- ${esc(item.fornecedor.nome)}</span></div>`).join("")}
+          <div style="margin-top:10px; display:flex; justify-content:space-between;">
+            <span class="small muted">${payLabel}</span>
+            <span><strong style="color:var(--brick);">${fmtBRL(total)}</strong>${isFiado ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+R$10 fiado)</span>` : ""}</span>
+          </div>
+        `;
+
+        state.carrinho = [];
+        renderizarBotaoCarrinho();
+        showScreen("screen-sucesso");
+      } catch (e) {
+        console.error("Falha ao finalizar carrinho:", e);
+        alertEl.textContent = "Erro ao finalizar carrinho: " + (e?.message || "tente novamente.");
+        alertEl.classList.add("show");
+      } finally {
+        $("btnFinalizarCarrinho").disabled = false;
+        $("btnFinalizarCarrinho").textContent = "Finalizar carrinho";
+      }
+    }
+
     // =====================================================================
     // UPLOAD DE COMPROVANTE NA TELA DE SUCESSO
     // =====================================================================
@@ -4610,12 +5176,16 @@
           mostrarLogin("meusPedidos", "Entre novamente para anexar o comprovante.");
           return;
         }
-        const { error } = await sb.rpc("anexar_comprovante_pedido", {
-          p_pedido_id: window.pedidoAtualId,
-          p_colaborador_id: colab.id,
-          p_comprovante_url: comprovanteUrl
-        });
-        if (error) throw error;
+        const ids = Array.isArray(window.pedidoAtualIds) && window.pedidoAtualIds.length ? window.pedidoAtualIds : [window.pedidoAtualId];
+        for (const pedidoId of ids) {
+          const { error } = await sb.rpc("anexar_comprovante_pedido", {
+            p_pedido_id: pedidoId,
+            p_colaborador_id: colab.id,
+            p_comprovante_url: comprovanteUrl,
+            p_session_token: colab.session_token || ""
+          });
+          if (error) throw error;
+        }
         if (window.reenviandoComprovante) {
           window.reenviandoComprovante = false;
           mostrarToast("OK", "Comprovante enviado", "O administrador ja pode revisar o novo arquivo.");
@@ -4646,11 +5216,15 @@
           mostrarLogin("meusPedidos", "Entre novamente para remover o comprovante.");
           return;
         }
-        await sb.rpc("anexar_comprovante_pedido", {
-          p_pedido_id: window.pedidoAtualId,
-          p_colaborador_id: colab.id,
-          p_comprovante_url: null
-        });
+        const ids = Array.isArray(window.pedidoAtualIds) && window.pedidoAtualIds.length ? window.pedidoAtualIds : [window.pedidoAtualId];
+        for (const pedidoId of ids) {
+          await sb.rpc("anexar_comprovante_pedido", {
+            p_pedido_id: pedidoId,
+            p_colaborador_id: colab.id,
+            p_comprovante_url: null,
+            p_session_token: colab.session_token || ""
+          });
+        }
       }
     });
 
@@ -4682,6 +5256,8 @@
           prato_id: state.selPrato.id,
           observacoes: $("obs").value.trim() || null,
           acompanhamentos: acompArr,
+          quantidade: state.pedidoQtd || 1,
+          session_token: colab.session_token || "",
           redirect_url: redirectBaseInfinitePay()
         }
       });
@@ -4692,6 +5268,7 @@
       }
 
       window.pedidoAtualId = data.pedido_id;
+      window.pedidoAtualIds = [data.pedido_id];
       localStorage.setItem(INFINITEPAY_PENDING_KEY, JSON.stringify({
         pedido_id: data.pedido_id,
         checkout_url: data.checkout_url,
@@ -4715,6 +5292,19 @@
     }
 
     $("btnVoltar").addEventListener("click", abrirHome);
+    $("qtdMenos")?.addEventListener("click", () => setQuantidadePedido((state.pedidoQtd || 1) - 1));
+    $("qtdMais")?.addEventListener("click", () => setQuantidadePedido((state.pedidoQtd || 1) + 1));
+    $("pedidoQtd")?.addEventListener("input", (e) => setQuantidadePedido(e.target.value));
+    $("btnAdicionarCarrinho")?.addEventListener("click", adicionarAtualAoCarrinho);
+    $("btnCarrinho")?.addEventListener("click", renderizarCarrinho);
+    $("btnVoltarCarrinho")?.addEventListener("click", abrirHome);
+    $("btnLimparCarrinho")?.addEventListener("click", () => {
+      state.carrinho = [];
+      state.carrinhoPagamento = null;
+      renderizarBotaoCarrinho();
+      abrirHome();
+    });
+    $("btnFinalizarCarrinho")?.addEventListener("click", finalizarCarrinho);
 
     $("btnConfirmar").addEventListener("click", async () => {
       const alertEl = $("pedidoAlert"); alertEl.classList.remove("show");
@@ -4752,7 +5342,9 @@
         p_prato_id: state.selPrato.id,
         p_forma_pagamento: state.selPagamento,
         p_observacoes: $("obs").value.trim() || null,
-        p_acompanhamentos: acompArr
+        p_acompanhamentos: acompArr,
+        p_quantidade: state.pedidoQtd || 1,
+        p_session_token: colab.session_token || ""
       });
 
       if (errPedido) {
@@ -4762,6 +5354,7 @@
       if (!pedidoId) throw new Error("O servidor nao retornou o numero do pedido.");
 
       window.pedidoAtualId = pedidoId;
+      window.pedidoAtualIds = [pedidoId];
       pedidoCriado = true;
 
       const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
@@ -4827,6 +5420,7 @@
       const nomesAcomp = state.acompanhamentos
         .filter(a => state.selAcomp.has(a.id))
         .map(a => a.nome);
+      const qtdPedido = normalizarQuantidadePedido(state.pedidoQtd);
 
       const payLabel = {
         pix_empresa: "Pix Empresa", pix_fornecedor: "Pix Fornecedor",
@@ -4837,7 +5431,7 @@
       $("sucessoResumo").innerHTML = `
         <div><strong>${state.selPrato.fornecedor.nome}</strong></div>
         <div class="small muted">${colab?.empresa ? "🏢 " + colab.empresa : ""}</div>
-        <div>${state.selPrato.nome}</div>
+        <div>${qtdPedido}x ${state.selPrato.nome}</div>
         ${nomesAcomp.length ? `<div class="small muted" style="margin-top:6px;">+ ${nomesAcomp.join(", ")}</div>` : ""}
         ${$("obs").value.trim() ? `<div class="small" style="margin-top:6px;">📝 ${$("obs").value.trim()}</div>` : ""}
         ${fretePedido > 0 ? `<div class="small muted" style="margin-top:8px;">Frete do fornecedor: ${fmtBRL(fretePedido)}</div>` : ""}
@@ -5014,7 +5608,7 @@
 
       pixFiadoPedidoIds = [];
       if (tipo === "fiado") {
-        const { data } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+        const { data } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
         const fiadosPendentes = (data || [])
           .filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente" && p.status !== "cancelado");
         pixFiadoPedidoIds = fiadosPendentes.map(p => p.id);
@@ -5111,7 +5705,8 @@
           const { error } = await sb.rpc("anexar_comprovante_pedido", {
             p_pedido_id: pedidoId,
             p_colaborador_id: colab.id,
-            p_comprovante_url: url
+            p_comprovante_url: url,
+            p_session_token: colab.session_token || ""
           });
           if (error) throw error;
         }
@@ -5299,7 +5894,8 @@
         p_endpoint: j.endpoint,
         p_p256dh: j.keys.p256dh,
         p_auth: j.keys.auth,
-        p_user_agent: navigator.userAgent.slice(0, 200)
+        p_user_agent: navigator.userAgent.slice(0, 200),
+        p_session_token: colab.session_token || ""
       });
     }
 
@@ -5352,7 +5948,7 @@
         return;
       }
 
-      const { data, error } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
       if (error || !data) return;
 
       const snapshot = new Map();
@@ -5418,7 +6014,7 @@
     async function checarFidelidadeEventos({ delay = 20000 } = {}) {
       const colab = getColab();
       if (!colab) return;
-      const { data, error } = await sb.rpc("fidelidade_eventos_pendentes", { p_colaborador_id: colab.id });
+      const { data, error } = await sb.rpc("fidelidade_eventos_pendentes", clienteAuthParams(colab));
       if (error || !data || data.length === 0) return;
       clearTimeout(fidelidadePopupTimer);
       fidelidadePopupTimer = setTimeout(() => mostrarPopupFidelidade(data), delay);
@@ -5447,7 +6043,8 @@
       if (colab && ids.length) {
         await sb.rpc("marcar_fidelidade_eventos_vistos", {
           p_colaborador_id: colab.id,
-          p_eventos: ids
+          p_eventos: ids,
+          p_session_token: colab.session_token || ""
         });
         await renderResumoClienteRapido();
         if (!$("tab-perfil").classList.contains("hidden")) await carregarPerfilCliente();
@@ -5463,7 +6060,7 @@
       async function checarFiado() {
         const colab = getColab();
         if (!colab) return;
-        const { data } = await sb.rpc("meus_pedidos", { p_colaborador_id: colab.id });
+        const { data } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
 
         if (!data) return;
         const fiados = data.filter(p => p.forma_pagamento === "fiado" && p.status !== "cancelado");
@@ -5500,7 +6097,8 @@
               p_endpoint: sub.endpoint,
               p_p256dh: sub.keys.p256dh,
               p_auth: sub.keys.auth,
-              p_user_agent: navigator.userAgent.slice(0, 200)
+              p_user_agent: navigator.userAgent.slice(0, 200),
+              p_session_token: colab.session_token || ""
             });
           }
         }
@@ -5589,7 +6187,16 @@
       }
       p.matchMsg = "Procurando cadastro...";
       atualizarMatchColetivo(idx);
-      const { data, error } = await sb.rpc("buscar_colaborador_coletivo", { p_busca: termo.trim() });
+      const colab = getColab();
+      if (!temSessaoCliente(colab)) {
+        p.matchMsg = "Entre novamente para consultar cadastros.";
+        atualizarMatchColetivo(idx);
+        return;
+      }
+      const { data, error } = await sb.rpc("buscar_colaborador_coletivo", {
+        p_busca: termo.trim(),
+        ...clienteAuthParams(colab)
+      });
       if (error) {
         p.matchMsg = "Nao consegui consultar o cadastro agora.";
         atualizarMatchColetivo(idx);
@@ -5834,7 +6441,8 @@
       const { data: coletivoId, error: errColetivo } = await sb.rpc("criar_pedido_coletivo", {
         p_colaborador_id: colab.id,
         p_itens: itens,
-        p_comprovante_url: comprovanteUrl
+        p_comprovante_url: comprovanteUrl,
+        p_session_token: colab.session_token || ""
       });
 
       $("btnConfirmarColetivo").disabled = false;

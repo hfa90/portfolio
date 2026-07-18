@@ -3712,7 +3712,7 @@
     async function consultarPedidosPainel(data = hojeISO(), extrasPendentes = true) {
       let query = sb.from("pedidos")
         .select(`
-          id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, data, comprovante_url, comprovante_status, comprovante_motivo,
+          id, preco_total, quantidade, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, data, comprovante_url, comprovante_status, comprovante_motivo,
           prato:pratos ( nome, preco ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
           colaborador:colaboradores ( id, nome, matricula, empresa, whatsapp ),
@@ -3735,6 +3735,7 @@
     const pedidoMinutos = (p) => p.criado_em ? Math.max(0, Math.floor((Date.now() - new Date(p.criado_em).getTime()) / 60000)) : 0;
     const pedidoPix = (p) => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
     const textoAcomps = (p) => (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
+    const textoQtd = (p) => Number(p.quantidade || 1) > 1 ? `${p.quantidade}x ` : "";
     const telefoneLimpo = (v) => String(v || "").replace(/\D/g, "");
 
     function renderPrioridadeCard(item) {
@@ -3873,7 +3874,7 @@
       $("relatoriosConteudo").innerHTML = '<div class="loading">Gerando relatorio...</div>';
       try {
         const { data, error } = await sb.from("pedidos")
-          .select("id, data, preco_total, forma_pagamento, status_pagamento, status, prato:pratos(nome), fornecedor:fornecedores(nome), colaborador:colaboradores(nome)")
+          .select("id, data, preco_total, quantidade, forma_pagamento, status_pagamento, status, prato:pratos(nome), fornecedor:fornecedores(nome), colaborador:colaboradores(nome)")
           .gte("data", inicio)
           .lte("data", fim)
           .neq("status", "cancelado")
@@ -4067,7 +4068,7 @@
         for (const grupo of porFornecedor.values()) {
           const linhas = grupo.pedidos.map((p, i) => {
             const acomps = textoAcomps(p);
-            return `${i + 1}. ${p.colaborador?.nome || "Cliente"} - ${p.prato?.nome || "Pedido"}${acomps ? " + " + acomps : ""}${p.observacoes ? " | Obs: " + p.observacoes : ""} - ${fmtBRL(p.preco_total)}`;
+            return `${i + 1}. ${p.colaborador?.nome || "Cliente"} - ${textoQtd(p)}${p.prato?.nome || "Pedido"}${acomps ? " + " + acomps : ""}${p.observacoes ? " | Obs: " + p.observacoes : ""} - ${fmtBRL(p.preco_total)}`;
           }).join("\n");
           const total = somaPedidos(grupo.pedidos);
           const texto = `Pedido do dia - ${fmtData(data)}\nFornecedor: ${grupo.fornecedor?.nome || "Fornecedor"}\n\n${linhas}\n\nTotal: ${grupo.pedidos.length} marmita(s) - ${fmtBRL(total)}`;
@@ -4109,7 +4110,7 @@
           return `
             <article class="kitchen-card">
               <div>
-                <strong>${escHtml(p.prato?.nome || "Pedido")}</strong>
+                <strong>${textoQtd(p)}${escHtml(p.prato?.nome || "Pedido")}</strong>
                 <div class="small muted">${escHtml(p.colaborador?.nome || "Cliente")} - ${escHtml(p.fornecedor?.nome || "Fornecedor")}</div>
               </div>
               ${acomps ? `<div><span class="badge aberto">${escHtml(acomps)}</span></div>` : ""}
@@ -4291,7 +4292,7 @@
       // Buscamos: Pedidos da data SELECIONADA *OU* pedidos PENDENTES de qualquer data (para cobrar fiados atrasados)
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
-      id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, fechado_em, enviado_em, entregue_em, concluido_em, cancelado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
+      id, preco_total, quantidade, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, fechado_em, enviado_em, entregue_em, concluido_em, cancelado_em, data, comprovante_url, comprovante_status, comprovante_motivo,
       prato:pratos ( nome ),
       fornecedor:fornecedores ( id, nome, whatsapp ),
       colaborador:colaboradores ( id, nome, matricula, empresa, whatsapp ),
@@ -4315,7 +4316,7 @@
       const statusLabelMap = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", concluido: "Concluido", cancelado: "Cancelado" };
       const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde", cartao_infinitepay: "Cartao InfinitePay" };
       const nomeCliente = (p) => escHtml(p.colaborador?.nome || "Cliente");
-      const nomePrato = (p) => escHtml(p.prato?.nome || "Pedido");
+      const nomePrato = (p) => `${textoQtd(p)}${escHtml(p.prato?.nome || "Pedido")}`;
       const nomeFornecedor = (p) => escHtml(p.fornecedor?.nome || "Fornecedor");
       const nomesAcomp = (p) => (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
       const horarioPedido = (p) => p.criado_em ? new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
@@ -4767,7 +4768,7 @@ Bom apetite! 😋`;
       const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos } = await sb.from("pedidos")
         .select(`
-          preco_total, observacoes, status,
+          preco_total, quantidade, observacoes, status,
           prato:pratos ( nome ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
           colaborador:colaboradores ( nome ),
@@ -4798,7 +4799,7 @@ Bom apetite! 😋`;
         pedidos.forEach((p, i) => {
           const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean);
           msg += `${i + 1}. *${p.colaborador?.nome}*\n`;
-          msg += `   ${p.prato?.nome}`;
+          msg += `   ${textoQtd(p)}${p.prato?.nome}`;
           if (acomps.length) msg += ` + ${acomps.join(", ")}`;
           msg += ` — ${fmtBRL(p.preco_total)}\n`;
           if (p.observacoes) msg += `   📝 _${p.observacoes}_\n`;
@@ -4827,7 +4828,7 @@ Bom apetite! 😋`;
       const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos, error } = await sb.from("pedidos")
         .select(`
-          id, preco_total, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_status,
+          id, preco_total, quantidade, observacoes, status, forma_pagamento, status_pagamento, criado_em, data, comprovante_status,
           prato:pratos ( nome ),
           fornecedor:fornecedores ( nome ),
           colaborador:colaboradores ( nome, empresa, whatsapp ),
@@ -4850,7 +4851,7 @@ Bom apetite! 😋`;
       const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
       const linhas = [[
         "Data", "Hora", "Colaborador", "Empresa", "WhatsApp", "Fornecedor", "Prato",
-        "Acompanhamentos", "Observacoes", "Pagamento", "Status pagamento", "Comprovante", "Status pedido", "Total"
+        "Quantidade", "Acompanhamentos", "Observacoes", "Pagamento", "Status pagamento", "Comprovante", "Status pedido", "Total"
       ]];
 
       pedidos.forEach(p => {
@@ -4864,6 +4865,7 @@ Bom apetite! 😋`;
           p.colaborador?.whatsapp,
           p.fornecedor?.nome,
           p.prato?.nome,
+          p.quantidade || 1,
           acomps,
           p.observacoes,
           p.forma_pagamento,
@@ -4893,7 +4895,7 @@ Bom apetite! 😋`;
       const data = $("pedidosFiltroData").value || hojeISO();
       const { data: pedidos } = await sb.from("pedidos")
         .select(`
-          id, preco_total, observacoes, forma_pagamento, status_pagamento,
+          id, preco_total, quantidade, observacoes, forma_pagamento, status_pagamento,
           prato:pratos ( nome, preco ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
           colaborador:colaboradores ( nome, empresa ),
@@ -4942,6 +4944,7 @@ Bom apetite! 😋`;
             nome: p.colaborador?.nome,
             empresa: p.colaborador?.empresa,
             prato: p.prato?.nome,
+            quantidade: p.quantidade || 1,
             acomps: (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean),
             obs: p.observacoes,
             preco: p.preco_total,
@@ -4966,7 +4969,7 @@ Bom apetite! 😋`;
                     <div style="flex:1; min-width:0;">
                       <strong style="font-size:.92rem;">${p.colaborador?.nome}</strong>
                       ${p.colaborador?.empresa ? `<span class="small muted"> · ${p.colaborador.empresa}</span>` : ""}
-                      <div class="small" style="margin-top:2px;">${p.prato?.nome}${acomps.length ? ` <span class="muted">+ ${acomps.join(", ")}</span>` : ""}</div>
+                      <div class="small" style="margin-top:2px;">${textoQtd(p)}${p.prato?.nome}${acomps.length ? ` <span class="muted">+ ${acomps.join(", ")}</span>` : ""}</div>
                       ${p.observacoes ? `<div class="small muted" style="margin-top:2px;">📝 ${p.observacoes}</div>` : ""}
                     </div>
                     <div style="text-align:right; flex-shrink:0;">
@@ -5074,7 +5077,7 @@ Bom apetite! 😋`;
         peds.forEach(p => {
           const precoComFrete = Number(p.preco) + fretePorPedido;
           msg += `  *${numGlobal++}. ${p.nome}*\n`;
-          msg += `  🍽️ ${p.prato}`;
+          msg += `  🍽️ ${Number(p.quantidade || 1) > 1 ? `${p.quantidade}x ` : ""}${p.prato}`;
           if (p.acomps && p.acomps.length) msg += ` ➕ ${p.acomps.join(", ")}`;
           msg += `\n`;
           if (p.obs) msg += `  📝 _${p.obs}_\n`;
@@ -5146,7 +5149,12 @@ Bom apetite! 😋`;
       const semana = datasDaSemana(data);
       const [inicioSemana, fimSemana] = [semana[0], semana[6]];
 
-      const [{ data: pratos, error: pratosError }, { data: cardapio, error: cardapioError }] = await Promise.all([
+      const [
+        { data: pratos, error: pratosError },
+        { data: cardapio, error: cardapioError },
+        { data: estoqueRows, error: estoqueError },
+        cardapioClienteHoje
+      ] = await Promise.all([
         sb.from("pratos")
           .select("id, nome, preco, ativo, fornecedor:fornecedores(id, nome, ativo)")
           .eq("ativo", true)
@@ -5155,11 +5163,18 @@ Bom apetite! 😋`;
         sb.from("cardapio_dia")
           .select("id, prato_id, fornecedor_id, data")
           .gte("data", inicioSemana)
-          .lte("data", fimSemana)
+          .lte("data", fimSemana),
+        sb.from("produto_estoque_dia")
+          .select("id, data, prato_id, estoque_total, estoque_vendido, ativo")
+          .gte("data", inicioSemana)
+          .lte("data", fimSemana),
+        data === hojeISO()
+          ? sb.rpc("cardapio_hoje")
+          : Promise.resolve({ data: [], error: null })
       ]);
 
-      if (pratosError || cardapioError) {
-        $("cardapioLista").innerHTML = `<div class="alert alert-error show">${pratosError?.message || cardapioError?.message}</div>`;
+      if (pratosError || cardapioError || estoqueError || cardapioClienteHoje.error) {
+        $("cardapioLista").innerHTML = `<div class="alert alert-error show">${pratosError?.message || cardapioError?.message || estoqueError?.message || cardapioClienteHoje.error?.message}</div>`;
         return;
       }
 
@@ -5171,6 +5186,7 @@ Bom apetite! 😋`;
       }
 
       const ativosDia = new Set((cardapio || []).filter(c => c.data === data).map(c => c.prato_id));
+      const estoqueDia = new Map((estoqueRows || []).filter(e => e.data === data).map(e => [e.prato_id, e]));
       const semanaPorPrato = new Map();
       const contagemPorDia = new Map(semana.map(d => [d, 0]));
       (cardapio || []).forEach(c => {
@@ -5199,6 +5215,18 @@ Bom apetite! 😋`;
         .filter(p => p.qtd >= 3)
         .sort((a, b) => b.qtd - a.qtd)
         .slice(0, 5);
+      const marmitasVisiveisCliente = data === hojeISO()
+        ? (cardapioClienteHoje.data || []).filter(item => item.prato_categoria === "marmita").length
+        : null;
+      const estoqueBaixo = [...estoqueDia.entries()]
+        .map(([pratoId, e]) => {
+          const prato = ativosPratos.find(p => p.id === pratoId);
+          const total = e.estoque_total === null || e.estoque_total === undefined ? null : Number(e.estoque_total);
+          const vendido = Number(e.estoque_vendido || 0);
+          return { nome: prato?.nome || "Produto", restante: total === null ? null : total - vendido };
+        })
+        .filter(e => e.restante !== null && e.restante <= 3)
+        .slice(0, 5);
 
       $("cardapioInsights").innerHTML = `
         <div class="insight-grid">
@@ -5215,6 +5243,16 @@ Bom apetite! 😋`;
           <div class="tool-card">
             <h3>Pratos muito repetidos</h3>
             <p class="small muted" style="margin:0;">${pratosRepetidos.length ? escHtml(pratosRepetidos.map(p => `${p.nome} (${p.qtd}x)`).join(", ")) : "Boa variedade nesta semana."}</p>
+          </div>
+          <div class="tool-card" style="${marmitasVisiveisCliente === 0 ? "border-color:rgba(197,48,48,.35); background:rgba(197,48,48,.08);" : ""}">
+            <h3>${data === hojeISO() ? "Visivel ao cliente" : "Controle do cliente"}</h3>
+            <p class="small muted" style="margin:0;">${data === hojeISO()
+              ? (marmitasVisiveisCliente === 0 ? "Alerta: nenhuma marmita aparece para o cliente hoje." : `${marmitasVisiveisCliente} marmita(s) visiveis hoje.`)
+              : "Selecione hoje para validar o que o cliente enxerga."}</p>
+          </div>
+          <div class="tool-card">
+            <h3>Estoque baixo</h3>
+            <p class="small muted" style="margin:0;">${estoqueBaixo.length ? escHtml(estoqueBaixo.map(e => `${e.nome} (${e.restante})`).join(", ")) : "Sem limite baixo neste dia."}</p>
           </div>
         </div>`;
 
@@ -5253,12 +5291,21 @@ Bom apetite! 😋`;
               ${pratos.map(p => {
                 const checked = ativosDia.has(p.id);
                 const diasPrato = semanaPorPrato.get(p.id) || new Set();
+                const estoque = estoqueDia.get(p.id);
+                const totalEstoque = estoque?.estoque_total ?? "";
+                const vendido = Number(estoque?.estoque_vendido || 0);
+                const restante = totalEstoque === "" ? null : Number(totalEstoque) - vendido;
                 return `
                   <label class="cardapio-prato-row ${checked ? "is-active" : ""}" data-cardapio-prato data-search="${(fornecedor.nome + " " + p.nome).toLowerCase()}" data-marcado="${checked ? "1" : "0"}">
                     <input type="checkbox" ${checked ? "checked" : ""} data-prato="${p.id}" data-fornecedor="${fornecedor.id}" />
                     <span style="min-width:0;">
                       <span class="cardapio-prato-name">${p.nome}</span>
                       <span class="muted small">${fmtBRL(p.preco)}</span>
+                      <span class="muted small" style="display:block;">${totalEstoque === "" ? "Estoque sem limite" : `Estoque: ${vendido}/${totalEstoque}${restante !== null ? ` (${restante} rest.)` : ""}`}</span>
+                    </span>
+                    <span style="display:flex; align-items:center; gap:6px;">
+                      <span class="muted small">Limite</span>
+                      <input class="input" type="number" min="${vendido}" step="1" value="${totalEstoque}" placeholder="Sem limite" data-estoque-input data-prato="${p.id}" style="width:96px; padding:8px 10px;" />
                     </span>
                     <span class="cardapio-prato-week" aria-hidden="true">
                       ${semana.map(dia => `<i class="${diasPrato.has(dia) ? "on" : ""}"></i>`).join("")}
@@ -5283,6 +5330,32 @@ Bom apetite! 😋`;
           const section = btn.closest("[data-cardapio-fornecedor]");
           const fechado = section.classList.toggle("is-collapsed");
           btn.textContent = fechado ? "Abrir" : "Recolher";
+        });
+      });
+
+      $("cardapioLista").querySelectorAll("[data-estoque-input]").forEach(input => {
+        input.addEventListener("click", e => e.stopPropagation());
+        input.addEventListener("change", async () => {
+          const raw = input.value.trim();
+          const total = raw === "" ? null : Math.max(0, Number.parseInt(raw, 10) || 0);
+          input.disabled = true;
+          try {
+            const row = {
+              data,
+              prato_id: input.dataset.prato,
+              estoque_total: total,
+              ativo: true
+            };
+            const { error } = await sb
+              .from("produto_estoque_dia")
+              .upsert(row, { onConflict: "data,prato_id" });
+            if (error) throw error;
+            await registrarAuditoria("alterou estoque do cardapio", "produto_estoque_dia", input.dataset.prato, { data, estoque_total: total });
+            carregarCardapioAdmin();
+          } catch (e) {
+            alert("Erro ao salvar estoque: " + (e?.message || "tente novamente."));
+            input.disabled = false;
+          }
         });
       });
 
