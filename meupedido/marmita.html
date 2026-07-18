@@ -2791,6 +2791,25 @@
     </div>
   </div>
 
+  <div class="debt-popup-bg" id="acompQtdPopup">
+    <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="acompQtdTitle">
+      <button class="debt-close" id="acompQtdClose" aria-label="Fechar">×</button>
+      <div style="text-align:center;">
+        <div style="font-size:42px; margin-bottom:8px;">➕</div>
+        <p class="eyebrow" style="margin-bottom:6px;">Acompanhamento</p>
+        <h2 class="debt-popup-title" id="acompQtdTitle">Quantidade do adicional</h2>
+        <p class="muted" id="acompQtdMsg"></p>
+      </div>
+      <div class="quantity-control" style="margin:16px auto 10px;">
+        <button type="button" id="acompQtdMenos" aria-label="Diminuir adicional">−</button>
+        <input id="acompQtdInput" type="number" min="1" value="1" aria-label="Quantidade do adicional" />
+        <button type="button" id="acompQtdMais" aria-label="Aumentar adicional">+</button>
+      </div>
+      <button class="btn btn-primary btn-block btn-pill" id="acompQtdConfirmar">Adicionar adicional</button>
+      <button class="btn btn-ghost btn-block btn-pill" id="acompQtdCancelar">Cancelar</button>
+    </div>
+  </div>
+
   <div class="pix-sheet-bg" id="pixSheetBg">
     <div class="pix-sheet">
       <div class="pix-handle"></div>
@@ -3017,6 +3036,7 @@
       pedidosAbertos: true,
       selPrato: null,
       selAcomp: new Set(),
+      selAcompQtd: new Map(),
       selPagamento: null,
       pedidoQtd: 1,
       carrinho: [],
@@ -4567,8 +4587,8 @@
       if (dados.acompanhamentos && dados.acompanhamentos.length > 0) {
         dados.acompanhamentos.forEach(acompId => {
           state.selAcomp.add(acompId);
-          const chip = document.querySelector(`.chip[data-id="${acompId}"]`);
-          if (chip) chip.classList.add("selected");
+          state.selAcompQtd.set(acompId, 1);
+          atualizarChipAcompanhamento(acompId);
         });
         atualizarTotal();
       }
@@ -4723,6 +4743,7 @@
 
       state.selPrato = prato;
       state.selAcomp = new Set();
+      state.selAcompQtd = new Map();
       state.selPagamento = null;
       state.pedidoQtd = 1;
       state.acompanhamentos = acomp || [];
@@ -4744,16 +4765,29 @@
         ? state.acompanhamentos.map(a => `
         <div class="chip" data-id="${a.id}">
           ${a.foto_url ? `<img class="chip-foto" src="${a.foto_url}" alt="${a.nome}" loading="lazy">` : ""}
-          ${a.nome}${Number(a.preco_extra) > 0 ? `<span class="extra">+${fmtBRL(a.preco_extra)}</span>` : ""}
+          <span>${a.nome}</span>${Number(a.preco_extra) > 0 ? `<span class="extra">+${fmtBRL(a.preco_extra)}</span>` : ""}
+          <span class="extra hidden" data-acomp-qtd-badge="${a.id}"></span>
         </div>`).join("")
         : '<p class="small muted">Este fornecedor não tem acompanhamentos cadastrados.</p>';
 
       $("acompList").querySelectorAll(".chip").forEach(c => {
-        c.addEventListener("click", () => {
+        c.addEventListener("click", async () => {
           const id = c.dataset.id;
-          if (state.selAcomp.has(id)) state.selAcomp.delete(id);
-          else state.selAcomp.add(id);
-          c.classList.toggle("selected");
+          const acomp = state.acompanhamentos.find(a => a.id === id);
+          if (state.selAcomp.has(id)) {
+            state.selAcomp.delete(id);
+            state.selAcompQtd.delete(id);
+          } else {
+            let qtd = 1;
+            const qtdPedido = normalizarQuantidadePedido(state.pedidoQtd);
+            if (qtdPedido > 1) {
+              qtd = await pedirQuantidadeAcompanhamento(acomp, qtdPedido);
+              if (!qtd) return;
+            }
+            state.selAcomp.add(id);
+            state.selAcompQtd.set(id, qtd);
+          }
+          atualizarChipAcompanhamento(id);
           atualizarTotal();
         });
       });
@@ -4847,18 +4881,66 @@
         : Number(state.selPrato.estoque_disponivel);
       if (estoque !== null) qtd = Math.max(1, Math.min(qtd, estoque));
       state.pedidoQtd = qtd;
+      state.selAcompQtd.forEach((valor, id) => {
+        if (Number(valor) > qtd) {
+          state.selAcompQtd.set(id, qtd);
+          atualizarChipAcompanhamento(id);
+        }
+      });
       if ($("pedidoQtd")) $("pedidoQtd").value = String(state.pedidoQtd);
       atualizarTotal();
+    }
+
+    function quantidadeAcompanhamento(id) {
+      return Math.max(1, Number(state.selAcompQtd.get(id) || 1));
+    }
+
+    function atualizarChipAcompanhamento(id) {
+      const chip = document.querySelector(`.chip[data-id="${id}"]`);
+      if (!chip) return;
+      const selecionado = state.selAcomp.has(id);
+      const qtd = quantidadeAcompanhamento(id);
+      chip.classList.toggle("selected", selecionado);
+      const badge = chip.querySelector(`[data-acomp-qtd-badge="${id}"]`);
+      if (badge) {
+        badge.textContent = selecionado && qtd > 1 ? `${qtd}x` : "";
+        badge.classList.toggle("hidden", !selecionado || qtd <= 1);
+      }
+    }
+
+    let resolverQtdAcomp = null;
+    let qtdAcompMax = 1;
+
+    function setQtdAcompPopup(valor) {
+      const n = Number.parseInt(valor, 10);
+      const qtd = Math.min(qtdAcompMax, Math.max(1, Number.isFinite(n) ? n : 1));
+      $("acompQtdInput").value = String(qtd);
+    }
+
+    function fecharQtdAcompPopup(valor = 0) {
+      $("acompQtdPopup").classList.remove("show");
+      const resolver = resolverQtdAcomp;
+      resolverQtdAcomp = null;
+      if (resolver) resolver(valor);
+    }
+
+    function pedirQuantidadeAcompanhamento(acomp, maxQtd) {
+      qtdAcompMax = Math.max(1, Number(maxQtd || 1));
+      $("acompQtdTitle").textContent = acomp?.nome || "Quantidade do adicional";
+      $("acompQtdMsg").textContent = `Você escolheu ${qtdAcompMax} unidade(s) do item principal. Quantos ${acomp?.nome || "adicionais"} deseja incluir?`;
+      $("acompQtdInput").max = String(qtdAcompMax);
+      setQtdAcompPopup(1);
+      $("acompQtdPopup").classList.add("show");
+      return new Promise(resolve => { resolverQtdAcomp = resolve; });
     }
 
     function calcTotal() {
       if (!state.selPrato) return 0;
       const qtd = normalizarQuantidadePedido(state.pedidoQtd);
-      let total = Number(state.selPrato.preco);
+      let total = Number(state.selPrato.preco) * qtd;
       state.acompanhamentos.forEach(a => {
-        if (state.selAcomp.has(a.id)) total += Number(a.preco_extra);
+        if (state.selAcomp.has(a.id)) total += Number(a.preco_extra) * quantidadeAcompanhamento(a.id);
       });
-      total *= qtd;
       total += Number(state.selPrato?.fornecedor?.frete_entrega || 0);
       if (state.selPagamento === "fiado") total += FIADO_TAXA;
       return total;
@@ -4866,12 +4948,12 @@
     function atualizarTotal() {
       const qtd = normalizarQuantidadePedido(state.pedidoQtd);
       const prato = Number(state.selPrato?.preco || 0);
-      const extras = state.acompanhamentos.reduce((s, a) => state.selAcomp.has(a.id) ? s + Number(a.preco_extra || 0) : s, 0);
+      const extras = state.acompanhamentos.reduce((s, a) => state.selAcomp.has(a.id) ? s + (Number(a.preco_extra || 0) * quantidadeAcompanhamento(a.id)) : s, 0);
       const frete = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
       const fiado = state.selPagamento === "fiado" ? FIADO_TAXA : 0;
       const linhas = [
         [`Produto (${qtd}x)`, prato * qtd],
-        ...(extras > 0 ? [[`Acompanhamentos (${qtd}x)`, extras * qtd]] : []),
+        ...(extras > 0 ? [["Acompanhamentos", extras]] : []),
         ...(frete > 0 ? [["Frete do fornecedor", frete]] : []),
         ...(fiado > 0 ? [["Taxa do fiado", fiado]] : [])
       ];
@@ -4946,7 +5028,7 @@
     }
 
     function totalItemCarrinho(item) {
-      return (Number(item.preco || 0) + Number(item.acompTotal || 0)) * Number(item.quantidade || 1);
+      return (Number(item.preco || 0) * Number(item.quantidade || 1)) + Number(item.acompTotal || 0);
     }
 
     function detalhesCarrinho(pagamento = state.carrinhoPagamento) {
@@ -4965,6 +5047,7 @@
     function itemAtualParaCarrinho() {
       const acompIds = [...state.selAcomp];
       const acompSelecionados = state.acompanhamentos.filter(a => state.selAcomp.has(a.id));
+      const acompanhamentosQtd = Object.fromEntries(acompIds.map(id => [id, quantidadeAcompanhamento(id)]));
       return {
         localId: novoIdLocal(),
         prato_id: state.selPrato.id,
@@ -4974,8 +5057,12 @@
         quantidade: normalizarQuantidadePedido(state.pedidoQtd),
         observacoes: $("obs").value.trim() || null,
         acompanhamentos: acompIds,
-        acompanhamentoNomes: acompSelecionados.map(a => a.nome),
-        acompTotal: acompSelecionados.reduce((s, a) => s + Number(a.preco_extra || 0), 0),
+        acompanhamentosQtd,
+        acompanhamentoNomes: acompSelecionados.map(a => {
+          const qtd = quantidadeAcompanhamento(a.id);
+          return qtd > 1 ? `${qtd}x ${a.nome}` : a.nome;
+        }),
+        acompTotal: acompSelecionados.reduce((s, a) => s + (Number(a.preco_extra || 0) * quantidadeAcompanhamento(a.id)), 0),
         fornecedor: {
           id: state.selPrato.fornecedor.id,
           nome: state.selPrato.fornecedor.nome,
@@ -5034,7 +5121,8 @@
         prato_id: item.prato_id,
         quantidade: Number(item.quantidade || 1),
         observacoes: item.observacoes || null,
-        acompanhamentos: item.acompanhamentos || []
+        acompanhamentos: item.acompanhamentos || [],
+        acompanhamentos_qtd: item.acompanhamentosQtd || {}
       }));
     }
 
@@ -5414,6 +5502,7 @@
           prato_id: state.selPrato.id,
           observacoes: $("obs").value.trim() || null,
           acompanhamentos: acompArr,
+          acompanhamentos_qtd: Object.fromEntries([...state.selAcompQtd]),
           quantidade: state.pedidoQtd || 1,
           session_token: colab.session_token || "",
           redirect_url: redirectBaseInfinitePay()
@@ -5438,14 +5527,19 @@
     async function uploadComprovante(pedidoId, file) {
       if (!file) return null;
       try {
-        const ext = file.name.split(".").pop();
-        const path = `comprovantes/${pedidoId}.${ext}`;
-        const { error } = await sb.storage.from("comprovantes-pix").upload(path, file, { upsert: true });
-        if (error) { console.warn("Upload comprovante:", error.message); return null; }
+        const ext = (file.name.split(".").pop() || "bin").replace(/[^a-z0-9]/gi, "").toLowerCase() || "bin";
+        const token = crypto?.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const path = `comprovantes/${pedidoId}-${token}.${ext}`;
+        const { error } = await sb.storage.from("comprovantes-pix").upload(path, file, { upsert: false });
+        if (error) {
+          console.warn("Upload comprovante:", error.message);
+          throw new Error(error.message || "Nao foi possivel enviar o comprovante.");
+        }
         const { data: { publicUrl } } = sb.storage.from("comprovantes-pix").getPublicUrl(path);
         return publicUrl;
       } catch (e) {
-        console.warn("Upload comprovante erro:", e); return null;
+        console.warn("Upload comprovante erro:", e);
+        throw e;
       }
     }
 
@@ -5453,6 +5547,15 @@
     $("qtdMenos")?.addEventListener("click", () => setQuantidadePedido((state.pedidoQtd || 1) - 1));
     $("qtdMais")?.addEventListener("click", () => setQuantidadePedido((state.pedidoQtd || 1) + 1));
     $("pedidoQtd")?.addEventListener("input", (e) => setQuantidadePedido(e.target.value));
+    $("acompQtdMenos")?.addEventListener("click", () => setQtdAcompPopup(Number($("acompQtdInput").value || 1) - 1));
+    $("acompQtdMais")?.addEventListener("click", () => setQtdAcompPopup(Number($("acompQtdInput").value || 1) + 1));
+    $("acompQtdInput")?.addEventListener("input", (e) => setQtdAcompPopup(e.target.value));
+    $("acompQtdConfirmar")?.addEventListener("click", () => fecharQtdAcompPopup(Number($("acompQtdInput").value || 1)));
+    $("acompQtdCancelar")?.addEventListener("click", () => fecharQtdAcompPopup(0));
+    $("acompQtdClose")?.addEventListener("click", () => fecharQtdAcompPopup(0));
+    $("acompQtdPopup")?.addEventListener("click", (e) => {
+      if (e.target === $("acompQtdPopup")) fecharQtdAcompPopup(0);
+    });
     $("btnAdicionarCarrinho")?.addEventListener("click", adicionarAtualAoCarrinho);
     $("btnCarrinho")?.addEventListener("click", renderizarCarrinho);
     $("btnVoltarCarrinho")?.addEventListener("click", abrirHome);
@@ -5501,6 +5604,7 @@
         p_forma_pagamento: state.selPagamento,
         p_observacoes: $("obs").value.trim() || null,
         p_acompanhamentos: acompArr,
+        p_acompanhamentos_qtd: Object.fromEntries([...state.selAcompQtd]),
         p_quantidade: state.pedidoQtd || 1,
         p_session_token: colab.session_token || ""
       });
@@ -5577,7 +5681,7 @@
 
       const nomesAcomp = state.acompanhamentos
         .filter(a => state.selAcomp.has(a.id))
-        .map(a => a.nome);
+        .map(a => quantidadeAcompanhamento(a.id) > 1 ? `${quantidadeAcompanhamento(a.id)}x ${a.nome}` : a.nome);
       const qtdPedido = normalizarQuantidadePedido(state.pedidoQtd);
 
       const payLabel = {
