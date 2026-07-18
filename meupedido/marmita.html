@@ -2026,6 +2026,65 @@
       min-height: 176px;
     }
 
+    .story-strip-wrap {
+      position: relative;
+      margin: 0 -2px;
+    }
+
+    .story-strip-wrap::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 58px;
+      height: calc(100% - 8px);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 220ms ease;
+      background: linear-gradient(90deg, rgba(246, 239, 227, 0), var(--bg) 72%);
+    }
+
+    .story-strip-wrap.has-more:not(.at-end)::after {
+      opacity: 1;
+    }
+
+    .story-more-cue {
+      position: absolute;
+      right: 6px;
+      top: 42px;
+      z-index: 2;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: rgba(255, 250, 240, .92);
+      color: var(--brick);
+      box-shadow: var(--shadow-sm);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      font-weight: 900;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateX(-4px);
+      transition: opacity 220ms ease;
+    }
+
+    .story-strip-wrap.has-more:not(.at-end) .story-more-cue {
+      opacity: 1;
+      animation: storyCueNudge 1500ms ease-in-out infinite;
+    }
+
+    @keyframes storyCueNudge {
+      0%,
+      100% {
+        transform: translateX(-4px);
+      }
+
+      50% {
+        transform: translateX(2px);
+      }
+    }
+
     .story-strip::-webkit-scrollbar {
       display: none;
     }
@@ -2723,7 +2782,8 @@
     </div>
 
     <div class="card rise rise-2" style="margin-top: 14px;">
-      <h3 style="margin-bottom:10px;">Acompanhamentos</h3>
+      <h3 id="acompTitulo" style="margin-bottom:6px;">Acompanhamentos</h3>
+      <p id="acompAjuda" class="small muted" style="margin:0 0 10px;"></p>
       <div id="acompList" class="chips"></div>
     </div>
 
@@ -3966,6 +4026,7 @@
         card.style.display = passaTexto && passaFiltro ? "" : "none";
       });
       atualizarInsightsBusca(totalVisivel, termo);
+      configurarPistasStories();
     }
 
     function renderizarStoriesCardapio(itens, pedidosAbertos) {
@@ -3995,7 +4056,8 @@
           <h2>Stories</h2>
           <span class="small muted">${stories.length} item${stories.length === 1 ? "" : "s"}</span>
         </div>
-        <div class="story-strip">
+        <div class="story-strip-wrap" data-story-strip-wrap>
+          <div class="story-strip">
           ${stories.map((item, index) => {
             const categoria = categoriaProduto(item.prato_categoria);
             const meta = CATEGORIAS_STORY[categoria];
@@ -4019,6 +4081,8 @@
               <span class="story-category-pill">${meta.label}</span>
             </button>`;
           }).join("")}
+          </div>
+          <span class="story-more-cue" aria-hidden="true">›</span>
         </div>
         <div class="small muted" style="padding:0 2px;">${Object.entries(contagem).map(([c, qtd]) => `${CATEGORIAS_STORY[c].label}: ${qtd}`).join(" · ")}</div>
       </section>`;
@@ -4028,6 +4092,27 @@
           const index = Number(btn.dataset.storyIndex || 0);
           abrirStoryProduto(stories[index], pedidosAbertos, index);
         });
+      });
+      configurarPistasStories();
+    }
+
+    function configurarPistasStories() {
+      document.querySelectorAll("[data-story-strip-wrap]").forEach(wrap => {
+        const strip = wrap.querySelector(".story-strip");
+        if (!strip) return;
+        strip.dataset.cueReady = "1";
+        const atualizar = () => {
+          const temOverflow = strip.scrollWidth > strip.clientWidth + 8;
+          const noFim = strip.scrollLeft + strip.clientWidth >= strip.scrollWidth - 12;
+          wrap.classList.toggle("has-more", temOverflow);
+          wrap.classList.toggle("at-end", !temOverflow || noFim);
+        };
+        if (strip.dataset.cueBound !== "1") {
+          strip.dataset.cueBound = "1";
+          strip.addEventListener("scroll", atualizar, { passive: true });
+          window.addEventListener("resize", atualizar);
+        }
+        requestAnimationFrame(atualizar);
       });
     }
 
@@ -4077,9 +4162,56 @@
       prato_foto_url: item.prato_foto_url || item.foto_url || "",
       prato_categoria: categoriaProduto(item.prato_categoria || item.categoria),
       prato_preco: Number(item.prato_preco ?? item.preco ?? 0),
+      estoque_disponivel: item.estoque_disponivel,
       fornecedor_pix: item.fornecedor_pix || item.fornecedor?.chave_pix || "",
       fornecedor_frete: Number(item.fornecedor_frete ?? item.fornecedor?.frete_entrega ?? 0)
     });
+
+    function contextoComplementarPedido(prato) {
+      const categoria = categoriaProduto(prato?.categoria || prato?.prato_categoria);
+      if (categoria === "bebida") {
+        return {
+          tipo: "produtos",
+          titulo: "Comidas e lanches disponíveis",
+          ajuda: "Escolha uma comida ou lanche para ir junto com a bebida.",
+          categorias: ["marmita", "lanche"],
+          vazio: "Nenhuma comida ou lanche disponível agora."
+        };
+      }
+      if (categoria === "sobremesa") {
+        return {
+          tipo: "produtos",
+          titulo: "Bebidas disponíveis",
+          ajuda: "Escolha uma bebida para acompanhar o doce.",
+          categorias: ["bebida"],
+          vazio: "Nenhuma bebida disponível agora."
+        };
+      }
+      return {
+        tipo: "acompanhamentos",
+        titulo: "Acompanhamentos",
+        ajuda: "Selecione adicionais deste fornecedor.",
+        categorias: [],
+        vazio: "Este fornecedor não tem acompanhamentos cadastrados."
+      };
+    }
+
+    function produtosDisponiveisParaContexto(contexto, pratoAtualId) {
+      return (state.cardapio || [])
+        .map(normalizarItemCardapio)
+        .filter(item => {
+          const estoque = item.estoque_disponivel;
+          const semEstoque = estoque !== undefined && estoque !== null && Number(estoque) <= 0;
+          return contexto.categorias.includes(categoriaProduto(item.prato_categoria))
+            && item.prato_id !== pratoAtualId
+            && !semEstoque;
+        })
+        .sort((a, b) => {
+          const ca = categoriaProduto(a.prato_categoria);
+          const cb = categoriaProduto(b.prato_categoria);
+          return ca.localeCompare(cb) || Number(a.prato_preco) - Number(b.prato_preco) || String(a.prato_nome).localeCompare(String(b.prato_nome));
+        });
+    }
 
     function escolherSugestao(categorias, excluirId = null) {
       const cats = Array.isArray(categorias) ? categorias : [categorias];
@@ -4940,7 +5072,8 @@
       state.selAcompQtd = new Map();
       state.selPagamento = null;
       state.pedidoQtd = 1;
-      state.acompanhamentos = acomp || [];
+      const contextoComplemento = contextoComplementarPedido(prato);
+      state.acompanhamentos = contextoComplemento.tipo === "acompanhamentos" ? (acomp || []) : [];
       state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
 
       window.pedidoAtualId = null;
@@ -4955,36 +5088,58 @@
       $("obs").value = "";
       $("pedidoAlert").classList.remove("show");
 
-      $("acompList").innerHTML = state.acompanhamentos.length
-        ? state.acompanhamentos.map(a => `
-        <div class="chip" data-id="${a.id}">
-          ${a.foto_url ? `<img class="chip-foto" src="${a.foto_url}" alt="${a.nome}" loading="lazy">` : ""}
-          <span>${a.nome}</span>${Number(a.preco_extra) > 0 ? `<span class="extra">+${fmtBRL(a.preco_extra)}</span>` : ""}
-          <span class="extra hidden" data-acomp-qtd-badge="${a.id}"></span>
-        </div>`).join("")
-        : '<p class="small muted">Este fornecedor não tem acompanhamentos cadastrados.</p>';
+      $("acompTitulo").textContent = contextoComplemento.titulo;
+      $("acompAjuda").textContent = contextoComplemento.ajuda;
 
-      $("acompList").querySelectorAll(".chip").forEach(c => {
-        c.addEventListener("click", async () => {
-          const id = c.dataset.id;
-          const acomp = state.acompanhamentos.find(a => a.id === id);
-          if (state.selAcomp.has(id)) {
-            state.selAcomp.delete(id);
-            state.selAcompQtd.delete(id);
-          } else {
-            let qtd = 1;
-            const qtdPedido = normalizarQuantidadePedido(state.pedidoQtd);
-            if (qtdPedido > 1) {
-              qtd = await pedirQuantidadeAcompanhamento(acomp, qtdPedido);
-              if (!qtd) return;
-            }
-            state.selAcomp.add(id);
-            state.selAcompQtd.set(id, qtd);
-          }
-          atualizarChipAcompanhamento(id);
-          atualizarTotal();
+      if (contextoComplemento.tipo === "produtos") {
+        const produtos = produtosDisponiveisParaContexto(contextoComplemento, prato.id);
+        $("acompList").innerHTML = produtos.length
+          ? produtos.map(item => `
+          <button class="chip" type="button" data-complemento-produto="${item.prato_id}">
+            ${item.prato_foto_url ? `<img class="chip-foto" src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}" loading="lazy">` : ""}
+            <span>${esc(item.prato_nome)}</span>
+            <span class="extra">${fmtBRL(item.prato_preco)}</span>
+          </button>`).join("")
+          : `<p class="small muted">${contextoComplemento.vazio}</p>`;
+
+        $("acompList").querySelectorAll("[data-complemento-produto]").forEach(c => {
+          c.addEventListener("click", () => {
+            const item = produtos.find(p => p.prato_id === c.dataset.complementoProduto);
+            if (item) adicionarSugestaoAoCarrinho(item);
+          });
         });
-      });
+      } else {
+        $("acompList").innerHTML = state.acompanhamentos.length
+          ? state.acompanhamentos.map(a => `
+          <div class="chip" data-id="${a.id}">
+            ${a.foto_url ? `<img class="chip-foto" src="${a.foto_url}" alt="${a.nome}" loading="lazy">` : ""}
+            <span>${a.nome}</span>${Number(a.preco_extra) > 0 ? `<span class="extra">+${fmtBRL(a.preco_extra)}</span>` : ""}
+            <span class="extra hidden" data-acomp-qtd-badge="${a.id}"></span>
+          </div>`).join("")
+          : `<p class="small muted">${contextoComplemento.vazio}</p>`;
+
+        $("acompList").querySelectorAll(".chip").forEach(c => {
+          c.addEventListener("click", async () => {
+            const id = c.dataset.id;
+            const acomp = state.acompanhamentos.find(a => a.id === id);
+            if (state.selAcomp.has(id)) {
+              state.selAcomp.delete(id);
+              state.selAcompQtd.delete(id);
+            } else {
+              let qtd = 1;
+              const qtdPedido = normalizarQuantidadePedido(state.pedidoQtd);
+              if (qtdPedido > 1) {
+                qtd = await pedirQuantidadeAcompanhamento(acomp, qtdPedido);
+                if (!qtd) return;
+              }
+              state.selAcomp.add(id);
+              state.selAcompQtd.set(id, qtd);
+            }
+            atualizarChipAcompanhamento(id);
+            atualizarTotal();
+          });
+        });
+      }
 
       const pixEmpresa = state.configEmpresa.pix_empresa;
       const resumoFiado = await checarDebitoFiado(false);
