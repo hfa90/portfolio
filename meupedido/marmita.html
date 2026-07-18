@@ -819,8 +819,21 @@
       display: flex;
       gap: 8px;
       align-items: center;
-      flex-wrap: wrap;
       justify-content: flex-end;
+      flex: 1;
+      max-width: 520px;
+    }
+
+    .totalbar-actions .btn {
+      min-height: 48px;
+      white-space: nowrap;
+      flex: 1 1 0;
+    }
+
+    .totalbar-actions #btnAdicionarCarrinho {
+      color: var(--brick);
+      background: rgba(185, 74, 42, .10);
+      border: 1px solid rgba(185, 74, 42, .18);
     }
 
     .cart-fab {
@@ -839,6 +852,47 @@
       font-weight: 800;
       box-shadow: var(--shadow-lg);
       cursor: pointer;
+      transition: transform 160ms ease, opacity 160ms ease;
+    }
+
+    .cart-pulse {
+      animation: cartPulse 720ms ease;
+    }
+
+    @keyframes cartPulse {
+      0% {
+        transform: scale(1);
+      }
+
+      35% {
+        transform: scale(1.08);
+      }
+
+      100% {
+        transform: scale(1);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .totalbar {
+        align-items: stretch;
+      }
+
+      .totalbar>div:first-child {
+        min-width: 82px;
+      }
+
+      .totalbar-actions {
+        flex-direction: column;
+        max-width: 230px;
+      }
+
+      .totalbar-actions .btn {
+        width: 100%;
+        min-height: 42px;
+        padding-left: 12px;
+        padding-right: 12px;
+      }
     }
 
     .cart-count {
@@ -2202,6 +2256,22 @@
       border-radius: 26px;
       padding: 18px;
       box-shadow: 0 18px 46px rgba(42, 31, 23, .24);
+      transform: translateY(110%);
+      transition: transform 260ms cubic-bezier(.2, .8, .2, 1);
+      touch-action: none;
+      will-change: transform;
+    }
+
+    .smart-offer-bg.show .smart-offer {
+      transform: translateY(0);
+    }
+
+    .smart-offer-handle {
+      width: 46px;
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(60, 45, 34, .22);
+      margin: 0 auto 12px;
     }
 
     .smart-offer-card {
@@ -2591,8 +2661,8 @@
         <div class="total" id="totalPreco">R$ 0,00</div>
       </div>
       <div class="totalbar-actions">
-        <button id="btnAdicionarCarrinho" class="btn btn-secondary btn-pill">Adicionar</button>
-        <button id="btnConfirmar" class="btn btn-primary btn-pill">Confirmar pedido</button>
+        <button id="btnAdicionarCarrinho" class="btn btn-secondary btn-pill">Adicionar ao carrinho</button>
+        <button id="btnConfirmar" class="btn btn-primary btn-pill">Comprar agora</button>
       </div>
     </div>
   </main>
@@ -2841,12 +2911,13 @@
 
   <div id="smartOfferPopup" class="smart-offer-bg" aria-hidden="true">
     <div class="smart-offer" role="dialog" aria-modal="true" aria-labelledby="smartOfferTitle">
+      <div class="smart-offer-handle" aria-hidden="true"></div>
       <p class="eyebrow" id="smartOfferEyebrow">Combina bem</p>
       <h2 id="smartOfferTitle" style="font-size:24px;">Que tal acompanhar?</h2>
       <p id="smartOfferMsg" class="muted small" style="margin:4px 0 0;"></p>
       <div id="smartOfferItem" class="smart-offer-card"></div>
       <div class="debt-actions">
-        <button id="smartOfferAccept" class="btn btn-primary btn-block btn-pill" type="button">Ver sugestão</button>
+        <button id="smartOfferAccept" class="btn btn-primary btn-block btn-pill" type="button">Adicionar ao carrinho</button>
         <button id="smartOfferSkip" class="btn btn-ghost btn-block btn-pill" type="button">Agora não</button>
       </div>
     </div>
@@ -2923,7 +2994,9 @@
     }
     const screens = ["screen-login", "screen-cadastro", "screen-home", "screen-pedido", "screen-carrinho", "screen-sucesso", "screen-acompanhamento", "screen-coletivo", "screen-sucesso-coletivo"];
     function showScreen(id) {
+      state.currentScreen = id;
       screens.forEach(s => $(s).classList.toggle("hidden", s !== id));
+      if (typeof renderizarBotaoCarrinho === "function") renderizarBotaoCarrinho();
       window.scrollTo(0, 0);
     }
 
@@ -2948,6 +3021,7 @@
       pedidoQtd: 1,
       carrinho: [],
       carrinhoPagamento: null,
+      currentScreen: "screen-home",
       authDestino: "home"
     };
 
@@ -2957,6 +3031,7 @@
     const INFINITEPAY_PENDING_KEY = "marmita.infinitepay.pending";
     const isInfinitePayPayment = (forma) => forma === INFINITEPAY_PAYMENT;
     const CATEGORIAS_STORY = {
+      marmita: { label: "Marmitas", icon: "🍱" },
       bebida: { label: "Bebidas", icon: "🥤" },
       sobremesa: { label: "Sobremesas", icon: "🍰" },
       lanche: { label: "Lanches", icon: "🥪" }
@@ -2978,6 +3053,7 @@
       if (empEl) empEl.textContent = colab?.empresa ? "· " + colab.empresa : "· escolha livremente";
       $("btnSair").textContent = colab ? "Sair" : "Entrar";
       $("btnSair2").textContent = colab ? "Sair" : "Entrar";
+      $("fabColetivo")?.classList.toggle("hidden", state.currentScreen !== "screen-home" || !!colab);
     }
 
     function mostrarLogin(destino = "home", mensagem = "") {
@@ -3577,8 +3653,14 @@
       const colab = getColab();
       state.favoritos = new Set();
       if (!colab) return;
-      const { data } = await sb.rpc("meus_favoritos", clienteAuthParams(colab));
-      state.favoritos = new Set((data || []).map(x => x.prato_id));
+      try {
+        const { data, error } = await sb.rpc("meus_favoritos", clienteAuthParams(colab));
+        if (error) throw error;
+        state.favoritos = new Set((data || []).map(x => x.prato_id));
+      } catch (e) {
+        console.warn("Favoritos do cliente:", e?.message || e);
+        state.favoritos = new Set();
+      }
     }
 
     async function alternarFavorito(pratoId, btn) {
@@ -3699,9 +3781,9 @@
     function renderizarStoriesCardapio(itens, pedidosAbertos) {
       const box = $("storyCategorias");
       if (!box) return;
-      const ordem = Object.keys(CATEGORIAS_STORY);
+      const ordem = ["bebida", "sobremesa", "lanche"];
       const stories = (itens || [])
-        .filter(item => CATEGORIAS_STORY[categoriaProduto(item.prato_categoria)])
+        .filter(item => ordem.includes(categoriaProduto(item.prato_categoria)))
         .sort((a, b) => {
           const ca = categoriaProduto(a.prato_categoria);
           const cb = categoriaProduto(b.prato_categoria);
@@ -3803,7 +3885,9 @@
       prato_descricao: item.prato_descricao || item.descricao || "",
       prato_foto_url: item.prato_foto_url || item.foto_url || "",
       prato_categoria: categoriaProduto(item.prato_categoria || item.categoria),
-      prato_preco: Number(item.prato_preco ?? item.preco ?? 0)
+      prato_preco: Number(item.prato_preco ?? item.preco ?? 0),
+      fornecedor_pix: item.fornecedor_pix || item.fornecedor?.chave_pix || "",
+      fornecedor_frete: Number(item.fornecedor_frete ?? item.fornecedor?.frete_entrega ?? 0)
     });
 
     function escolherSugestao(categorias, excluirId = null) {
@@ -3820,7 +3904,7 @@
       state.smartOfferItem = item;
       $("smartOfferTitle").textContent = titulo;
       $("smartOfferMsg").textContent = mensagem;
-      $("smartOfferAccept").textContent = cta || `Ver ${item.prato_nome}`;
+      $("smartOfferAccept").textContent = cta || "Adicionar ao carrinho";
       $("smartOfferItem").innerHTML = `
         ${item.prato_foto_url ? `<img class="smart-offer-img" src="${item.prato_foto_url}" alt="${esc(item.prato_nome)}" loading="lazy">` : `<div class="smart-offer-img">🍱</div>`}
         <div style="min-width:0;">
@@ -3853,7 +3937,7 @@
             titulo: "Uma bebida gelada combina bem",
             mensagem: `Para acompanhar ${itemAtual.prato_nome}, separamos uma sugestao rapida.`,
             item: bebida,
-            cta: `Ver bebida por ${fmtBRL(bebida.prato_preco)}`
+            cta: `Adicionar bebida por ${fmtBRL(bebida.prato_preco)}`
           }), 450);
         }
         return;
@@ -3866,7 +3950,7 @@
             titulo: "Quer uma marmita para acompanhar?",
             mensagem: `Antes de fechar a bebida, escolha uma marmita para acompanhar ${itemAtual.prato_nome}.`,
             item: marmita,
-            cta: `Escolher marmita por ${fmtBRL(marmita.prato_preco)}`
+            cta: `Adicionar marmita por ${fmtBRL(marmita.prato_preco)}`
           }), 450);
         }
       }
@@ -3876,7 +3960,12 @@
       const lista = $("cardapioList");
       lista.innerHTML = '<div class="loading">Carregando cardápio…</div>';
       await carregarFavoritosCliente();
-      await renderResumoClienteRapido();
+      try {
+        await renderResumoClienteRapido();
+      } catch (e) {
+        console.warn("Resumo rapido do cliente:", e?.message || e);
+        if ($("clienteResumoRapido")) $("clienteResumoRapido").innerHTML = "";
+      }
 
       const [{ data, error }, { data: cfgAberto }] = await Promise.all([
         sb.rpc("cardapio_hoje"),
@@ -4555,12 +4644,35 @@
     $("smartOfferPopup")?.addEventListener("click", (e) => {
       if (e.target === $("smartOfferPopup")) fecharOfertaInteligente();
     });
+    const smartOfferSheet = document.querySelector(".smart-offer");
+    const smartOfferDrag = { active: false, startY: 0, currentY: 0 };
+    smartOfferSheet?.addEventListener("pointerdown", (e) => {
+      smartOfferDrag.active = true;
+      smartOfferDrag.startY = e.clientY;
+      smartOfferDrag.currentY = 0;
+      smartOfferSheet.setPointerCapture?.(e.pointerId);
+      smartOfferSheet.style.transition = "none";
+    });
+    smartOfferSheet?.addEventListener("pointermove", (e) => {
+      if (!smartOfferDrag.active) return;
+      smartOfferDrag.currentY = Math.max(0, e.clientY - smartOfferDrag.startY);
+      smartOfferSheet.style.transform = `translateY(${smartOfferDrag.currentY}px)`;
+    });
+    function finalizarArrasteOferta() {
+      if (!smartOfferDrag.active) return;
+      const deveFechar = smartOfferDrag.currentY > 90;
+      smartOfferDrag.active = false;
+      smartOfferSheet.style.transition = "";
+      smartOfferSheet.style.transform = "";
+      if (deveFechar) fecharOfertaInteligente();
+    }
+    smartOfferSheet?.addEventListener("pointerup", finalizarArrasteOferta);
+    smartOfferSheet?.addEventListener("pointercancel", finalizarArrasteOferta);
     $("smartOfferAccept")?.addEventListener("click", async () => {
       const item = state.smartOfferItem;
       if (!item) return;
+      adicionarSugestaoAoCarrinho(item);
       fecharOfertaInteligente();
-      state.suprimirProximaSugestao = true;
-      await abrirPedido(item.prato_id, item.fornecedor_id);
     });
 
     $("btnSair").addEventListener("click", async () => {
@@ -4818,9 +4930,19 @@
       const btn = $("btnCarrinho");
       if (!btn) return;
       const qtd = state.carrinho.reduce((s, item) => s + Number(item.quantidade || 1), 0);
-      btn.classList.toggle("hidden", qtd === 0 || !state.pedidosAbertos);
+      const podeMostrar = state.currentScreen === "screen-home" && state.pedidosAbertos;
+      btn.classList.toggle("hidden", qtd === 0 || !podeMostrar);
       $("carrinhoQtdFab").textContent = String(qtd);
       $("carrinhoResumoFab").textContent = qtd === 1 ? "1 item" : `${qtd} itens`;
+    }
+
+    function animarEntradaCarrinho() {
+      const alvo = state.currentScreen === "screen-home" ? $("btnCarrinho") : $("btnAdicionarCarrinho");
+      if (!alvo) return;
+      alvo.classList.remove("cart-pulse");
+      void alvo.offsetWidth;
+      alvo.classList.add("cart-pulse");
+      setTimeout(() => alvo.classList.remove("cart-pulse"), 760);
     }
 
     function totalItemCarrinho(item) {
@@ -4863,12 +4985,48 @@
       };
     }
 
+    function sugestaoParaCarrinho(item) {
+      const sugestao = normalizarItemCardapio(item);
+      return {
+        localId: novoIdLocal(),
+        prato_id: sugestao.prato_id,
+        nome: sugestao.prato_nome,
+        categoria: categoriaProduto(sugestao.prato_categoria),
+        preco: Number(sugestao.prato_preco || 0),
+        quantidade: 1,
+        observacoes: null,
+        acompanhamentos: [],
+        acompanhamentoNomes: [],
+        acompTotal: 0,
+        fornecedor: {
+          id: sugestao.fornecedor_id,
+          nome: sugestao.fornecedor_nome,
+          chave_pix: sugestao.fornecedor_pix || "",
+          frete_entrega: Number(sugestao.fornecedor_frete || 0)
+        }
+      };
+    }
+
     function adicionarAtualAoCarrinho() {
       if (!state.selPrato) return;
       state.carrinho.push(itemAtualParaCarrinho());
       renderizarBotaoCarrinho();
+      animarEntradaCarrinho();
       mostrarToast("🛒", "Item adicionado", "Continue escolhendo ou abra o carrinho para finalizar.");
       abrirHome();
+    }
+
+    function adicionarSugestaoAoCarrinho(item) {
+      if (!item) return;
+      const sugestao = normalizarItemCardapio(item);
+      if (state.currentScreen === "screen-pedido" && state.selPrato?.id && state.selPrato.id !== sugestao.prato_id) {
+        state.carrinho.push(itemAtualParaCarrinho());
+      }
+      state.carrinho.push(sugestaoParaCarrinho(sugestao));
+      renderizarBotaoCarrinho();
+      animarEntradaCarrinho();
+      mostrarToast("🛒", "Itens no carrinho", `${sugestao.prato_nome} entrou junto com sua escolha para finalizar o pagamento.`);
+      setTimeout(() => renderizarCarrinho(), 520);
     }
 
     function payloadItensCarrinho() {
@@ -5479,7 +5637,7 @@
           alertEl.classList.add("show");
         }
       } finally {
-        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Confirmar pedido";
+        $("btnConfirmar").disabled = false; $("btnConfirmar").textContent = "Comprar agora";
       }
     });
 
@@ -6131,7 +6289,7 @@
     showScreen = function (id) {
       _origShowScreen(id);
       const fab = $("fabColetivo");
-      if (fab) fab.classList.toggle("hidden", id !== "screen-home");
+      if (fab) fab.classList.toggle("hidden", id !== "screen-home" || !!getColab());
     };
 
     $("fabColetivo").addEventListener("click", () => {
