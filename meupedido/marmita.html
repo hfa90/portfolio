@@ -2720,9 +2720,8 @@
           </div>
         </div>
 
-        <button class="btn btn-secondary btn-block btn-pill" id="btnCopiarPixSucesso"
-          style="margin-bottom: 16px; color: var(--blue-ios); background: rgba(0, 122, 255, 0.1);">📋 Copiar Código
-          PIX</button>
+        <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPixSucesso"
+          style="margin-bottom: 16px;">💳 Pagar com InfinitePay</button>
         <span id="sucessoPixCopiaCola" class="hidden"></span>
 
         <label style="display:block; cursor:pointer;">
@@ -2834,7 +2833,7 @@
       </div>
 
       <div class="pix-copy-row">
-        <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPix">📋 Copiar código PIX</button>
+        <button class="btn btn-primary btn-block btn-pill" id="btnCopiarPix">💳 Pagar com InfinitePay</button>
       </div>
       <label class="btn btn-secondary btn-block btn-pill hidden" id="pixFiadoComprovanteWrap" style="margin-top:10px;">
         📎 Anexar comprovante do fiado
@@ -5349,6 +5348,8 @@
           $("sucessoPixValor").textContent = fmtBRL(total);
           $("sucessoPixCopiaCola").textContent = payload;
           $("btnCopiarPixSucesso").classList.remove("hidden");
+          $("btnCopiarPixSucesso").dataset.action = "checkout";
+          $("btnCopiarPixSucesso").innerHTML = "💳 Pagar com InfinitePay";
           const canvas = $("sucessoPixCanvas");
           try {
             canvas.innerHTML = "";
@@ -5524,6 +5525,43 @@
       window.location.href = data.checkout_url;
     }
 
+    async function abrirCheckoutInfinitePayPedidos(pedidoIds) {
+      const colab = getColab();
+      const ids = [...new Set((pedidoIds || []).map(String).filter(Boolean))];
+      if (!colab) {
+        mostrarLogin("meusPedidos", "Entre novamente para abrir o checkout.");
+        return;
+      }
+      if (!ids.length) {
+        throw new Error("Nao encontrei pedido PIX pendente para enviar ao checkout.");
+      }
+
+      const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
+        body: {
+          colaborador_id: colab.id,
+          pedido_ids: ids,
+          session_token: colab.session_token || "",
+          redirect_url: redirectBaseInfinitePay()
+        }
+      });
+
+      if (error) throw new Error(await mensagemErroFuncao(error, "Erro ao chamar checkout InfinitePay."));
+      if (!data?.success || !data?.checkout_url || !data?.pedido_id) {
+        throw new Error(data?.message || "InfinitePay nao retornou o link de pagamento.");
+      }
+
+      window.pedidoAtualId = data.pedido_id;
+      window.pedidoAtualIds = data.pedido_ids || [data.pedido_id];
+      localStorage.setItem(INFINITEPAY_PENDING_KEY, JSON.stringify({
+        pedido_id: data.pedido_id,
+        pedido_ids: data.pedido_ids || [data.pedido_id],
+        pedido_carrinho_id: data.pedido_carrinho_id || null,
+        checkout_url: data.checkout_url,
+        criado_em: new Date().toISOString()
+      }));
+      window.location.href = data.checkout_url;
+    }
+
     async function uploadComprovante(pedidoId, file) {
       if (!file) return null;
       try {
@@ -5646,6 +5684,10 @@
         $("sucessoPixValor").textContent = fmtBRL(total);
         $("sucessoPixCopiaCola").textContent = payload;
         $("btnCopiarPixSucesso").classList.remove("hidden");
+        $("btnCopiarPixSucesso").dataset.action = state.selPagamento === "pix_empresa" ? "checkout" : "copy";
+        $("btnCopiarPixSucesso").innerHTML = state.selPagamento === "pix_empresa"
+          ? "💳 Pagar com InfinitePay"
+          : "📋 Copiar código PIX";
 
         const canvas = $("sucessoPixCanvas");
         try {
@@ -5722,6 +5764,7 @@
             $("sucessoPixValor").textContent = fmtBRL(calcTotal());
             $("sucessoPixCopiaCola").textContent = "";
             $("btnCopiarPixSucesso").classList.add("hidden");
+            $("btnCopiarPixSucesso").dataset.action = "";
             $("pixComprovanteBtn").className = "btn btn-primary btn-block btn-pill";
             $("pixComprovanteBtn").innerHTML = "📎 Anexar Comprovante";
             $("pixComprovanteInput").disabled = false;
@@ -5746,14 +5789,32 @@
     });
 
     $("btnCopiarPixSucesso").addEventListener("click", async () => {
-      const codigo = $("sucessoPixCopiaCola").textContent;
+      const btn = $("btnCopiarPixSucesso");
+      if (btn.dataset.action !== "checkout") {
+        const codigo = $("sucessoPixCopiaCola").textContent;
+        try {
+          await navigator.clipboard.writeText(codigo);
+          const originalText = btn.innerHTML;
+          btn.innerHTML = "✅ Copiado!";
+          setTimeout(() => btn.innerHTML = originalText, 2000);
+        } catch {
+          alert("Selecione e copie o código manualmente.");
+        }
+        return;
+      }
+
+      const pedidoIds = Array.isArray(window.pedidoAtualIds) && window.pedidoAtualIds.length
+        ? window.pedidoAtualIds
+        : (window.pedidoAtualId ? [window.pedidoAtualId] : []);
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = "Abrindo checkout...";
       try {
-        await navigator.clipboard.writeText(codigo);
-        const originalText = $("btnCopiarPixSucesso").innerHTML;
-        $("btnCopiarPixSucesso").innerHTML = "✅ Copiado!";
-        setTimeout(() => $("btnCopiarPixSucesso").innerHTML = originalText, 2000);
-      } catch {
-        alert("Selecione e copie o código manualmente.");
+        await abrirCheckoutInfinitePayPedidos(pedidoIds);
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+        mostrarToast("⚠️", "Checkout indisponivel", err?.message || "Nao foi possivel abrir a InfinitePay.");
       }
     });
 
@@ -5850,6 +5911,8 @@
 
     let pixQrInstance = null;
     let pixFiadoPedidoIds = [];
+    let pixSheetPedidoIds = [];
+    let pixSheetTipo = "fiado";
 
     async function abrirPixSheet(totalPendente, tipo = "fiado") {
       const colab = getColab();
@@ -5868,6 +5931,8 @@
         return;
       }
 
+      pixSheetTipo = tipo;
+      pixSheetPedidoIds = [];
       pixFiadoPedidoIds = [];
       if (tipo === "fiado") {
         const { data } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
@@ -5875,6 +5940,12 @@
           .filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente" && p.status !== "cancelado");
         pixFiadoPedidoIds = fiadosPendentes.map(p => p.id);
         totalPendente = fiadosPendentes.reduce((s, p) => s + Number(p.preco_total || 0), 0);
+      } else if (tipo === "pix") {
+        const { data } = await sb.rpc("meus_pedidos", clienteAuthParams(colab));
+        const pixEmpresaPendentes = (data || [])
+          .filter(p => p.forma_pagamento === "pix_empresa" && p.status_pagamento === "pendente" && p.status !== "cancelado");
+        pixSheetPedidoIds = pixEmpresaPendentes.map(p => p.id);
+        totalPendente = pixEmpresaPendentes.reduce((s, p) => s + Number(p.preco_total || 0), 0);
       }
 
       if (totalPendente <= 0) {
@@ -5896,13 +5967,16 @@
       document.getElementById("pixCopiaCola").textContent = payload;
       document.getElementById("pixSubtitle").textContent = tipo === "fiado"
         ? "Saldo de fiado em aberto"
-        : "PIX aguardando confirmação";
+        : "PIX Empresa aguardando checkout";
       document.getElementById("pixAlert").classList.remove("show");
       document.getElementById("pixFiadoComprovanteWrap").classList.toggle("hidden", tipo !== "fiado");
       document.getElementById("pixFiadoComprovanteMsg").classList.toggle("hidden", tipo !== "fiado");
       document.getElementById("pixFiadoComprovanteMsg").textContent = tipo === "fiado"
         ? "Anexe o comprovante para o administrador baixar o fiado."
         : "";
+      document.getElementById("btnCopiarPix").textContent = tipo === "pix"
+        ? "💳 Pagar com InfinitePay"
+        : "📋 Copiar código PIX";
 
       const canvas = document.getElementById("pixQrCanvas");
       canvas.innerHTML = "";
@@ -5933,8 +6007,24 @@
     }
 
     document.getElementById("btnCopiarPix").addEventListener("click", async () => {
-      const codigo = document.getElementById("pixCopiaCola").textContent;
+      const btn = document.getElementById("btnCopiarPix");
       const alertEl = document.getElementById("pixAlert");
+      if (pixSheetTipo === "pix") {
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Abrindo checkout...";
+        try {
+          await abrirCheckoutInfinitePayPedidos(pixSheetPedidoIds);
+        } catch (err) {
+          alertEl.textContent = err?.message || "Nao foi possivel abrir o checkout InfinitePay.";
+          alertEl.className = "alert alert-error show";
+          btn.disabled = false;
+          btn.textContent = originalText;
+        }
+        return;
+      }
+
+      const codigo = document.getElementById("pixCopiaCola").textContent;
       try {
         await navigator.clipboard.writeText(codigo);
         alertEl.textContent = "✅ Código copiado! Cole no seu app de pagamentos.";
