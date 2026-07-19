@@ -4047,6 +4047,11 @@
       return resumo;
     }
 
+    function resgateFidelidadeAtivo() {
+      const valor = state.fidelidadeResumo?.resgate_ativo;
+      return valor === true || valor === "true" || valor === undefined;
+    }
+
     function saldoFidelidadeAtual() {
       return Math.max(0, Number(state.fidelidadeSaldo || 0));
     }
@@ -4100,14 +4105,17 @@
       if (!opt) return;
       const total = totalPedidoSemResgate();
       const saldo = saldoFidelidadeAtual();
-      const disponivel = saldo >= total && total > 0;
+      const resgateAtivo = resgateFidelidadeAtivo();
+      const disponivel = resgateAtivo && saldo >= total && total > 0;
       opt.classList.toggle("disabled", !disponivel);
-      opt.dataset.motivo = disponivel ? "" : "resgate";
+      opt.dataset.motivo = disponivel ? "" : (resgateAtivo ? "resgate" : "resgate_desativado");
       const desc = opt.querySelector(".pay-desc");
       if (desc) {
         desc.textContent = disponivel
           ? `Saldo ${fmtBRL(saldo)} cobre este pedido inteiro.`
-          : `Saldo ${fmtBRL(saldo)}. Resgate só quando cobrir ${fmtBRL(total)} inteiro.`;
+          : (resgateAtivo
+            ? `Saldo ${fmtBRL(saldo)}. Resgate só quando cobrir ${fmtBRL(total)} inteiro.`
+            : "Resgate de fidelidade desativado pelo restaurante.");
       }
       if (!disponivel && state.selPagamento === RESGATE_PAYMENT) {
         state.selPagamento = null;
@@ -4121,14 +4129,17 @@
       if (!opt) return;
       const resumo = detalhesCarrinho(null);
       const saldo = saldoFidelidadeAtual();
-      const disponivel = saldo >= resumo.total && resumo.total > 0;
+      const resgateAtivo = resgateFidelidadeAtivo();
+      const disponivel = resgateAtivo && saldo >= resumo.total && resumo.total > 0;
       opt.classList.toggle("disabled", !disponivel);
-      opt.dataset.motivo = disponivel ? "" : "resgate";
+      opt.dataset.motivo = disponivel ? "" : (resgateAtivo ? "resgate" : "resgate_desativado");
       const desc = opt.querySelector(".pay-desc");
       if (desc) {
         desc.textContent = disponivel
           ? `Saldo ${fmtBRL(saldo)} cobre o carrinho inteiro.`
-          : `Saldo ${fmtBRL(saldo)}. Resgate só para pagar ${fmtBRL(resumo.total)} inteiro.`;
+          : (resgateAtivo
+            ? `Saldo ${fmtBRL(saldo)}. Resgate só para pagar ${fmtBRL(resumo.total)} inteiro.`
+            : "Resgate de fidelidade desativado pelo restaurante.");
       }
       if (!disponivel && state.carrinhoPagamento === RESGATE_PAYMENT) {
         state.carrinhoPagamento = null;
@@ -4160,10 +4171,14 @@
       const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
       const credito = Number(fidelidade?.credito_por_marmita || 0.5);
       const ativo = fidelidade?.ativa === true;
+      if (!ativo) {
+        alvo.innerHTML = "";
+        return;
+      }
       alvo.innerHTML = `<div class="loyalty-card">
-        <div class="small muted">Programa de fidelidade ${ativo ? "" : "pausado"}</div>
+        <div class="small muted">Programa de fidelidade</div>
         <div class="loyalty-points">${fmtBRL(saldo)}</div>
-        <p class="small" style="margin:4px 0 0;">${ativo ? `Cada marmita paga adiciona ${fmtBRL(credito)} ao seu saldo. Resgate somente produtos que o saldo paga por completo.` : "O administrador pode ativar ou pausar o plano a qualquer momento."}</p>
+        <p class="small" style="margin:4px 0 0;">Cada marmita paga adiciona ${fmtBRL(credito)} ao seu saldo. Resgate somente produtos que o saldo paga por completo.</p>
         ${renderOpcoesResgateHtml(saldo)}
         <div class="quick-row" style="position:relative; z-index:1; margin-top:12px;">
           <button class="quick-chip" id="btnIrFavoritos">Favoritos (${perfil.favoritos || 0})</button>
@@ -5038,13 +5053,15 @@
       const saldo = Number(fidelidade?.saldo ?? 0);
       const credito = Number(fidelidade?.credito_por_marmita || 0.5);
       const ativo = fidelidade?.ativa === true;
-      alvo.innerHTML = `
+      const fidelidadeHtml = ativo ? `
         <div class="loyalty-card">
-          <div class="small muted">Clube da Marmita ${ativo ? "" : "pausado"}</div>
+          <div class="small muted">Clube da Marmita</div>
           <div class="loyalty-points">${fmtBRL(saldo)}</div>
-          <p class="small">${ativo ? `${pedidosPontuados} marmita(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)} para trocar por produtos inteiros.` : "O plano de fidelidade está pausado pelo administrador."}</p>
+          <p class="small">${pedidosPontuados} marmita(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)} para trocar por produtos inteiros.</p>
           ${renderOpcoesResgateHtml(saldo)}
-        </div>
+        </div>` : "";
+      alvo.innerHTML = `
+        ${fidelidadeHtml}
         <div class="profile-grid">
           <div class="stat-mini"><div class="stat-mini-label">Pedidos</div><div class="stat-mini-value brick">${p.total_pedidos || 0}</div></div>
           <div class="stat-mini"><div class="stat-mini-label">Favoritos</div><div class="stat-mini-value olive">${p.favoritos || 0}</div></div>
@@ -5408,6 +5425,7 @@
       if (colabPagamento) await obterFidelidadeResumo();
       const saldoResgate = saldoFidelidadeAtual();
       const totalResgate = totalPedidoSemResgate();
+      const resgateAtivo = resgateFidelidadeAtivo();
       const opts = [
         {
           id: INFINITEPAY_PAYMENT,
@@ -5419,11 +5437,13 @@
           id: RESGATE_PAYMENT,
           icon: "🎟️",
           title: "Resgatar fidelidade",
-          desc: saldoResgate >= totalResgate
-            ? `Saldo ${fmtBRL(saldoResgate)} cobre este pedido inteiro.`
-            : `Saldo ${fmtBRL(saldoResgate)}. Resgate só quando cobrir ${fmtBRL(totalResgate)} inteiro.`,
-          disabled: saldoResgate < totalResgate || totalResgate <= 0,
-          motivo: "resgate"
+          desc: !resgateAtivo
+            ? "Resgate de fidelidade desativado pelo restaurante."
+            : (saldoResgate >= totalResgate
+              ? `Saldo ${fmtBRL(saldoResgate)} cobre este pedido inteiro.`
+              : `Saldo ${fmtBRL(saldoResgate)}. Resgate só quando cobrir ${fmtBRL(totalResgate)} inteiro.`),
+          disabled: !resgateAtivo || saldoResgate < totalResgate || totalResgate <= 0,
+          motivo: resgateAtivo ? "resgate" : "resgate_desativado"
         },
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
         {
@@ -5459,6 +5479,7 @@
           if (opt.classList.contains("disabled")) {
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o pedido inteiro.");
+            else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
             else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
             return;
           }
@@ -5780,6 +5801,7 @@
       if (colabCarrinho) await obterFidelidadeResumo();
       const saldoResgateCarrinho = saldoFidelidadeAtual();
       const totalResgateCarrinho = detalhesCarrinho(null).total;
+      const resgateAtivoCarrinho = resgateFidelidadeAtivo();
 
       $("carrinhoLista").innerHTML = state.carrinho.map(item => `
         <div class="cart-item" data-cart-item="${item.localId}">
@@ -5811,11 +5833,13 @@
           id: RESGATE_PAYMENT,
           icon: "🎟️",
           title: "Resgatar fidelidade",
-          desc: saldoResgateCarrinho >= totalResgateCarrinho
-            ? `Saldo ${fmtBRL(saldoResgateCarrinho)} cobre o carrinho inteiro.`
-            : `Saldo ${fmtBRL(saldoResgateCarrinho)}. Resgate só para pagar ${fmtBRL(totalResgateCarrinho)} inteiro.`,
-          disabled: saldoResgateCarrinho < totalResgateCarrinho || totalResgateCarrinho <= 0,
-          motivo: "resgate"
+          desc: !resgateAtivoCarrinho
+            ? "Resgate de fidelidade desativado pelo restaurante."
+            : (saldoResgateCarrinho >= totalResgateCarrinho
+              ? `Saldo ${fmtBRL(saldoResgateCarrinho)} cobre o carrinho inteiro.`
+              : `Saldo ${fmtBRL(saldoResgateCarrinho)}. Resgate só para pagar ${fmtBRL(totalResgateCarrinho)} inteiro.`),
+          disabled: !resgateAtivoCarrinho || saldoResgateCarrinho < totalResgateCarrinho || totalResgateCarrinho <= 0,
+          motivo: resgateAtivoCarrinho ? "resgate" : "resgate_desativado"
         },
         { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
         {
@@ -5847,6 +5871,7 @@
           if (opt.classList.contains("disabled")) {
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o carrinho inteiro.");
+            else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
             else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
             return;
           }
