@@ -648,7 +648,8 @@
     .prato-visual img {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
+      object-position: center;
       display: block;
     }
 
@@ -1900,6 +1901,82 @@
       color: #fff;
     }
 
+    .score-card {
+      background: linear-gradient(135deg, rgba(94, 107, 58, .16), rgba(185, 74, 42, .10));
+      border: 1px solid rgba(94, 107, 58, .22);
+      border-radius: 20px;
+      padding: 16px;
+      margin-top: 12px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .score-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .score-ring {
+      --score: 70;
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at center, var(--paper) 58%, transparent 59%),
+        conic-gradient(var(--olive) calc(var(--score) * 1%), rgba(118, 118, 128, .18) 0);
+      border: 1px solid var(--separator);
+      flex-shrink: 0;
+    }
+
+    .score-ring strong {
+      font-family: var(--font-display);
+      font-size: 28px;
+      color: var(--ink);
+      line-height: 1;
+    }
+
+    .score-meter {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(118, 118, 128, .16);
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .score-meter span {
+      display: block;
+      width: var(--score-width, 70%);
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--crimson), var(--mustard), var(--olive));
+    }
+
+    .score-facts {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .score-facts div {
+      border: 1px solid var(--separator);
+      border-radius: 12px;
+      padding: 8px;
+      background: rgba(255, 250, 240, .55);
+      text-align: center;
+    }
+
+    .score-facts strong {
+      display: block;
+      font-family: var(--font-display);
+      font-size: 20px;
+      color: var(--brick);
+    }
+
     .progress-track {
       height: 10px;
       border-radius: 999px;
@@ -2631,6 +2708,8 @@
     :root[data-theme="dark"] .pin-key,
     :root[data-theme="dark"] .search-box,
     :root[data-theme="dark"] .search-insights,
+    :root[data-theme="dark"] .score-card,
+    :root[data-theme="dark"] .score-facts div,
     :root[data-theme="dark"] .story-chip,
     :root[data-theme="dark"] .pay-option,
     :root[data-theme="dark"] .payment-helper,
@@ -3351,6 +3430,37 @@
     const RESGATE_PAYMENT = "resgate_fidelidade";
     const INFINITEPAY_PENDING_KEY = "marmita.infinitepay.pending";
     const isInfinitePayPayment = (forma) => forma === INFINITEPAY_PAYMENT;
+    const CHECKOUT_CONFIG_KEYS = [
+      "pix_empresa",
+      "nome_empresa",
+      "pagamento_cartao_ativo",
+      "pagamento_pix_empresa_ativo",
+      "pagamento_fiado_ativo",
+      "pagamento_dinheiro_ativo",
+      "pagamento_pagar_mais_tarde_ativo"
+    ];
+    const PAYMENT_TOGGLE_KEYS = {
+      cartao_infinitepay: "pagamento_cartao_ativo",
+      pix_empresa: "pagamento_pix_empresa_ativo",
+      fiado: "pagamento_fiado_ativo",
+      dinheiro: "pagamento_dinheiro_ativo",
+      pagar_mais_tarde: "pagamento_pagar_mais_tarde_ativo"
+    };
+    function pagamentoGlobalAtivo(forma) {
+      if (forma === RESGATE_PAYMENT) return resgateFidelidadeAtivo();
+      const chave = PAYMENT_TOGGLE_KEYS[forma];
+      return !chave || state.configEmpresa[chave] !== "false";
+    }
+    function mensagemPagamentoSuspenso(forma) {
+      return {
+        cartao_infinitepay: "Cartão suspenso pelo restaurante.",
+        pix_empresa: "Pix Empresa suspenso pelo restaurante.",
+        fiado: "Fiado suspenso pelo restaurante.",
+        dinheiro: "Dinheiro suspenso pelo restaurante.",
+        pagar_mais_tarde: "Pagar mais tarde suspenso pelo restaurante.",
+        resgate_fidelidade: "Resgate de fidelidade desativado pelo restaurante."
+      }[forma] || "Forma de pagamento suspensa pelo restaurante.";
+    }
     const CATEGORIAS_STORY = {
       marmita: { label: "Marmitas", icon: "🍱" },
       bebida: { label: "Bebidas", icon: "🥤" },
@@ -4089,6 +4199,29 @@
           </div>
           <strong class="small">${fmtBRL(item.preco)}</strong>
         </div>`).join("")}
+      </div>`;
+    }
+
+    function renderScoreClienteHtml(perfil) {
+      if (perfil?.score_visivel === false) return "";
+      const score = Math.max(0, Math.min(100, Number(perfil?.score_valor ?? 70)));
+      const nivel = perfil?.score_nivel || (score >= 85 ? "Excelente" : score >= 70 ? "Bom" : score >= 50 ? "Atenção" : "Risco");
+      const mensagem = perfil?.score_mensagem || "Seu score acompanha pagamentos no prazo, atrasos e pendencias vencidas.";
+      return `<div class="score-card">
+        <div class="score-head">
+          <div style="min-width:0;">
+            <div class="small muted">Score de pagamento</div>
+            <h3 style="margin:2px 0 4px;">${esc(nivel)}</h3>
+            <p class="small muted" style="margin:0;">${esc(mensagem)}</p>
+          </div>
+          <div class="score-ring" style="--score:${score};"><strong>${score}</strong></div>
+        </div>
+        <div class="score-meter" style="--score-width:${score}%;"><span></span></div>
+        <div class="score-facts">
+          <div><strong>${Number(perfil?.score_pagos_no_prazo || 0)}</strong><span class="small muted">no prazo</span></div>
+          <div><strong>${Number(perfil?.score_atrasados || 0)}</strong><span class="small muted">atrasos</span></div>
+          <div><strong>${Number(perfil?.score_pendentes_vencidos || 0)}</strong><span class="small muted">vencidos</span></div>
+        </div>
       </div>`;
     }
 
@@ -5062,6 +5195,7 @@
         </div>` : "";
       alvo.innerHTML = `
         ${fidelidadeHtml}
+        ${renderScoreClienteHtml(p)}
         <div class="profile-grid">
           <div class="stat-mini"><div class="stat-mini-label">Pedidos</div><div class="stat-mini-value brick">${p.total_pedidos || 0}</div></div>
           <div class="stat-mini"><div class="stat-mini-label">Favoritos</div><div class="stat-mini-value olive">${p.favoritos || 0}</div></div>
@@ -5337,7 +5471,7 @@
         .eq("ativo", true);
       const { data: config } = await sb.from("configuracoes")
         .select("chave, valor")
-        .in("chave", ["pix_empresa", "nome_empresa"]);
+        .in("chave", CHECKOUT_CONFIG_KEYS);
       const itemCardapio = (state.cardapio || []).find(item => item.prato_id === pratoId);
       if (prato && itemCardapio) {
         prato.estoque_total = itemCardapio.estoque_total;
@@ -5426,12 +5560,18 @@
       const saldoResgate = saldoFidelidadeAtual();
       const totalResgate = totalPedidoSemResgate();
       const resgateAtivo = resgateFidelidadeAtivo();
+      const cartaoAtivo = pagamentoGlobalAtivo(INFINITEPAY_PAYMENT);
+      const pixEmpresaAtivo = pagamentoGlobalAtivo("pix_empresa");
+      const fiadoAtivo = pagamentoGlobalAtivo("fiado");
+      const maisTardeAtivo = pagamentoGlobalAtivo("pagar_mais_tarde");
       const opts = [
         {
           id: INFINITEPAY_PAYMENT,
           icon: "💳",
           title: "Cartão",
-          desc: "Pague com cartão no checkout seguro da InfinitePay."
+          desc: cartaoAtivo ? "Pague com cartão no checkout seguro da InfinitePay." : mensagemPagamentoSuspenso(INFINITEPAY_PAYMENT),
+          disabled: !cartaoAtivo,
+          motivo: !cartaoAtivo ? "pagamento_suspenso" : ""
         },
         {
           id: RESGATE_PAYMENT,
@@ -5445,22 +5585,26 @@
           disabled: !resgateAtivo || saldoResgate < totalResgate || totalResgate <= 0,
           motivo: resgateAtivo ? "resgate" : "resgate_desativado"
         },
-        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
+        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: !pixEmpresaAtivo ? mensagemPagamentoSuspenso("pix_empresa") : (pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado"), disabled: !pixEmpresaAtivo || !pixEmpresa, motivo: !pixEmpresaAtivo ? "pagamento_suspenso" : "" },
         {
           id: "fiado",
           icon: "📒",
           title: "Fiado",
-          desc: fiadoBloqueado
+          desc: !fiadoAtivo
+            ? mensagemPagamentoSuspenso("fiado")
+            : (fiadoBloqueado
             ? "Indisponível: regularize o fiado vencido para habilitar novamente."
-            : "Acumula até a data de pagamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>",
-          disabled: fiadoBloqueado,
-          motivo: "fiado"
+            : "Acumula até a data de pagamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>"),
+          disabled: !fiadoAtivo || fiadoBloqueado,
+          motivo: !fiadoAtivo ? "pagamento_suspenso" : "fiado"
         },
         {
           id: "pagar_mais_tarde",
           icon: "🕒",
           title: "Pagar mais tarde",
-          desc: "Para pagar até o fim do expediente de hoje."
+          desc: maisTardeAtivo ? "Para pagar até o fim do expediente de hoje." : mensagemPagamentoSuspenso("pagar_mais_tarde"),
+          disabled: !maisTardeAtivo,
+          motivo: !maisTardeAtivo ? "pagamento_suspenso" : ""
         }
       ];
       $("payOptions").innerHTML = opts.map(o => `
@@ -5480,6 +5624,7 @@
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o pedido inteiro.");
             else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
+            else if (opt.dataset.motivo === "pagamento_suspenso") mostrarToast("!", "Pagamento suspenso", "O restaurante suspendeu esta forma de pagamento por enquanto.");
             else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
             return;
           }
@@ -5792,7 +5937,7 @@
 
       $("btnFinalizarCarrinho").disabled = false;
       const [{ data: config }, resumoFiado] = await Promise.all([
-        sb.from("configuracoes").select("chave, valor").in("chave", ["pix_empresa", "nome_empresa"]),
+        sb.from("configuracoes").select("chave, valor").in("chave", CHECKOUT_CONFIG_KEYS),
         checarDebitoFiado(false)
       ]);
       state.configEmpresa = Object.fromEntries((config || []).map(c => [c.chave, c.valor]));
@@ -5802,6 +5947,10 @@
       const saldoResgateCarrinho = saldoFidelidadeAtual();
       const totalResgateCarrinho = detalhesCarrinho(null).total;
       const resgateAtivoCarrinho = resgateFidelidadeAtivo();
+      const cartaoCarrinhoAtivo = pagamentoGlobalAtivo(INFINITEPAY_PAYMENT);
+      const pixEmpresaCarrinhoAtivo = pagamentoGlobalAtivo("pix_empresa");
+      const fiadoCarrinhoAtivo = pagamentoGlobalAtivo("fiado");
+      const maisTardeCarrinhoAtivo = pagamentoGlobalAtivo("pagar_mais_tarde");
 
       $("carrinhoLista").innerHTML = state.carrinho.map(item => `
         <div class="cart-item" data-cart-item="${item.localId}">
@@ -5828,7 +5977,7 @@
 
       const pixEmpresa = state.configEmpresa.pix_empresa;
       const opts = [
-        { id: INFINITEPAY_PAYMENT, icon: "💳", title: "Cartão", desc: "Pague todos os itens no checkout seguro da InfinitePay." },
+        { id: INFINITEPAY_PAYMENT, icon: "💳", title: "Cartão", desc: cartaoCarrinhoAtivo ? "Pague todos os itens no checkout seguro da InfinitePay." : mensagemPagamentoSuspenso(INFINITEPAY_PAYMENT), disabled: !cartaoCarrinhoAtivo, motivo: !cartaoCarrinhoAtivo ? "pagamento_suspenso" : "" },
         {
           id: RESGATE_PAYMENT,
           icon: "🎟️",
@@ -5841,18 +5990,20 @@
           disabled: !resgateAtivoCarrinho || saldoResgateCarrinho < totalResgateCarrinho || totalResgateCarrinho <= 0,
           motivo: resgateAtivoCarrinho ? "resgate" : "resgate_desativado"
         },
-        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado", disabled: !pixEmpresa },
+        { id: "pix_empresa", icon: "🏢", title: "Pix Empresa", desc: !pixEmpresaCarrinhoAtivo ? mensagemPagamentoSuspenso("pix_empresa") : (pixEmpresa ? `Chave: ${pixEmpresa}` : "Não configurado"), disabled: !pixEmpresaCarrinhoAtivo || !pixEmpresa, motivo: !pixEmpresaCarrinhoAtivo ? "pagamento_suspenso" : "" },
         {
           id: "fiado",
           icon: "📒",
           title: "Fiado",
-          desc: fiadoBloqueado
+          desc: !fiadoCarrinhoAtivo
+            ? mensagemPagamentoSuspenso("fiado")
+            : (fiadoBloqueado
             ? "Indisponível: regularize o fiado vencido para habilitar novamente."
-            : "A taxa de R$10,00 entra uma vez no carrinho.",
-          disabled: fiadoBloqueado,
-          motivo: "fiado"
+            : "A taxa de R$10,00 entra uma vez no carrinho."),
+          disabled: !fiadoCarrinhoAtivo || fiadoBloqueado,
+          motivo: !fiadoCarrinhoAtivo ? "pagamento_suspenso" : "fiado"
         },
-        { id: "pagar_mais_tarde", icon: "🕒", title: "Pagar mais tarde", desc: "Para pagar até o fim do expediente de hoje." }
+        { id: "pagar_mais_tarde", icon: "🕒", title: "Pagar mais tarde", desc: maisTardeCarrinhoAtivo ? "Para pagar até o fim do expediente de hoje." : mensagemPagamentoSuspenso("pagar_mais_tarde"), disabled: !maisTardeCarrinhoAtivo, motivo: !maisTardeCarrinhoAtivo ? "pagamento_suspenso" : "" }
       ];
 
       $("carrinhoPayOptions").innerHTML = opts.map(o => `
@@ -5872,6 +6023,7 @@
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o carrinho inteiro.");
             else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
+            else if (opt.dataset.motivo === "pagamento_suspenso") mostrarToast("!", "Pagamento suspenso", "O restaurante suspendeu esta forma de pagamento por enquanto.");
             else mostrarToast("⚠️", "Forma indisponível", "Esta forma de pagamento não está disponível agora.");
             return;
           }
@@ -5953,6 +6105,11 @@
         alertEl.classList.add("show");
         return;
       }
+      if (!pagamentoGlobalAtivo(state.carrinhoPagamento)) {
+        alertEl.textContent = mensagemPagamentoSuspenso(state.carrinhoPagamento);
+        alertEl.classList.add("show");
+        return;
+      }
       const colab = getColab();
       if (!colab) {
         mostrarLogin("home", "Entre com sua matricula e PIN para finalizar o carrinho.");
@@ -5967,6 +6124,12 @@
       }
       if (state.carrinhoPagamento === RESGATE_PAYMENT) {
         await obterFidelidadeResumo();
+        if (!pagamentoGlobalAtivo(state.carrinhoPagamento)) {
+          alertEl.textContent = mensagemPagamentoSuspenso(state.carrinhoPagamento);
+          alertEl.classList.add("show");
+          atualizarOpcaoResgateCarrinho();
+          return;
+        }
         const totalResgate = detalhesCarrinho(null).total;
         if (saldoFidelidadeAtual() < totalResgate) {
           alertEl.textContent = `Seu saldo de fidelidade (${fmtBRL(saldoFidelidadeAtual())}) nao cobre o carrinho inteiro (${fmtBRL(totalResgate)}).`;
@@ -6295,6 +6458,11 @@
         alertEl.textContent = "Escolha a forma de pagamento."; alertEl.classList.add("show");
         return;
       }
+      if (!pagamentoGlobalAtivo(state.selPagamento)) {
+        alertEl.textContent = mensagemPagamentoSuspenso(state.selPagamento);
+        alertEl.classList.add("show");
+        return;
+      }
       const colab = getColab();
       if (!colab) {
         mostrarLogin("pedido", "Entre com sua matricula e PIN para confirmar este pedido.");
@@ -6309,6 +6477,12 @@
       }
       if (state.selPagamento === RESGATE_PAYMENT) {
         await obterFidelidadeResumo();
+        if (!pagamentoGlobalAtivo(state.selPagamento)) {
+          alertEl.textContent = mensagemPagamentoSuspenso(state.selPagamento);
+          alertEl.classList.add("show");
+          atualizarOpcaoResgatePedido();
+          return;
+        }
         const totalResgate = totalPedidoSemResgate();
         if (saldoFidelidadeAtual() < totalResgate) {
           alertEl.textContent = `Seu saldo de fidelidade (${fmtBRL(saldoFidelidadeAtual())}) nao cobre o pedido inteiro (${fmtBRL(totalResgate)}).`;
