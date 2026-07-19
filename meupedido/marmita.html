@@ -3321,6 +3321,17 @@
       p_colaborador_id: colab?.id || null,
       p_session_token: colab?.session_token || ""
     });
+    async function rpcPerfilCliente(colab = getColab()) {
+      const params = clienteAuthParams(colab);
+      let resp = await sb.rpc("perfil_cliente", params);
+      if (resp.error && /schema cache|p_colaborador_id|Could not find/i.test(resp.error.message || "")) {
+        resp = await sb.rpc("perfil_cliente", {
+          p_colab_id: params.p_colaborador_id,
+          p_session_token: params.p_session_token
+        });
+      }
+      return resp;
+    }
     function exigirSessaoCliente(destino = "home", mensagem = "Entre novamente para continuar.") {
       const colab = getColab();
       if (temSessaoCliente(colab)) return colab;
@@ -4149,7 +4160,20 @@
       const { data, error } = await sb.rpc("fidelidade_resumo", clienteAuthParams(colab));
       if (error) {
         console.warn("Resumo fidelidade:", error.message);
-        return null;
+        const { data: cfg } = await sb.from("configuracoes")
+          .select("chave, valor")
+          .in("chave", ["fidelidade_ativa", "fidelidade_credito_por_marmita", "fidelidade_resgate_ativo"]);
+        const map = Object.fromEntries((cfg || []).map(c => [c.chave, c.valor]));
+        const resumoFallback = {
+          ativa: map.fidelidade_ativa !== "false",
+          saldo: 0,
+          pedidos_pontuados: 0,
+          credito_por_marmita: Number(map.fidelidade_credito_por_marmita || 0.5),
+          resgate_ativo: map.fidelidade_resgate_ativo !== "false"
+        };
+        state.fidelidadeResumo = resumoFallback;
+        state.fidelidadeSaldo = 0;
+        return resumoFallback;
       }
       const resumo = Array.isArray(data) ? data[0] : data;
       state.fidelidadeResumo = resumo || null;
@@ -4294,16 +4318,18 @@
         $("btnResumoLogin")?.addEventListener("click", () => mostrarLogin("home", "Entre para personalizar o cardapio."));
         return;
       }
-      const [{ data }, fidelidade] = await Promise.all([
-        sb.rpc("perfil_cliente", clienteAuthParams(colab)),
+      const [{ data, error: perfilError }, fidelidade] = await Promise.all([
+        rpcPerfilCliente(colab),
         obterFidelidadeResumo()
       ]);
-      const perfil = Array.isArray(data) ? data[0] : data;
-      if (!perfil) { alvo.innerHTML = ""; return; }
+      if (perfilError) console.warn("Perfil rapido:", perfilError.message);
+      const perfil = (Array.isArray(data) ? data[0] : data) || {
+        favoritos: state.favoritos?.size || 0
+      };
       const saldo = Number(fidelidade?.saldo ?? 0);
       const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
       const credito = Number(fidelidade?.credito_por_marmita || 0.5);
-      const ativo = fidelidade?.ativa === true;
+      const ativo = fidelidade?.ativa === true || fidelidade?.ativa === "true";
       if (!ativo) {
         alvo.innerHTML = "";
         return;
@@ -5169,7 +5195,7 @@
       }
       alvo.innerHTML = '<div class="loading">Carregando perfil...</div>';
       const [{ data, error }, fidelidade] = await Promise.all([
-        sb.rpc("perfil_cliente", clienteAuthParams(colab)),
+        rpcPerfilCliente(colab),
         obterFidelidadeResumo()
       ]);
       if (error) {
@@ -5641,7 +5667,7 @@
       atualizarTotal();
       const colab = getColab();
       if (colab) {
-        const { data: perfilData } = await sb.rpc("perfil_cliente", clienteAuthParams(colab));
+        const { data: perfilData } = await rpcPerfilCliente(colab);
         const pref = (Array.isArray(perfilData) ? perfilData[0] : perfilData)?.pagamento_preferido;
         const payOpt = pref ? document.querySelector(`.pay-option[data-pay="${pref}"]:not(.disabled)`) : null;
         if (payOpt) {
