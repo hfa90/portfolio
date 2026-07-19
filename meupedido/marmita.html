@@ -1635,28 +1635,75 @@
     /* FAB Pedido Coletivo */
     .fab-coletivo {
       position: fixed;
-      bottom: calc(24px + var(--safe-bottom));
-      right: 20px;
+      right: 0;
+      bottom: calc(106px + var(--safe-bottom));
       z-index: 15;
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 0 20px;
+      padding: 0 18px 0 14px;
       height: 52px;
       background: var(--olive);
       color: #fff;
       border: none;
-      border-radius: 999px;
+      border-radius: 999px 0 0 999px;
       font-family: var(--font-body);
       font-weight: 700;
       font-size: 15px;
       cursor: pointer;
       box-shadow: 0 6px 24px -4px rgba(94, 107, 58, .45);
-      transition: transform 120ms ease, box-shadow 120ms ease;
+      transform: translateX(calc(100% - 48px));
+      transition: transform 260ms cubic-bezier(.2, .8, .2, 1), box-shadow 160ms ease, filter 160ms ease;
+      touch-action: pan-y;
+      user-select: none;
+      will-change: transform;
+    }
+
+    .fab-coletivo.expanded,
+    .fab-coletivo:focus-visible {
+      transform: translateX(0);
+      box-shadow: 0 10px 30px -6px rgba(94, 107, 58, .55);
+    }
+
+    .fab-coletivo::before {
+      content: "";
+      position: absolute;
+      left: 9px;
+      top: 10px;
+      bottom: 10px;
+      width: 3px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .45);
+    }
+
+    .fab-coletivo-icon {
+      display: inline-grid;
+      place-items: center;
+      min-width: 24px;
+      font-size: 20px;
+      margin-left: 8px;
+    }
+
+    .fab-coletivo-label {
+      white-space: nowrap;
     }
 
     .fab-coletivo:active {
-      transform: scale(0.95);
+      filter: brightness(.96);
+    }
+
+    .fab-coletivo.nudging {
+      animation: coletivoNudge 1200ms ease-in-out infinite;
+    }
+
+    @keyframes coletivoNudge {
+      0%, 100% {
+        transform: translateX(calc(100% - 48px));
+      }
+
+      45% {
+        transform: translateX(calc(100% - 58px));
+      }
     }
 
     /* Tela coletivo */
@@ -2713,8 +2760,9 @@
     </div>
   </main>
 
-  <button class="fab-coletivo hidden" id="fabColetivo">
-    <span style="font-size:20px;">👥</span> Pedido coletivo
+  <button class="fab-coletivo hidden nudging" id="fabColetivo" aria-expanded="false" aria-label="Abrir botão de pedido coletivo">
+    <span class="fab-coletivo-icon">👥</span>
+    <span class="fab-coletivo-label">Pedido coletivo</span>
   </button>
 
   <button class="cart-fab hidden" id="btnCarrinho">
@@ -6830,13 +6878,35 @@
     }
 
     const _origShowScreen = showScreen;
+    let coletivoFabExpandido = false;
+    let coletivoFabTimer = null;
+    let coletivoFabPointer = null;
+
+    function setColetivoFabExpandido(aberto, autoRecolher = true) {
+      const fab = $("fabColetivo");
+      if (!fab) return;
+      coletivoFabExpandido = !!aberto;
+      fab.classList.toggle("expanded", coletivoFabExpandido);
+      fab.classList.toggle("nudging", !coletivoFabExpandido);
+      fab.setAttribute("aria-expanded", coletivoFabExpandido ? "true" : "false");
+      fab.setAttribute("aria-label", coletivoFabExpandido ? "Abrir pedido coletivo" : "Mostrar pedido coletivo");
+      if (coletivoFabTimer) clearTimeout(coletivoFabTimer);
+      if (coletivoFabExpandido && autoRecolher) {
+        coletivoFabTimer = setTimeout(() => setColetivoFabExpandido(false, false), 3600);
+      }
+    }
+
     showScreen = function (id) {
       _origShowScreen(id);
       const fab = $("fabColetivo");
-      if (fab) fab.classList.toggle("hidden", id !== "screen-home" || !!getColab());
+      if (fab) {
+        const esconder = id !== "screen-home" || !!getColab();
+        fab.classList.toggle("hidden", esconder);
+        if (esconder) setColetivoFabExpandido(false, false);
+      }
     };
 
-    $("fabColetivo").addEventListener("click", () => {
+    function abrirPedidoColetivo() {
       const ok = confirm("Pedido coletivo é somente via PIX Empresa.\n\nNão é possível comprar no fiado neste modo. Se o grupo escolher pratos de mais de um fornecedor, o frete configurado de cada fornecedor será aplicado e dividido entre os pedidos daquele fornecedor.");
       if (!ok) return;
       coletivoState.pessoas = [];
@@ -6844,6 +6914,37 @@
       renderColetivo();
       addPessoaColetivo();
       showScreen("screen-coletivo");
+    }
+
+    $("fabColetivo").addEventListener("pointerdown", (e) => {
+      coletivoFabPointer = { x: e.clientX, y: e.clientY, moved: false };
+    });
+
+    $("fabColetivo").addEventListener("pointermove", (e) => {
+      if (!coletivoFabPointer) return;
+      const dx = e.clientX - coletivoFabPointer.x;
+      const dy = e.clientY - coletivoFabPointer.y;
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      coletivoFabPointer.moved = true;
+      if (dx < -10) setColetivoFabExpandido(true);
+      if (dx > 10) setColetivoFabExpandido(false, false);
+    });
+
+    $("fabColetivo").addEventListener("pointerup", () => {
+      setTimeout(() => { coletivoFabPointer = null; }, 0);
+    });
+
+    $("fabColetivo").addEventListener("click", (e) => {
+      if (coletivoFabPointer?.moved) {
+        e.preventDefault();
+        return;
+      }
+      if (!coletivoFabExpandido) {
+        e.preventDefault();
+        setColetivoFabExpandido(true);
+        return;
+      }
+      abrirPedidoColetivo();
     });
     $("btnVoltarColetivo").addEventListener("click", () => showScreen("screen-home"));
     $("btnSairColetivo").addEventListener("click", async () => {
