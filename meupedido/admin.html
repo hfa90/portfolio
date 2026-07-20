@@ -2146,6 +2146,37 @@
       font-size: 28px;
     }
 
+    .foto-cardapio-preview {
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 250, 240, .72);
+      max-width: 260px;
+    }
+
+    .foto-cardapio-visual {
+      height: 110px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      margin-bottom: 10px;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(255, 255, 255, .55), transparent 34%),
+        linear-gradient(135deg, rgba(185, 74, 42, .16), rgba(94, 107, 58, .12));
+      color: var(--ink-soft);
+      font-weight: 800;
+    }
+
+    .foto-cardapio-visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center;
+      display: block;
+    }
+
     .admin-toast {
       position: fixed;
       left: 16px;
@@ -2374,6 +2405,7 @@
     :root[data-theme="dark"] .foto-card,
     :root[data-theme="dark"] .foto-picker,
     :root[data-theme="dark"] .foto-preview,
+    :root[data-theme="dark"] .foto-cardapio-preview,
     :root[data-theme="dark"] .story-admin-card,
     :root[data-theme="dark"] .story-admin-col,
     :root[data-theme="dark"] .kitchen-card,
@@ -3383,7 +3415,20 @@
               <p class="small muted" style="margin:8px 0 0;">Pode escolher JPG, PNG ou WEBP. O sistema salva em WEBP automaticamente.</p>
             </div>
           </div>
+          <div class="foto-cardapio-preview" id="${id}CardPreview">
+            <div class="foto-cardapio-visual" id="${id}CardVisual">
+              ${url ? `<img src="${url}" alt="Prévia no cardápio">` : "Prévia"}
+            </div>
+            <strong>Prévia no cardápio</strong>
+            <p class="small muted" style="margin:4px 0 0;">Mostra a imagem inteira no formato usado pelo cliente.</p>
+          </div>
         </div>`;
+    }
+
+    function atualizarPreviewCardapioFoto(inputId, url) {
+      const visual = $(`${inputId}CardVisual`);
+      if (!visual) return;
+      visual.innerHTML = url ? `<img src="${url}" alt="Prévia no cardápio">` : "Prévia";
     }
 
     function ligarPreviewFoto(inputId, previewId) {
@@ -3393,6 +3438,7 @@
         const file = input.files?.[0];
         if (!file || !preview) return;
         const url = URL.createObjectURL(file);
+        atualizarPreviewCardapioFoto(inputId, url);
         if (preview.tagName === "IMG") {
           preview.src = url;
         } else {
@@ -4936,6 +4982,42 @@
       const todosPedidos = pedidos || [];
       const pedidosHoje = todosPedidos.filter(p => p.data === dataFiltro);
       const pedidosOperacionaisHoje = pedidosHoje.filter(p => !["concluido", "cancelado"].includes(p.status));
+      const cfgKeysDashboard = [
+        "pedidos_abertos",
+        "pagamento_cartao_ativo",
+        "pagamento_pix_empresa_ativo",
+        "pagamento_fiado_ativo",
+        "pagamento_dinheiro_ativo",
+        "pagamento_pagar_mais_tarde_ativo",
+        "fidelidade_resgate_ativo"
+      ];
+      const [cfgDashResp, cardapioDashResp, estoqueDashResp] = await Promise.all([
+        sb.from("configuracoes").select("chave, valor").in("chave", cfgKeysDashboard),
+        sb.from("cardapio_dia").select("prato_id, fornecedor_id, disponivel").eq("data", dataFiltro).eq("disponivel", true),
+        sb.from("produto_estoque_dia").select("prato_id, estoque_total, estoque_vendido, ativo, prato:pratos(nome)").eq("data", dataFiltro).eq("ativo", true)
+      ]);
+      if (cfgDashResp.error || cardapioDashResp.error || estoqueDashResp.error) {
+        console.warn("Dashboard operacional:", cfgDashResp.error?.message || cardapioDashResp.error?.message || estoqueDashResp.error?.message);
+      }
+      const cfgDashboard = Object.fromEntries((cfgDashResp.data || []).map(c => [c.chave, c.valor]));
+      const cardapioAtivoHoje = cardapioDashResp.data || [];
+      const estoqueBaixo = (estoqueDashResp.data || [])
+        .map(e => {
+          const total = e.estoque_total === null || e.estoque_total === undefined ? null : Number(e.estoque_total);
+          const vendido = Number(e.estoque_vendido || 0);
+          const restante = total === null ? null : Math.max(0, total - vendido);
+          return { nome: e.prato?.nome || "Produto", total, restante };
+        })
+        .filter(e => e.total !== null && e.total > 0 && e.restante <= Math.max(2, Math.ceil(e.total * 0.2)))
+        .slice(0, 4);
+      const pagamentosSuspensos = [
+        ["pagamento_cartao_ativo", "Cartão"],
+        ["pagamento_pix_empresa_ativo", "Pix Empresa"],
+        ["pagamento_fiado_ativo", "Fiado"],
+        ["pagamento_dinheiro_ativo", "Dinheiro"],
+        ["pagamento_pagar_mais_tarde_ativo", "Pagar mais tarde"],
+        ["fidelidade_resgate_ativo", "Resgate fidelidade"]
+      ].filter(([chave]) => cfgDashboard[chave] === "false").map(([, label]) => label);
       const statusLabelMap = { aberto: "Recebido", fechado: "Sendo feito", enviado: "A caminho", entregue: "Chegou", concluido: "Concluido", cancelado: "Cancelado" };
       const payLabel = { pix_empresa: "Pix", pix_fornecedor: "Pix", dinheiro: "Dinheiro", fiado: "Fiado", pagar_mais_tarde: "Pagar mais tarde", cartao_infinitepay: "Cartao InfinitePay", resgate_fidelidade: "Resgate fidelidade" };
       const nomeCliente = (p) => escHtml(p.colaborador?.nome || "Cliente");
@@ -4966,6 +5048,10 @@
       const pixRejeitados = todosPedidos.filter(p => isPix(p) && p.status_pagamento === "pendente" && p.comprovante_status === "rejeitado");
       const pagamentosPresenciaisHoje = pedidosHoje.filter(p => ["dinheiro", "pagar_mais_tarde"].includes(p.forma_pagamento) && p.status_pagamento === "pendente");
       const fiadosAbertos = todosPedidos.filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente");
+      const fiadosAntigos = fiadosAbertos.filter(p => {
+        const dias = Math.floor((new Date(`${dataFiltro}T12:00:00`) - new Date(`${p.data}T12:00:00`)) / 86400000);
+        return dias > 15;
+      });
       const cartaoConfirmadosHoje = pedidosHoje.filter(p => p.forma_pagamento === "cartao_infinitepay" && p.status_pagamento === "pago");
 
       $("pedidosStats").innerHTML = `
@@ -4976,8 +5062,13 @@
       `;
 
       const prioridades = [];
+      if (cfgDashboard.pedidos_abertos === "false") prioridades.push({ titulo: "Loja fechada para pedidos", detalhe: "Clientes conseguem consultar, mas não finalizar pedidos.", tag: "Loja", acao: "navegar('config')", acaoTexto: "Abrir config" });
+      if (!cardapioAtivoHoje.length) prioridades.push({ titulo: "Cardápio do dia vazio", detalhe: "Publique ao menos um prato para o cliente comprar hoje.", tag: "Cardápio", acao: "navegar('cardapio')", acaoTexto: "Montar" });
+      if (pagamentosSuspensos.length) prioridades.push({ titulo: `${pagamentosSuspensos.length} pagamento${pagamentosSuspensos.length > 1 ? "s" : ""} suspenso${pagamentosSuspensos.length > 1 ? "s" : ""}`, detalhe: pagamentosSuspensos.join(", "), tag: "Checkout", acao: "navegar('config')", acaoTexto: "Revisar" });
+      if (estoqueBaixo.length) prioridades.push({ titulo: `${estoqueBaixo.length} item${estoqueBaixo.length > 1 ? "s" : ""} com estoque baixo`, detalhe: estoqueBaixo.map(e => `${e.nome}: ${e.restante}`).join(", "), tag: "Estoque", acao: "navegar('cardapio')", acaoTexto: "Ajustar" });
       if (pixParaAprovar.length) prioridades.push({ titulo: `${pixParaAprovar.length} comprovante${pixParaAprovar.length > 1 ? "s" : ""} para aprovar`, detalhe: `${fmtBRL(soma(pixParaAprovar))} aguardando baixa`, tag: "Pix" });
       if (pagamentosPresenciaisHoje.length) prioridades.push({ titulo: `${pagamentosPresenciaisHoje.length} pagamento${pagamentosPresenciaisHoje.length > 1 ? "s" : ""} presencial`, detalhe: `${fmtBRL(soma(pagamentosPresenciaisHoje))} a receber hoje`, tag: "Caixa" });
+      if (fiadosAntigos.length) prioridades.push({ titulo: `${fiadosAntigos.length} fiado${fiadosAntigos.length > 1 ? "s" : ""} acima de 15 dias`, detalhe: `${fmtBRL(soma(fiadosAntigos))} em aberto`, tag: "Fiado", acao: "navegar('financeiro')", acaoTexto: "Cobrar" });
       if (prontosParaCozinha.length) prioridades.push({ titulo: `${prontosParaCozinha.length} pedido${prontosParaCozinha.length > 1 ? "s" : ""} pronto para preparo`, detalhe: "Mover no kanban quando a cozinha iniciar", tag: "Fila" });
       if (atrasados.length) prioridades.push({ titulo: `${atrasados.length} pedido${atrasados.length > 1 ? "s" : ""} ha mais de 45 min`, detalhe: "Vale conferir a cozinha antes de seguir", tag: "Atraso" });
       if (pixRejeitados.length) prioridades.push({ titulo: `${pixRejeitados.length} Pix rejeitado${pixRejeitados.length > 1 ? "s" : ""}`, detalhe: "Aguardando cliente reenviar comprovante", tag: "Reenvio" });
@@ -5007,6 +5098,7 @@
                   <div>
                     <strong>${escHtml(item.titulo)}</strong>
                     <div class="small muted">${escHtml(item.detalhe)}</div>
+                    ${item.acao ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="${item.acao}">${escHtml(item.acaoTexto || "Abrir")}</button>` : ""}
                   </div>
                   <span class="priority-pill">${escHtml(item.tag)}</span>
                 </div>

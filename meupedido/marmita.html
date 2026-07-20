@@ -4353,9 +4353,24 @@
     function renderOpcoesResgateHtml(saldo = saldoFidelidadeAtual()) {
       const opcoes = produtosResgataveis(saldo);
       if (!opcoes.length) {
+        const proximo = (state.cardapio || [])
+          .filter(item => ["marmita", "bebida", "sobremesa", "lanche"].includes(categoriaProduto(item.prato_categoria)))
+          .map(item => ({
+            nome: item.prato_nome,
+            preco: Number(item.prato_preco || 0),
+            categoria: categoriaProduto(item.prato_categoria)
+          }))
+          .filter(item => item.nome && item.preco > saldo)
+          .sort((a, b) => a.preco - b.preco)[0];
+        if (proximo) {
+          return `<div class="redeem-empty small">
+            Faltam <strong>${fmtBRL(proximo.preco - saldo)}</strong> para resgatar ${esc(proximo.nome)}.
+          </div>`;
+        }
         return `<div class="redeem-empty small">Quando seu saldo cobrir um produto inteiro, as opções aparecem aqui.</div>`;
       }
       return `<div class="redeem-list">
+        <div class="small" style="color:rgba(255,255,255,.86); font-weight:900;">Você já pode resgatar</div>
         ${opcoes.map(item => `<div class="redeem-item">
           <div style="min-width:0;">
             <strong class="small">${esc(item.nome)}</strong>
@@ -4477,7 +4492,7 @@
       alvo.innerHTML = `<div class="loyalty-card">
         <div class="small muted">Programa de fidelidade</div>
         <div class="loyalty-points">${fmtBRL(saldo)}</div>
-        <p class="small" style="margin:4px 0 0;">Cada marmita paga adiciona ${fmtBRL(credito)} ao seu saldo. Resgate somente produtos que o saldo paga por completo.</p>
+        <p class="small" style="margin:4px 0 0;">Cada marmita paga soma ${fmtBRL(credito)}. Use o saldo para resgatar produtos inteiros.</p>
         ${renderOpcoesResgateHtml(saldo)}
         <div class="quick-row" style="position:relative; z-index:1; margin-top:12px;">
           <button class="quick-chip" id="btnIrFavoritos">Favoritos (${perfil.favoritos || 0})</button>
@@ -5353,12 +5368,12 @@
       const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
       const saldo = Number(fidelidade?.saldo ?? 0);
       const credito = Number(fidelidade?.credito_por_marmita || 0.5);
-      const ativo = fidelidade?.ativa === true;
+      const ativo = fidelidade?.ativa === true || fidelidade?.ativa === "true";
       const fidelidadeHtml = ativo ? `
         <div class="loyalty-card">
           <div class="small muted">Clube da Marmita</div>
           <div class="loyalty-points">${fmtBRL(saldo)}</div>
-          <p class="small">${pedidosPontuados} marmita(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)} para trocar por produtos inteiros.</p>
+          <p class="small">${pedidosPontuados} marmita(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)}.</p>
           ${renderOpcoesResgateHtml(saldo)}
         </div>` : "";
       alvo.innerHTML = `
