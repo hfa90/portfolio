@@ -1747,21 +1747,22 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      background: rgba(255, 250, 240, .86);
-      border: 1px solid var(--separator);
-      border-radius: 16px;
-      padding: 0 14px;
-      min-height: 48px;
-      box-shadow: var(--shadow-sm);
+      background: rgba(255, 250, 240, .08);
+      border: 1px solid rgba(118, 118, 128, .16);
+      border-radius: 999px;
+      padding: 0 12px;
+      min-height: 44px;
+      box-shadow: none;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease, transform 180ms ease;
     }
 
     .search-box:focus-within,
     .search-box.searching {
-      background: rgba(255, 250, 240, .98);
-      border-color: rgba(185, 74, 42, .42);
-      box-shadow: 0 12px 30px rgba(42, 31, 23, .12);
-      transform: translateY(-1px);
+      background: rgba(255, 250, 240, .14);
+      border-color: rgba(185, 74, 42, .36);
+      box-shadow: 0 10px 26px rgba(42, 31, 23, .08);
     }
 
     .search-icon {
@@ -1826,6 +1827,53 @@
       cursor: pointer;
     }
 
+    .filter-wrap {
+      position: relative;
+      display: flex;
+      justify-content: flex-end;
+      margin-top: -2px;
+    }
+
+    .filter-toggle {
+      min-height: 34px;
+      border: 1px solid rgba(118, 118, 128, .16);
+      border-radius: 999px;
+      background: rgba(255, 250, 240, .08);
+      color: var(--ink-soft);
+      padding: 0 12px;
+      font-weight: 800;
+      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+
+    .filter-toggle span {
+      color: var(--brick);
+    }
+
+    .filter-menu {
+      position: absolute;
+      top: calc(100% + 8px);
+      right: 0;
+      z-index: 12;
+      min-width: 190px;
+      padding: 8px;
+      border: 1px solid var(--separator);
+      border-radius: 16px;
+      background: rgba(255, 250, 240, .96);
+      box-shadow: var(--shadow);
+      display: none;
+      gap: 4px;
+    }
+
+    .filter-wrap.open .filter-menu {
+      display: grid;
+    }
+
     .filter-row,
     .quick-row {
       display: flex;
@@ -1851,6 +1899,16 @@
       padding: 0 14px;
       font-weight: 700;
       font-size: 13px;
+    }
+
+    .filter-menu .filter-chip {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      border: 0;
+      background: transparent;
+      border-radius: 12px;
+      color: var(--ink);
     }
 
     .filter-chip.active,
@@ -2707,6 +2765,8 @@
     :root[data-theme="dark"] .menu-pill,
     :root[data-theme="dark"] .pin-key,
     :root[data-theme="dark"] .search-box,
+    :root[data-theme="dark"] .filter-toggle,
+    :root[data-theme="dark"] .filter-menu,
     :root[data-theme="dark"] .search-insights,
     :root[data-theme="dark"] .score-card,
     :root[data-theme="dark"] .score-facts div,
@@ -2718,6 +2778,10 @@
     :root[data-theme="dark"] .acomp-qtd-card {
       background: rgba(244, 234, 220, .07);
       border-color: rgba(244, 234, 220, .12);
+    }
+
+    :root[data-theme="dark"] .filter-menu .filter-chip {
+      color: var(--ink);
     }
 
     :root[data-theme="dark"] .input,
@@ -2908,11 +2972,16 @@
           <button id="cardapioBuscaLimpar" class="search-clear" type="button" aria-label="Limpar busca">×</button>
         </div>
         <div id="cardapioBuscaInsights" class="search-insights small" aria-live="polite"></div>
-        <div class="filter-row">
-          <button class="filter-chip active" data-cardapio-filtro="todos">Todos</button>
-          <button class="filter-chip" data-cardapio-filtro="favoritos">Favoritos</button>
-          <button class="filter-chip" data-cardapio-filtro="economicos">Até R$ 25</button>
-          <button class="filter-chip" data-cardapio-filtro="com-foto">Com foto</button>
+        <div class="filter-wrap" id="cardapioFiltroWrap">
+          <button class="filter-toggle" id="cardapioFiltroToggle" type="button" aria-expanded="false">
+            Filtros <span id="cardapioFiltroLabel">Todos</span>
+          </button>
+          <div class="filter-menu" id="cardapioFiltroMenu">
+            <button class="filter-chip active" data-cardapio-filtro="todos">Todos</button>
+            <button class="filter-chip" data-cardapio-filtro="favoritos">Favoritos</button>
+            <button class="filter-chip" data-cardapio-filtro="economicos">Até R$ 25</button>
+            <button class="filter-chip" data-cardapio-filtro="com-foto">Com foto</button>
+          </div>
         </div>
       </div>
       <div id="clienteResumoRapido"></div>
@@ -4348,6 +4417,7 @@
       $("btnIrFavoritos")?.addEventListener("click", () => {
         state.cardapioFiltro = "favoritos";
         document.querySelectorAll("[data-cardapio-filtro]").forEach(b => b.classList.toggle("active", b.dataset.cardapioFiltro === "favoritos"));
+        atualizarRotuloFiltroCardapio();
         aplicarFiltrosCardapio();
       });
       $("btnIrPerfil")?.addEventListener("click", () => { ativarTab("perfil"); carregarPerfilCliente(); });
@@ -4426,6 +4496,7 @@
           $("cardapioBusca").value = "marmita";
           state.cardapioFiltro = "todos";
           document.querySelectorAll("[data-cardapio-filtro]").forEach(b => b.classList.toggle("active", b.dataset.cardapioFiltro === "todos"));
+          atualizarRotuloFiltroCardapio();
         }
         aplicarFiltrosCardapio();
         $("cardapioBusca")?.focus();
@@ -5367,6 +5438,16 @@
       $("tab-perfil").classList.toggle("hidden", target !== "perfil");
     }
 
+    function atualizarRotuloFiltroCardapio() {
+      const ativo = document.querySelector("[data-cardapio-filtro].active");
+      if ($("cardapioFiltroLabel")) $("cardapioFiltroLabel").textContent = ativo?.textContent?.trim() || "Todos";
+    }
+
+    function fecharMenuFiltroCardapio() {
+      $("cardapioFiltroWrap")?.classList.remove("open");
+      $("cardapioFiltroToggle")?.setAttribute("aria-expanded", "false");
+    }
+
     document.querySelectorAll(".segmented button, .tab").forEach(t => {
       t.addEventListener("click", () => {
         const target = t.dataset.tab;
@@ -5386,13 +5467,26 @@
       aplicarFiltrosCardapio();
       $("cardapioBusca").focus();
     });
+    $("cardapioFiltroToggle")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wrap = $("cardapioFiltroWrap");
+      const aberto = !wrap?.classList.contains("open");
+      wrap?.classList.toggle("open", aberto);
+      $("cardapioFiltroToggle")?.setAttribute("aria-expanded", aberto ? "true" : "false");
+    });
     document.querySelectorAll("[data-cardapio-filtro]").forEach(btn => {
       btn.addEventListener("click", () => {
         state.cardapioFiltro = btn.dataset.cardapioFiltro;
         document.querySelectorAll("[data-cardapio-filtro]").forEach(b => b.classList.toggle("active", b === btn));
+        atualizarRotuloFiltroCardapio();
+        fecharMenuFiltroCardapio();
         aplicarFiltrosCardapio();
       });
     });
+    document.addEventListener("click", e => {
+      if (!$("cardapioFiltroWrap")?.contains(e.target)) fecharMenuFiltroCardapio();
+    });
+    atualizarRotuloFiltroCardapio();
 
     $("storyCloseBtn")?.addEventListener("click", fecharStoryProduto);
     $("storyPrevBtn")?.addEventListener("click", (e) => {
