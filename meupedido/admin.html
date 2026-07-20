@@ -3005,6 +3005,7 @@
       <div class="section-head">
         <h1>Colaboradores</h1>
         <div class="sh-actions">
+          <button class="btn btn-secondary btn-block" onclick="abrirModalImportarColabs()">Importar colaboradores</button>
           <button class="btn btn-primary btn-block" onclick="abrirModalColab()">+ Novo colaborador</button>
         </div>
       </div>
@@ -3018,6 +3019,12 @@
       <div id="finStats" class="stats"></div>
 
       <div id="finSaldos" class="loading" style="margin-top: 12px;">Carregando…</div>
+
+      <div class="card" style="margin-top: 12px; border-color: rgba(220, 53, 69, .35);">
+        <h2>Zerar dados financeiros</h2>
+        <p class="small muted" style="margin-bottom:10px;">Apaga pedidos, histórico, pagamentos e fidelidade de todos os clientes. Os cadastros continuam ativos.</p>
+        <button class="btn btn-danger btn-block" onclick="zerarDadosCliente(null, 'todos os clientes')">Zerar financeiro de todos</button>
+      </div>
 
       <div class="card" style="margin-top: 12px;">
         <h2>PIX aguardando confirmação</h2>
@@ -6734,7 +6741,7 @@ Bom apetite!`;
 
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo, fiado_bloqueado").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo, fiado_bloqueado, pin_alteracao_obrigatoria").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
@@ -6747,20 +6754,146 @@ Bom apetite!`;
           <td data-label="Endereço">${c.endereco_empresa || "—"}</td>
           <td data-label="WhatsApp"><span class="small muted">${c.whatsapp || "—"}</span></td>
           <td data-label="Fiado">${c.fiado_bloqueado ? '<span class="badge cancelado">bloqueado</span>' : '<span class="badge pago">liberado</span>'}</td>
-          <td data-label="Status">${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
+          <td data-label="Status">
+            ${c.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}
+            ${c.pin_alteracao_obrigatoria ? '<span class="badge pendente" style="margin-left:4px;">trocar PIN</span>' : ""}
+            ${!c.empresa || !c.endereco_empresa ? '<span class="badge pendente" style="margin-left:4px;">cadastro incompleto</span>' : ""}
+          </td>
           <td class="actions">
             <button class="btn btn-primary btn-sm" onclick='abrirPerfilClienteAdmin(${JSON.stringify(c).replace(/'/g, "&apos;")})'>Perfil</button>
             <button class="btn btn-ghost btn-sm" onclick='abrirModalColab(${JSON.stringify(c).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-ghost btn-sm" onclick="alternarFiadoColab('${c.id}', ${c.fiado_bloqueado ? "false" : "true"})">${c.fiado_bloqueado ? "Liberar fiado" : "Bloquear fiado"}</button>
             <button class="btn btn-ghost btn-sm" onclick="resetarPin('${c.id}', '${c.nome.replace(/'/g, "\\'")}')">PIN</button>
+            <button class="btn btn-danger btn-sm" onclick="zerarDadosCliente('${c.id}', '${c.nome.replace(/'/g, "\\'")}')">Zerar dados</button>
             <button class="btn btn-danger btn-sm" onclick="excluirColab('${c.id}')">Excluir</button>
           </td>
         </tr>`).join("")}</tbody></table>`;
     }
 
+    function normalizarHeaderImportacao(v) {
+      return String(v || "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function parseCsvImportacao(texto) {
+      const linhas = [];
+      let atual = [], cel = "", aspas = false;
+      const pushCel = () => { atual.push(cel); cel = ""; };
+      const pushLinha = () => {
+        if (atual.length || cel) {
+          pushCel();
+          linhas.push(atual);
+        }
+        atual = [];
+      };
+      const sep = ((texto.split("\n")[0] || "").match(/;/g) || []).length > ((texto.split("\n")[0] || "").match(/,/g) || []).length ? ";" : ",";
+      for (let i = 0; i < texto.length; i++) {
+        const ch = texto[i];
+        const prox = texto[i + 1];
+        if (ch === '"' && aspas && prox === '"') { cel += '"'; i++; continue; }
+        if (ch === '"') { aspas = !aspas; continue; }
+        if (ch === sep && !aspas) { pushCel(); continue; }
+        if ((ch === "\n" || ch === "\r") && !aspas) {
+          if (ch === "\r" && prox === "\n") i++;
+          pushLinha();
+          continue;
+        }
+        cel += ch;
+      }
+      pushLinha();
+      if (!linhas.length) return [];
+      const headers = linhas.shift().map(normalizarHeaderImportacao);
+      return linhas
+        .filter(l => l.some(v => String(v || "").trim()))
+        .map(l => Object.fromEntries(headers.map((h, i) => [h, String(l[i] || "").trim()])));
+    }
+
+    async function lerArquivoColaboradores(file) {
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      if (["xlsx", "xls", "xlsm", "ods"].includes(ext)) {
+        const XLSX = await import("https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm");
+        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(ws, { defval: "" }).map(row => {
+          const obj = {};
+          Object.entries(row).forEach(([k, v]) => obj[normalizarHeaderImportacao(k)] = String(v ?? "").trim());
+          return obj;
+        });
+      }
+      return parseCsvImportacao(await file.text());
+    }
+
+    function normalizarLinhaColaborador(row) {
+      const pick = (...keys) => keys.map(k => row[k]).find(v => String(v || "").trim()) || "";
+      return {
+        matricula: pick("matricula", "matricula_funcionario", "codigo", "id"),
+        nome: pick("nome_completo", "nome", "colaborador", "funcionario"),
+        empresa: pick("empresa", "nome_empresa", "companhia", "setor"),
+        whatsapp: pick("telefone", "whatsapp", "celular", "fone", "contato").replace(/\D/g, "")
+      };
+    }
+
+    window.abrirModalImportarColabs = () => {
+      $("modalTitle").textContent = "Importar colaboradores";
+      $("modalSave").classList.remove("hidden");
+      $("modalSave").textContent = "Importar";
+      $("modalBody").innerHTML = `
+        <p class="small muted">Aceita CSV, XLS, XLSX, XLSM e ODS. Use colunas como matricula, nome completo, empresa e telefone/WhatsApp.</p>
+        <div class="field"><label>Arquivo</label><input id="impArquivo" class="input" type="file" accept=".csv,.txt,.xls,.xlsx,.xlsm,.ods" /></div>
+        <div class="field"><label>PIN inicial padrão</label><input id="impPin" class="input" inputmode="numeric" maxlength="8" value="1234" /></div>
+        <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+          <input id="impResetExistentes" type="checkbox" style="width:20px;height:20px;" />
+          Atualizar também o PIN de matrículas já cadastradas
+        </label>
+        <div id="impPreview" class="small muted">Nenhum arquivo selecionado.</div>`;
+      $("modalAlert").classList.remove("show");
+      $("modal").classList.add("show");
+      let linhasImportacao = [];
+      $("impArquivo").addEventListener("change", async (e) => {
+        try {
+          linhasImportacao = (await lerArquivoColaboradores(e.target.files?.[0])).map(normalizarLinhaColaborador);
+          const validas = linhasImportacao.filter(l => l.matricula && l.nome);
+          $("impPreview").innerHTML = `${validas.length} linha(s) válida(s) encontradas.${validas.length ? `<br>Primeira: ${escHtml(validas[0].matricula)} - ${escHtml(validas[0].nome)}` : ""}`;
+        } catch (err) {
+          linhasImportacao = [];
+          $("impPreview").textContent = err.message || "Não consegui ler o arquivo.";
+        }
+      });
+      $("modalSave").onclick = async () => {
+        const pin = $("impPin").value.trim();
+        const payload = linhasImportacao.filter(l => l.matricula && l.nome);
+        if (!payload.length) { $("modalAlert").textContent = "Selecione um arquivo com matrícula e nome completo."; $("modalAlert").classList.add("show"); return; }
+        if (!/^\d{4,8}$/.test(pin)) { $("modalAlert").textContent = "PIN inicial deve ter de 4 a 8 dígitos."; $("modalAlert").classList.add("show"); return; }
+        $("modalSave").disabled = true;
+        $("modalSave").textContent = "Importando...";
+        try {
+          const { data, error } = await sb.rpc("admin_importar_colaboradores", {
+            p_colaboradores: payload,
+            p_pin_inicial: pin,
+            p_resetar_existentes: $("impResetExistentes").checked
+          });
+          if (error) throw error;
+          const r = typeof data === "string" ? JSON.parse(data) : data;
+          fecharModal();
+          alert(`Importação concluída.\nNovos: ${r?.inseridos || 0}\nAtualizados: ${r?.atualizados || 0}\nIgnorados: ${r?.ignorados || 0}`);
+          await carregarColaboradores();
+        } catch (err) {
+          $("modalAlert").textContent = err.message || "Erro ao importar colaboradores.";
+          $("modalAlert").classList.add("show");
+        } finally {
+          $("modalSave").disabled = false;
+          $("modalSave").textContent = "Importar";
+        }
+      };
+    };
+
     window.abrirModalColab = (c = null) => {
       $("modalTitle").textContent = c ? "Editar colaborador" : "Novo colaborador";
       $("modalSave").classList.remove("hidden");
+      $("modalSave").textContent = "Salvar";
       $("modalBody").innerHTML = `
         <div class="field"><label>Nome</label><input id="cNome" class="input" value="${c?.nome ?? ""}"/></div>
         <div class="field"><label>Matrícula (login)</label><input id="cMat" class="input" inputmode="numeric" value="${c?.matricula ?? ""}"/></div>
@@ -6815,7 +6948,24 @@ Bom apetite!`;
       if (!/^\d{4}$/.test(pin)) { alert("PIN deve ter 4 dígitos."); return; }
       const { error } = await sb.rpc("set_pin_colaborador", { p_colaborador_id: id, p_pin: pin });
       if (error) alert("Erro: " + error.message);
-      else alert("PIN atualizado!");
+      else alert("PIN atualizado! O cliente deverá trocar no próximo acesso.");
+      await carregarColaboradores();
+    };
+
+    window.zerarDadosCliente = async (id, nome = "este cliente") => {
+      const alvo = id ? nome : "todos os clientes";
+      const aviso = `Isto vai apagar financeiro, pedidos, historico e fidelidade de ${alvo}. Os cadastros de colaboradores serao preservados.`;
+      if (!confirm(aviso)) return;
+      const confirmacao = prompt(id ? "Digite ZERAR para confirmar." : "Digite ZERAR TODOS para confirmar.");
+      if (confirmacao !== (id ? "ZERAR" : "ZERAR TODOS")) return;
+      try {
+        const { data, error } = await sb.rpc("admin_zerar_financeiro_cliente", { p_colaborador_id: id || null });
+        if (error) throw error;
+        alert(data || "Dados zerados com sucesso.");
+        await Promise.all([carregarColaboradores(), carregarFinanceiro()]);
+      } catch (err) {
+        alert(err.message || "Erro ao zerar dados.");
+      }
     };
 
     window.excluirColab = async (id) => {

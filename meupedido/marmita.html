@@ -3002,11 +3002,6 @@
           placeholder="5592999999999" /></div>
       <div class="field"><label>Matrícula de funcionário</label><input id="cadMatricula" class="input"
           inputmode="numeric" /></div>
-      <div class="field"><label>Empresa</label><input id="cadEmpresa" class="input" /></div>
-      <div class="field"><label>Endereço da empresa</label><input id="cadEnderecoEmpresa" class="input"
-          placeholder="Rua, unidade, setor ou ponto de entrega" /></div>
-      <div class="field"><label>PIN numérico (4 dígitos)</label><input id="cadPin" class="input" type="password"
-          inputmode="numeric" maxlength="4" /></div>
 
       <button id="btnCriarCadastro" class="btn btn-primary btn-block">Criar cadastro</button>
       <p class="footer-link">Já tenho cadastro. <a href="#" id="btnIrLoginCadastro">Entrar com matrícula</a></p>
@@ -3405,6 +3400,35 @@
     </div>
   </div>
 
+  <div class="debt-popup-bg" id="accountSetupPopup">
+    <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="accountSetupTitle">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <p class="eyebrow" id="accountSetupEyebrow">Primeiro acesso</p>
+          <h2 class="debt-popup-title" id="accountSetupTitle">Atualize seu acesso</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="accountSetupClose" aria-label="Fechar">×</button>
+      </div>
+      <p class="muted" id="accountSetupMsg">Complete os dados para continuar.</p>
+      <div id="accountSetupAlert" class="alert alert-error"></div>
+
+      <div id="accountPinForm">
+        <div class="field"><label>Novo PIN numérico</label><input id="accountNewPin" class="input" type="password" inputmode="numeric" maxlength="8" /></div>
+        <div class="field"><label>Confirmar novo PIN</label><input id="accountNewPinConfirm" class="input" type="password" inputmode="numeric" maxlength="8" /></div>
+        <button class="btn btn-primary btn-block btn-pill" id="accountSavePin">Alterar PIN</button>
+      </div>
+
+      <div id="accountProfileForm" class="hidden">
+        <div class="field"><label>Nome da empresa</label><input id="accountEmpresa" class="input" /></div>
+        <div class="field"><label>Endereço / ponto de entrega</label><input id="accountEndereco" class="input" placeholder="Rua, unidade, setor ou ponto de entrega" /></div>
+        <div class="debt-actions">
+          <button class="btn btn-primary btn-block btn-pill" id="accountSaveProfile">Salvar cadastro</button>
+          <button class="btn btn-ghost btn-block btn-pill" id="accountSkipProfile">Pular por enquanto</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="storyViewer" class="story-viewer" aria-hidden="true">
     <div id="storyViewerMedia" class="story-viewer-media"></div>
     <button id="storyPrevBtn" class="story-nav prev" type="button" aria-label="Story anterior">‹</button>
@@ -3653,7 +3677,11 @@
         nome: resp.nome,
         matricula: resp.matricula,
         empresa: resp.empresa,
+        endereco_empresa: resp.endereco_empresa || "",
+        whatsapp: resp.whatsapp || "",
         fiado_bloqueado: !!resp.fiado_bloqueado,
+        pin_alteracao_obrigatoria: !!resp.pin_alteracao_obrigatoria,
+        cadastro_incompleto: !!resp.cadastro_incompleto,
         session_token: resp.session_token || "",
         session_expires_at: resp.session_expires_at || null
       });
@@ -3661,6 +3689,12 @@
       iniciarMonitorPedidosCliente();
       iniciarMonitorDebitoFiado();
       checarFidelidadeEventos({ delay: 20000 });
+      if (resp.pin_alteracao_obrigatoria) {
+        await mostrarPopupAlterarPinObrigatorio();
+      }
+      if (clienteCadastroIncompleto()) {
+        setTimeout(() => mostrarPopupCompletarCadastro({ obrigatorio: false }), 250);
+      }
       if (state.authDestino === "pedido") {
         showScreen("screen-pedido");
         $("pedidoAlert").textContent = "Identificacao confirmada. Agora pode confirmar o pedido.";
@@ -3681,6 +3715,170 @@
       }
       await abrirHome();
     }
+
+    let accountPopupResolve = null;
+    let accountPopupObrigatorio = false;
+    let accountPopupModo = "";
+
+    function clienteCadastroIncompleto(colab = getColab()) {
+      if (!colab) return false;
+      return !!colab.cadastro_incompleto || !String(colab.empresa || "").trim() || !String(colab.endereco_empresa || "").trim();
+    }
+
+    function abrirAccountPopup(modo, { obrigatorio = false } = {}) {
+      accountPopupModo = modo;
+      accountPopupObrigatorio = obrigatorio;
+      $("accountSetupAlert").classList.remove("show");
+      $("accountPinForm").classList.toggle("hidden", modo !== "pin");
+      $("accountProfileForm").classList.toggle("hidden", modo !== "perfil");
+      $("accountSetupClose").classList.toggle("hidden", obrigatorio);
+      $("accountSkipProfile").classList.toggle("hidden", obrigatorio);
+      if (modo === "pin") {
+        $("accountSetupEyebrow").textContent = "Primeiro acesso";
+        $("accountSetupTitle").textContent = "Crie seu novo PIN";
+        $("accountSetupMsg").textContent = "Por segurança, troque o PIN inicial antes de continuar.";
+        $("accountNewPin").value = "";
+        $("accountNewPinConfirm").value = "";
+        setTimeout(() => $("accountNewPin").focus(), 80);
+      } else {
+        const colab = getColab();
+        $("accountSetupEyebrow").textContent = obrigatorio ? "Cadastro obrigatório" : "Complete seu cadastro";
+        $("accountSetupTitle").textContent = "Empresa e entrega";
+        $("accountSetupMsg").textContent = obrigatorio
+          ? "Para finalizar o pedido, informe a empresa e o ponto de entrega."
+          : "Você pode preencher agora ou deixar para antes de finalizar o pedido.";
+        $("accountEmpresa").value = colab?.empresa || "";
+        $("accountEndereco").value = colab?.endereco_empresa || "";
+        setTimeout(() => $("accountEmpresa").focus(), 80);
+      }
+      $("accountSetupPopup").classList.add("show");
+      return new Promise(resolve => { accountPopupResolve = resolve; });
+    }
+
+    function fecharAccountPopup(resultado = false) {
+      if (accountPopupObrigatorio) return;
+      $("accountSetupPopup").classList.remove("show");
+      if (accountPopupResolve) accountPopupResolve(resultado);
+      accountPopupResolve = null;
+    }
+
+    async function mostrarPopupAlterarPinObrigatorio() {
+      return abrirAccountPopup("pin", { obrigatorio: true });
+    }
+
+    async function mostrarPopupCompletarCadastro(options = {}) {
+      return abrirAccountPopup("perfil", options);
+    }
+
+    async function salvarPinPrimeiroAcesso() {
+      const colab = getColab();
+      if (!colab) return mostrarLogin("home", "Entre novamente para alterar o PIN.");
+      const alertEl = $("accountSetupAlert");
+      const pinNovo = $("accountNewPin").value.trim();
+      const pinConfirm = $("accountNewPinConfirm").value.trim();
+      alertEl.classList.remove("show");
+      if (!/^\d{4,8}$/.test(pinNovo)) {
+        alertEl.textContent = "O novo PIN deve ter de 4 a 8 dígitos.";
+        alertEl.classList.add("show");
+        return;
+      }
+      if (pinNovo !== pinConfirm) {
+        alertEl.textContent = "Os PINs não conferem.";
+        alertEl.classList.add("show");
+        return;
+      }
+      $("accountSavePin").disabled = true;
+      $("accountSavePin").textContent = "Salvando...";
+      try {
+        const { error } = await sb.rpc("alterar_pin_cliente", {
+          p_colaborador_id: colab.id,
+          p_novo_pin: pinNovo,
+          p_session_token: colab.session_token || ""
+        });
+        if (error) throw error;
+        setColab({ ...colab, pin_alteracao_obrigatoria: false });
+        $("accountSetupPopup").classList.remove("show");
+        if (accountPopupResolve) accountPopupResolve(true);
+        accountPopupResolve = null;
+        mostrarToast("OK", "PIN alterado", "Seu novo acesso foi salvo.");
+      } catch (err) {
+        alertEl.textContent = err.message || "Não foi possível alterar o PIN.";
+        alertEl.classList.add("show");
+      } finally {
+        $("accountSavePin").disabled = false;
+        $("accountSavePin").textContent = "Alterar PIN";
+      }
+    }
+
+    async function salvarCadastroObrigatorio() {
+      const colab = getColab();
+      if (!colab) return mostrarLogin("perfil", "Entre novamente para completar seu cadastro.");
+      const alertEl = $("accountSetupAlert");
+      const empresa = $("accountEmpresa").value.trim();
+      const endereco = $("accountEndereco").value.trim();
+      alertEl.classList.remove("show");
+      if (!empresa || !endereco) {
+        alertEl.textContent = "Informe empresa e endereço/ponto de entrega.";
+        alertEl.classList.add("show");
+        return false;
+      }
+      $("accountSaveProfile").disabled = true;
+      $("accountSaveProfile").textContent = "Salvando...";
+      try {
+        const { error } = await sb.rpc("salvar_perfil_cliente", {
+          p_colaborador_id: colab.id,
+          p_whatsapp: colab.whatsapp || "",
+          p_empresa: empresa,
+          p_endereco_empresa: endereco,
+          p_pagamento_preferido: null,
+          p_observacoes: null,
+          p_receber_notificacoes: true,
+          p_session_token: colab.session_token || ""
+        });
+        if (error) throw error;
+        setColab({ ...colab, empresa, endereco_empresa: endereco, cadastro_incompleto: false });
+        atualizarHeaderCliente();
+        $("accountSetupPopup").classList.remove("show");
+        if (accountPopupResolve) accountPopupResolve(true);
+        accountPopupResolve = null;
+        mostrarToast("OK", "Cadastro completo", "Agora você pode finalizar pedidos.");
+        if (!$("tab-perfil")?.classList.contains("hidden")) await carregarPerfilCliente();
+        return true;
+      } catch (err) {
+        alertEl.textContent = err.message || "Não foi possível salvar.";
+        alertEl.classList.add("show");
+        return false;
+      } finally {
+        $("accountSaveProfile").disabled = false;
+        $("accountSaveProfile").textContent = "Salvar cadastro";
+      }
+    }
+
+    async function garantirCadastroProntoParaPedido(alertEl = null) {
+      let colab = getColab();
+      if (!colab) return false;
+      if (colab.pin_alteracao_obrigatoria) {
+        await mostrarPopupAlterarPinObrigatorio();
+        colab = getColab();
+      }
+      if (clienteCadastroIncompleto(colab)) {
+        const ok = await mostrarPopupCompletarCadastro({ obrigatorio: true });
+        colab = getColab();
+        if (!ok || clienteCadastroIncompleto(colab)) {
+          if (alertEl) {
+            alertEl.textContent = "Complete empresa e endereço/ponto de entrega para finalizar o pedido.";
+            alertEl.classList.add("show");
+          }
+          return false;
+        }
+      }
+      return true;
+    }
+
+    $("accountSetupClose")?.addEventListener("click", () => fecharAccountPopup(false));
+    $("accountSkipProfile")?.addEventListener("click", () => fecharAccountPopup(false));
+    $("accountSavePin")?.addEventListener("click", salvarPinPrimeiroAcesso);
+    $("accountSaveProfile")?.addEventListener("click", salvarCadastroObrigatorio);
 
     document.querySelectorAll(".pin-key").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -3759,17 +3957,12 @@
         p_nome: $("cadNome").value.trim(),
         p_whatsapp: $("cadWhats").value.trim(),
         p_matricula: $("cadMatricula").value.trim(),
-        p_empresa: $("cadEmpresa").value.trim(),
-        p_endereco_empresa: $("cadEnderecoEmpresa").value.trim(),
-        p_pin: $("cadPin").value.trim()
+        p_empresa: "",
+        p_endereco_empresa: "",
+        p_pin: ""
       };
-      if (!payload.p_nome || !payload.p_whatsapp || !payload.p_matricula || !payload.p_empresa || !payload.p_pin) {
-        alertEl.textContent = "Preencha nome, WhatsApp, matricula, empresa e PIN.";
-        alertEl.classList.add("show");
-        return;
-      }
-      if (!/^\d{4}$/.test(payload.p_pin)) {
-        alertEl.textContent = "O PIN deve ter 4 digitos numericos.";
+      if (!payload.p_nome || !payload.p_whatsapp || !payload.p_matricula) {
+        alertEl.textContent = "Preencha nome, WhatsApp e matricula.";
         alertEl.classList.add("show");
         return;
       }
@@ -3783,7 +3976,7 @@
           return;
         }
         const resp = Array.isArray(data) ? data[0] : data;
-        mostrarToast("✅", "Cadastro criado", "Voce ja pode confirmar pedidos.");
+        mostrarToast("OK", "Cadastro criado", "Use o PIN inicial informado pela empresa e troque no primeiro acesso.");
         await concluirAutenticacao(resp);
       } finally {
         $("btnCriarCadastro").disabled = false;
@@ -5365,6 +5558,15 @@
         return;
       }
       state.perfilCliente = p;
+      setColab({
+        ...colab,
+        empresa: p.empresa || "",
+        endereco_empresa: p.endereco_empresa || "",
+        whatsapp: p.whatsapp || colab.whatsapp || "",
+        pin_alteracao_obrigatoria: !!p.pin_alteracao_obrigatoria,
+        cadastro_incompleto: !!p.cadastro_incompleto || !p.empresa || !p.endereco_empresa
+      });
+      atualizarHeaderCliente();
       const pedidosPontuados = Number(fidelidade?.pedidos_pontuados || 0);
       const saldo = Number(fidelidade?.saldo ?? 0);
       const credito = Number(fidelidade?.credito_por_marmita || 0.5);
@@ -5430,7 +5632,12 @@
         };
         const { error } = await sb.rpc("salvar_perfil_cliente", payload);
         if (error) throw error;
-        setColab({ ...colab, empresa: payload.p_empresa });
+        setColab({
+          ...colab,
+          empresa: payload.p_empresa,
+          endereco_empresa: payload.p_endereco_empresa,
+          cadastro_incompleto: !payload.p_empresa || !payload.p_endereco_empresa
+        });
         atualizarHeaderCliente();
         mostrarToast("✅", "Perfil salvo", "Suas preferências foram atualizadas.");
         await carregarPerfilCliente();
@@ -6321,6 +6528,7 @@
         mostrarLogin("home", "Entre com sua matricula e PIN para finalizar o carrinho.");
         return;
       }
+      if (!await garantirCadastroProntoParaPedido(alertEl)) return;
       if (state.carrinhoPagamento === "fiado") {
         const resumoFiado = await checarDebitoFiado(false);
         if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
@@ -6674,6 +6882,7 @@
         mostrarLogin("pedido", "Entre com sua matricula e PIN para confirmar este pedido.");
         return;
       }
+      if (!await garantirCadastroProntoParaPedido(alertEl)) return;
       if (state.selPagamento === "fiado") {
         const resumoFiado = await checarDebitoFiado(false);
         if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
