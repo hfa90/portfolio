@@ -2834,6 +2834,10 @@
         </span>
         Financeiro
       </button>
+      <button class="drawer-item" data-section="socios">
+        <span class="di-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M17 11h5"/></svg></span>
+        <span>Sócios</span>
+      </button>
       <button class="drawer-item" data-section="relatorios">
         <span class="di-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 19h16"/><path d="M8 16v-5"/><path d="M13 16V8"/><path d="M18 16v-9"/></svg></span>
         <span>Relatórios</span>
@@ -3035,6 +3039,33 @@
       <div class="card" style="margin-top: 12px;">
         <h2>A pagar por fornecedor (mês)</h2>
         <div id="finFornecedores" class="loading">Carregando…</div>
+      </div>
+    </section>
+
+    <!-- ============ Sócios ============ -->
+    <section id="section-socios" class="hidden rise rise-1">
+      <div class="section-head">
+        <h1>Sócios</h1>
+        <div class="sh-actions">
+          <button class="btn btn-ghost btn-block" id="btnSociosAtualizar">Atualizar</button>
+          <button class="btn btn-primary btn-block" onclick="abrirModalSocio()">Novo sócio</button>
+        </div>
+      </div>
+      <p class="muted small">Cadastre sócios, vincule fornecedores ou produtos e acompanhe repasses por lucro.</p>
+      <div id="sociosStats" class="stats"></div>
+      <div class="tool-grid">
+        <div class="tool-card">
+          <h3>Dashboard de repasses</h3>
+          <div id="sociosDashboard" class="loading">Carregando…</div>
+        </div>
+        <div class="tool-card">
+          <h3>Simulador</h3>
+          <div id="sociosSimulador" class="loading">Carregando…</div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:12px;">
+        <h2>Cadastros e vínculos</h2>
+        <div id="sociosLista" class="loading">Carregando…</div>
       </div>
     </section>
 
@@ -3989,6 +4020,7 @@
       acomp: "Acompanhamentos",
       colaboradores: "Colaboradores",
       financeiro: "Financeiro",
+      socios: "Sócios",
       relatorios: "Relatórios",
       fidelidade: "Fidelidade",
       whatsapp: "WhatsApp",
@@ -4092,8 +4124,8 @@
 
     const secoesPorPerfil = {
       master: null,
-      gestor: ["pedidos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "config"],
-      financeiro: ["pedidos", "prioridades", "financeiro", "relatorios", "whatsapp", "auditoria"],
+      gestor: ["pedidos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "socios", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "config"],
+      financeiro: ["pedidos", "prioridades", "financeiro", "socios", "relatorios", "whatsapp", "auditoria"],
       cozinha: ["prioridades", "cozinha", "whatsapp"]
     };
 
@@ -4161,6 +4193,7 @@
       acomp: carregarAcompanhamentos,
       colaboradores: carregarColaboradores,
       financeiro: carregarFinanceiro,
+      socios: carregarSocios,
       relatorios: carregarRelatorios,
       fidelidade: carregarFidelidade,
       whatsapp: carregarWhatsApp,
@@ -4177,7 +4210,7 @@
       }
       document.querySelectorAll(".drawer-item[data-section]").forEach(b =>
         b.classList.toggle("active", b.dataset.section === section));
-      ["pedidos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
+      ["pedidos", "prioridades", "cardapio", "stories", "fornecedores", "pratos", "acomp", "colaboradores", "financeiro", "socios", "relatorios", "fidelidade", "whatsapp", "cozinha", "auditoria", "admins", "config"].forEach(s => {
         $("section-" + s).classList.toggle("hidden", s !== section);
       });
       $("appBarTitle").textContent = SECTION_TITLES[section] || "";
@@ -6284,7 +6317,7 @@ Bom apetite!`;
                   ${storyPhotoHtml(item)}
                   <div style="min-width:0;">
                     <strong>${escHtml(item.nome)}</strong>
-                    <div class="small muted">${escHtml(item.fornecedor?.nome || "Fornecedor")} · ${fmtBRL(item.preco)}</div>
+                    <div class="small muted">${escHtml(item.fornecedor?.nome || "Fornecedor")} · venda ${fmtBRL(item.preco)} · lucro ${fmtBRL(lucroItem(item, "preco"))}</div>
                     <div style="margin-top:6px;">${item.ativo && item.fornecedor?.ativo ? '<span class="badge pago">publicado</span>' : '<span class="badge cancelado">retirado</span>'}</div>
                     <div class="story-admin-actions">
                       <button class="btn btn-ghost btn-sm" onclick='abrirModalStory(${JSON.stringify(item).replace(/'/g, "&apos;")})'>Editar</button>
@@ -6328,11 +6361,24 @@ Bom apetite!`;
         </div>
         <div class="field"><label>Nome da publicação</label><input id="storyNome" class="input" value="${escHtml(item?.nome || "")}" placeholder="Ex.: Coca-Cola 2L, Pudim, X-salada" /></div>
         <div class="field"><label>Descrição</label><textarea id="storyDesc" rows="2" placeholder="Texto curto que aparece no story">${escHtml(item?.descricao || "")}</textarea></div>
-        <div class="field"><label>Preço (R$)</label><input id="storyPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${item?.preco ?? ""}" /></div>
+        <div class="row">
+          <div class="field"><label>Custo unitário (R$)</label><input id="storyCusto" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${item?.custo_unitario ?? 0}" /></div>
+          <div class="field"><label>Preço de venda (R$)</label><input id="storyPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${item?.preco ?? ""}" /></div>
+        </div>
+        <div id="storyLucroPreview" class="payment-card" style="padding:12px;"></div>
         ${fotoPickerHtml("storyFoto", item?.foto_url)}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="storyAtivo" ${item?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Publicado no story</label></div>`;
       $("modal").classList.add("show");
       ligarPreviewFoto("storyFoto", "storyFotoPreview");
+      const atualizarLucroStory = () => {
+        const venda = Number($("storyPreco").value || 0);
+        const custo = Number($("storyCusto").value || 0);
+        const lucro = venda - custo;
+        $("storyLucroPreview").innerHTML = `<strong>Lucro unitário: ${fmtBRL(lucro)}</strong><div class="small muted" style="margin-top:4px;">Custo ${fmtBRL(custo)} · venda ${fmtBRL(venda)} · margem ${margemPct(lucro, venda).toFixed(1)}%</div>`;
+      };
+      $("storyPreco").addEventListener("input", atualizarLucroStory);
+      $("storyCusto").addEventListener("input", atualizarLucroStory);
+      atualizarLucroStory();
 
       $("modalSave").onclick = async () => {
         const payload = {
@@ -6340,6 +6386,7 @@ Bom apetite!`;
           categoria: $("storyCategoria").value,
           nome: $("storyNome").value.trim(),
           descricao: $("storyDesc").value.trim() || null,
+          custo_unitario: parseFloat($("storyCusto").value) || 0,
           preco: parseFloat($("storyPreco").value),
           ativo: $("storyAtivo").checked
         };
@@ -6410,6 +6457,10 @@ Bom apetite!`;
       lanche: "Lanche"
     };
 
+    const custoItem = (item = {}, campoPreco = "preco") => Number(item.custo_unitario || 0);
+    const lucroItem = (item = {}, campoPreco = "preco") => Number(item[campoPreco] || 0) - custoItem(item, campoPreco);
+    const margemPct = (lucro, venda) => Number(venda || 0) > 0 ? (Number(lucro || 0) / Number(venda || 0)) * 100 : 0;
+
     async function carregarPratos() {
       $("pratosLista").innerHTML = '<div class="loading">Carregando…</div>';
       const { data, error } = await sb.from("pratos")
@@ -6425,7 +6476,9 @@ Bom apetite!`;
         return;
       }
       $("pratosLista").innerHTML = `<table class="tbl">
-        <tbody>${data.map(p => `<tr>
+        <tbody>${data.map(p => {
+          const lucro = lucroItem(p, "preco");
+          return `<tr>
           <td>
             <div style="display:flex; gap:10px; align-items:center;">
               ${fotoMiniHtml(p.foto_url, p.nome)}
@@ -6434,13 +6487,16 @@ Bom apetite!`;
           </td>
           <td data-label="Fornecedor">${p.fornecedor?.nome ?? "—"}</td>
           <td data-label="Categoria">${CATEGORIAS_PRATOS[p.categoria || "marmita"] || "Marmita"}</td>
-          <td data-label="Preço">${fmtBRL(p.preco)}</td>
+          <td data-label="Venda">${fmtBRL(p.preco)}</td>
+          <td data-label="Custo">${fmtBRL(p.custo_unitario || 0)}</td>
+          <td data-label="Lucro"><strong style="color:${lucro >= 0 ? "var(--olive)" : "var(--crimson)"};">${fmtBRL(lucro)}</strong><br><span class="small muted">${margemPct(lucro, p.preco).toFixed(1)}%</span></td>
           <td data-label="Status">${p.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalPrato(${JSON.stringify(p).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirPrato('${p.id}')">Excluir</button>
           </td>
-        </tr>`).join("")}</tbody></table>`;
+        </tr>`;
+        }).join("")}</tbody></table>`;
     }
 
     window.abrirModalPrato = async (p = null) => {
@@ -6453,9 +6509,6 @@ Bom apetite!`;
         $("modal").classList.add("show");
         return;
       }
-      const sugestoesHtml = SUGESTOES_PRATOS.map(nome =>
-        `<button type="button" class="btn btn-ghost btn-sm prato-sugestao" data-prato="${nome.replace(/"/g, "&quot;")}">${nome}</button>`
-      ).join("");
       $("modalBody").innerHTML = `
         <div class="field"><label>Fornecedor</label>
           <select id="pForn">
@@ -6470,23 +6523,26 @@ Bom apetite!`;
             ${Object.entries(CATEGORIAS_PRATOS).map(([value, label]) => `<option value="${value}" ${(p?.categoria || "marmita") === value ? "selected" : ""}>${label}</option>`).join("")}
           </select>
         </div>
-        <div class="field">
-          <label>Opções rápidas</label>
-          <div style="display:flex; flex-wrap:wrap; gap:8px;">${sugestoesHtml}</div>
-        </div>
         <div class="field"><label>Descrição</label><textarea id="pDesc" rows="2">${p?.descricao ?? ""}</textarea></div>
-        <div class="field"><label>Preço (R$)</label><input id="pPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.preco ?? ""}"/></div>
+        <div class="row">
+          <div class="field"><label>Custo unitário (R$)</label><input id="pCusto" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.custo_unitario ?? 0}"/></div>
+          <div class="field"><label>Preço de venda (R$)</label><input id="pPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${p?.preco ?? ""}"/></div>
+        </div>
+        <div id="pLucroPreview" class="payment-card" style="padding:12px;"></div>
         ${fotoPickerHtml("pFoto", p?.foto_url)}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="pAtivo" ${p?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
       ligarPreviewFoto("pFoto", "pFotoPreview");
-      $("modalBody").querySelectorAll(".prato-sugestao").forEach(btn => {
-        btn.addEventListener("click", () => {
-          $("pNome").value = btn.dataset.prato;
-          $("pNome").focus();
-        });
-      });
+      const atualizarLucroPrato = () => {
+        const venda = Number($("pPreco").value || 0);
+        const custo = Number($("pCusto").value || 0);
+        const lucro = venda - custo;
+        $("pLucroPreview").innerHTML = `<strong>Lucro unitário: ${fmtBRL(lucro)}</strong><div class="small muted" style="margin-top:4px;">Custo ${fmtBRL(custo)} · venda ${fmtBRL(venda)} · margem ${margemPct(lucro, venda).toFixed(1)}%</div>`;
+      };
+      $("pPreco").addEventListener("input", atualizarLucroPrato);
+      $("pCusto").addEventListener("input", atualizarLucroPrato);
+      atualizarLucroPrato();
 
       $("modalSave").onclick = async () => {
         const payload = {
@@ -6494,6 +6550,7 @@ Bom apetite!`;
           nome: $("pNome").value.trim(),
           categoria: $("pCategoria").value,
           descricao: $("pDesc").value.trim() || null,
+          custo_unitario: parseFloat($("pCusto").value) || 0,
           preco: parseFloat($("pPreco").value),
           ativo: $("pAtivo").checked
         };
@@ -6548,7 +6605,9 @@ Bom apetite!`;
         return;
       }
       $("acompLista").innerHTML = `<table class="tbl">
-        <tbody>${data.map(a => `<tr>
+        <tbody>${data.map(a => {
+          const lucro = Number(a.preco_extra || 0) - Number(a.custo_unitario || 0);
+          return `<tr>
           <td>
             <div style="display:flex; gap:10px; align-items:center;">
               ${fotoMiniHtml(a.foto_url, a.nome)}
@@ -6556,13 +6615,16 @@ Bom apetite!`;
             </div>
           </td>
           <td data-label="Fornecedor">${a.fornecedor?.nome ?? "—"}</td>
-          <td data-label="Preço extra">${Number(a.preco_extra) > 0 ? fmtBRL(a.preco_extra) : "Grátis"}</td>
+          <td data-label="Venda">${Number(a.preco_extra) > 0 ? fmtBRL(a.preco_extra) : "Grátis"}</td>
+          <td data-label="Custo">${fmtBRL(a.custo_unitario || 0)}</td>
+          <td data-label="Lucro"><strong style="color:${lucro >= 0 ? "var(--olive)" : "var(--crimson)"};">${fmtBRL(lucro)}</strong><br><span class="small muted">${margemPct(lucro, a.preco_extra).toFixed(1)}%</span></td>
           <td data-label="Status">${a.ativo ? '<span class="badge pago">ativo</span>' : '<span class="badge cancelado">inativo</span>'}</td>
           <td class="actions">
             <button class="btn btn-ghost btn-sm" onclick='abrirModalAcomp(${JSON.stringify(a).replace(/'/g, "&apos;")})'>Editar</button>
             <button class="btn btn-danger btn-sm" onclick="excluirAcomp('${a.id}')">Excluir</button>
           </td>
-        </tr>`).join("")}</tbody></table>`;
+        </tr>`;
+        }).join("")}</tbody></table>`;
     }
 
     window.abrirModalAcomp = async (a = null) => {
@@ -6574,16 +6636,30 @@ Bom apetite!`;
           <select id="aForn">${(forns || []).map(f => `<option value="${f.id}" ${a?.fornecedor_id === f.id ? "selected" : ""}>${f.nome}</option>`).join("")}</select>
         </div>
         <div class="field"><label>Nome</label><input id="aNome" class="input" value="${a?.nome ?? ""}"/></div>
-        <div class="field"><label>Preço extra (R$) — 0 se grátis</label><input id="aPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${a?.preco_extra ?? 0}"/></div>`;
+        <div class="row">
+          <div class="field"><label>Custo unitário (R$)</label><input id="aCusto" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${a?.custo_unitario ?? 0}"/></div>
+          <div class="field"><label>Preço de venda (R$) — 0 se grátis</label><input id="aPreco" class="input" type="number" step="0.01" min="0" inputmode="decimal" value="${a?.preco_extra ?? 0}"/></div>
+        </div>
+        <div id="aLucroPreview" class="payment-card" style="padding:12px;"></div>`;
       $("modalBody").insertAdjacentHTML("beforeend", `${fotoPickerHtml("aFoto", a?.foto_url)}<div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="aAtivo" ${a?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`);
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
       ligarPreviewFoto("aFoto", "aFotoPreview");
+      const atualizarLucroAcomp = () => {
+        const venda = Number($("aPreco").value || 0);
+        const custo = Number($("aCusto").value || 0);
+        const lucro = venda - custo;
+        $("aLucroPreview").innerHTML = `<strong>Lucro unitário: ${fmtBRL(lucro)}</strong><div class="small muted" style="margin-top:4px;">Custo ${fmtBRL(custo)} · venda ${fmtBRL(venda)} · margem ${margemPct(lucro, venda).toFixed(1)}%</div>`;
+      };
+      $("aPreco").addEventListener("input", atualizarLucroAcomp);
+      $("aCusto").addEventListener("input", atualizarLucroAcomp);
+      atualizarLucroAcomp();
 
       $("modalSave").onclick = async () => {
         const payload = {
           fornecedor_id: $("aForn").value,
           nome: $("aNome").value.trim(),
+          custo_unitario: parseFloat($("aCusto").value) || 0,
           preco_extra: parseFloat($("aPreco").value) || 0,
           ativo: $("aAtivo").checked
         };
@@ -7131,6 +7207,266 @@ Bom apetite!`;
     };
 
     // =====================================================================
+    // SÓCIOS
+    // =====================================================================
+    function calcularCustoPedidoAdmin(p = {}) {
+      const qtd = Number(p.quantidade || 1);
+      const custoProduto = Number(p.prato?.custo_unitario || 0) * qtd;
+      const custoAcomp = (p.acompanhamentos || []).reduce((s, item) => {
+        const qtdAcomp = Number(item.quantidade || 1);
+        return s + (Number(item.acompanhamento?.custo_unitario || 0) * qtdAcomp);
+      }, 0);
+      return custoProduto + custoAcomp;
+    }
+
+    function periodoSociosInfo() {
+      const hoje = new Date();
+      const hojeStr = dataLocalISO(hoje);
+      const inicioSemana = new Date(hoje);
+      inicioSemana.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      return {
+        hoje: hojeStr,
+        inicioSemana: dataLocalISO(inicioSemana),
+        inicioMes: dataLocalISO(inicioMes)
+      };
+    }
+
+    function rateSocio(socio, vinculo) {
+      return Number(vinculo?.percentual_lucro ?? socio?.percentual_lucro ?? 0);
+    }
+
+    async function carregarSocios() {
+      $("sociosStats").innerHTML = '<div class="loading">Carregando…</div>';
+      $("sociosDashboard").innerHTML = '<div class="loading">Carregando…</div>';
+      $("sociosLista").innerHTML = '<div class="loading">Carregando…</div>';
+      $("sociosSimulador").innerHTML = '<div class="loading">Carregando…</div>';
+
+      try {
+        const { inicioMes, inicioSemana, hoje } = periodoSociosInfo();
+        const [
+          sociosResp,
+          fornResp,
+          prodResp,
+          pedidosResp,
+          pratosResp,
+          acompResp,
+          fornecedoresResp
+        ] = await Promise.all([
+          sb.from("socios").select("*").order("nome"),
+          sb.from("socio_fornecedores").select("*, fornecedor:fornecedores(id, nome)"),
+          sb.from("socio_produtos").select("*, prato:pratos(id, nome, categoria, fornecedor_id, preco, custo_unitario)"),
+          sb.from("pedidos").select(`
+            id, data, preco_total, quantidade, fornecedor_id, prato_id, status,
+            prato:pratos(id, nome, preco, custo_unitario),
+            acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(id, nome, preco_extra, custo_unitario))
+          `).gte("data", inicioMes).neq("status", "cancelado"),
+          sb.from("pratos").select("id, nome, categoria, fornecedor_id, preco, custo_unitario, ativo").eq("ativo", true).order("nome"),
+          sb.from("acompanhamentos").select("id, nome, fornecedor_id, preco_extra, custo_unitario, ativo").eq("ativo", true).order("nome"),
+          sb.from("fornecedores").select("id, nome, ativo").eq("ativo", true).order("nome")
+        ]);
+
+        const erro = sociosResp.error || fornResp.error || prodResp.error || pedidosResp.error || pratosResp.error || acompResp.error || fornecedoresResp.error;
+        if (erro) throw erro;
+
+        const socios = sociosResp.data || [];
+        const vincFor = fornResp.data || [];
+        const vincProd = prodResp.data || [];
+        const pedidos = pedidosResp.data || [];
+        const pratos = pratosResp.data || [];
+        const acomp = acompResp.data || [];
+        const fornecedores = fornecedoresResp.data || [];
+        const socioMap = new Map(socios.map(s => [s.id, s]));
+        const resultado = new Map(socios.map(s => [s.id, {
+          socio: s,
+          dia: { receita: 0, custo: 0, lucro: 0, repasse: 0 },
+          semana: { receita: 0, custo: 0, lucro: 0, repasse: 0 },
+          mes: { receita: 0, custo: 0, lucro: 0, repasse: 0 }
+        }]));
+
+        pedidos.forEach(p => {
+          const receita = Number(p.preco_total || 0);
+          const custo = calcularCustoPedidoAdmin(p);
+          const lucro = receita - custo;
+          const produtoLinks = vincProd.filter(v => v.prato_id === p.prato_id);
+          const fornecedorLinks = produtoLinks.length ? [] : vincFor.filter(v => v.fornecedor_id === p.fornecedor_id);
+          const links = [...produtoLinks, ...fornecedorLinks];
+          links.forEach(v => {
+            const s = socioMap.get(v.socio_id);
+            const row = resultado.get(v.socio_id);
+            if (!s || !row || s.ativo === false) return;
+            const pct = rateSocio(s, v) / 100;
+            for (const [key, match] of [
+              ["mes", p.data >= inicioMes],
+              ["semana", p.data >= inicioSemana],
+              ["dia", p.data === hoje]
+            ]) {
+              if (!match) continue;
+              row[key].receita += receita;
+              row[key].custo += custo;
+              row[key].lucro += lucro;
+              row[key].repasse += lucro * pct;
+            }
+          });
+        });
+
+        const totalRepasseMes = [...resultado.values()].reduce((s, r) => s + r.mes.repasse, 0);
+        const totalLucroMes = [...resultado.values()].reduce((s, r) => s + r.mes.lucro, 0);
+        $("sociosStats").innerHTML = `
+          <div class="stat"><div class="stat-label">Sócios ativos</div><div class="stat-value">${socios.filter(s => s.ativo !== false).length}</div></div>
+          <div class="stat"><div class="stat-label">Lucro vinculado mês</div><div class="stat-value olive">${fmtBRL(totalLucroMes)}</div></div>
+          <div class="stat"><div class="stat-label">Repasses mês</div><div class="stat-value brick">${fmtBRL(totalRepasseMes)}</div></div>
+          <div class="stat"><div class="stat-label">Vínculos</div><div class="stat-value">${vincFor.length + vincProd.length}</div></div>`;
+
+        const dashboardRows = [...resultado.values()].sort((a, b) => b.mes.repasse - a.mes.repasse);
+        $("sociosDashboard").innerHTML = dashboardRows.length ? `<table class="tbl">
+          <tbody>${dashboardRows.map(r => `
+            <tr>
+              <td><strong>${escHtml(r.socio.nome)}</strong><br><span class="small muted">${Number(r.socio.percentual_lucro || 0).toFixed(1)}% padrão</span></td>
+              <td data-label="Hoje">${fmtBRL(r.dia.repasse)}<br><span class="small muted">lucro ${fmtBRL(r.dia.lucro)}</span></td>
+              <td data-label="Semana">${fmtBRL(r.semana.repasse)}<br><span class="small muted">lucro ${fmtBRL(r.semana.lucro)}</span></td>
+              <td data-label="Mês"><strong style="color:var(--brick);">${fmtBRL(r.mes.repasse)}</strong><br><span class="small muted">custo ${fmtBRL(r.mes.custo)}</span></td>
+            </tr>`).join("")}</tbody>
+        </table>` : '<div class="card empty">Cadastre um sócio e crie vínculos para ver repasses.</div>';
+
+        $("sociosLista").innerHTML = socios.length ? `<div class="audit-list">${socios.map(s => {
+          const vf = vincFor.filter(v => v.socio_id === s.id);
+          const vp = vincProd.filter(v => v.socio_id === s.id);
+          return `<article class="audit-item">
+            <div>
+              <strong>${escHtml(s.nome)}</strong>
+              <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${Number(s.percentual_lucro || 0).toFixed(1)}% padrão · ${s.ativo !== false ? "ativo" : "inativo"}</div>
+              <div class="small muted" style="margin-top:6px;">Fornecedores: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (${Number(v.percentual_lucro ?? s.percentual_lucro ?? 0).toFixed(1)}%)`).join(", ") || "nenhum"}</div>
+              <div class="small muted">Produtos: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (${Number(v.percentual_lucro ?? s.percentual_lucro ?? 0).toFixed(1)}%)`).join(", ") || "nenhum"}</div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-ghost btn-sm" onclick='abrirModalSocio(${JSON.stringify(s).replace(/'/g, "&apos;")})'>Editar</button>
+              <button class="btn btn-ghost btn-sm" onclick='abrirModalVinculoSocio(${JSON.stringify(s).replace(/'/g, "&apos;")})'>Vincular</button>
+              <button class="btn btn-ghost btn-sm" onclick="limparVinculosSocio('${s.id}', '${s.nome.replace(/'/g, "\\'")}')">Limpar vínculos</button>
+              <button class="btn btn-danger btn-sm" onclick="alternarSocio('${s.id}', ${s.ativo === false ? "true" : "false"})">${s.ativo === false ? "Ativar" : "Inativar"}</button>
+            </div>
+          </article>`;
+        }).join("")}</div>` : '<div class="card empty">Nenhum sócio cadastrado.</div>';
+
+        const produtosOptions = [
+          ...pratos.map(p => ({ tipo: "prato", id: p.id, label: `${p.nome} (${CATEGORIAS_PRATOS[p.categoria] || "Produto"})`, venda: Number(p.preco || 0), custo: Number(p.custo_unitario || 0), fornecedor_id: p.fornecedor_id })),
+          ...acomp.map(a => ({ tipo: "acomp", id: a.id, label: `${a.nome} (adicional)`, venda: Number(a.preco_extra || 0), custo: Number(a.custo_unitario || 0), fornecedor_id: a.fornecedor_id }))
+        ];
+        $("sociosSimulador").innerHTML = `
+          <div class="field"><label>Sócio</label><select id="simSocio">${socios.map(s => `<option value="${s.id}">${escHtml(s.nome)}</option>`).join("")}</select></div>
+          <div class="field"><label>Produto ou adicional</label><select id="simProduto">${produtosOptions.map((p, i) => `<option value="${i}">${escHtml(p.label)}</option>`).join("")}</select></div>
+          <div class="row">
+            <div class="field"><label>Quantidade</label><input id="simQtd" class="input" type="number" min="1" step="1" value="10" /></div>
+            <div class="field"><label>% do sócio</label><input id="simPct" class="input" type="number" min="0" max="100" step="0.1" value="${socios[0]?.percentual_lucro ?? 0}" /></div>
+          </div>
+          <div id="simResultado" class="payment-card" style="padding:12px;"></div>`;
+        const atualizarSimulador = () => {
+          const socio = socioMap.get($("simSocio")?.value);
+          const item = produtosOptions[Number($("simProduto")?.value || 0)];
+          if (!socio || !item) {
+            $("simResultado").innerHTML = '<div class="small muted">Cadastre sócios e produtos para simular.</div>';
+            return;
+          }
+          if (document.activeElement?.id === "simSocio") $("simPct").value = Number(socio.percentual_lucro || 0).toFixed(1);
+          const qtd = Math.max(1, Number($("simQtd").value || 1));
+          const pct = Number($("simPct").value || 0);
+          const receita = item.venda * qtd;
+          const custo = item.custo * qtd;
+          const lucro = receita - custo;
+          const repasse = lucro * (pct / 100);
+          $("simResultado").innerHTML = `<strong>Repasse previsto: ${fmtBRL(repasse)}</strong><div class="small muted" style="margin-top:4px;">Receita ${fmtBRL(receita)} · custo ${fmtBRL(custo)} · lucro ${fmtBRL(lucro)} · margem ${margemPct(lucro, receita).toFixed(1)}%</div>`;
+        };
+        ["simSocio", "simProduto", "simQtd", "simPct"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
+        atualizarSimulador();
+        window.__sociosCache = { socios, fornecedores, pratos };
+      } catch (e) {
+        const msg = e.message || "Erro ao carregar sócios. Aplique a migração de sócios/custos no Supabase.";
+        $("sociosStats").innerHTML = "";
+        $("sociosDashboard").innerHTML = `<div class="alert alert-error show">${msg}</div>`;
+        $("sociosLista").innerHTML = "";
+        $("sociosSimulador").innerHTML = "";
+      }
+    }
+
+    window.abrirModalSocio = (s = null) => {
+      $("modalTitle").textContent = s ? "Editar sócio" : "Novo sócio";
+      $("modalSave").classList.remove("hidden");
+      $("modalSave").textContent = "Salvar";
+      $("modalBody").innerHTML = `
+        <div class="field"><label>Nome do sócio</label><input id="socioNome" class="input" value="${escHtml(s?.nome || "")}" /></div>
+        <div class="field"><label>WhatsApp</label><input id="socioWhats" class="input" inputmode="tel" value="${escHtml(s?.whatsapp || "")}" /></div>
+        <div class="field"><label>% padrão sobre lucro</label><input id="socioPct" class="input" type="number" min="0" max="100" step="0.1" value="${s?.percentual_lucro ?? 0}" /></div>
+        <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAtivo" type="checkbox" ${s?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;" /> Ativo</label>`;
+      $("modalAlert").classList.remove("show");
+      $("modal").classList.add("show");
+      $("modalSave").onclick = async () => {
+        const payload = {
+          nome: $("socioNome").value.trim(),
+          whatsapp: $("socioWhats").value.trim().replace(/\D/g, "") || null,
+          percentual_lucro: Number($("socioPct").value || 0),
+          ativo: $("socioAtivo").checked
+        };
+        if (!payload.nome) { $("modalAlert").textContent = "Informe o nome do sócio."; $("modalAlert").classList.add("show"); return; }
+        const resp = s
+          ? await sb.from("socios").update(payload).eq("id", s.id)
+          : await sb.from("socios").insert(payload);
+        if (resp.error) { $("modalAlert").textContent = resp.error.message; $("modalAlert").classList.add("show"); return; }
+        fecharModal();
+        await carregarSocios();
+      };
+    };
+
+    window.abrirModalVinculoSocio = async (s) => {
+      const cache = window.__sociosCache || {};
+      const fornecedores = cache.fornecedores || (await sb.from("fornecedores").select("id, nome").eq("ativo", true).order("nome")).data || [];
+      const pratos = cache.pratos || (await sb.from("pratos").select("id, nome, categoria").eq("ativo", true).order("nome")).data || [];
+      $("modalTitle").textContent = `Vincular ${s.nome}`;
+      $("modalSave").classList.remove("hidden");
+      $("modalSave").textContent = "Vincular";
+      $("modalBody").innerHTML = `
+        <div class="field"><label>Tipo de vínculo</label><select id="vincTipo"><option value="fornecedor">Restaurante / fornecedor</option><option value="produto">Produto / lanche</option></select></div>
+        <div class="field" id="vincFornecedorWrap"><label>Fornecedor</label><select id="vincFornecedor">${fornecedores.map(f => `<option value="${f.id}">${escHtml(f.nome)}</option>`).join("")}</select></div>
+        <div class="field hidden" id="vincProdutoWrap"><label>Produto</label><select id="vincProduto">${pratos.map(p => `<option value="${p.id}">${escHtml(p.nome)} - ${CATEGORIAS_PRATOS[p.categoria] || "Produto"}</option>`).join("")}</select></div>
+        <div class="field"><label>% sobre lucro neste vínculo</label><input id="vincPct" class="input" type="number" min="0" max="100" step="0.1" value="${s.percentual_lucro ?? 0}" /></div>`;
+      $("modalAlert").classList.remove("show");
+      $("modal").classList.add("show");
+      $("vincTipo").addEventListener("change", () => {
+        const prod = $("vincTipo").value === "produto";
+        $("vincFornecedorWrap").classList.toggle("hidden", prod);
+        $("vincProdutoWrap").classList.toggle("hidden", !prod);
+      });
+      $("modalSave").onclick = async () => {
+        const pct = Number($("vincPct").value || 0);
+        const tipo = $("vincTipo").value;
+        const resp = tipo === "produto"
+          ? await sb.from("socio_produtos").upsert({ socio_id: s.id, prato_id: $("vincProduto").value, percentual_lucro: pct }, { onConflict: "socio_id,prato_id" })
+          : await sb.from("socio_fornecedores").upsert({ socio_id: s.id, fornecedor_id: $("vincFornecedor").value, percentual_lucro: pct }, { onConflict: "socio_id,fornecedor_id" });
+        if (resp.error) { $("modalAlert").textContent = resp.error.message; $("modalAlert").classList.add("show"); return; }
+        fecharModal();
+        await carregarSocios();
+      };
+    };
+
+    window.alternarSocio = async (id, ativo) => {
+      const { error } = await sb.from("socios").update({ ativo }).eq("id", id);
+      if (error) alert(error.message);
+      await carregarSocios();
+    };
+
+    window.limparVinculosSocio = async (id, nome) => {
+      if (!confirm(`Remover todos os vínculos de ${nome}?`)) return;
+      const [forn, prod] = await Promise.all([
+        sb.from("socio_fornecedores").delete().eq("socio_id", id),
+        sb.from("socio_produtos").delete().eq("socio_id", id)
+      ]);
+      const error = forn.error || prod.error;
+      if (error) alert(error.message);
+      await carregarSocios();
+    };
+
+    $("btnSociosAtualizar")?.addEventListener("click", carregarSocios);
+
+    // =====================================================================
     // CONFIGURAÇÕES — Toggle pedidos abertos/fechados
     // =====================================================================
     let pedidosAbertos = true;
@@ -7308,6 +7644,9 @@ Bom apetite!`;
         "cliente_preferencias",
         "pedido_avaliacoes",
         "cliente_fidelidade_eventos",
+        "socios",
+        "socio_fornecedores",
+        "socio_produtos",
         "auditoria_admin",
         "admins"
       ];
