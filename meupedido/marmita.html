@@ -4981,7 +4981,11 @@
       prato_preco: Number(item.prato_preco ?? item.preco ?? 0),
       estoque_disponivel: item.estoque_disponivel,
       fornecedor_pix: item.fornecedor_pix || item.fornecedor?.chave_pix || "",
-      fornecedor_frete: Number(item.fornecedor_frete ?? item.fornecedor?.frete_entrega ?? 0)
+      fornecedor_frete: Number(item.fornecedor_frete ?? item.fornecedor?.frete_entrega ?? 0),
+      socio_id: item.socio_id || "",
+      socio_nome: item.socio_nome || "",
+      socio_aceita_fiado: item.socio_aceita_fiado === true || item.socio_aceita_fiado === "true",
+      socio_fiado_valor_extra: Math.max(0, Number(item.socio_fiado_valor_extra || 0))
     });
 
     function contextoComplementarPedido(prato) {
@@ -5164,7 +5168,11 @@
           categoria: categoriaProduto(item.prato_categoria),
           fornecedor_frete: Number(item.fornecedor_frete || 0),
           estoque_total: item.estoque_total,
-          estoque_disponivel: item.estoque_disponivel
+          estoque_disponivel: item.estoque_disponivel,
+          socio_id: item.socio_id || "",
+          socio_nome: item.socio_nome || "",
+          socio_aceita_fiado: item.socio_aceita_fiado === true || item.socio_aceita_fiado === "true",
+          socio_fiado_valor_extra: Math.max(0, Number(item.socio_fiado_valor_extra || 0))
         });
       });
 
@@ -5926,6 +5934,10 @@
       if (prato && itemCardapio) {
         prato.estoque_total = itemCardapio.estoque_total;
         prato.estoque_disponivel = itemCardapio.estoque_disponivel;
+        prato.socio_id = itemCardapio.socio_id || "";
+        prato.socio_nome = itemCardapio.socio_nome || "";
+        prato.socio_aceita_fiado = itemCardapio.socio_aceita_fiado === true || itemCardapio.socio_aceita_fiado === "true";
+        prato.socio_fiado_valor_extra = Math.max(0, Number(itemCardapio.socio_fiado_valor_extra || 0));
       }
 
       state.selPrato = prato;
@@ -6014,6 +6026,8 @@
       const pixEmpresaAtivo = pagamentoGlobalAtivo("pix_empresa");
       const fiadoAtivo = pagamentoGlobalAtivo("fiado");
       const maisTardeAtivo = pagamentoGlobalAtivo("pagar_mais_tarde");
+      const fiadoProdutoAceito = fiadoAceitoProduto(prato);
+      const fiadoExtra = fiadoExtraProduto(prato);
       const opts = [
         {
           id: INFINITEPAY_PAYMENT,
@@ -6044,9 +6058,11 @@
             ? mensagemPagamentoSuspenso("fiado")
             : (fiadoBloqueado
             ? "Indisponível: regularize o fiado vencido para habilitar novamente."
-            : "Acumula até a data de pagamento <span style='color:var(--crimson);font-weight:700;'>+R$10,00</span>"),
-          disabled: !fiadoAtivo || fiadoBloqueado,
-          motivo: !fiadoAtivo ? "pagamento_suspenso" : "fiado"
+            : (!fiadoProdutoAceito
+              ? "Este restaurante não aceita fiado neste cardápio."
+              : `Acumula até a data de pagamento <span style='color:var(--crimson);font-weight:700;'>${textoTaxaFiado(fiadoExtra)}</span>`)),
+          disabled: !fiadoAtivo || fiadoBloqueado || !fiadoProdutoAceito,
+          motivo: !fiadoAtivo ? "pagamento_suspenso" : (fiadoBloqueado ? "fiado" : (!fiadoProdutoAceito ? "fiado_config" : "fiado"))
         },
         {
           id: "pagar_mais_tarde",
@@ -6072,6 +6088,7 @@
         opt.addEventListener("click", () => {
           if (opt.classList.contains("disabled")) {
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
+            else if (opt.dataset.motivo === "fiado_config") mostrarToast("!", "Fiado indisponível", "Este sócio/restaurante não aceita fiado para este produto.");
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o pedido inteiro.");
             else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
             else if (opt.dataset.motivo === "pagamento_suspenso") mostrarToast("!", "Pagamento suspenso", "O restaurante suspendeu esta forma de pagamento por enquanto.");
@@ -6107,7 +6124,34 @@
       sugerirComplementoPedido(prato);
     }
 
-    const FIADO_TAXA = 10.00;
+    function fiadoAceitoProduto(prato = state.selPrato) {
+      return prato?.socio_aceita_fiado === true || prato?.socio_aceita_fiado === "true";
+    }
+
+    function fiadoExtraProduto(prato = state.selPrato) {
+      return Math.max(0, Number(prato?.socio_fiado_valor_extra || 0));
+    }
+
+    function textoTaxaFiado(valor) {
+      return valor > 0 ? `+${fmtBRL(valor)} no pedido fiado` : "Sem taxa extra no fiado";
+    }
+
+    function fiadoResumoCarrinho() {
+      const grupos = new Map();
+      const recusados = [];
+      state.carrinho.forEach(item => {
+        const aceito = item.socio_aceita_fiado === true || item.socio_aceita_fiado === "true";
+        const nome = item.socio_nome || item.fornecedor?.nome || "Restaurante";
+        if (!aceito) recusados.push(nome);
+        const chave = item.socio_id || item.fornecedor?.id || item.fornecedor_id || nome;
+        const atual = grupos.get(chave);
+        const valor = Math.max(0, Number(item.socio_fiado_valor_extra || 0));
+        if (!atual || valor > atual.valor) grupos.set(chave, { nome, valor });
+      });
+      const detalhes = [...grupos.values()];
+      const extraTotal = detalhes.reduce((s, item) => s + item.valor, 0);
+      return { aceito: recusados.length === 0, recusados: [...new Set(recusados)], detalhes, extraTotal };
+    }
 
     function normalizarQuantidadePedido(valor) {
       const n = Number.parseInt(valor, 10);
@@ -6182,7 +6226,7 @@
         if (state.selAcomp.has(a.id)) total += Number(a.preco_extra) * quantidadeAcompanhamento(a.id);
       });
       total += Number(state.selPrato?.fornecedor?.frete_entrega || 0);
-      if (state.selPagamento === "fiado") total += FIADO_TAXA;
+      if (state.selPagamento === "fiado") total += fiadoExtraProduto();
       return total;
     }
     function atualizarTotal() {
@@ -6190,7 +6234,7 @@
       const prato = Number(state.selPrato?.preco || 0);
       const extras = state.acompanhamentos.reduce((s, a) => state.selAcomp.has(a.id) ? s + (Number(a.preco_extra || 0) * quantidadeAcompanhamento(a.id)) : s, 0);
       const frete = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
-      const fiado = state.selPagamento === "fiado" ? FIADO_TAXA : 0;
+      const fiado = state.selPagamento === "fiado" ? fiadoExtraProduto() : 0;
       const linhas = [
         [`Produto (${qtd}x)`, prato * qtd],
         ...(extras > 0 ? [["Acompanhamentos", extras]] : []),
@@ -6229,7 +6273,7 @@
         },
         fiado: {
           titulo: "Fiado",
-          texto: "O pedido entra agora e soma a taxa do fiado. Acompanhe a data limite em Meus pedidos."
+          texto: `O pedido entra agora no fiado ${textoTaxaFiado(fiadoExtraProduto()).toLowerCase()}. Acompanhe a data limite em Meus pedidos.`
         },
         pagar_mais_tarde: {
           titulo: "Pagar mais tarde",
@@ -6285,8 +6329,9 @@
         if (frete > 0 && !fretes.has(item.fornecedor.id)) fretes.set(item.fornecedor.id, { nome: item.fornecedor.nome, valor: frete });
       });
       const freteTotal = [...fretes.values()].reduce((s, f) => s + f.valor, 0);
-      const fiado = pagamento === "fiado" ? FIADO_TAXA : 0;
-      return { produtos, fretes: [...fretes.values()], freteTotal, fiado, total: produtos + freteTotal + fiado };
+      const fiadoResumo = fiadoResumoCarrinho();
+      const fiado = pagamento === "fiado" ? fiadoResumo.extraTotal : 0;
+      return { produtos, fretes: [...fretes.values()], freteTotal, fiado, fiadoResumo, total: produtos + freteTotal + fiado };
     }
 
     function itemAtualParaCarrinho() {
@@ -6308,6 +6353,10 @@
           return qtd > 1 ? `${qtd}x ${a.nome}` : a.nome;
         }),
         acompTotal: acompSelecionados.reduce((s, a) => s + (Number(a.preco_extra || 0) * quantidadeAcompanhamento(a.id)), 0),
+        socio_id: state.selPrato.socio_id || "",
+        socio_nome: state.selPrato.socio_nome || "",
+        socio_aceita_fiado: fiadoAceitoProduto(state.selPrato),
+        socio_fiado_valor_extra: fiadoExtraProduto(state.selPrato),
         fornecedor: {
           id: state.selPrato.fornecedor.id,
           nome: state.selPrato.fornecedor.nome,
@@ -6330,6 +6379,10 @@
         acompanhamentos: [],
         acompanhamentoNomes: [],
         acompTotal: 0,
+        socio_id: sugestao.socio_id || "",
+        socio_nome: sugestao.socio_nome || "",
+        socio_aceita_fiado: sugestao.socio_aceita_fiado === true,
+        socio_fiado_valor_extra: Math.max(0, Number(sugestao.socio_fiado_valor_extra || 0)),
         fornecedor: {
           id: sugestao.fornecedor_id,
           nome: sugestao.fornecedor_nome,
@@ -6401,6 +6454,7 @@
       const pixEmpresaCarrinhoAtivo = pagamentoGlobalAtivo("pix_empresa");
       const fiadoCarrinhoAtivo = pagamentoGlobalAtivo("fiado");
       const maisTardeCarrinhoAtivo = pagamentoGlobalAtivo("pagar_mais_tarde");
+      const resumoFiadoCarrinhoConfig = fiadoResumoCarrinho();
 
       $("carrinhoLista").innerHTML = state.carrinho.map(item => `
         <div class="cart-item" data-cart-item="${item.localId}">
@@ -6449,9 +6503,11 @@
             ? mensagemPagamentoSuspenso("fiado")
             : (fiadoBloqueado
             ? "Indisponível: regularize o fiado vencido para habilitar novamente."
-            : "A taxa de R$10,00 entra uma vez no carrinho."),
-          disabled: !fiadoCarrinhoAtivo || fiadoBloqueado,
-          motivo: !fiadoCarrinhoAtivo ? "pagamento_suspenso" : "fiado"
+            : (!resumoFiadoCarrinhoConfig.aceito
+              ? `Fiado indisponível para: ${resumoFiadoCarrinhoConfig.recusados.slice(0, 2).join(", ")}.`
+              : `Taxa no carrinho: ${fmtBRL(resumoFiadoCarrinhoConfig.extraTotal)}.`)),
+          disabled: !fiadoCarrinhoAtivo || fiadoBloqueado || !resumoFiadoCarrinhoConfig.aceito,
+          motivo: !fiadoCarrinhoAtivo ? "pagamento_suspenso" : (fiadoBloqueado ? "fiado" : (!resumoFiadoCarrinhoConfig.aceito ? "fiado_config" : "fiado"))
         },
         { id: "pagar_mais_tarde", icon: "🕒", title: "Pagar mais tarde", desc: maisTardeCarrinhoAtivo ? "Para pagar até o fim do expediente de hoje." : mensagemPagamentoSuspenso("pagar_mais_tarde"), disabled: !maisTardeCarrinhoAtivo, motivo: !maisTardeCarrinhoAtivo ? "pagamento_suspenso" : "" }
       ];
@@ -6471,6 +6527,7 @@
         opt.addEventListener("click", () => {
           if (opt.classList.contains("disabled")) {
             if (opt.dataset.motivo === "fiado") mostrarPopupDebito(resumoFiado || ultimoResumoFiado);
+            else if (opt.dataset.motivo === "fiado_config") mostrarToast("!", "Fiado indisponível", "Remova os itens de sócios/restaurantes que não aceitam fiado.");
             else if (opt.dataset.motivo === "resgate") mostrarToast("🎟️", "Saldo insuficiente", "O saldo de fidelidade precisa cobrir o carrinho inteiro.");
             else if (opt.dataset.motivo === "resgate_desativado") mostrarToast("!", "Resgate desativado", "O restaurante desativou temporariamente o pagamento com saldo.");
             else if (opt.dataset.motivo === "pagamento_suspenso") mostrarToast("!", "Pagamento suspenso", "O restaurante suspendeu esta forma de pagamento por enquanto.");
@@ -6512,7 +6569,7 @@
         cartao_infinitepay: "O carrinho inteiro será enviado para a InfinitePay em uma única cobrança.",
         pix_empresa: "Pague o total por PIX e anexe um comprovante para liberar todos os itens.",
         resgate_fidelidade: "O saldo de fidelidade paga o carrinho inteiro. Nao existe abatimento parcial.",
-        fiado: "O carrinho entra agora no seu fiado com a taxa aplicada uma vez.",
+        fiado: `O carrinho entra agora no seu fiado com taxa total de ${fmtBRL(detalhesCarrinho("fiado").fiado)}.`,
         pagar_mais_tarde: "Os itens entram como pendentes para pagamento ainda hoje."
       }[state.carrinhoPagamento] || "";
       box.innerHTML = `<strong>${esc($("carrinhoPayOptions").querySelector(".pay-option.selected .pay-title")?.textContent || "Pagamento")}</strong><div class="small muted" style="margin-top:4px;">${info}</div>`;
@@ -6567,6 +6624,12 @@
       }
       if (!await garantirCadastroProntoParaPedido(alertEl)) return;
       if (state.carrinhoPagamento === "fiado") {
+        const configFiado = fiadoResumoCarrinho();
+        if (!configFiado.aceito) {
+          alertEl.textContent = `Fiado indisponível para: ${configFiado.recusados.join(", ")}.`;
+          alertEl.classList.add("show");
+          return;
+        }
         const resumoFiado = await checarDebitoFiado(false);
         if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
           await mostrarPopupDebito(resumoFiado);
@@ -6673,7 +6736,7 @@
           ${itensResumo.map(item => `<div class="small" style="margin-top:6px;">${item.quantidade}x ${esc(item.nome)} <span class="muted">- ${esc(item.fornecedor.nome)}</span></div>`).join("")}
           <div style="margin-top:10px; display:flex; justify-content:space-between;">
             <span class="small muted">${payLabel}</span>
-            <span><strong style="color:var(--brick);">${fmtBRL(total)}</strong>${isFiado ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+R$10 fiado)</span>` : ""}</span>
+            <span><strong style="color:var(--brick);">${fmtBRL(total)}</strong>${isFiado && resumo.fiado > 0 ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+${fmtBRL(resumo.fiado)} fiado)</span>` : ""}</span>
           </div>
         `;
 
@@ -6921,6 +6984,11 @@
       }
       if (!await garantirCadastroProntoParaPedido(alertEl)) return;
       if (state.selPagamento === "fiado") {
+        if (!fiadoAceitoProduto()) {
+          alertEl.textContent = "Este sócio/restaurante não aceita fiado para este produto.";
+          alertEl.classList.add("show");
+          return;
+        }
         const resumoFiado = await checarDebitoFiado(false);
         if (resumoFiado?.fiado_bloqueado || totalFiadoVencidoResumo(resumoFiado) > 0) {
           await mostrarPopupDebito(resumoFiado);
@@ -6980,7 +7048,8 @@
       const isPix = ["pix_empresa", "pix_fornecedor"].includes(state.selPagamento);
       const isFiado = state.selPagamento === "fiado";
       const isResgate = state.selPagamento === RESGATE_PAYMENT;
-      const precoBase = total - (isFiado ? FIADO_TAXA : 0);
+      const fiadoPedidoExtra = isFiado ? fiadoExtraProduto() : 0;
+      const precoBase = total - fiadoPedidoExtra;
       const fretePedido = Number(state.selPrato?.fornecedor?.frete_entrega || 0);
 
       const pixArea = $("sucessoPixArea");
@@ -7066,7 +7135,7 @@
           <span>
             ${isFiado ? `<span class="small muted" style="text-decoration:line-through; margin-right:4px;">${fmtBRL(precoBase)}</span>` : ""}
             <strong style="color:var(--brick);">${fmtBRL(total)}</strong>
-            ${isFiado ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+R$10 fiado)</span>` : ""}
+            ${isFiado && fiadoPedidoExtra > 0 ? `<span class="small" style="color:var(--crimson); margin-left:4px;">(+${fmtBRL(fiadoPedidoExtra)} fiado)</span>` : ""}
           </span>
         </div>
       `;

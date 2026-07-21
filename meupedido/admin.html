@@ -7733,16 +7733,16 @@ Bom apetite!`;
                 <strong>${escHtml(r.socio.nome)}</strong>
                 <div class="small muted">${r.mes.indicacoes} indicação(ões) · ${r.mes.proprios} produto(s) próprio(s) · ${r.mes.pedidos} pedido(s) no mês</div>
               </div>
-              <span class="socio-chip ${r.socio.id === masterId ? "master" : "socio"}">${acessoSocio ? `Você: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}` : `${r.socio.id === masterId ? "Master" : "Sócio"}: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}`}</span>
+              <span class="socio-chip ${r.socio.id === masterId ? "master" : "socio"}">${acessoSocio ? `Você recebe: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}` : `${r.socio.id === masterId ? "Master recebe" : "Sócio recebe"}: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}`}</span>
             </div>
             ${graficoSocioValores([
-              { label: acessoSocio ? "Você" : "Sócio", valor: r.mes.socioRecebe, classe: "socio" },
-              { label: r.socio.id === masterId ? "Sua parte master" : `Master ${masterRotulo}`, valor: r.socio.id === masterId ? r.mes.masterDireto : r.mes.masterRecebe, classe: "master" },
+              { label: acessoSocio ? "Você (R$ 1,50/item indicado)" : "Sócio (R$ 1,50/item indicado)", valor: r.mes.socioRecebe, classe: "socio" },
+              { label: r.socio.id === masterId ? "Sua parte master" : `Master ${masterRotulo} (R$ 1,50/item indicado)`, valor: r.socio.id === masterId ? r.mes.masterDireto : r.mes.masterRecebe, classe: "master" },
               { label: "Base", valor: r.mes.baseParceiro, classe: "base" }
             ])}
             <div class="row" style="margin-top:10px;">
-              <div class="socio-split-note small"><strong>Hoje:</strong> ${fmtBRL(totalReceberSocio(r, "dia", masterId))} para ${acessoSocio ? "você" : "este sócio"} · ${fmtBRL(r.dia.masterRecebe)} gerados para master</div>
-              <div class="socio-split-note small"><strong>Semana:</strong> ${fmtBRL(totalReceberSocio(r, "semana", masterId))} para ${acessoSocio ? "você" : "este sócio"} · ${fmtBRL(r.semana.masterRecebe)} gerados para master</div>
+              <div class="socio-split-note small"><strong>Hoje:</strong> taxa de operação ${fmtBRL(r.dia.socioComissao + r.dia.masterRecebe)} nas indicações = ${fmtBRL(r.dia.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.dia.masterRecebe)} para master</div>
+              <div class="socio-split-note small"><strong>Semana:</strong> taxa de operação ${fmtBRL(r.semana.socioComissao + r.semana.masterRecebe)} nas indicações = ${fmtBRL(r.semana.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.semana.masterRecebe)} para master</div>
             </div>
           </article>`).join("")}</div>` : '<div class="card empty">Crie um vínculo de produto próprio ou indicação para ver repasses.</div>';
 
@@ -7752,7 +7752,7 @@ Bom apetite!`;
           return `<article class="audit-item">
             <div>
               <strong>${escHtml(s.nome)}</strong>
-              <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"}</div>
+              <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"} · Fiado: ${s.aceita_fiado ? `aceita (+${fmtBRL(Number(s.fiado_valor_extra || 0))})` : "não aceita"}</div>
               <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item)`).join(", ") || "nenhuma"}</div>
               <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (R$ 3,00 ${escHtml(masterNome)} por item)`).join(", ") || "nenhum"}</div>
               <button class="btn btn-olive btn-sm ${acessoSocio ? "" : "hidden"}" style="margin-top:10px;" onclick="copiarCardapioSocio('${s.id}', this)">Copiar meu cardápio</button>
@@ -7815,7 +7815,12 @@ Bom apetite!`;
       $("modalBody").innerHTML = `
         <div class="field"><label>Nome do sócio</label><input id="socioNome" class="input" value="${escHtml(s?.nome || "")}" /></div>
         <div class="field"><label>WhatsApp</label><input id="socioWhats" class="input" inputmode="tel" value="${escHtml(s?.whatsapp || "")}" /></div>
-        <div class="socio-split-note small" style="margin-bottom:12px;">A divisão não usa percentual: produto próprio gera R$ 3,00 para ${escHtml(masterNome)}; indicação divide R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item.</div>
+        <div class="row">
+          <label class="field" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAceitaFiado" type="checkbox" ${s?.aceita_fiado ? "checked" : ""} style="width:20px;height:20px;" /> Aceita pagamento fiado</label>
+          <div class="field"><label>Valor extra do fiado</label><input id="socioFiadoExtra" class="input" type="number" min="0" step="0.01" value="${Number(s?.fiado_valor_extra || 0).toFixed(2)}" /></div>
+        </div>
+        <div class="socio-split-note small" style="margin-bottom:12px;">O fiado fica visível apenas nos produtos/restaurantes deste sócio quando ele aceitar. O valor extra configurado entra sobre o pedido fiado inteiro, seja marmita, bebida, sobremesa ou lanche.</div>
+        <div class="socio-split-note small" style="margin-bottom:12px;">A divisão não usa percentual: produto próprio gera R$ 3,00 para ${escHtml(masterNome)}; indicação divide a taxa de operação de R$ 3,00 em R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item.</div>
         <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAtivo" type="checkbox" ${s?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;" /> Ativo</label>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
@@ -7824,6 +7829,8 @@ Bom apetite!`;
           nome: $("socioNome").value.trim(),
           whatsapp: $("socioWhats").value.trim().replace(/\D/g, "") || null,
           percentual_lucro: 0,
+          aceita_fiado: $("socioAceitaFiado").checked,
+          fiado_valor_extra: Math.max(0, Number($("socioFiadoExtra").value || 0)),
           ativo: $("socioAtivo").checked
         };
         if (!payload.nome) { $("modalAlert").textContent = "Informe o nome do sócio."; $("modalAlert").classList.add("show"); return; }
