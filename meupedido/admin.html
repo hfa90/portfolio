@@ -3197,7 +3197,7 @@
             <span>+</span>
             <span class="regra-chip master">R$ 3,00 master</span>
           </div>
-          <p class="small muted" style="margin:0;">Quando o sócio vende o próprio produto, os R$ 3,00 são integralmente do sócio master Hayden.</p>
+          <p class="small muted" style="margin:0;">Quando o sócio vende o próprio produto, os R$ 3,00 são integralmente do sócio master escolhido.</p>
         </article>
         <article class="regra-card">
           <strong>Restaurante indicado pelo sócio</strong>
@@ -3208,9 +3208,10 @@
             <span>+</span>
             <span class="regra-chip master">R$ 1,50 master</span>
           </div>
-          <p class="small muted" style="margin:0;">Exemplo: marmita de R$ 20,00 vira R$ 23,00. Seu Pedro recebe R$ 1,50 e Hayden recebe R$ 1,50.</p>
+          <p class="small muted" style="margin:0;">Exemplo: marmita de R$ 20,00 vira R$ 23,00. Seu Pedro recebe R$ 1,50 e o master escolhido recebe R$ 1,50.</p>
         </article>
       </div>
+      <div id="sociosMasterPanel" class="card" style="margin-bottom:14px;"></div>
       <div id="sociosStats" class="stats"></div>
       <div class="tool-grid">
         <div class="tool-card">
@@ -7418,6 +7419,7 @@ Bom apetite!`;
     const SOCIO_ADICIONAL_UNITARIO = 3;
     const SOCIO_INDICACAO_SOCIO_UNIT = SOCIO_ADICIONAL_UNITARIO / 2;
     const SOCIO_INDICACAO_MASTER_UNIT = SOCIO_ADICIONAL_UNITARIO / 2;
+    const SOCIO_MASTER_CONFIG_KEY = "socio_master_id";
 
     function periodoSociosInfo() {
       const hoje = new Date();
@@ -7462,7 +7464,7 @@ Bom apetite!`;
     }
 
     function bucketSocio() {
-      return { receita: 0, unidades: 0, pedidos: 0, baseParceiro: 0, socioRecebe: 0, socioComissao: 0, masterRecebe: 0, indicacoes: 0, proprios: 0 };
+      return { receita: 0, unidades: 0, pedidos: 0, baseParceiro: 0, socioRecebe: 0, socioComissao: 0, masterRecebe: 0, masterDireto: 0, masterUnidades: 0, indicacoes: 0, proprios: 0 };
     }
 
     function somarRegraNoBucket(bucket, regra) {
@@ -7475,6 +7477,16 @@ Bom apetite!`;
       bucket.masterRecebe += regra.masterRecebe;
       if (regra.tipo === "proprio") bucket.proprios += regra.unidades;
       else bucket.indicacoes += regra.unidades;
+    }
+
+    function somarMasterNoBucket(bucket, regra) {
+      bucket.masterDireto += regra.masterRecebe;
+      bucket.masterUnidades += regra.unidades;
+    }
+
+    function totalReceberSocio(r, periodo, masterId) {
+      const bucket = r?.[periodo] || bucketSocio();
+      return bucket.socioRecebe + (r?.socio?.id === masterId ? bucket.masterDireto : 0);
     }
 
     function graficoSocioValores(partes) {
@@ -7495,6 +7507,7 @@ Bom apetite!`;
       $("sociosDashboard").innerHTML = '<div class="loading">Carregando…</div>';
       $("sociosLista").innerHTML = '<div class="loading">Carregando…</div>';
       $("sociosSimulador").innerHTML = '<div class="loading">Carregando…</div>';
+      if ($("sociosMasterPanel")) $("sociosMasterPanel").innerHTML = '<div class="loading" style="padding:8px;">Carregando master...</div>';
 
       try {
         const { inicioMes, inicioSemana, hoje } = periodoSociosInfo();
@@ -7505,7 +7518,8 @@ Bom apetite!`;
           pedidosResp,
           pratosResp,
           acompResp,
-          fornecedoresResp
+          fornecedoresResp,
+          masterConfigResp
         ] = await Promise.all([
           sb.from("socios").select("*").order("nome"),
           sb.from("socio_fornecedores").select("*, fornecedor:fornecedores(id, nome)"),
@@ -7517,10 +7531,11 @@ Bom apetite!`;
           `).gte("data", inicioMes).neq("status", "cancelado"),
           sb.from("pratos").select("id, nome, categoria, fornecedor_id, preco, custo_unitario, ativo").eq("ativo", true).order("nome"),
           sb.from("acompanhamentos").select("id, nome, fornecedor_id, preco_extra, custo_unitario, ativo").eq("ativo", true).order("nome"),
-          sb.from("fornecedores").select("id, nome, ativo").eq("ativo", true).order("nome")
+          sb.from("fornecedores").select("id, nome, ativo").eq("ativo", true).order("nome"),
+          sb.from("configuracoes").select("valor").eq("chave", SOCIO_MASTER_CONFIG_KEY).maybeSingle()
         ]);
 
-        const erro = sociosResp.error || fornResp.error || prodResp.error || pedidosResp.error || pratosResp.error || acompResp.error || fornecedoresResp.error;
+        const erro = sociosResp.error || fornResp.error || prodResp.error || pedidosResp.error || pratosResp.error || acompResp.error || fornecedoresResp.error || masterConfigResp.error;
         if (erro) throw erro;
 
         const socios = sociosResp.data || [];
@@ -7531,10 +7546,33 @@ Bom apetite!`;
         const acomp = acompResp.data || [];
         const fornecedores = fornecedoresResp.data || [];
         const socioMap = new Map(socios.map(s => [s.id, s]));
+        const masterIdSalvo = masterConfigResp.data?.valor || "";
+        const masterSocio = socioMap.get(masterIdSalvo);
+        const masterId = masterSocio?.ativo !== false ? masterSocio?.id : "";
+        const masterNome = masterSocio?.nome || "sócio master";
+        const masterRotulo = masterSocio ? masterNome : "master";
         const acessoSocio = adminAtual?.perfil === "socio";
         const socioAtualId = adminAtual?.socio_id || null;
         const sociosVisiveis = acessoSocio ? socios.filter(s => s.id === socioAtualId) : socios;
         $("btnNovoSocio")?.classList.toggle("hidden", acessoSocio);
+        $("sociosMasterPanel")?.classList.toggle("hidden", acessoSocio);
+        if (!acessoSocio && $("sociosMasterPanel")) {
+          $("sociosMasterPanel").innerHTML = `
+            <div class="section-head" style="margin-bottom:10px;">
+              <div>
+                <h2 style="margin:0;">Sócio master</h2>
+                <p class="small muted" style="margin:4px 0 0;">Escolha qual sócio recebe a parte master dos R$ 3,00.</p>
+              </div>
+              <span class="socio-chip master">${masterSocio ? escHtml(masterSocio.nome) : "Não definido"}</span>
+            </div>
+            <div class="row">
+              <div class="field" style="margin-bottom:0;"><label>Master atual</label><select id="sociosMasterSelect">
+                <option value="">Selecione o sócio master</option>
+                ${socios.filter(s => s.ativo !== false).map(s => `<option value="${s.id}" ${s.id === masterId ? "selected" : ""}>${escHtml(s.nome)}</option>`).join("")}
+              </select></div>
+              <button class="btn btn-primary btn-block" onclick="salvarSocioMaster()">Salvar master</button>
+            </div>`;
+        }
         if (acessoSocio && !socioAtualId) {
           throw new Error("Este login de sócio ainda não foi vinculado a um cadastro de sócio. Peça ao perfil Master para abrir Admins e escolher o sócio vinculado.");
         }
@@ -7555,9 +7593,10 @@ Bom apetite!`;
           const fornecedorLink = produtoLink ? null : vincFor.find(v => v.fornecedor_id === p.fornecedor_id && socioMap.get(v.socio_id)?.ativo !== false);
           const link = produtoLink || fornecedorLink;
           if (!link) return;
-          if (acessoSocio && link.socio_id !== socioAtualId) return;
+          if (acessoSocio && link.socio_id !== socioAtualId && socioAtualId !== masterId) return;
           const row = resultado.get(link.socio_id);
           if (!row) return;
+          const masterRow = masterId ? resultado.get(masterId) : null;
           const regra = calcularRegraSocietaria({
             receita,
             quantidade: p.quantidade,
@@ -7568,21 +7607,23 @@ Bom apetite!`;
             ["semana", p.data >= inicioSemana],
             ["dia", p.data === hoje]
           ]) {
-            if (match) somarRegraNoBucket(row[key], regra);
+            if (!match) continue;
+            somarRegraNoBucket(row[key], regra);
+            if (masterRow) somarMasterNoBucket(masterRow[key], regra);
           }
         });
 
         const linhasResultado = [...resultado.values()].filter(r => !acessoSocio || r.socio.id === socioAtualId);
-        const totalSociosMes = linhasResultado.reduce((s, r) => s + r.mes.socioRecebe, 0);
-        const totalMasterMes = linhasResultado.reduce((s, r) => s + r.mes.masterRecebe, 0);
-        const totalUnidadesMes = linhasResultado.reduce((s, r) => s + r.mes.unidades, 0);
+        const totalSociosMes = linhasResultado.reduce((s, r) => s + totalReceberSocio(r, "mes", masterId), 0);
+        const totalMasterMes = [...resultado.values()].reduce((s, r) => s + r.mes.masterRecebe, 0);
+        const totalUnidadesMes = linhasResultado.reduce((s, r) => s + r.mes.unidades + (r.socio.id === masterId ? r.mes.masterUnidades : 0), 0);
         $("sociosStats").innerHTML = `
           <div class="stat"><div class="stat-label">${acessoSocio ? "Seu acesso" : "Sócios ativos"}</div><div class="stat-value">${acessoSocio ? "1" : socios.filter(s => s.ativo !== false).length}</div></div>
           <div class="stat"><div class="stat-label">Unidades vinculadas mês</div><div class="stat-value olive">${totalUnidadesMes}</div></div>
           <div class="stat"><div class="stat-label">${acessoSocio ? "Você recebe mês" : "Sócios recebem mês"}</div><div class="stat-value olive">${fmtBRL(totalSociosMes)}</div></div>
-          <div class="stat"><div class="stat-label">Master Hayden mês</div><div class="stat-value brick">${fmtBRL(totalMasterMes)}</div></div>`;
+          <div class="stat"><div class="stat-label">Master ${escHtml(masterRotulo)} mês</div><div class="stat-value brick">${fmtBRL(totalMasterMes)}</div></div>`;
 
-        const dashboardRows = linhasResultado.sort((a, b) => b.mes.socioRecebe - a.mes.socioRecebe);
+        const dashboardRows = linhasResultado.sort((a, b) => totalReceberSocio(b, "mes", masterId) - totalReceberSocio(a, "mes", masterId));
         $("sociosDashboard").innerHTML = dashboardRows.length ? `<div class="audit-list">${dashboardRows.map(r => `
           <article class="audit-item">
             <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
@@ -7590,16 +7631,16 @@ Bom apetite!`;
                 <strong>${escHtml(r.socio.nome)}</strong>
                 <div class="small muted">${r.mes.indicacoes} indicação(ões) · ${r.mes.proprios} produto(s) próprio(s) · ${r.mes.pedidos} pedido(s) no mês</div>
               </div>
-              <span class="socio-chip ${acessoSocio ? "socio" : "master"}">${acessoSocio ? `Você: ${fmtBRL(r.mes.socioRecebe)}` : `Master: ${fmtBRL(r.mes.masterRecebe)}`}</span>
+              <span class="socio-chip ${r.socio.id === masterId ? "master" : "socio"}">${acessoSocio ? `Você: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}` : `${r.socio.id === masterId ? "Master" : "Sócio"}: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}`}</span>
             </div>
             ${graficoSocioValores([
               { label: acessoSocio ? "Você" : "Sócio", valor: r.mes.socioRecebe, classe: "socio" },
-              { label: "Master", valor: r.mes.masterRecebe, classe: "master" },
+              { label: r.socio.id === masterId ? "Sua parte master" : `Master ${masterRotulo}`, valor: r.socio.id === masterId ? r.mes.masterDireto : r.mes.masterRecebe, classe: "master" },
               { label: "Base", valor: r.mes.baseParceiro, classe: "base" }
             ])}
             <div class="row" style="margin-top:10px;">
-              <div class="socio-split-note small"><strong>Hoje:</strong> ${fmtBRL(r.dia.socioRecebe)} para ${acessoSocio ? "você" : "o sócio"} · ${fmtBRL(r.dia.masterRecebe)} para master</div>
-              <div class="socio-split-note small"><strong>Semana:</strong> ${fmtBRL(r.semana.socioRecebe)} para ${acessoSocio ? "você" : "o sócio"} · ${fmtBRL(r.semana.masterRecebe)} para master</div>
+              <div class="socio-split-note small"><strong>Hoje:</strong> ${fmtBRL(totalReceberSocio(r, "dia", masterId))} para ${acessoSocio ? "você" : "este sócio"} · ${fmtBRL(r.dia.masterRecebe)} gerados para master</div>
+              <div class="socio-split-note small"><strong>Semana:</strong> ${fmtBRL(totalReceberSocio(r, "semana", masterId))} para ${acessoSocio ? "você" : "este sócio"} · ${fmtBRL(r.semana.masterRecebe)} gerados para master</div>
             </div>
           </article>`).join("")}</div>` : '<div class="card empty">Crie um vínculo de produto próprio ou indicação para ver repasses.</div>';
 
@@ -7610,8 +7651,8 @@ Bom apetite!`;
             <div>
               <strong>${escHtml(s.nome)}</strong>
               <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"}</div>
-              <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 master por item)`).join(", ") || "nenhuma"}</div>
-              <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (R$ 3,00 master por item)`).join(", ") || "nenhum"}</div>
+              <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item)`).join(", ") || "nenhuma"}</div>
+              <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (R$ 3,00 ${escHtml(masterNome)} por item)`).join(", ") || "nenhum"}</div>
             </div>
             <div class="actions ${acessoSocio ? "hidden" : ""}">
               <button class="btn btn-ghost btn-sm" onclick='abrirModalSocio(${JSON.stringify(s).replace(/'/g, "&apos;")})'>Editar</button>
@@ -7646,13 +7687,13 @@ Bom apetite!`;
             ${graficoSocioValores([
               { label: tipo === "indicacao" ? "Restaurante" : "Sócio", valor: regra.baseParceiro, classe: "base" },
               { label: "Sócio", valor: regra.socioComissao, classe: "socio" },
-              { label: "Master", valor: regra.masterRecebe, classe: "master" }
+              { label: masterNome, valor: regra.masterRecebe, classe: "master" }
             ])}
-            <div class="small muted" style="margin-top:8px;">${tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e Hayden recebe ${fmtBRL(regra.masterRecebe)}.` : `${escHtml(socio.nome)} recebe o valor do produto (${fmtBRL(regra.baseParceiro)}) e Hayden recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
+            <div class="small muted" style="margin-top:8px;">${tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : `${escHtml(socio.nome)} recebe o valor do produto (${fmtBRL(regra.baseParceiro)}) e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
         };
         ["simSocio", "simTipo", "simPrecoBase", "simQtd"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
         atualizarSimulador();
-        window.__sociosCache = { socios, fornecedores, pratos };
+        window.__sociosCache = { socios, fornecedores, pratos, masterId, masterNome };
       } catch (e) {
         const msg = e.message || "Erro ao carregar sócios. Aplique a migração de sócios/custos no Supabase.";
         $("sociosStats").innerHTML = "";
@@ -7663,13 +7704,14 @@ Bom apetite!`;
     }
 
     window.abrirModalSocio = (s = null) => {
+      const masterNome = window.__sociosCache?.masterNome || "master escolhido";
       $("modalTitle").textContent = s ? "Editar sócio" : "Novo sócio";
       $("modalSave").classList.remove("hidden");
       $("modalSave").textContent = "Salvar";
       $("modalBody").innerHTML = `
         <div class="field"><label>Nome do sócio</label><input id="socioNome" class="input" value="${escHtml(s?.nome || "")}" /></div>
         <div class="field"><label>WhatsApp</label><input id="socioWhats" class="input" inputmode="tel" value="${escHtml(s?.whatsapp || "")}" /></div>
-        <div class="socio-split-note small" style="margin-bottom:12px;">A divisão não usa percentual: produto próprio gera R$ 3,00 para Hayden; indicação divide R$ 1,50 para o sócio e R$ 1,50 para Hayden por item.</div>
+        <div class="socio-split-note small" style="margin-bottom:12px;">A divisão não usa percentual: produto próprio gera R$ 3,00 para ${escHtml(masterNome)}; indicação divide R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item.</div>
         <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAtivo" type="checkbox" ${s?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;" /> Ativo</label>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
@@ -7694,6 +7736,7 @@ Bom apetite!`;
       const cache = window.__sociosCache || {};
       const fornecedores = cache.fornecedores || (await sb.from("fornecedores").select("id, nome").eq("ativo", true).order("nome")).data || [];
       const pratos = cache.pratos || (await sb.from("pratos").select("id, nome, categoria").eq("ativo", true).order("nome")).data || [];
+      const masterNome = cache.masterNome || "master escolhido";
       $("modalTitle").textContent = `Vincular ${s.nome}`;
       $("modalSave").classList.remove("hidden");
       $("modalSave").textContent = "Vincular";
@@ -7701,7 +7744,7 @@ Bom apetite!`;
         <div class="field"><label>Forma de venda</label><select id="vincTipo"><option value="fornecedor">Restaurante indicado pelo sócio</option><option value="produto">Produto próprio do sócio</option></select></div>
         <div class="field" id="vincFornecedorWrap"><label>Restaurante / fornecedor indicado</label><select id="vincFornecedor">${fornecedores.map(f => `<option value="${f.id}">${escHtml(f.nome)}</option>`).join("")}</select></div>
         <div class="field hidden" id="vincProdutoWrap"><label>Produto próprio</label><select id="vincProduto">${pratos.map(p => `<option value="${p.id}">${escHtml(p.nome)} - ${CATEGORIAS_PRATOS[p.categoria] || "Produto"}</option>`).join("")}</select></div>
-        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para Hayden por item. Produto próprio: R$ 3,00 para Hayden por item.</div>`;
+        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio: R$ 3,00 para ${escHtml(masterNome)} por item.</div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
       $("vincTipo").addEventListener("change", () => {
@@ -7738,6 +7781,24 @@ Bom apetite!`;
       ]);
       const error = forn.error || prod.error;
       if (error) alert(error.message);
+      await carregarSocios();
+    };
+
+    window.salvarSocioMaster = async () => {
+      const masterId = $("sociosMasterSelect")?.value || "";
+      if (!masterId) {
+        alert("Escolha qual sócio será o master.");
+        return;
+      }
+      const { error } = await sb.from("configuracoes").upsert(
+        { chave: SOCIO_MASTER_CONFIG_KEY, valor: masterId },
+        { onConflict: "chave" }
+      );
+      if (error) {
+        alert(error.message);
+        return;
+      }
+      await registrarAuditoria("alterou sócio master", "configuracoes", null, { socio_master_id: masterId });
       await carregarSocios();
     };
 
