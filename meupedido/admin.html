@@ -3215,17 +3215,13 @@
       <div id="sociosStats" class="stats"></div>
       <div id="sociosFiadoSelfPanel" class="tool-card hidden" style="margin-bottom:12px;"></div>
       <div class="tool-card" style="margin-bottom:12px;">
-        <h3>Relatório individual do sócio</h3>
+        <h3>Relatório de repasses em PDF</h3>
         <div class="row">
           <div class="field"><label>Sócio</label><select id="socioRelSocio"></select></div>
           <div class="field"><label>Período</label><select id="socioRelPeriodo"><option value="dia">Diário</option><option value="semana">Semanal</option><option value="mes">Mensal</option></select></div>
           <div class="field"><label>Data base</label><input id="socioRelData" class="input" type="date" /></div>
         </div>
-        <div class="row">
-          <button class="btn btn-primary btn-block" id="btnSocioRelGerar">Gerar relatório</button>
-          <button class="btn btn-secondary btn-block" id="btnSocioRelPdf">Baixar PDF</button>
-        </div>
-        <div id="sociosRelatorioResultado" class="loading" style="margin-top:12px;">Atualize os dados para gerar um relatório.</div>
+        <button class="btn btn-primary btn-block" id="btnSocioRelPdf">Baixar PDF organizado</button>
       </div>
       <div class="tool-grid">
         <div class="tool-card">
@@ -7624,10 +7620,10 @@ Bom apetite!`;
       const masterId = cache.masterId || "";
       return (cache.movimentos || [])
         .filter(m => m.data >= periodo.inicio && m.data <= periodo.fim)
-        .filter(m => m.socio_id === socioId || socioId === masterId)
+        .filter(m => socioId === "__todos__" || m.socio_id === socioId || socioId === masterId)
         .map(m => {
-          const recebeComoSocio = m.socio_id === socioId ? Number(m.regra.socioRecebe || 0) : 0;
-          const recebeComoMaster = socioId === masterId ? Number(m.regra.masterRecebe || 0) : 0;
+          const recebeComoSocio = (socioId === "__todos__" || m.socio_id === socioId) ? Number(m.regra.socioRecebe || 0) : 0;
+          const recebeComoMaster = (socioId === "__todos__" || socioId === masterId) ? Number(m.regra.masterRecebe || 0) : 0;
           return {
             ...m,
             recebeComoSocio,
@@ -7661,82 +7657,80 @@ Bom apetite!`;
     function dadosRelatorioSocioAtual() {
       const cache = window.__sociosRelatorioCache || {};
       const socioId = $("socioRelSocio")?.value || "";
-      const socio = (cache.socios || []).find(s => s.id === socioId);
+      const socio = socioId === "__todos__"
+        ? { id: "__todos__", nome: "Todos os sócios" }
+        : (cache.socios || []).find(s => s.id === socioId);
       const tipo = $("socioRelPeriodo")?.value || "mes";
       const periodo = periodoRelatorioSocio(tipo, $("socioRelData")?.value || hojeISO());
       const linhas = linhasRelatorioSocio(socioId, periodo, cache);
       return { cache, socioId, socio, tipo, periodo, linhas, resumo: resumoRelatorioSocio(linhas) };
     }
 
-    function renderRelatorioSocioIndividual() {
-      const alvo = $("sociosRelatorioResultado");
-      if (!alvo) return;
-      const { cache, socio, periodo, linhas, resumo } = dadosRelatorioSocioAtual();
-      if (!cache.socios?.length) {
-        alvo.innerHTML = '<div class="card empty">Atualize os sócios para montar o relatório.</div>';
-        return;
-      }
-      if (!socio) {
-        alvo.innerHTML = '<div class="card empty">Escolha um sócio para gerar o relatório.</div>';
-        return;
-      }
-      alvo.innerHTML = `
-        <div class="stats" style="margin-bottom:10px;">
-          <div class="stat"><div class="stat-label">Período</div><div class="stat-value" style="font-size:18px;">${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)}</div></div>
-          <div class="stat"><div class="stat-label">Pedidos</div><div class="stat-value">${resumo.pedidos}</div></div>
-          <div class="stat"><div class="stat-label">Unidades</div><div class="stat-value olive">${resumo.unidades}</div></div>
-          <div class="stat"><div class="stat-label">Total do sócio</div><div class="stat-value brick">${fmtBRL(resumo.total)}</div></div>
-        </div>
-        <div class="payment-card" style="margin-bottom:10px;">
-          <div class="payment-card-head"><strong>${escHtml(socio.nome)}</strong><span class="badge pago">${escHtml(periodo.titulo)}</span></div>
-          <div class="resumo-line"><span>Receita das vendas vinculadas</span><strong>${fmtBRL(resumo.receita)}</strong></div>
-          <div class="resumo-line"><span>Base do restaurante/produto</span><strong>${fmtBRL(resumo.base)}</strong></div>
-          <div class="resumo-line"><span>Repasse como sócio</span><strong>${fmtBRL(resumo.socio)}</strong></div>
-          <div class="resumo-line"><span>Repasse como master</span><strong>${fmtBRL(resumo.master)}</strong></div>
-          <div class="small muted" style="margin-top:8px;">Indicações: ${resumo.indicacoes} unidade(s) · Produtos próprios: ${resumo.proprios} unidade(s)</div>
-        </div>
-        ${linhas.length ? `<div class="table-wrap"><table>
-          <thead><tr><th>Data</th><th>Cliente</th><th>Produto</th><th>Origem</th><th>Pagamento</th><th>Unid.</th><th>Venda</th><th>Repasse</th></tr></thead>
-          <tbody>${linhas.map(item => `<tr>
-            <td>${fmtData(item.data)}</td>
-            <td>${escHtml(item.cliente || "-")}</td>
-            <td>${escHtml(item.produto || "-")}<div class="small muted">${escHtml(item.fornecedor || "")}</div></td>
-            <td>${item.tipo === "proprio" ? "Produto próprio" : "Indicação"}<div class="small muted">${escHtml(item.papel)}</div></td>
-            <td>${escHtml(REL_PAY_LABEL[item.forma_pagamento] || item.forma_pagamento || "-")}</td>
-            <td>${Number(item.quantidade || 0)}</td>
-            <td>${fmtBRL(item.receita)}</td>
-            <td><strong>${fmtBRL(item.totalRecebe)}</strong></td>
-          </tr>`).join("")}</tbody>
-        </table></div>` : '<div class="card empty">Nenhum pedido válido para este sócio no período escolhido.</div>'}
-      `;
+    function resumoPorSocioRelatorio(linhas, cache = window.__sociosRelatorioCache || {}) {
+      const sociosMap = new Map((cache.todosSocios || cache.socios || []).map(s => [s.id, s.nome]));
+      const masterId = cache.masterId || "";
+      const masterNome = cache.masterNome || sociosMap.get(masterId) || "Master";
+      const map = new Map();
+      const garantir = (id, nome, papel) => {
+        if (!id) return null;
+        if (!map.has(id)) map.set(id, { id, nome: nome || sociosMap.get(id) || "Sócio", papel, unidades: 0, pedidos: new Set(), faturamento: 0, socio: 0, master: 0, total: 0 });
+        return map.get(id);
+      };
+      linhas.forEach(item => {
+        const socio = garantir(item.socio_id, item.socio_nome, item.tipo === "proprio" ? "Produto próprio" : "Indicação");
+        if (socio && Number(item.regra.socioRecebe || 0) > 0) {
+          socio.unidades += Number(item.quantidade || 0);
+          socio.pedidos.add(item.id);
+          socio.faturamento += Number(item.receita || 0);
+          socio.socio += Number(item.regra.socioRecebe || 0);
+          socio.total += Number(item.regra.socioRecebe || 0);
+        }
+        const master = garantir(masterId, masterNome, "Master");
+        if (master && Number(item.regra.masterRecebe || 0) > 0) {
+          master.unidades += Number(item.quantidade || 0);
+          master.pedidos.add(item.id);
+          master.faturamento += Number(item.receita || 0);
+          master.master += Number(item.regra.masterRecebe || 0);
+          master.total += Number(item.regra.masterRecebe || 0);
+        }
+      });
+      return [...map.values()]
+        .map(item => ({ ...item, pedidos: item.pedidos.size }))
+        .filter(item => item.total > 0)
+        .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome));
     }
 
     async function baixarRelatorioSocioPdf() {
-      const { socio, periodo, linhas, resumo } = dadosRelatorioSocioAtual();
+      const { cache, socioId, socio, periodo, linhas, resumo } = dadosRelatorioSocioAtual();
       if (!socio) return alert("Escolha um sócio para gerar o PDF.");
+      if (!linhas.length) return alert("Nenhum pedido válido para este relatório no período escolhido.");
       const btn = $("btnSocioRelPdf");
       const original = btn?.textContent || "Baixar PDF";
       if (btn) { btn.disabled = true; btn.textContent = "Gerando..."; }
       try {
         const { jsPDF, autoTable } = await carregarBibliotecaPdf();
         const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        const porSocio = resumoPorSocioRelatorio(linhas, cache);
+        const porFornecedor = agruparRelatorio(linhas, p => p.fornecedor || "Fornecedor");
+        const porCliente = agruparRelatorio(linhas, p => p.cliente || "Cliente").slice(0, 18);
+        const titulo = socioId === "__todos__" ? "Relatório de repasses - Todos os sócios" : `Relatório de repasses - ${socio.nome}`;
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
-        doc.text(`Relatório individual - ${socio.nome}`, 14, 16);
+        doc.text(titulo, 14, 16);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(9);
         doc.text(`${periodo.titulo}: ${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)} · Gerado em ${fmtDataHora(new Date().toISOString())}`, 14, 23);
         autoTable(doc, {
           startY: 32,
-          head: [["Indicador", "Valor"]],
+          head: [["Resumo geral", "Valor", "Leitura"]],
           body: [
-            ["Pedidos", resumo.pedidos],
-            ["Unidades", resumo.unidades],
-            ["Receita das vendas vinculadas", fmtBRL(resumo.receita)],
-            ["Base do restaurante/produto", fmtBRL(resumo.base)],
-            ["Repasse como sócio", fmtBRL(resumo.socio)],
-            ["Repasse como master", fmtBRL(resumo.master)],
-            ["Total do sócio", fmtBRL(resumo.total)]
+            ["Faturamento total", fmtBRL(resumo.receita), "Total vendido nos pedidos válidos do relatório"],
+            ["Base restaurante/produto", fmtBRL(resumo.base), "Valor que não faz parte da taxa de operação"],
+            ["Taxa de operação gerada", fmtBRL(resumo.socio + resumo.master), "Soma dos repasses de sócio e master"],
+            ["Total a pagar aos sócios", fmtBRL(resumo.total), "Quanto deve ser repassado conforme a regra"],
+            ["Pedidos", resumo.pedidos, `${resumo.unidades} unidade(s)`],
+            ["Indicações", resumo.indicacoes, "Unidades vendidas por restaurante indicado"],
+            ["Produtos próprios", resumo.proprios, "Unidades de produto próprio do sócio"]
           ],
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 2 },
@@ -7745,12 +7739,39 @@ Bom apetite!`;
         });
         autoTable(doc, {
           startY: doc.lastAutoTable.finalY + 8,
-          head: [["Data", "Cliente", "Produto", "Fornecedor", "Origem", "Pagamento", "Unid.", "Venda", "Repasse"]],
+          head: [["Sócio", "Papel", "Pedidos", "Unid.", "Faturamento vinculado", "Repasse sócio", "Repasse master", "Total a receber"]],
+          body: porSocio.map(item => [
+            item.nome,
+            item.papel,
+            item.pedidos,
+            item.unidades,
+            fmtBRL(item.faturamento),
+            fmtBRL(item.socio),
+            fmtBRL(item.master),
+            fmtBRL(item.total)
+          ]),
+          theme: "striped",
+          margin: { bottom: 14 },
+          styles: { fontSize: 7.5, cellPadding: 1.8, overflow: "linebreak" },
+          headStyles: { fillColor: [94, 107, 58] },
+          columnStyles: { 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" }, 7: { halign: "right" } }
+        });
+        doc.addPage();
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("Quem comprou de quem", 14, 16);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(`${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)}`, 14, 22);
+        autoTable(doc, {
+          startY: 30,
+          head: [["Data", "Cliente", "Comprou de", "Produto", "Sócio vinculado", "Origem", "Pagamento", "Unid.", "Venda", "Repasse"]],
           body: linhas.map(item => [
             fmtData(item.data),
             item.cliente || "-",
-            item.produto || "-",
             item.fornecedor || "-",
+            item.produto || "-",
+            item.socio_nome || "-",
             `${item.tipo === "proprio" ? "Produto próprio" : "Indicação"} (${item.papel})`,
             REL_PAY_LABEL[item.forma_pagamento] || item.forma_pagamento || "-",
             Number(item.quantidade || 0),
@@ -7759,12 +7780,32 @@ Bom apetite!`;
           ]),
           theme: "striped",
           margin: { bottom: 14 },
-          styles: { fontSize: 7, cellPadding: 1.6, overflow: "linebreak" },
+          styles: { fontSize: 6.6, cellPadding: 1.4, overflow: "linebreak" },
           headStyles: { fillColor: [42, 31, 23] },
-          columnStyles: { 8: { halign: "right" }, 7: { halign: "right" }, 6: { halign: "right" } }
+          columnStyles: { 9: { halign: "right" }, 8: { halign: "right" }, 7: { halign: "right" } }
+        });
+        doc.addPage();
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.text("Apoio financeiro", 14, 16);
+        autoTable(doc, {
+          startY: 28,
+          head: [["Fornecedor", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porFornecedor.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [42, 31, 23] }
+        });
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Cliente", "Pedidos", "Total", "Recebido", "Pendente"]],
+          body: porCliente.map(x => [x.nome, x.qtd, fmtBRL(x.total), fmtBRL(x.pago), fmtBRL(x.pendente)]),
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [185, 74, 42] }
         });
         addRodapePdf(doc);
-        doc.save(`relatorio-socio-${socio.nome.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${periodo.inicio}-a-${periodo.fim}.pdf`);
+        doc.save(`relatorio-repasses-${socio.nome.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${periodo.inicio}-a-${periodo.fim}.pdf`);
       } catch (e) {
         alert("Erro ao gerar PDF do sócio: " + (e?.message || e));
       } finally {
@@ -7949,6 +7990,7 @@ Bom apetite!`;
             produto: p.prato?.nome || "Produto",
             quantidade: Number(p.quantidade || 1),
             receita,
+            preco_total: receita,
             tipo: produtoLink ? "proprio" : "indicacao",
             forma_pagamento: p.forma_pagamento,
             status_pagamento: p.status_pagamento,
@@ -8049,22 +8091,20 @@ Bom apetite!`;
         ["simSocio", "simTipo", "simPrecoBase", "simQtd"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
         atualizarSimulador();
         window.__sociosCache = { socios, fornecedores, pratos, masterId, masterNome };
-        window.__sociosRelatorioCache = { socios: sociosVisiveis, movimentos: movimentosSocios, masterId, masterNome };
+        window.__sociosRelatorioCache = { socios: sociosVisiveis, todosSocios: socios, movimentos: movimentosSocios, masterId, masterNome };
         if ($("socioRelData") && !$("socioRelData").value) $("socioRelData").value = hoje;
         if ($("socioRelSocio")) {
           const valorAnterior = $("socioRelSocio").value;
-          $("socioRelSocio").innerHTML = sociosVisiveis.map(s => `<option value="${s.id}">${escHtml(s.nome)}${s.id === masterId ? " (Master)" : ""}</option>`).join("");
+          $("socioRelSocio").innerHTML = `${acessoSocio ? "" : '<option value="__todos__">Todos os sócios</option>'}${sociosVisiveis.map(s => `<option value="${s.id}">${escHtml(s.nome)}${s.id === masterId ? " (Master)" : ""}</option>`).join("")}`;
           $("socioRelSocio").disabled = acessoSocio;
-          if (valorAnterior && sociosVisiveis.some(s => s.id === valorAnterior)) $("socioRelSocio").value = valorAnterior;
+          if (valorAnterior && (valorAnterior === "__todos__" || sociosVisiveis.some(s => s.id === valorAnterior))) $("socioRelSocio").value = valorAnterior;
         }
-        renderRelatorioSocioIndividual();
       } catch (e) {
         const msg = e.message || "Erro ao carregar sócios. Aplique a migração de sócios/custos no Supabase.";
         $("sociosStats").innerHTML = "";
         $("sociosDashboard").innerHTML = `<div class="alert alert-error show">${msg}</div>`;
         $("sociosLista").innerHTML = "";
         $("sociosSimulador").innerHTML = "";
-        if ($("sociosRelatorioResultado")) $("sociosRelatorioResultado").innerHTML = "";
       }
     }
 
@@ -8213,11 +8253,7 @@ Bom apetite!`;
     };
 
     $("btnSociosAtualizar")?.addEventListener("click", carregarSocios);
-    $("btnSocioRelGerar")?.addEventListener("click", renderRelatorioSocioIndividual);
     $("btnSocioRelPdf")?.addEventListener("click", baixarRelatorioSocioPdf);
-    ["socioRelSocio", "socioRelPeriodo", "socioRelData"].forEach(id => {
-      $(id)?.addEventListener("change", renderRelatorioSocioIndividual);
-    });
 
     // =====================================================================
     // CONFIGURAÇÕES — Toggle pedidos abertos/fechados
