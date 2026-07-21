@@ -3213,6 +3213,19 @@
       </div>
       <div id="sociosMasterPanel" class="card" style="margin-bottom:14px;"></div>
       <div id="sociosStats" class="stats"></div>
+      <div class="tool-card" style="margin-bottom:12px;">
+        <h3>Relatório individual do sócio</h3>
+        <div class="row">
+          <div class="field"><label>Sócio</label><select id="socioRelSocio"></select></div>
+          <div class="field"><label>Período</label><select id="socioRelPeriodo"><option value="dia">Diário</option><option value="semana">Semanal</option><option value="mes">Mensal</option></select></div>
+          <div class="field"><label>Data base</label><input id="socioRelData" class="input" type="date" /></div>
+        </div>
+        <div class="row">
+          <button class="btn btn-primary btn-block" id="btnSocioRelGerar">Gerar relatório</button>
+          <button class="btn btn-secondary btn-block" id="btnSocioRelPdf">Baixar PDF</button>
+        </div>
+        <div id="sociosRelatorioResultado" class="loading" style="margin-top:12px;">Atualize os dados para gerar um relatório.</div>
+      </div>
       <div class="tool-grid">
         <div class="tool-card">
           <h3>Dashboard de repasses</h3>
@@ -7524,10 +7537,12 @@ Bom apetite!`;
       const inicioSemana = new Date(hoje);
       inicioSemana.setDate(hoje.getDate() - ((hoje.getDay() + 6) % 7));
       const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+      const inicioAno = new Date(hoje.getFullYear(), 0, 1);
       return {
         hoje: hojeStr,
         inicioSemana: dataLocalISO(inicioSemana),
-        inicioMes: dataLocalISO(inicioMes)
+        inicioMes: dataLocalISO(inicioMes),
+        inicioAno: dataLocalISO(inicioAno)
       };
     }
 
@@ -7586,6 +7601,176 @@ Bom apetite!`;
       return bucket.socioRecebe + (r?.socio?.id === masterId ? bucket.masterDireto : 0);
     }
 
+    function periodoRelatorioSocio(tipo = "mes", dataBase = hojeISO()) {
+      const base = new Date(`${dataBase || hojeISO()}T12:00:00`);
+      if (tipo === "dia") {
+        const dia = dataLocalISO(base);
+        return { inicio: dia, fim: dia, titulo: "Diário" };
+      }
+      if (tipo === "semana") {
+        const inicio = new Date(base);
+        inicio.setDate(base.getDate() - ((base.getDay() + 6) % 7));
+        const fim = new Date(inicio);
+        fim.setDate(inicio.getDate() + 6);
+        return { inicio: dataLocalISO(inicio), fim: dataLocalISO(fim), titulo: "Semanal" };
+      }
+      const inicio = new Date(base.getFullYear(), base.getMonth(), 1, 12);
+      const fim = new Date(base.getFullYear(), base.getMonth() + 1, 0, 12);
+      return { inicio: dataLocalISO(inicio), fim: dataLocalISO(fim), titulo: "Mensal" };
+    }
+
+    function linhasRelatorioSocio(socioId, periodo, cache = window.__sociosRelatorioCache || {}) {
+      const masterId = cache.masterId || "";
+      return (cache.movimentos || [])
+        .filter(m => m.data >= periodo.inicio && m.data <= periodo.fim)
+        .filter(m => m.socio_id === socioId || socioId === masterId)
+        .map(m => {
+          const recebeComoSocio = m.socio_id === socioId ? Number(m.regra.socioRecebe || 0) : 0;
+          const recebeComoMaster = socioId === masterId ? Number(m.regra.masterRecebe || 0) : 0;
+          return {
+            ...m,
+            recebeComoSocio,
+            recebeComoMaster,
+            totalRecebe: recebeComoSocio + recebeComoMaster,
+            papel: [
+              recebeComoSocio > 0 ? "sócio" : "",
+              recebeComoMaster > 0 ? "master" : ""
+            ].filter(Boolean).join(" + ") || "sem repasse"
+          };
+        })
+        .filter(m => m.totalRecebe > 0)
+        .sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
+    }
+
+    function resumoRelatorioSocio(linhas) {
+      return linhas.reduce((acc, item) => {
+        acc.pedidos += 1;
+        acc.unidades += Number(item.quantidade || 0);
+        acc.receita += Number(item.receita || 0);
+        acc.base += Number(item.regra.baseParceiro || 0);
+        acc.socio += Number(item.recebeComoSocio || 0);
+        acc.master += Number(item.recebeComoMaster || 0);
+        acc.total += Number(item.totalRecebe || 0);
+        if (item.tipo === "proprio") acc.proprios += Number(item.quantidade || 0);
+        else acc.indicacoes += Number(item.quantidade || 0);
+        return acc;
+      }, { pedidos: 0, unidades: 0, receita: 0, base: 0, socio: 0, master: 0, total: 0, indicacoes: 0, proprios: 0 });
+    }
+
+    function dadosRelatorioSocioAtual() {
+      const cache = window.__sociosRelatorioCache || {};
+      const socioId = $("socioRelSocio")?.value || "";
+      const socio = (cache.socios || []).find(s => s.id === socioId);
+      const tipo = $("socioRelPeriodo")?.value || "mes";
+      const periodo = periodoRelatorioSocio(tipo, $("socioRelData")?.value || hojeISO());
+      const linhas = linhasRelatorioSocio(socioId, periodo, cache);
+      return { cache, socioId, socio, tipo, periodo, linhas, resumo: resumoRelatorioSocio(linhas) };
+    }
+
+    function renderRelatorioSocioIndividual() {
+      const alvo = $("sociosRelatorioResultado");
+      if (!alvo) return;
+      const { cache, socio, periodo, linhas, resumo } = dadosRelatorioSocioAtual();
+      if (!cache.socios?.length) {
+        alvo.innerHTML = '<div class="card empty">Atualize os sócios para montar o relatório.</div>';
+        return;
+      }
+      if (!socio) {
+        alvo.innerHTML = '<div class="card empty">Escolha um sócio para gerar o relatório.</div>';
+        return;
+      }
+      alvo.innerHTML = `
+        <div class="stats" style="margin-bottom:10px;">
+          <div class="stat"><div class="stat-label">Período</div><div class="stat-value" style="font-size:18px;">${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)}</div></div>
+          <div class="stat"><div class="stat-label">Pedidos</div><div class="stat-value">${resumo.pedidos}</div></div>
+          <div class="stat"><div class="stat-label">Unidades</div><div class="stat-value olive">${resumo.unidades}</div></div>
+          <div class="stat"><div class="stat-label">Total do sócio</div><div class="stat-value brick">${fmtBRL(resumo.total)}</div></div>
+        </div>
+        <div class="payment-card" style="margin-bottom:10px;">
+          <div class="payment-card-head"><strong>${escHtml(socio.nome)}</strong><span class="badge pago">${escHtml(periodo.titulo)}</span></div>
+          <div class="resumo-line"><span>Receita das vendas vinculadas</span><strong>${fmtBRL(resumo.receita)}</strong></div>
+          <div class="resumo-line"><span>Base do restaurante/produto</span><strong>${fmtBRL(resumo.base)}</strong></div>
+          <div class="resumo-line"><span>Repasse como sócio</span><strong>${fmtBRL(resumo.socio)}</strong></div>
+          <div class="resumo-line"><span>Repasse como master</span><strong>${fmtBRL(resumo.master)}</strong></div>
+          <div class="small muted" style="margin-top:8px;">Indicações: ${resumo.indicacoes} unidade(s) · Produtos próprios: ${resumo.proprios} unidade(s)</div>
+        </div>
+        ${linhas.length ? `<div class="table-wrap"><table>
+          <thead><tr><th>Data</th><th>Cliente</th><th>Produto</th><th>Origem</th><th>Pagamento</th><th>Unid.</th><th>Venda</th><th>Repasse</th></tr></thead>
+          <tbody>${linhas.map(item => `<tr>
+            <td>${fmtData(item.data)}</td>
+            <td>${escHtml(item.cliente || "-")}</td>
+            <td>${escHtml(item.produto || "-")}<div class="small muted">${escHtml(item.fornecedor || "")}</div></td>
+            <td>${item.tipo === "proprio" ? "Produto próprio" : "Indicação"}<div class="small muted">${escHtml(item.papel)}</div></td>
+            <td>${escHtml(REL_PAY_LABEL[item.forma_pagamento] || item.forma_pagamento || "-")}</td>
+            <td>${Number(item.quantidade || 0)}</td>
+            <td>${fmtBRL(item.receita)}</td>
+            <td><strong>${fmtBRL(item.totalRecebe)}</strong></td>
+          </tr>`).join("")}</tbody>
+        </table></div>` : '<div class="card empty">Nenhum pedido válido para este sócio no período escolhido.</div>'}
+      `;
+    }
+
+    async function baixarRelatorioSocioPdf() {
+      const { socio, periodo, linhas, resumo } = dadosRelatorioSocioAtual();
+      if (!socio) return alert("Escolha um sócio para gerar o PDF.");
+      const btn = $("btnSocioRelPdf");
+      const original = btn?.textContent || "Baixar PDF";
+      if (btn) { btn.disabled = true; btn.textContent = "Gerando..."; }
+      try {
+        const { jsPDF, autoTable } = await carregarBibliotecaPdf();
+        const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(16);
+        doc.text(`Relatório individual - ${socio.nome}`, 14, 16);
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(`${periodo.titulo}: ${fmtData(periodo.inicio)} a ${fmtData(periodo.fim)} · Gerado em ${fmtDataHora(new Date().toISOString())}`, 14, 23);
+        autoTable(doc, {
+          startY: 32,
+          head: [["Indicador", "Valor"]],
+          body: [
+            ["Pedidos", resumo.pedidos],
+            ["Unidades", resumo.unidades],
+            ["Receita das vendas vinculadas", fmtBRL(resumo.receita)],
+            ["Base do restaurante/produto", fmtBRL(resumo.base)],
+            ["Repasse como sócio", fmtBRL(resumo.socio)],
+            ["Repasse como master", fmtBRL(resumo.master)],
+            ["Total do sócio", fmtBRL(resumo.total)]
+          ],
+          theme: "grid",
+          styles: { fontSize: 8, cellPadding: 2 },
+          headStyles: { fillColor: [185, 74, 42] },
+          columnStyles: { 1: { halign: "right" } }
+        });
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Data", "Cliente", "Produto", "Fornecedor", "Origem", "Pagamento", "Unid.", "Venda", "Repasse"]],
+          body: linhas.map(item => [
+            fmtData(item.data),
+            item.cliente || "-",
+            item.produto || "-",
+            item.fornecedor || "-",
+            `${item.tipo === "proprio" ? "Produto próprio" : "Indicação"} (${item.papel})`,
+            REL_PAY_LABEL[item.forma_pagamento] || item.forma_pagamento || "-",
+            Number(item.quantidade || 0),
+            fmtBRL(item.receita),
+            fmtBRL(item.totalRecebe)
+          ]),
+          theme: "striped",
+          margin: { bottom: 14 },
+          styles: { fontSize: 7, cellPadding: 1.6, overflow: "linebreak" },
+          headStyles: { fillColor: [42, 31, 23] },
+          columnStyles: { 8: { halign: "right" }, 7: { halign: "right" }, 6: { halign: "right" } }
+        });
+        addRodapePdf(doc);
+        doc.save(`relatorio-socio-${socio.nome.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${periodo.inicio}-a-${periodo.fim}.pdf`);
+      } catch (e) {
+        alert("Erro ao gerar PDF do sócio: " + (e?.message || e));
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = original; }
+      }
+    }
+
     function pedidoContaParaSocios(p = {}) {
       if (!p || p.status === "cancelado" || p.status === "aguardando_pagamento") return false;
       if (p.status_pagamento === "cancelado") return false;
@@ -7635,7 +7820,7 @@ Bom apetite!`;
 
       try {
         await limparCheckoutsInfinitePayExpiradosSilencioso();
-        const { inicioMes, inicioSemana, hoje } = periodoSociosInfo();
+        const { inicioMes, inicioSemana, inicioAno, hoje } = periodoSociosInfo();
         const [
           sociosResp,
           fornResp,
@@ -7650,10 +7835,12 @@ Bom apetite!`;
           sb.from("socio_fornecedores").select("*, fornecedor:fornecedores(id, nome)"),
           sb.from("socio_produtos").select("*, prato:pratos(id, nome, categoria, fornecedor_id, preco, custo_unitario)"),
           sb.from("pedidos").select(`
-            id, data, preco_total, quantidade, fornecedor_id, prato_id, status, forma_pagamento, status_pagamento,
+            id, data, criado_em, preco_total, quantidade, fornecedor_id, prato_id, status, forma_pagamento, status_pagamento,
             prato:pratos(id, nome, preco, custo_unitario),
+            fornecedor:fornecedores(id, nome),
+            colaborador:colaboradores(id, nome, empresa, matricula),
             acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(id, nome, preco_extra, custo_unitario))
-          `).gte("data", inicioMes).neq("status", "cancelado"),
+          `).gte("data", inicioAno).neq("status", "cancelado"),
           sb.from("pratos").select("id, nome, categoria, fornecedor_id, preco, custo_unitario, ativo").eq("ativo", true).order("nome"),
           sb.from("acompanhamentos").select("id, nome, fornecedor_id, preco_extra, custo_unitario, ativo").eq("ativo", true).order("nome"),
           sb.from("fornecedores").select("id, nome, ativo").eq("ativo", true).order("nome"),
@@ -7668,7 +7855,7 @@ Bom apetite!`;
         const vincProd = prodResp.data || [];
         const pedidosBrutos = pedidosResp.data || [];
         const pedidos = pedidosBrutos.filter(pedidoContaParaSocios);
-        const checkoutsIgnorados = pedidosBrutos.filter(p => p.forma_pagamento === "cartao_infinitepay" && !pedidoContaParaSocios(p)).length;
+        const checkoutsIgnorados = pedidosBrutos.filter(p => p.data >= inicioMes && p.forma_pagamento === "cartao_infinitepay" && !pedidoContaParaSocios(p)).length;
         const pratos = pratosResp.data || [];
         const acomp = acompResp.data || [];
         const fornecedores = fornecedoresResp.data || [];
@@ -7713,6 +7900,7 @@ Bom apetite!`;
           semana: bucketSocio(),
           mes: bucketSocio()
         }]));
+        const movimentosSocios = [];
 
         pedidos.forEach(p => {
           const receita = Number(p.preco_total || 0);
@@ -7728,6 +7916,25 @@ Bom apetite!`;
             receita,
             quantidade: p.quantidade,
             tipo: produtoLink ? "proprio" : "indicacao"
+          });
+          movimentosSocios.push({
+            id: p.id,
+            socio_id: link.socio_id,
+            socio_nome: socioMap.get(link.socio_id)?.nome || "Sócio",
+            master_id: masterId,
+            master_nome: masterNome,
+            data: p.data,
+            criado_em: p.criado_em,
+            cliente: p.colaborador?.nome || "Cliente",
+            empresa: p.colaborador?.empresa || "",
+            fornecedor: p.fornecedor?.nome || "Fornecedor",
+            produto: p.prato?.nome || "Produto",
+            quantidade: Number(p.quantidade || 1),
+            receita,
+            tipo: produtoLink ? "proprio" : "indicacao",
+            forma_pagamento: p.forma_pagamento,
+            status_pagamento: p.status_pagamento,
+            regra
           });
           for (const [key, match] of [
             ["mes", p.data >= inicioMes],
@@ -7824,12 +8031,22 @@ Bom apetite!`;
         ["simSocio", "simTipo", "simPrecoBase", "simQtd"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
         atualizarSimulador();
         window.__sociosCache = { socios, fornecedores, pratos, masterId, masterNome };
+        window.__sociosRelatorioCache = { socios: sociosVisiveis, movimentos: movimentosSocios, masterId, masterNome };
+        if ($("socioRelData") && !$("socioRelData").value) $("socioRelData").value = hoje;
+        if ($("socioRelSocio")) {
+          const valorAnterior = $("socioRelSocio").value;
+          $("socioRelSocio").innerHTML = sociosVisiveis.map(s => `<option value="${s.id}">${escHtml(s.nome)}${s.id === masterId ? " (Master)" : ""}</option>`).join("");
+          $("socioRelSocio").disabled = acessoSocio;
+          if (valorAnterior && sociosVisiveis.some(s => s.id === valorAnterior)) $("socioRelSocio").value = valorAnterior;
+        }
+        renderRelatorioSocioIndividual();
       } catch (e) {
         const msg = e.message || "Erro ao carregar sócios. Aplique a migração de sócios/custos no Supabase.";
         $("sociosStats").innerHTML = "";
         $("sociosDashboard").innerHTML = `<div class="alert alert-error show">${msg}</div>`;
         $("sociosLista").innerHTML = "";
         $("sociosSimulador").innerHTML = "";
+        if ($("sociosRelatorioResultado")) $("sociosRelatorioResultado").innerHTML = "";
       }
     }
 
@@ -7954,6 +8171,11 @@ Bom apetite!`;
     };
 
     $("btnSociosAtualizar")?.addEventListener("click", carregarSocios);
+    $("btnSocioRelGerar")?.addEventListener("click", renderRelatorioSocioIndividual);
+    $("btnSocioRelPdf")?.addEventListener("click", baixarRelatorioSocioPdf);
+    ["socioRelSocio", "socioRelPeriodo", "socioRelData"].forEach(id => {
+      $(id)?.addEventListener("change", renderRelatorioSocioIndividual);
+    });
 
     // =====================================================================
     // CONFIGURAÇÕES — Toggle pedidos abertos/fechados
