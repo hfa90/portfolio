@@ -3580,6 +3580,9 @@
       configEmpresa: {},
       favoritos: new Set(),
       cardapioFiltro: "todos",
+      cardapioSocioId: "",
+      cardapioSocioNome: "",
+      cardapioSocioProdutos: new Set(),
       perfilCliente: null,
       storyItem: null,
       storyList: [],
@@ -3638,6 +3641,25 @@
         resgate_fidelidade: "Resgate de fidelidade desativado pelo restaurante."
       }[forma] || "Forma de pagamento suspensa pelo restaurante.";
     }
+
+    async function carregarContextoCardapioSocio() {
+      const params = new URLSearchParams(window.location.search);
+      const socioId = params.get("socio") || params.get("s");
+      state.cardapioSocioId = socioId || "";
+      state.cardapioSocioNome = "";
+      state.cardapioSocioProdutos = new Set();
+      if (!socioId) return;
+
+      const { data, error } = await sb.rpc("cardapio_socio_info", { p_socio_id: socioId });
+      const info = Array.isArray(data) ? data[0] : data;
+      if (error || !info) {
+        console.warn("Cardapio do socio:", error?.message || "Socio nao encontrado");
+        state.cardapioSocioId = "";
+        return;
+      }
+      state.cardapioSocioNome = info.socio_nome || "Socio";
+    }
+
     const CATEGORIAS_STORY = {
       marmita: { label: "Marmitas", icon: "🍱" },
       bebida: { label: "Bebidas", icon: "🥤" },
@@ -4019,7 +4041,9 @@
       iniciarMonitorPedidosCliente();
       iniciarMonitorDebitoFiado();
       const hoje = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
-      $("dataHoje").textContent = "Cardápio de " + hoje;
+      $("dataHoje").textContent = state.cardapioSocioId && state.cardapioSocioNome
+        ? `Cardápio de ${state.cardapioSocioNome}`
+        : "Cardápio de " + hoje;
 
       showScreen("screen-home");
       await carregarCardapio();
@@ -5097,8 +5121,11 @@
         if ($("clienteResumoRapido")) $("clienteResumoRapido").innerHTML = "";
       }
 
+      const cardapioRpc = state.cardapioSocioId
+        ? sb.rpc("cardapio_socio", { p_socio_id: state.cardapioSocioId })
+        : sb.rpc("cardapio_hoje");
       const [{ data, error }, { data: cfgAberto }] = await Promise.all([
-        sb.rpc("cardapio_hoje"),
+        cardapioRpc,
         sb.from("configuracoes").select("valor").eq("chave", "pedidos_abertos").maybeSingle()
       ]);
 
@@ -5106,16 +5133,20 @@
 
       const pedidosAbertos = cfgAberto?.valor !== "false";
       state.pedidosAbertos = pedidosAbertos;
+      const cardapioBase = data || [];
+      if (state.cardapioSocioId && data?.[0]?.socio_nome) state.cardapioSocioNome = data[0].socio_nome;
 
-      if (!data || data.length === 0) {
+      if (!cardapioBase || cardapioBase.length === 0) {
         $("storyCategorias")?.classList.add("hidden");
         if ($("storyCategorias")) $("storyCategorias").innerHTML = "";
-        lista.innerHTML = '<div class="card empty"><div class="empty-icon">🍽️</div><p>Nenhum cardápio publicado hoje.<br/>Aguarde o administrador.</p></div>';
+        lista.innerHTML = state.cardapioSocioId
+          ? `<div class="card empty"><div class="empty-icon">🍽️</div><p>${esc(state.cardapioSocioNome || "Este sócio")} ainda não tem produtos publicados hoje.</p></div>`
+          : '<div class="card empty"><div class="empty-icon">🍽️</div><p>Nenhum cardápio publicado hoje.<br/>Aguarde o administrador.</p></div>';
         return;
       }
 
-      renderizarStoriesCardapio(data || [], pedidosAbertos);
-      const produtosVendaveis = (data || []).filter(item => ["marmita", "bebida", "sobremesa", "lanche"].includes(categoriaProduto(item.prato_categoria)));
+      renderizarStoriesCardapio(cardapioBase || [], pedidosAbertos);
+      const produtosVendaveis = (cardapioBase || []).filter(item => ["marmita", "bebida", "sobremesa", "lanche"].includes(categoriaProduto(item.prato_categoria)));
       const marmitas = produtosVendaveis.filter(item => categoriaProduto(item.prato_categoria) === "marmita");
 
       const grupos = new Map();
@@ -5137,14 +5168,14 @@
         });
       });
 
-      state.cardapio = data;
+      state.cardapio = cardapioBase;
       renderResumoClienteRapido().catch(e => console.warn("Resumo rapido do cliente:", e?.message || e));
 
       let html = `<div class="menu-hero">
         <div class="menu-hero-row">
           <div>
-            <div class="menu-hero-title">Cardapio liberado para consulta</div>
-            <div class="small muted">Escolha o prato agora. A matricula e o PIN entram somente na confirmacao.</div>
+            <div class="menu-hero-title">${state.cardapioSocioId ? `Cardápio de ${esc(state.cardapioSocioNome || "sócio")}` : "Cardapio liberado para consulta"}</div>
+            <div class="small muted">${state.cardapioSocioId ? "Você está vendo apenas os produtos deste sócio." : "Escolha o prato agora. A matricula e o PIN entram somente na confirmacao."}</div>
           </div>
           <div style="font-size:34px;">🍱</div>
         </div>
@@ -5688,11 +5719,11 @@
       }
       const dados = data[0];
 
-      const { data: cardapio } = await sb.rpc("cardapio_hoje");
+      const cardapio = state.cardapio?.length ? state.cardapio : (await sb.rpc("cardapio_hoje")).data;
       const disponivel = (cardapio || []).find(c => c.prato_id === dados.prato_id);
 
       if (!disponivel) {
-        alert("Este prato não está no cardápio de hoje.");
+        alert(state.cardapioSocioId ? "Este prato não está no cardápio deste sócio hoje." : "Este prato não está no cardápio de hoje.");
         return;
       }
       const { data: _cfgAberto } = await sb.from("configuracoes").select("valor").eq("chave", "pedidos_abertos").maybeSingle();
@@ -5877,6 +5908,10 @@
     // MONTAR PEDIDO
     // =====================================================================
     async function abrirPedido(pratoId, fornecedorId) {
+      if (state.cardapioSocioId && !(state.cardapio || []).some(item => item.prato_id === pratoId)) {
+        alert("Este produto não faz parte do cardápio compartilhado por este sócio.");
+        return;
+      }
       const { data: prato } = await sb.from("pratos")
         .select("id, nome, descricao, foto_url, categoria, preco, fornecedor:fornecedores(id, nome, chave_pix, frete_entrega)")
         .eq("id", pratoId).single();
@@ -7783,6 +7818,7 @@
 
     (async () => {
       if (!(await tratarRetornoInfinitePay())) {
+        await carregarContextoCardapioSocio();
         await abrirHome();
         const tabInicial = new URLSearchParams(window.location.search).get("tab");
         if (tabInicial === "meusPedidos") {

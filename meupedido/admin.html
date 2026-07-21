@@ -3704,6 +3704,89 @@
 
       return html + `</div></section>`;
     }
+
+    function renderPagarMaisTardeAdmin(pendentes) {
+      if (!pendentes || pendentes.length === 0) {
+        return '<section class="fiado-panel"><div class="fiado-panel-title"><div><h2>Pagar mais tarde</h2><p class="small muted">Nenhum cliente com pagamento para cobrar hoje.</p></div></div></section>';
+      }
+
+      const mapa = new Map();
+      pendentes.forEach(p => {
+        const colabId = p.colaborador?.id;
+        if (!colabId) return;
+        if (!mapa.has(colabId)) {
+          mapa.set(colabId, {
+            id: colabId,
+            nome: p.colaborador.nome,
+            matricula: p.colaborador.matricula || "",
+            empresa: p.colaborador.empresa || "",
+            zap: p.colaborador.whatsapp || "",
+            total: 0,
+            ids: [],
+            compras: []
+          });
+        }
+        const dados = mapa.get(colabId);
+        dados.total += Number(p.preco_total || 0);
+        dados.ids.push(p.id);
+        dados.compras.push({
+          id: p.id,
+          data: p.data,
+          criado_em: p.criado_em,
+          valor: Number(p.preco_total || 0),
+          prato: p.prato?.nome || "Pedido",
+          fornecedor: p.fornecedor?.nome || "Fornecedor"
+        });
+      });
+
+      const devedores = [...mapa.values()].sort((a, b) => b.total - a.total);
+      const totalAberto = devedores.reduce((s, d) => s + d.total, 0);
+      let html = `<section class="fiado-panel">
+        <div class="fiado-panel-title">
+          <div>
+            <h2>Pagar mais tarde</h2>
+            <p class="small muted">Cobranças para pagamento até hoje. Use o WhatsApp para lembrar o produto e o valor devido.</p>
+          </div>
+        </div>
+        <div class="fiado-summary">
+          <div class="fiado-summary-item"><span>Total para cobrar</span><strong>${fmtBRL(totalAberto)}</strong></div>
+          <div class="fiado-summary-item"><span>Clientes</span><strong>${devedores.length}</strong></div>
+        </div>
+        <div class="fiado-grid">`;
+
+      for (const dados of devedores) {
+        const primeiroNome = (dados.nome || "Cliente").split(" ")[0];
+        const comprasMsg = dados.compras.map(c => `- ${c.prato} (${fmtBRL(c.valor)})`).join("\n");
+        const waTexto = `Ola ${primeiroNome}! Voce escolheu pagar mais tarde e deve pagar ate hoje o valor de ${fmtBRL(dados.total)}.\n\nProduto(s):\n${comprasMsg}\n\nPode regularizar esse pagamento hoje, por favor?`;
+        const waLink = dados.zap ? `https://wa.me/${dados.zap.replace(/\D/g, "")}?text=${encodeURIComponent(waTexto)}` : "";
+        const meta = [dados.empresa, dados.matricula ? `Matricula ${dados.matricula}` : "", dados.zap ? `WhatsApp ${dados.zap}` : ""].filter(Boolean).join(" - ");
+        html += `<article class="fiado-card">
+          <div class="fiado-card-head">
+            <div>
+              <h3>${escHtml(dados.nome)}</h3>
+              <div class="fiado-meta">${escHtml(meta || "Cadastro sem empresa/telefone")}</div>
+              <div class="fiado-meta">${dados.compras.length} item(ns) para cobrar hoje</div>
+            </div>
+            <div class="fiado-total">${fmtBRL(dados.total)}</div>
+          </div>
+          <div class="fiado-compras">
+            ${dados.compras.map(c => `<div class="fiado-compra">
+              <div>
+                <strong>${escHtml(c.prato)}</strong>
+                <div class="small muted">${escHtml(c.fornecedor)} - ${fmtData(c.data)}</div>
+              </div>
+              <div><strong>${fmtBRL(c.valor)}</strong><div class="fiado-dias">Até hoje</div></div>
+            </div>`).join("")}
+          </div>
+          <div class="fiado-actions">
+            ${waLink ? `<a href="${waLink}" target="_blank" class="btn btn-olive btn-sm">Cobrar WhatsApp</a>` : `<button class="btn btn-ghost btn-sm" disabled>Sem WhatsApp</button>`}
+            <button class="btn btn-primary btn-sm" onclick="marcarVariosPagos(this, '${dados.ids.join(",")}')">Marcar recebido</button>
+          </div>
+        </article>`;
+      }
+
+      return html + `</div></section>`;
+    }
     const CARDAPIO_FOTOS_BUCKET = "cardapio-fotos";
 
     let adminAtual = null;
@@ -7319,7 +7402,20 @@ Bom apetite!`;
         .neq("status", "aguardando_pagamento")
         .order("data", { ascending: false });
 
-      $("finSaldos").innerHTML = renderFiadosAbertosAdmin(fiados || []);
+      const { data: pagarMaisTarde } = await sb.from("pedidos")
+        .select(`
+          id, preco_total, data, criado_em,
+          prato:pratos(nome),
+          fornecedor:fornecedores(nome),
+          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+        `)
+        .eq("forma_pagamento", "pagar_mais_tarde")
+        .eq("status_pagamento", "pendente")
+        .neq("status", "cancelado")
+        .neq("status", "aguardando_pagamento")
+        .order("data", { ascending: false });
+
+      $("finSaldos").innerHTML = renderPagarMaisTardeAdmin(pagarMaisTarde || []) + renderFiadosAbertosAdmin(fiados || []);
 
       // ---- PIX com comprovante pendente ----
       const { data: pixPend } = await sb.from("pedidos")
@@ -7489,6 +7585,12 @@ Bom apetite!`;
       return bucket.socioRecebe + (r?.socio?.id === masterId ? bucket.masterDireto : 0);
     }
 
+    function linkCardapioSocio(socioId) {
+      const url = new URL("marmita.html", window.location.href);
+      url.searchParams.set("socio", socioId);
+      return url.toString();
+    }
+
     function graficoSocioValores(partes) {
       const total = Math.max(1, partes.reduce((s, p) => s + Math.max(0, Number(p.valor || 0)), 0));
       return `<div class="socio-chart">${partes.map(p => {
@@ -7653,8 +7755,10 @@ Bom apetite!`;
               <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"}</div>
               <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item)`).join(", ") || "nenhuma"}</div>
               <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (R$ 3,00 ${escHtml(masterNome)} por item)`).join(", ") || "nenhum"}</div>
+              <button class="btn btn-olive btn-sm ${acessoSocio ? "" : "hidden"}" style="margin-top:10px;" onclick="copiarCardapioSocio('${s.id}', this)">Copiar meu cardápio</button>
             </div>
             <div class="actions ${acessoSocio ? "hidden" : ""}">
+              <button class="btn btn-olive btn-sm" onclick="copiarCardapioSocio('${s.id}', this)">Copiar cardápio</button>
               <button class="btn btn-ghost btn-sm" onclick='abrirModalSocio(${JSON.stringify(s).replace(/'/g, "&apos;")})'>Editar</button>
               <button class="btn btn-ghost btn-sm" onclick='abrirModalVinculoSocio(${JSON.stringify(s).replace(/'/g, "&apos;")})'>Vincular</button>
               <button class="btn btn-ghost btn-sm" onclick="limparVinculosSocio('${s.id}', '${s.nome.replace(/'/g, "\\'")}')">Limpar vínculos</button>
@@ -7800,6 +7904,20 @@ Bom apetite!`;
       }
       await registrarAuditoria("alterou sócio master", "configuracoes", null, { socio_master_id: masterId });
       await carregarSocios();
+    };
+
+    window.copiarCardapioSocio = async (socioId, btn) => {
+      const link = linkCardapioSocio(socioId);
+      try {
+        await navigator.clipboard.writeText(link);
+        if (btn) {
+          const texto = btn.textContent;
+          btn.textContent = "Link copiado";
+          setTimeout(() => btn.textContent = texto, 1800);
+        }
+      } catch {
+        prompt("Copie o link do cardápio do sócio:", link);
+      }
     };
 
     $("btnSociosAtualizar")?.addEventListener("click", carregarSocios);
