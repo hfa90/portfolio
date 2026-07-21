@@ -5393,6 +5393,7 @@
     // FUNÇÃO PRINCIPAL DE CARREGAMENTO (Super Otimizada)
     async function carregarPedidos(options = {}) {
       const silent = !!options.silent;
+      await limparCheckoutsInfinitePayExpiradosSilencioso();
       const dataFiltro = $("pedidosFiltroData").value || hojeISO();
       $("pedidosData").textContent = fmtData(dataFiltro);
 
@@ -7585,6 +7586,27 @@ Bom apetite!`;
       return bucket.socioRecebe + (r?.socio?.id === masterId ? bucket.masterDireto : 0);
     }
 
+    function pedidoContaParaSocios(p = {}) {
+      if (!p || p.status === "cancelado" || p.status === "aguardando_pagamento") return false;
+      if (p.status_pagamento === "cancelado") return false;
+      if (["cartao_infinitepay", "pix_empresa", "pix_fornecedor", "resgate_fidelidade"].includes(p.forma_pagamento)) {
+        return p.status_pagamento === "pago";
+      }
+      return true;
+    }
+
+    let limpezaInfinitePayPendenteExecutada = false;
+    async function limparCheckoutsInfinitePayExpiradosSilencioso() {
+      if (limpezaInfinitePayPendenteExecutada) return;
+      limpezaInfinitePayPendenteExecutada = true;
+      try {
+        const { error } = await sb.rpc("cancelar_checkouts_infinitepay_expirados", { p_minutos: 45 });
+        if (error) console.warn("Limpeza de checkouts InfinitePay pendentes:", error.message);
+      } catch (e) {
+        console.warn("Limpeza de checkouts InfinitePay pendentes:", e?.message || e);
+      }
+    }
+
     function linkCardapioSocio(socioId) {
       const url = new URL("marmita.html", window.location.href);
       url.searchParams.set("socio", socioId);
@@ -7612,6 +7634,7 @@ Bom apetite!`;
       if ($("sociosMasterPanel")) $("sociosMasterPanel").innerHTML = '<div class="loading" style="padding:8px;">Carregando master...</div>';
 
       try {
+        await limparCheckoutsInfinitePayExpiradosSilencioso();
         const { inicioMes, inicioSemana, hoje } = periodoSociosInfo();
         const [
           sociosResp,
@@ -7627,7 +7650,7 @@ Bom apetite!`;
           sb.from("socio_fornecedores").select("*, fornecedor:fornecedores(id, nome)"),
           sb.from("socio_produtos").select("*, prato:pratos(id, nome, categoria, fornecedor_id, preco, custo_unitario)"),
           sb.from("pedidos").select(`
-            id, data, preco_total, quantidade, fornecedor_id, prato_id, status,
+            id, data, preco_total, quantidade, fornecedor_id, prato_id, status, forma_pagamento, status_pagamento,
             prato:pratos(id, nome, preco, custo_unitario),
             acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(id, nome, preco_extra, custo_unitario))
           `).gte("data", inicioMes).neq("status", "cancelado"),
@@ -7643,7 +7666,9 @@ Bom apetite!`;
         const socios = sociosResp.data || [];
         const vincFor = fornResp.data || [];
         const vincProd = prodResp.data || [];
-        const pedidos = pedidosResp.data || [];
+        const pedidosBrutos = pedidosResp.data || [];
+        const pedidos = pedidosBrutos.filter(pedidoContaParaSocios);
+        const checkoutsIgnorados = pedidosBrutos.filter(p => p.forma_pagamento === "cartao_infinitepay" && !pedidoContaParaSocios(p)).length;
         const pratos = pratosResp.data || [];
         const acomp = acompResp.data || [];
         const fornecedores = fornecedoresResp.data || [];
@@ -7723,7 +7748,8 @@ Bom apetite!`;
           <div class="stat"><div class="stat-label">${acessoSocio ? "Seu acesso" : "Sócios ativos"}</div><div class="stat-value">${acessoSocio ? "1" : socios.filter(s => s.ativo !== false).length}</div></div>
           <div class="stat"><div class="stat-label">Unidades vinculadas mês</div><div class="stat-value olive">${totalUnidadesMes}</div></div>
           <div class="stat"><div class="stat-label">${acessoSocio ? "Você recebe mês" : "Sócios recebem mês"}</div><div class="stat-value olive">${fmtBRL(totalSociosMes)}</div></div>
-          <div class="stat"><div class="stat-label">Master ${escHtml(masterRotulo)} mês</div><div class="stat-value brick">${fmtBRL(totalMasterMes)}</div></div>`;
+          <div class="stat"><div class="stat-label">Master ${escHtml(masterRotulo)} mês</div><div class="stat-value brick">${fmtBRL(totalMasterMes)}</div></div>
+          ${checkoutsIgnorados > 0 ? `<div class="stat"><div class="stat-label">Checkouts não pagos ignorados</div><div class="stat-value">${checkoutsIgnorados}</div></div>` : ""}`;
 
         const dashboardRows = linhasResultado.sort((a, b) => totalReceberSocio(b, "mes", masterId) - totalReceberSocio(a, "mes", masterId));
         $("sociosDashboard").innerHTML = dashboardRows.length ? `<div class="audit-list">${dashboardRows.map(r => `
