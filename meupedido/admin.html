@@ -3311,6 +3311,7 @@
         <button class="tab-btn active" type="button" data-wa-tab="fornecedores">Restaurantes</button>
         <button class="tab-btn" type="button" data-wa-tab="pagar_mais_tarde">Pagar mais tarde</button>
         <button class="tab-btn" type="button" data-wa-tab="fiado">Fiado</button>
+        <button class="tab-btn" type="button" data-wa-tab="comprovantes">Comprovantes</button>
       </div>
       <div id="whatsConteudo" class="loading">Carregando…</div>
     </section>
@@ -4492,6 +4493,7 @@
       let query = sb.from("pedidos")
         .select(`
           id, preco_total, quantidade, observacoes, status, forma_pagamento, status_pagamento, criado_em, pago_em, data, comprovante_url, comprovante_status, comprovante_motivo,
+          infinitepay_checkout_url, infinitepay_capture_method, infinitepay_paid_amount, infinitepay_transaction_nsu, infinitepay_receipt_url,
           prato:pratos ( nome, preco ),
           fornecedor:fornecedores ( id, nome, whatsapp ),
           colaborador:colaboradores ( id, nome, matricula, empresa, whatsapp ),
@@ -5149,9 +5151,10 @@
       return limpo ? `https://wa.me/${limpo}?text=${encodeURIComponent(texto)}` : "";
     }
 
-    function renderWhatsCard(titulo, texto, numero = "", meta = "", destaque = "") {
+    function renderWhatsCard(titulo, texto, numero = "", meta = "", destaque = "", cobranca = null) {
       const link = abrirLinkWhats(numero, texto);
       const copyText = escHtml(JSON.stringify(texto));
+      const cobrancaJson = cobranca ? escHtml(JSON.stringify(cobranca)) : "";
       return `
         <article class="tool-card">
           <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap;">
@@ -5165,9 +5168,58 @@
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
             <button class="btn btn-ghost btn-sm" onclick="copiarTextoWhatsApp(this, ${copyText})">Copiar texto</button>
             ${link ? `<a class="btn btn-primary btn-sm" href="${link}" target="_blank">Abrir WhatsApp</a>` : `<button class="btn btn-ghost btn-sm" disabled>Sem WhatsApp</button>`}
+            ${cobranca ? `<button class="btn btn-olive btn-sm" data-cobranca="${cobrancaJson}" onclick="gerarLinkPagamentoWhats(this)">${cobranca.checkoutUrl ? "Atualizar link" : "Gerar link InfinitePay"}</button>` : ""}
           </div>
         </article>`;
     }
+
+    function linkPagamentoTexto(url) {
+      return url ? `\n\nLink seguro para pagar agora pela InfinitePay:\n${url}` : "";
+    }
+
+    function metodoInfinitePayLabel(p = {}) {
+      const raw = String(p.infinitepay_capture_method || "").toLowerCase();
+      if (raw.includes("pix")) return "Pix via InfinitePay";
+      if (raw.includes("credit") || raw.includes("credito") || raw.includes("card")) return "Cartão de crédito via InfinitePay";
+      if (raw.includes("debit") || raw.includes("debito")) return "Cartão de débito via InfinitePay";
+      return "InfinitePay";
+    }
+
+    async function gerarLinkPagamentoWhats(btn) {
+      let payload = {};
+      try {
+        payload = JSON.parse(btn.dataset.cobranca || "{}");
+        if (!payload.colaboradorId || !Array.isArray(payload.pedidoIds) || !payload.pedidoIds.length) {
+          throw new Error("Dados insuficientes para gerar o link.");
+        }
+        const original = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = "Gerando...";
+        const { data: sessaoAuth } = await sb.auth.getSession();
+        const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
+          headers: sessaoAuth?.session?.access_token
+            ? { Authorization: `Bearer ${sessaoAuth.session.access_token}` }
+            : {},
+          body: {
+            colaborador_id: payload.colaboradorId,
+            pedido_ids: payload.pedidoIds,
+            admin_checkout: true,
+            redirect_url: `${location.origin}${location.pathname}#whatsapp`,
+          },
+        });
+        if (error) throw error;
+        if (!data?.success || !data?.checkout_url) throw new Error(data?.message || "Link nao retornado pela InfinitePay.");
+        await navigator.clipboard?.writeText(data.checkout_url).catch(() => {});
+        mostrarToastAdmin("OK", "Link InfinitePay gerado", "O link foi salvo no pedido e copiado para a area de transferencia.");
+        await carregarWhatsApp();
+        btn.textContent = original;
+      } catch (e) {
+        alert(e.message || "Erro ao gerar link InfinitePay.");
+        btn.disabled = false;
+        btn.textContent = payload?.checkoutUrl ? "Atualizar link" : "Gerar link InfinitePay";
+      }
+    }
+    window.gerarLinkPagamentoWhats = gerarLinkPagamentoWhats;
 
     function mensagemFornecedorWhats(grupo, data) {
       let texto = `*Pedidos - ${grupo.fornecedor?.nome || "Restaurante"} - ${fmtData(data)}*\n\n`;
@@ -5188,7 +5240,7 @@
 
     function mensagemPagarMaisTardeWhats(p) {
       const primeiro = (p.colaborador?.nome || "cliente").split(" ")[0];
-      return `Olá ${primeiro}!\n\nComprovante do seu pedido de hoje:\n\nProduto: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nValor: ${fmtBRL(p.preco_total)}\nPagamento escolhido: Pagar mais tarde\n\nPor favor, realize o pagamento até hoje. Esta mensagem serve como lembrete e comprovante da compra registrada.`;
+      return `Olá ${primeiro}!\n\nComprovante do seu pedido de hoje:\n\nProduto: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nValor: ${fmtBRL(p.preco_total)}\nPagamento escolhido: Pagar mais tarde${linkPagamentoTexto(p.infinitepay_checkout_url)}\n\nPor favor, realize o pagamento até hoje. Esta mensagem serve como lembrete e comprovante da compra registrada.`;
     }
 
     function agruparFiadosPorCliente(pedidos) {
@@ -5196,10 +5248,11 @@
       pedidos.forEach(p => {
         const c = p.colaborador || {};
         const key = c.id || c.whatsapp || c.nome || p.id;
-        if (!mapa.has(key)) mapa.set(key, { nome: c.nome || "Cliente", whatsapp: c.whatsapp || "", empresa: c.empresa || "", matricula: c.matricula || "", total: 0, compras: [] });
+        if (!mapa.has(key)) mapa.set(key, { id: c.id || "", nome: c.nome || "Cliente", whatsapp: c.whatsapp || "", empresa: c.empresa || "", matricula: c.matricula || "", total: 0, compras: [], checkoutUrl: "" });
         const item = mapa.get(key);
         item.total += Number(p.preco_total || 0);
-        item.compras.push({ data: p.data, produto: `${textoQtd(p)}${p.prato?.nome || "Pedido"}`, fornecedor: p.fornecedor?.nome || "Restaurante", valor: Number(p.preco_total || 0) });
+        if (!item.checkoutUrl && p.infinitepay_checkout_url) item.checkoutUrl = p.infinitepay_checkout_url;
+        item.compras.push({ id: p.id, data: p.data, produto: `${textoQtd(p)}${p.prato?.nome || "Pedido"}`, fornecedor: p.fornecedor?.nome || "Restaurante", valor: Number(p.preco_total || 0) });
       });
       return [...mapa.values()].sort((a, b) => b.total - a.total);
     }
@@ -5207,7 +5260,15 @@
     function mensagemFiadoWhats(dados) {
       const primeiro = (dados.nome || "cliente").split(" ")[0];
       const compras = dados.compras.map((c, i) => `${i + 1}. ${fmtData(c.data)} - ${c.produto} (${c.fornecedor}) - ${fmtBRL(c.valor)}`).join("\n");
-      return `Olá ${primeiro}!\n\nVocê possui fiado em aberto no valor total de ${fmtBRL(dados.total)}.\n\nCompras pendentes:\n${compras}\n\nPode regularizar esse valor, por favor?`;
+      return `Olá ${primeiro}!\n\nVocê possui fiado em aberto no valor total de ${fmtBRL(dados.total)}.\n\nCompras pendentes:\n${compras}${linkPagamentoTexto(dados.checkoutUrl)}\n\nPode regularizar esse valor, por favor?`;
+    }
+
+    function mensagemComprovanteInfinitePay(p) {
+      const primeiro = (p.colaborador?.nome || "cliente").split(" ")[0];
+      const valorPago = p.infinitepay_paid_amount || p.preco_total;
+      const nsu = p.infinitepay_transaction_nsu ? `\nTransação/NSU: ${p.infinitepay_transaction_nsu}` : "";
+      const recibo = p.infinitepay_receipt_url ? `\nRecibo InfinitePay: ${p.infinitepay_receipt_url}` : "";
+      return `Olá ${primeiro}!\n\n*COMPROVANTE DE PAGAMENTO*\n\nRecebemos o pagamento do seu pedido.\n\nPedido: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nData do pedido: ${fmtData(p.data)}\nValor pago: ${fmtBRL(valorPago)}\nForma de pagamento: ${metodoInfinitePayLabel(p)}\nPago em: ${p.pago_em ? fmtData(p.pago_em.slice(0, 10)) : fmtData(hojeISO())}${nsu}${recibo}\n\nObrigado! Seu pagamento foi identificado automaticamente pelo sistema.`;
     }
 
     async function carregarWhatsApp() {
@@ -5244,15 +5305,30 @@
             mensagemPagarMaisTardeWhats(p),
             p.colaborador?.whatsapp,
             `${p.fornecedor?.nome || "Restaurante"} · ${fmtBRL(p.preco_total)}`,
-            "Pagar hoje"
+            p.infinitepay_checkout_url ? "Link pronto" : "Pagar hoje",
+            { colaboradorId: p.colaborador?.id, pedidoIds: [p.id], checkoutUrl: p.infinitepay_checkout_url || "" }
           ));
           $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum cliente com "Pagar mais tarde" nesta data.</div>';
           return;
         }
 
+        if (whatsTabAtual === "comprovantes") {
+          const pedidos = (await consultarPedidosPainel(data, false))
+            .filter(p => p.data === data && p.status_pagamento === "pago" && (p.infinitepay_transaction_nsu || p.infinitepay_paid_amount || p.forma_pagamento === "cartao_infinitepay"));
+          const cards = pedidos.map(p => renderWhatsCard(
+            p.colaborador?.nome || "Cliente",
+            mensagemComprovanteInfinitePay(p),
+            p.colaborador?.whatsapp,
+            `${p.fornecedor?.nome || "Restaurante"} · ${fmtBRL(p.infinitepay_paid_amount || p.preco_total)}`,
+            "Pago"
+          ));
+          $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum pagamento InfinitePay confirmado nesta data.</div>';
+          return;
+        }
+
         const { data: fiados, error } = await sb.from("pedidos")
           .select(`
-            id, preco_total, quantidade, data, criado_em, forma_pagamento, status_pagamento, status,
+            id, preco_total, quantidade, data, criado_em, forma_pagamento, status_pagamento, status, infinitepay_checkout_url,
             prato:pratos(nome),
             fornecedor:fornecedores(id, nome, whatsapp),
             colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
@@ -5269,7 +5345,8 @@
           mensagemFiadoWhats(dados),
           dados.whatsapp,
           [dados.empresa, dados.matricula ? `Matrícula ${dados.matricula}` : "", `${dados.compras.length} compra(s)`].filter(Boolean).join(" · "),
-          fmtBRL(dados.total)
+          dados.checkoutUrl ? "Link pronto" : fmtBRL(dados.total),
+          { colaboradorId: dados.id, pedidoIds: dados.compras.map(c => c.id), checkoutUrl: dados.checkoutUrl || "" }
         ));
         $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum fiado em aberto.</div>';
       } catch (e) {
