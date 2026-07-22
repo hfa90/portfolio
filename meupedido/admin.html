@@ -3050,7 +3050,7 @@
 
       <div id="viewCozinha" class="hidden">
         <div style="display:flex; gap:8px; margin-bottom: 16px;">
-          <button class="btn btn-primary btn-block" id="btnGerarWA">Msg Padrão WhatsApp</button>
+          <button class="btn btn-primary btn-block" id="btnGerarWA">Abrir Central WhatsApp</button>
           <button class="btn btn-ghost btn-block" id="btnExportarCSV">Exportar CSV/Excel</button>
         </div>
         <div id="pedidosLista" class="loading">Carregando lista de fornecedores…</div>
@@ -3300,13 +3300,18 @@
     <!-- ============ WhatsApp ============ -->
     <section id="section-whatsapp" class="hidden rise rise-1">
       <div class="section-head">
-        <h1>Mensagens WhatsApp</h1>
+        <h1>Central WhatsApp</h1>
         <div class="sh-actions">
           <input type="date" id="waData" class="input" />
-          <button class="btn btn-primary btn-block" id="btnWhatsAtualizar">Montar mensagens</button>
+          <button class="btn btn-primary btn-block" id="btnWhatsAtualizar">Atualizar central</button>
         </div>
       </div>
-      <p class="muted small">Templates prontos para fornecedores, clientes com pagamento pendente e fechamento diário.</p>
+      <p class="muted small">Envie pedidos para restaurantes, comprovantes de "Pagar mais tarde" e cobranças de fiado em um só lugar.</p>
+      <div class="segmented-control" style="margin-bottom:14px;">
+        <button class="tab-btn active" type="button" data-wa-tab="fornecedores">Restaurantes</button>
+        <button class="tab-btn" type="button" data-wa-tab="pagar_mais_tarde">Pagar mais tarde</button>
+        <button class="tab-btn" type="button" data-wa-tab="fiado">Fiado</button>
+      </div>
       <div id="whatsConteudo" class="loading">Carregando…</div>
     </section>
 
@@ -5120,61 +5125,153 @@
     }
 
     $("waData").value = hojeISO();
+    let whatsTabAtual = "fornecedores";
     $("btnWhatsAtualizar").addEventListener("click", carregarWhatsApp);
-    function renderWhatsCard(titulo, texto, numero = "") {
-      const link = numero ? `https://wa.me/${telefoneLimpo(numero)}?text=${encodeURIComponent(texto)}` : "";
+    document.querySelectorAll("[data-wa-tab]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        whatsTabAtual = btn.dataset.waTab;
+        document.querySelectorAll("[data-wa-tab]").forEach(x => x.classList.toggle("active", x === btn));
+        carregarWhatsApp();
+      });
+    });
+
+    function copiarTextoWhatsApp(btn, texto) {
+      navigator.clipboard.writeText(texto).then(() => {
+        const original = btn.textContent;
+        btn.textContent = "Copiado";
+        setTimeout(() => btn.textContent = original, 1400);
+      }).catch(() => prompt("Copie a mensagem:", texto));
+    }
+    window.copiarTextoWhatsApp = copiarTextoWhatsApp;
+
+    function abrirLinkWhats(numero, texto) {
+      const limpo = telefoneLimpo(numero);
+      return limpo ? `https://wa.me/${limpo}?text=${encodeURIComponent(texto)}` : "";
+    }
+
+    function renderWhatsCard(titulo, texto, numero = "", meta = "", destaque = "") {
+      const link = abrirLinkWhats(numero, texto);
       const copyText = escHtml(JSON.stringify(texto));
       return `
         <article class="tool-card">
-          <h3>${escHtml(titulo)}</h3>
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+            <div style="min-width:0;">
+              <h3>${escHtml(titulo)}</h3>
+              ${meta ? `<div class="small muted">${escHtml(meta)}</div>` : ""}
+            </div>
+            ${destaque ? `<span class="badge pendente">${escHtml(destaque)}</span>` : ""}
+          </div>
           <div class="whatsapp-preview">${escHtml(texto)}</div>
-          <div style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText(${copyText}).then(() => this.textContent='Copiado')">Copiar</button>
-            ${link ? `<a class="btn btn-primary btn-sm" href="${link}" target="_blank">Abrir WhatsApp</a>` : ""}
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            <button class="btn btn-ghost btn-sm" onclick="copiarTextoWhatsApp(this, ${copyText})">Copiar texto</button>
+            ${link ? `<a class="btn btn-primary btn-sm" href="${link}" target="_blank">Abrir WhatsApp</a>` : `<button class="btn btn-ghost btn-sm" disabled>Sem WhatsApp</button>`}
           </div>
         </article>`;
     }
 
+    function mensagemFornecedorWhats(grupo, data) {
+      let texto = `*Pedidos - ${grupo.fornecedor?.nome || "Restaurante"} - ${fmtData(data)}*\n\n`;
+      let total = 0;
+      grupo.pedidos.forEach((p, i) => {
+        const acomps = textoAcomps(p);
+        texto += `${i + 1}. *${p.colaborador?.nome || "Cliente"}*\n`;
+        texto += `   ${textoQtd(p)}${p.prato?.nome || "Pedido"}`;
+        if (acomps) texto += ` + ${acomps}`;
+        texto += ` - ${fmtBRL(p.preco_total)}\n`;
+        texto += `   Pagamento: ${REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento || "-"}\n`;
+        if (p.observacoes) texto += `   Obs: _${p.observacoes}_\n`;
+        total += Number(p.preco_total || 0);
+      });
+      texto += `\n--------------------\n*Total: ${grupo.pedidos.length} pedido(s) - ${fmtBRL(total)}*`;
+      return { texto, total };
+    }
+
+    function mensagemPagarMaisTardeWhats(p) {
+      const primeiro = (p.colaborador?.nome || "cliente").split(" ")[0];
+      return `Olá ${primeiro}!\n\nComprovante do seu pedido de hoje:\n\nProduto: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nValor: ${fmtBRL(p.preco_total)}\nPagamento escolhido: Pagar mais tarde\n\nPor favor, realize o pagamento até hoje. Esta mensagem serve como lembrete e comprovante da compra registrada.`;
+    }
+
+    function agruparFiadosPorCliente(pedidos) {
+      const mapa = new Map();
+      pedidos.forEach(p => {
+        const c = p.colaborador || {};
+        const key = c.id || c.whatsapp || c.nome || p.id;
+        if (!mapa.has(key)) mapa.set(key, { nome: c.nome || "Cliente", whatsapp: c.whatsapp || "", empresa: c.empresa || "", matricula: c.matricula || "", total: 0, compras: [] });
+        const item = mapa.get(key);
+        item.total += Number(p.preco_total || 0);
+        item.compras.push({ data: p.data, produto: `${textoQtd(p)}${p.prato?.nome || "Pedido"}`, fornecedor: p.fornecedor?.nome || "Restaurante", valor: Number(p.preco_total || 0) });
+      });
+      return [...mapa.values()].sort((a, b) => b.total - a.total);
+    }
+
+    function mensagemFiadoWhats(dados) {
+      const primeiro = (dados.nome || "cliente").split(" ")[0];
+      const compras = dados.compras.map((c, i) => `${i + 1}. ${fmtData(c.data)} - ${c.produto} (${c.fornecedor}) - ${fmtBRL(c.valor)}`).join("\n");
+      return `Olá ${primeiro}!\n\nVocê possui fiado em aberto no valor total de ${fmtBRL(dados.total)}.\n\nCompras pendentes:\n${compras}\n\nPode regularizar esse valor, por favor?`;
+    }
+
     async function carregarWhatsApp() {
       const data = $("waData").value || hojeISO();
-      $("whatsConteudo").innerHTML = '<div class="loading">Montando mensagens...</div>';
+      $("whatsConteudo").innerHTML = '<div class="loading">Montando central WhatsApp...</div>';
       try {
-        const pedidos = await consultarPedidosPainel(data, true);
-        const pedidosHoje = pedidos.filter(p => p.data === data);
-        const porFornecedor = new Map();
-        pedidosHoje.filter(p => p.status !== "concluido").forEach(p => {
-          const id = p.fornecedor?.id || "sem";
-          if (!porFornecedor.has(id)) porFornecedor.set(id, { fornecedor: p.fornecedor, pedidos: [] });
-          porFornecedor.get(id).pedidos.push(p);
-        });
-
-        const cards = [];
-        for (const grupo of porFornecedor.values()) {
-          const linhas = grupo.pedidos.map((p, i) => {
-            const acomps = textoAcomps(p);
-            return `${i + 1}. ${p.colaborador?.nome || "Cliente"} - ${textoQtd(p)}${p.prato?.nome || "Pedido"}${acomps ? " + " + acomps : ""}${p.observacoes ? " | Obs: " + p.observacoes : ""} - ${fmtBRL(p.preco_total)}`;
-          }).join("\n");
-          const total = somaPedidos(grupo.pedidos);
-          const texto = `Pedido do dia - ${fmtData(data)}\nFornecedor: ${grupo.fornecedor?.nome || "Fornecedor"}\n\n${linhas}\n\nTotal: ${grupo.pedidos.length} marmita(s) - ${fmtBRL(total)}`;
-          cards.push(renderWhatsCard(`Fornecedor - ${grupo.fornecedor?.nome || "Fornecedor"}`, texto, grupo.fornecedor?.whatsapp));
+        if (whatsTabAtual === "fornecedores") {
+          const pedidos = (await consultarPedidosPainel(data, false)).filter(p => p.data === data && p.status !== "concluido");
+          const porFornecedor = new Map();
+          pedidos.forEach(p => {
+            const id = p.fornecedor?.id || "sem";
+            if (!porFornecedor.has(id)) porFornecedor.set(id, { fornecedor: p.fornecedor, pedidos: [] });
+            porFornecedor.get(id).pedidos.push(p);
+          });
+          const cards = [...porFornecedor.values()].map(grupo => {
+            const { texto, total } = mensagemFornecedorWhats(grupo, data);
+            return renderWhatsCard(
+              grupo.fornecedor?.nome || "Restaurante",
+              texto,
+              grupo.fornecedor?.whatsapp,
+              `${grupo.pedidos.length} pedido(s) para enviar ao restaurante`,
+              fmtBRL(total)
+            );
+          });
+          $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum pedido para restaurante nesta data.</div>';
+          return;
         }
 
-        const pendentes = pedidos.filter(p => pedidoPix(p) && p.status_pagamento === "pendente" && !p.comprovante_url);
-        pendentes.slice(0, 10).forEach(p => {
-          const texto = `Ola ${p.colaborador?.nome?.split(" ")[0] || ""}! Seu pedido ${p.prato?.nome || ""} ainda esta aguardando o comprovante PIX. Envie pelo app para o pedido seguir para preparo.`;
-          cards.push(renderWhatsCard(`Lembrete comprovante - ${p.colaborador?.nome || "Cliente"}`, texto, p.colaborador?.whatsapp));
-        });
+        if (whatsTabAtual === "pagar_mais_tarde") {
+          const pedidos = (await consultarPedidosPainel(data, true))
+            .filter(p => p.forma_pagamento === "pagar_mais_tarde" && p.status_pagamento === "pendente" && p.data === data);
+          const cards = pedidos.map(p => renderWhatsCard(
+            p.colaborador?.nome || "Cliente",
+            mensagemPagarMaisTardeWhats(p),
+            p.colaborador?.whatsapp,
+            `${p.fornecedor?.nome || "Restaurante"} · ${fmtBRL(p.preco_total)}`,
+            "Pagar hoje"
+          ));
+          $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum cliente com "Pagar mais tarde" nesta data.</div>';
+          return;
+        }
 
-        const rejeitados = pedidos.filter(p => pedidoPix(p) && p.comprovante_status === "rejeitado");
-        rejeitados.slice(0, 10).forEach(p => {
-          const texto = `Ola ${p.colaborador?.nome?.split(" ")[0] || ""}! O comprovante do pedido ${p.prato?.nome || ""} precisa ser reenviado. Motivo: ${p.comprovante_motivo || "comprovante nao validado"}.`;
-          cards.push(renderWhatsCard(`Reenvio Pix - ${p.colaborador?.nome || "Cliente"}`, texto, p.colaborador?.whatsapp));
-        });
-
-        const resumo = `Fechamento do dia - ${fmtData(data)}\nPedidos: ${pedidosHoje.length}\nFaturamento: ${fmtBRL(somaPedidos(pedidosHoje))}\nPagos: ${fmtBRL(somaPedidos(pedidosHoje.filter(p => p.status_pagamento === "pago")))}\nPendentes: ${fmtBRL(somaPedidos(pedidosHoje.filter(p => p.status_pagamento !== "pago")))}`;
-        cards.unshift(renderWhatsCard("Resumo do dia", resumo));
-
-        $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Sem mensagens para esta data.</div>';
+        const { data: fiados, error } = await sb.from("pedidos")
+          .select(`
+            id, preco_total, quantidade, data, criado_em, forma_pagamento, status_pagamento, status,
+            prato:pratos(nome),
+            fornecedor:fornecedores(id, nome, whatsapp),
+            colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+          `)
+          .eq("forma_pagamento", "fiado")
+          .eq("status_pagamento", "pendente")
+          .neq("status", "cancelado")
+          .neq("status", "aguardando_pagamento")
+          .order("data", { ascending: false });
+        if (error) throw error;
+        const devedores = agruparFiadosPorCliente(fiados || []);
+        const cards = devedores.map(dados => renderWhatsCard(
+          dados.nome,
+          mensagemFiadoWhats(dados),
+          dados.whatsapp,
+          [dados.empresa, dados.matricula ? `Matrícula ${dados.matricula}` : "", `${dados.compras.length} compra(s)`].filter(Boolean).join(" · "),
+          fmtBRL(dados.total)
+        ));
+        $("whatsConteudo").innerHTML = cards.length ? `<div class="tool-grid">${cards.join("")}</div>` : '<div class="card empty">Nenhum fiado em aberto.</div>';
       } catch (e) {
         $("whatsConteudo").innerHTML = `<div class="alert alert-error show">${e.message || e}</div>`;
       }
@@ -5934,64 +6031,11 @@ Bom apetite!`;
       }
     };
 
-    $("btnGerarWA").addEventListener("click", async () => {
-      const data = $("pedidosFiltroData").value || hojeISO();
-      const { data: pedidos } = await sb.from("pedidos")
-        .select(`
-          preco_total, quantidade, observacoes, status,
-          prato:pratos ( nome ),
-          fornecedor:fornecedores ( id, nome, whatsapp ),
-          colaborador:colaboradores ( nome ),
-          acompanhamentos:pedido_acompanhamentos ( acompanhamento:acompanhamentos ( nome ) )
-        `)
-        .eq("data", data)
-        .order("criado_em");
-
-      const pedidosOperacionais = (pedidos || []).filter(p => !["aguardando_pagamento", "cancelado", "concluido"].includes(p.status));
-
-      if (pedidosOperacionais.length === 0) {
-        alert("Nenhum pedido para gerar mensagem.");
-        return;
-      }
-
-      const grupos = new Map();
-      pedidosOperacionais.forEach(p => {
-        const fid = p.fornecedor?.id;
-        if (!grupos.has(fid)) grupos.set(fid, { fornecedor: p.fornecedor, pedidos: [] });
-        grupos.get(fid).pedidos.push(p);
-      });
-
-      const dataFmt = new Date(data + "T12:00:00").toLocaleDateString("pt-BR");
-      let bodyHtml = "";
-      for (const { fornecedor, pedidos } of grupos.values()) {
-        let msg = `*Pedido - ${fornecedor.nome} - ${dataFmt}*\n\n`;
-        let total = 0;
-        pedidos.forEach((p, i) => {
-          const acomps = (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean);
-          msg += `${i + 1}. *${p.colaborador?.nome}*\n`;
-          msg += `   ${textoQtd(p)}${p.prato?.nome}`;
-          if (acomps.length) msg += ` + ${acomps.join(", ")}`;
-          msg += ` - ${fmtBRL(p.preco_total)}\n`;
-          if (p.observacoes) msg += `   Obs: _${p.observacoes}_\n`;
-          total += Number(p.preco_total);
-        });
-        msg += `\n--------------------\n*Total: ${pedidos.length} marmitas - ${fmtBRL(total)}*`;
-
-        const url = `https://wa.me/${fornecedor.whatsapp}?text=${encodeURIComponent(msg)}`;
-        bodyHtml += `<div class="card" style="margin-bottom:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px; flex-wrap:wrap;">
-            <h3 style="margin:0;">${fornecedor.nome}</h3>
-            <a href="${url}" target="_blank" class="btn btn-olive btn-sm">Abrir no WhatsApp</a>
-          </div>
-          <div class="wa-preview">${msg.replace(/\*/g, "")}</div>
-          <button class="btn btn-ghost btn-block btn-sm" style="margin-top:8px;" onclick="navigator.clipboard.writeText(\`${msg.replace(/`/g, "\\`")}\`).then(() => this.textContent='Copiado!')">Copiar texto</button>
-        </div>`;
-      }
-
-      $("modalTitle").textContent = "Mensagens para WhatsApp";
-      $("modalBody").innerHTML = bodyHtml;
-      $("modalSave").classList.add("hidden");
-      $("modal").classList.add("show");
+    $("btnGerarWA").addEventListener("click", () => {
+      $("waData").value = $("pedidosFiltroData").value || hojeISO();
+      whatsTabAtual = "fornecedores";
+      document.querySelectorAll("[data-wa-tab]").forEach(btn => btn.classList.toggle("active", btn.dataset.waTab === whatsTabAtual));
+      navegar("whatsapp");
     });
 
     $("btnExportarCSV").addEventListener("click", async () => {
