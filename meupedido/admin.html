@@ -3587,6 +3587,10 @@
     });
 
     const $ = (id) => document.getElementById(id);
+    function setHTMLIfChanged(id, html) {
+      const el = $(id);
+      if (el && el.innerHTML !== html) el.innerHTML = html;
+    }
     const fmtBRL = (v) => "R$ " + Number(v ?? 0).toFixed(2).replace(".", ",");
     const fmtData = (d) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
     const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
@@ -4174,7 +4178,7 @@
     async function atualizarTelasOperacionaisSilencioso() {
       const sec = secaoAtiva();
       if (sec === "pedidos") await carregarPedidos({ silent: true });
-      if (sec === "financeiro") await carregarFinanceiro();
+      if (sec === "financeiro") await carregarFinanceiro({ silent: true });
     }
 
     const eventosAdminVistos = new Set();
@@ -7673,10 +7677,13 @@ Bom apetite!`;
       if (document.querySelector(".drawer-item.active")?.dataset?.section === "pedidos") await carregarPedidos({ silent: true });
     };
 
-    async function carregarFinanceiro() {
-      $("finSaldos").innerHTML = '<div class="loading">Carregando…</div>';
-      $("finFornecedores").innerHTML = '<div class="loading">Carregando…</div>';
-      if ($("finClientesStatus")) $("finClientesStatus").innerHTML = '<div class="loading">Carregando clientes...</div>';
+    async function carregarFinanceiro(options = {}) {
+      const silent = !!options.silent;
+      if (!silent) {
+        $("finSaldos").innerHTML = '<div class="loading">Carregando…</div>';
+        $("finFornecedores").innerHTML = '<div class="loading">Carregando…</div>';
+        if ($("finClientesStatus")) $("finClientesStatus").innerHTML = '<div class="loading">Carregando clientes...</div>';
+      }
 
       const inicioMes = new Date(); inicioMes.setDate(1);
       const inicioMesStr = dataLocalISO(inicioMes);
@@ -7704,9 +7711,9 @@ Bom apetite!`;
         .neq("status", "cancelado")
         .order("criado_em", { ascending: false });
       if ($("finClientesStatus")) {
-        $("finClientesStatus").innerHTML = centralError
+        setHTMLIfChanged("finClientesStatus", centralError
           ? `<div class="alert alert-error show">${centralError.message}</div>`
-          : renderCentralClientesFinanceiro(centralPedidos || []);
+          : renderCentralClientesFinanceiro(centralPedidos || []));
       }
 
       const totalMes = (pedidosMes || []).reduce((s, p) => s + Number(p.preco_total), 0);
@@ -7720,7 +7727,7 @@ Bom apetite!`;
       const concluidoSemana = concluidos.filter(p => dataConclusao(p) >= inicioSemanaStr).reduce((s, p) => s + Number(p.preco_total), 0);
       const concluidoMes = concluidos.reduce((s, p) => s + Number(p.preco_total), 0);
 
-      $("finStats").innerHTML = `
+      setHTMLIfChanged("finStats", `
         <div class="stat"><div class="stat-label">Faturado mês</div><div class="stat-value brick">${fmtBRL(totalMes)}</div></div>
         <div class="stat"><div class="stat-label">Recebido</div><div class="stat-value olive">${fmtBRL(totalPago)}</div></div>
         <div class="stat"><div class="stat-label">Pendente</div><div class="stat-value">${fmtBRL(totalPendente)}</div></div>
@@ -7729,7 +7736,7 @@ Bom apetite!`;
         <div class="stat"><div class="stat-label">Concluido hoje</div><div class="stat-value brick">${fmtBRL(concluidoHoje)}</div></div>
         <div class="stat"><div class="stat-label">Concluido semana</div><div class="stat-value brick">${fmtBRL(concluidoSemana)}</div></div>
         <div class="stat"><div class="stat-label">Concluido mes</div><div class="stat-value brick">${fmtBRL(concluidoMes)}</div></div>
-      `;
+      `);
 
       // ---- FIADO: por colaborador com detalhes de cada pedido ----
       const { data: fiados } = await sb.from("pedidos")
@@ -7757,7 +7764,7 @@ Bom apetite!`;
         .neq("status", "aguardando_pagamento")
         .order("data", { ascending: false });
 
-      $("finSaldos").innerHTML = renderPagarMaisTardeAdmin(pagarMaisTarde || []) + renderFiadosAbertosAdmin(fiados || []);
+      setHTMLIfChanged("finSaldos", renderPagarMaisTardeAdmin(pagarMaisTarde || []) + renderFiadosAbertosAdmin(fiados || []));
 
       // ---- PIX com comprovante pendente ----
       const { data: pixPend } = await sb.from("pedidos")
@@ -7786,7 +7793,7 @@ Bom apetite!`;
 
       // Adicionar seção de PIX pendentes ao DOM (após finSaldos)
       const finPix = document.getElementById("finPixPendente");
-      if (finPix) finPix.innerHTML = pixHtml;
+      if (finPix) setHTMLIfChanged("finPixPendente", pixHtml);
 
       // ---- Faturamento por fornecedor ----
       const { data: forn } = await sb.from("pedidos")
@@ -7803,14 +7810,14 @@ Bom apetite!`;
         mapaF.get(id).total += Number(p.preco_total);
       });
 
-      if (mapaF.size === 0) $("finFornecedores").innerHTML = '<div class="empty">Sem pedidos no mês.</div>';
+      if (mapaF.size === 0) setHTMLIfChanged("finFornecedores", '<div class="empty">Sem pedidos no mês.</div>');
       else {
         const arr = [...mapaF.values()].sort((a, b) => b.total - a.total);
-        $("finFornecedores").innerHTML = arr.map(x =>
+        setHTMLIfChanged("finFornecedores", arr.map(x =>
           `<div style="display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px dashed var(--line); gap:8px;">
             <span style="min-width:0; overflow:hidden; text-overflow:ellipsis;">${x.nome}</span>
             <strong style="flex-shrink:0;">${fmtBRL(x.total)}</strong>
-          </div>`).join("");
+          </div>`).join(""));
       }
     }
 
