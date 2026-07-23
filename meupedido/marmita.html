@@ -1247,6 +1247,47 @@
       margin-top: auto;
     }
 
+    .grupo-extras {
+      border-top: 1px dashed rgba(0, 0, 0, .08);
+      padding-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .grupo-extra-lista {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .grupo-extra-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      border: 1px solid rgba(0, 0, 0, .08);
+      border-radius: 999px;
+      padding: 7px 9px;
+      background: rgba(255, 255, 255, .70);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .grupo-extra-pill button {
+      width: 20px;
+      height: 20px;
+      min-height: 20px;
+      border: 0;
+      border-radius: 999px;
+      padding: 0;
+      background: rgba(197, 48, 48, .12);
+      color: var(--crimson);
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+    }
+
     .pedido-status-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -2970,7 +3011,8 @@
 
     :root[data-theme="dark"] .grupo-busca,
     :root[data-theme="dark"] .grupo-chip,
-    :root[data-theme="dark"] .grupo-produto-card {
+    :root[data-theme="dark"] .grupo-produto-card,
+    :root[data-theme="dark"] .grupo-extra-pill {
       background: rgba(244, 234, 220, .08);
       border-color: rgba(244, 234, 220, .14);
       color: var(--ink);
@@ -5507,6 +5549,13 @@
       { id: "todos", label: "Todos" }
     ];
 
+    const GRUPO_EXTRA_CATEGORIAS = [
+      { id: "bebida", label: "Bebidas" },
+      { id: "sobremesa", label: "Sobremesas" },
+      { id: "lanche", label: "Lanches" },
+      { id: "todos", label: "Todos" }
+    ];
+
     function primeiroProdutoGrupo() {
       const produtos = produtosGrupoDisponiveis();
       return produtos.find(p => categoriaProduto(p.prato_categoria) === "marmita") || produtos[0] || null;
@@ -5514,6 +5563,10 @@
 
     function produtoGrupoPorId(id) {
       return produtosGrupoDisponiveis().find(p => String(p.prato_id) === String(id)) || null;
+    }
+
+    function produtosExtrasGrupoDisponiveis() {
+      return produtosGrupoDisponiveis().filter(p => ["bebida", "sobremesa", "lanche"].includes(categoriaProduto(p.prato_categoria)));
     }
 
     function textoBuscaProdutoGrupo(produto = {}) {
@@ -5567,6 +5620,73 @@
       });
     }
 
+    function filtrarExtrasGrupo(item = {}, produtos = produtosExtrasGrupoDisponiveis()) {
+      const categoria = item.extraCategoria || "bebida";
+      const tokens = termosBusca(item.extraBusca || "");
+      return produtos
+        .filter(p => categoria === "todos" || categoriaProduto(p.prato_categoria) === categoria)
+        .map(p => {
+          const texto = textoBuscaProdutoGrupo(p);
+          const score = tokens.reduce((s, t) => s + (texto.includes(t) ? (texto.startsWith(t) ? 5 : 3) : 0), 0);
+          return { ...p, __score: score };
+        })
+        .filter(p => !tokens.length || p.__score > 0)
+        .sort((a, b) => (b.__score - a.__score) || Number(a.prato_preco || 0) - Number(b.prato_preco || 0) || String(a.prato_nome || "").localeCompare(String(b.prato_nome || "")))
+        .slice(0, 8);
+    }
+
+    function renderOpcoesExtrasGrupo(item, index, produtos = produtosExtrasGrupoDisponiveis()) {
+      const filtrados = filtrarExtrasGrupo(item, produtos);
+      if (!produtos.length) return '<div class="small muted">Nenhuma bebida, sobremesa ou lanche disponível hoje.</div>';
+      if (!filtrados.length) return '<div class="empty">Nenhum extra encontrado.</div>';
+      return `<div class="grupo-produtos-grid">${filtrados.map(p => `
+        <button class="grupo-produto-card" type="button" data-grupo-extra-add="${index}" data-prato-id="${p.prato_id}">
+          <span class="grupo-produto-nome">+ ${esc(p.prato_nome)}</span>
+          <span class="grupo-produto-meta">${esc(p.fornecedor_nome || "Restaurante")} · ${esc(CATEGORIAS_STORY[categoriaProduto(p.prato_categoria)]?.label || "Extra")}</span>
+          <span class="grupo-produto-preco">${fmtBRL(p.prato_preco)}</span>
+        </button>
+      `).join("")}</div>`;
+    }
+
+    function renderExtrasGrupo(item, index) {
+      const extras = Array.isArray(item.extras) ? item.extras : [];
+      item.extraCategoria = item.extraCategoria || "bebida";
+      return `<div class="grupo-extras">
+        <div>
+          <div class="pedido-status-label">Extras da pessoa</div>
+          <div class="small muted">Adicione refrigerante, sobremesa ou lanche junto ao pedido dessa pessoa.</div>
+        </div>
+        <div class="grupo-extra-lista">
+          ${extras.length ? extras.map((extra, extraIndex) => {
+            const produto = produtoGrupoPorId(extra.prato_id);
+            return `<span class="grupo-extra-pill">
+              <span>${esc(produto?.prato_nome || "Extra")} · ${fmtBRL(produto?.prato_preco || 0)}</span>
+              <button type="button" data-grupo-extra-remover="${index}" data-extra-index="${extraIndex}" aria-label="Remover extra">×</button>
+            </span>`;
+          }).join("") : '<span class="small muted">Nenhum extra adicionado.</span>'}
+        </div>
+        <input class="grupo-busca" data-grupo-extra-busca="${index}" type="search" value="${esc(item.extraBusca || "")}" placeholder="Buscar refrigerante, sobremesa..." />
+        <div class="grupo-categorias">
+          ${GRUPO_EXTRA_CATEGORIAS.map(cat => `<button class="grupo-chip ${item.extraCategoria === cat.id ? "active" : ""}" type="button" data-grupo-extra-categoria="${index}" data-categoria="${cat.id}">${cat.label}</button>`).join("")}
+        </div>
+        <div data-grupo-extra-opcoes="${index}">${renderOpcoesExtrasGrupo(item, index)}</div>
+      </div>`;
+    }
+
+    function atualizarOpcoesExtrasGrupo(index) {
+      const wrap = document.querySelector(`[data-grupo-extra-opcoes="${index}"]`);
+      const item = state.grupoItens[index];
+      if (!wrap || !item) return;
+      wrap.innerHTML = renderOpcoesExtrasGrupo(item, index);
+      wrap.querySelectorAll("[data-grupo-extra-add]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          item.extras = Array.isArray(item.extras) ? item.extras : [];
+          item.extras.push({ prato_id: btn.dataset.pratoId || "", observacoes: "" });
+          renderGrupoItens();
+        });
+      });
+    }
+
     async function prepararPedidoGrupo() {
       if (!getColab()) {
         $("grupoItens").innerHTML = `<div class="empty">Entre com sua matrícula para montar pedido em grupo.</div>`;
@@ -5607,6 +5727,7 @@
                   ${GRUPO_CATEGORIAS.map(cat => `<button class="grupo-chip ${item.categoriaProduto === cat.id ? "active" : ""}" type="button" data-grupo-categoria="${index}" data-categoria="${cat.id}">${cat.label}</button>`).join("")}
                 </div>
                 <div data-grupo-opcoes="${index}">${renderOpcoesProdutoGrupo(item, index, produtos)}</div>
+                ${renderExtrasGrupo(item, index)}
               </div>`;
             })()}
             <div class="field"><label>Observação</label><input class="input" data-grupo-obs="${index}" value="${esc(item.observacoes || "")}" placeholder="Ex.: sem cebola" /></div>
@@ -5622,6 +5743,23 @@
         document.querySelectorAll(`[data-grupo-categoria="${index}"]`).forEach(btn => {
           btn.addEventListener("click", () => {
             item.categoriaProduto = btn.dataset.categoria || "marmita";
+            renderGrupoItens();
+          });
+        });
+        atualizarOpcoesExtrasGrupo(index);
+        document.querySelector(`[data-grupo-extra-busca="${index}"]`)?.addEventListener("input", (e) => {
+          item.extraBusca = e.target.value;
+          atualizarOpcoesExtrasGrupo(index);
+        });
+        document.querySelectorAll(`[data-grupo-extra-categoria="${index}"]`).forEach(btn => {
+          btn.addEventListener("click", () => {
+            item.extraCategoria = btn.dataset.categoria || "bebida";
+            renderGrupoItens();
+          });
+        });
+        document.querySelectorAll(`[data-grupo-extra-remover="${index}"]`).forEach(btn => {
+          btn.addEventListener("click", () => {
+            item.extras = (item.extras || []).filter((_, extraIndex) => extraIndex !== Number(btn.dataset.extraIndex));
             renderGrupoItens();
           });
         });
@@ -5668,6 +5806,9 @@
             prato_id: primeiroProduto?.prato_id || "",
             categoriaProduto: "marmita",
             buscaProduto: "",
+            extraCategoria: "bebida",
+            extraBusca: "",
+            extras: [],
             observacoes: ""
           });
           $("grupoMatricula").value = "";
@@ -5702,6 +5843,9 @@
         prato_id: primeiroProduto?.prato_id || "",
         categoriaProduto: "marmita",
         buscaProduto: "",
+        extraCategoria: "bebida",
+        extraBusca: "",
+        extras: [],
         observacoes: `Pessoa sem cadastro: ${nome}`
       });
       $("grupoNaoEncontradoPopup").classList.remove("show");
@@ -5722,6 +5866,10 @@
         nome: item.nome,
         matricula: item.matricula || null,
         prato_id: item.prato_id,
+        extras: (item.extras || []).map(extra => ({
+          prato_id: extra.prato_id,
+          observacoes: extra.observacoes || null
+        })).filter(extra => extra.prato_id),
         observacoes: item.observacoes || null
       })).filter(item => item.nome && item.prato_id && item.colaborador_id);
       if (!itens.length) {
