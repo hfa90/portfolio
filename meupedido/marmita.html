@@ -1288,6 +1288,40 @@
       font-weight: 900;
     }
 
+    .grupo-cart-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .grupo-cart-card {
+      border: 1px solid rgba(52, 199, 89, .22);
+      background: rgba(52, 199, 89, .07);
+      border-radius: 14px;
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .grupo-cart-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .grupo-cart-total {
+      font-weight: 900;
+      color: var(--olive);
+      white-space: nowrap;
+    }
+
+    .grupo-cart-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .pedido-status-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -3019,7 +3053,8 @@
     }
 
     :root[data-theme="dark"] .grupo-produto-selecionado,
-    :root[data-theme="dark"] .grupo-produto-card.active {
+    :root[data-theme="dark"] .grupo-produto-card.active,
+    :root[data-theme="dark"] .grupo-cart-card {
       background: rgba(52, 199, 89, .12);
       border-color: rgba(52, 199, 89, .28);
     }
@@ -5696,45 +5731,95 @@
       renderGrupoItens();
     }
 
+    function resumoItemGrupo(item = {}) {
+      const principal = produtoGrupoPorId(item.prato_id);
+      const extras = (item.extras || []).map(extra => produtoGrupoPorId(extra.prato_id)).filter(Boolean);
+      const total = Number(principal?.prato_preco || 0) + extras.reduce((s, p) => s + Number(p.prato_preco || 0), 0);
+      return { principal, extras, total };
+    }
+
+    function renderPedidoGrupoEdicao(item, index, produtos) {
+      const selecionado = produtoGrupoPorId(item.prato_id) || primeiroProdutoGrupo();
+      item.prato_id = item.prato_id || selecionado?.prato_id || "";
+      item.categoriaProduto = item.categoriaProduto || "marmita";
+      return `
+        <div class="pedido-status-item" style="margin-top:10px;">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div>
+              <strong>${esc(item.nome)}</strong>
+              <div class="small muted">${item.responsavel ? "Na sua responsabilidade" : `Matrícula ${esc(item.matricula || "")}`}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" type="button" data-grupo-remover="${index}">Remover</button>
+          </div>
+          <div class="grupo-picker">
+            <div class="grupo-produto-selecionado">
+              <div style="min-width:0;">
+                <div class="pedido-status-label">Produto escolhido</div>
+                <strong>${esc(selecionado?.prato_nome || "Escolha um produto")}</strong>
+                <div class="small muted">${selecionado ? `${esc(selecionado.fornecedor_nome || "Restaurante")} · ${fmtBRL(selecionado.prato_preco)}` : "Use a busca abaixo"}</div>
+              </div>
+              <span class="badge pago">${selecionado ? "OK" : "pendente"}</span>
+            </div>
+            <input class="grupo-busca" data-grupo-busca="${index}" type="search" value="${esc(item.buscaProduto || "")}" placeholder="Buscar marmita, carne, restaurante..." />
+            <div class="grupo-categorias">
+              ${GRUPO_CATEGORIAS.map(cat => `<button class="grupo-chip ${item.categoriaProduto === cat.id ? "active" : ""}" type="button" data-grupo-categoria="${index}" data-categoria="${cat.id}">${cat.label}</button>`).join("")}
+            </div>
+            <div data-grupo-opcoes="${index}">${renderOpcoesProdutoGrupo(item, index, produtos)}</div>
+            ${renderExtrasGrupo(item, index)}
+          </div>
+          <div class="field"><label>Observação</label><input class="input" data-grupo-obs="${index}" value="${esc(item.observacoes || "")}" placeholder="Ex.: sem cebola" /></div>
+          <button class="btn btn-primary btn-block btn-pill" type="button" data-grupo-concluir="${index}">Adicionar ao carrinho do grupo</button>
+        </div>`;
+    }
+
+    function renderPedidoGrupoCarrinho(item, index) {
+      const resumo = resumoItemGrupo(item);
+      const extrasTexto = resumo.extras.length
+        ? ` + ${resumo.extras.map(p => p.prato_nome).join(" + ")}`
+        : "";
+      return `<article class="grupo-cart-card">
+        <div class="grupo-cart-head">
+          <div style="min-width:0;">
+            <strong>${esc(item.nome)}</strong>
+            <div class="small muted">${item.responsavel ? "Na sua responsabilidade" : `Matrícula ${esc(item.matricula || "")}`}</div>
+            <div class="small muted">${esc(resumo.principal?.prato_nome || "Produto")}${esc(extrasTexto)}</div>
+          </div>
+          <div class="grupo-cart-total">${fmtBRL(resumo.total)}</div>
+        </div>
+        <div class="grupo-cart-actions">
+          <button class="btn btn-ghost btn-sm" type="button" data-grupo-editar="${index}">Editar</button>
+          <button class="btn btn-ghost btn-sm" type="button" data-grupo-remover="${index}">Remover</button>
+        </div>
+      </article>`;
+    }
+
     function renderGrupoItens() {
       const produtos = produtosGrupoDisponiveis();
+      const emEdicao = state.grupoItens.map((item, index) => ({ item, index })).filter(x => !x.item.finalizado);
+      const noCarrinho = state.grupoItens.map((item, index) => ({ item, index })).filter(x => x.item.finalizado);
+      const totalCarrinho = noCarrinho.reduce((s, x) => s + resumoItemGrupo(x.item).total, 0);
       $("grupoItens").innerHTML = `
-        <h3>Pessoas no pedido</h3>
-        ${state.grupoItens.length ? state.grupoItens.map((item, index) => `
-          <div class="pedido-status-item" style="margin-top:10px;">
-            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
-              <div>
-                <strong>${esc(item.nome)}</strong>
-                <div class="small muted">${item.responsavel ? "Na sua responsabilidade" : `Matrícula ${esc(item.matricula || "")}`}</div>
-              </div>
-              <button class="btn btn-ghost btn-sm" type="button" data-grupo-remover="${index}">Remover</button>
-            </div>
-            ${(() => {
-              const selecionado = produtoGrupoPorId(item.prato_id) || primeiroProdutoGrupo();
-              item.prato_id = item.prato_id || selecionado?.prato_id || "";
-              item.categoriaProduto = item.categoriaProduto || "marmita";
-              return `<div class="grupo-picker">
-                <div class="grupo-produto-selecionado">
-                  <div style="min-width:0;">
-                    <div class="pedido-status-label">Produto escolhido</div>
-                    <strong>${esc(selecionado?.prato_nome || "Escolha um produto")}</strong>
-                    <div class="small muted">${selecionado ? `${esc(selecionado.fornecedor_nome || "Restaurante")} · ${fmtBRL(selecionado.prato_preco)}` : "Use a busca abaixo"}</div>
-                  </div>
-                  <span class="badge pago">${selecionado ? "OK" : "pendente"}</span>
-                </div>
-                <input class="grupo-busca" data-grupo-busca="${index}" type="search" value="${esc(item.buscaProduto || "")}" placeholder="Buscar marmita, carne, restaurante..." />
-                <div class="grupo-categorias">
-                  ${GRUPO_CATEGORIAS.map(cat => `<button class="grupo-chip ${item.categoriaProduto === cat.id ? "active" : ""}" type="button" data-grupo-categoria="${index}" data-categoria="${cat.id}">${cat.label}</button>`).join("")}
-                </div>
-                <div data-grupo-opcoes="${index}">${renderOpcoesProdutoGrupo(item, index, produtos)}</div>
-                ${renderExtrasGrupo(item, index)}
-              </div>`;
-            })()}
-            <div class="field"><label>Observação</label><input class="input" data-grupo-obs="${index}" value="${esc(item.observacoes || "")}" placeholder="Ex.: sem cebola" /></div>
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin-bottom:2px;">Montando agora</h3>
+            <div class="small muted">Quando terminar uma pessoa, envie para o carrinho do grupo.</div>
           </div>
-        `).join("") : '<div class="empty">Busque uma matrícula para começar.</div>'}
+          <span class="badge pendente">${emEdicao.length}</span>
+        </div>
+        ${emEdicao.length ? emEdicao.map(({ item, index }) => renderPedidoGrupoEdicao(item, index, produtos)).join("") : '<div class="empty">Busque uma matrícula para montar o próximo pedido.</div>'}
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start; margin-top:16px; flex-wrap:wrap;">
+          <div>
+            <h3 style="margin-bottom:2px;">Carrinho do grupo</h3>
+            <div class="small muted">${noCarrinho.length} pessoa(s) pronta(s) · ${fmtBRL(totalCarrinho)}</div>
+          </div>
+          <span class="badge pago">${noCarrinho.length}</span>
+        </div>
+        <div class="grupo-cart-list">
+          ${noCarrinho.length ? noCarrinho.map(({ item, index }) => renderPedidoGrupoCarrinho(item, index)).join("") : '<div class="small muted">Nenhum pedido no carrinho ainda.</div>'}
+        </div>
         ${!produtos.length ? '<div class="alert alert-error show">Nenhum produto disponível hoje para pedido em grupo.</div>' : ""}`;
       state.grupoItens.forEach((item, index) => {
+        if (item.finalizado) return;
         atualizarOpcoesProdutoGrupo(index);
         document.querySelector(`[data-grupo-busca="${index}"]`)?.addEventListener("input", (e) => {
           item.buscaProduto = e.target.value;
@@ -5765,6 +5850,22 @@
         });
         const obs = document.querySelector(`[data-grupo-obs="${index}"]`);
         obs?.addEventListener("input", () => item.observacoes = obs.value);
+      });
+      document.querySelectorAll("[data-grupo-concluir]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const item = state.grupoItens[Number(btn.dataset.grupoConcluir)];
+          if (!item?.prato_id) return;
+          item.finalizado = true;
+          renderGrupoItens();
+        });
+      });
+      document.querySelectorAll("[data-grupo-editar]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const item = state.grupoItens[Number(btn.dataset.grupoEditar)];
+          if (!item) return;
+          item.finalizado = false;
+          renderGrupoItens();
+        });
       });
       document.querySelectorAll("[data-grupo-remover]").forEach(btn => {
         btn.addEventListener("click", () => {
@@ -5809,6 +5910,7 @@
             extraCategoria: "bebida",
             extraBusca: "",
             extras: [],
+            finalizado: false,
             observacoes: ""
           });
           $("grupoMatricula").value = "";
@@ -5846,6 +5948,7 @@
         extraCategoria: "bebida",
         extraBusca: "",
         extras: [],
+        finalizado: false,
         observacoes: `Pessoa sem cadastro: ${nome}`
       });
       $("grupoNaoEncontradoPopup").classList.remove("show");
@@ -5860,6 +5963,12 @@
       alertEl.classList.remove("show");
       if (!colab) return mostrarLogin("home", "Entre para enviar pedido em grupo.");
       if (!await garantirCadastroProntoParaPedido(alertEl)) return;
+      const abertos = state.grupoItens.filter(item => !item.finalizado);
+      if (abertos.length) {
+        alertEl.textContent = "Adicione ao carrinho do grupo os pedidos que ainda estão em edição.";
+        alertEl.classList.add("show");
+        return;
+      }
       const itens = state.grupoItens.map(item => ({
         colaborador_id: item.responsavel ? colab.id : item.colaborador_id,
         responsavel: !!item.responsavel,
