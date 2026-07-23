@@ -906,6 +906,91 @@
       flex-shrink: 0;
     }
 
+    .admin-confirm-bg {
+      position: fixed;
+      inset: 0;
+      z-index: 140;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(42, 31, 23, .56);
+      backdrop-filter: blur(4px);
+    }
+
+    .admin-confirm-bg.show {
+      display: flex;
+      animation: fadeIn 180ms ease-out;
+    }
+
+    .admin-confirm-card {
+      width: min(440px, 100%);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+    }
+
+    .admin-confirm-head {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .admin-confirm-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      background: rgba(210, 152, 34, .16);
+      color: var(--mustard);
+      font-weight: 900;
+      border: 1px solid rgba(210, 152, 34, .28);
+    }
+
+    .admin-confirm-title {
+      margin: 0;
+      font-size: 1.08rem;
+      color: var(--ink);
+    }
+
+    .admin-confirm-msg {
+      margin: 4px 0 0;
+      color: var(--ink-soft);
+      line-height: 1.35;
+    }
+
+    .admin-confirm-detail {
+      display: none;
+      margin: 12px 0 0;
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-soft);
+      border: 1px solid var(--line);
+      color: var(--ink);
+      font-weight: 800;
+    }
+
+    .admin-confirm-detail.show {
+      display: block;
+    }
+
+    .admin-confirm-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 16px;
+    }
+
+    .admin-confirm-actions .btn {
+      width: auto;
+      min-width: 110px;
+    }
+
     /* ==================================================================
        STATS (cards de estatística)
        ================================================================== */
@@ -3576,6 +3661,23 @@
     </div>
   </div>
 
+  <div class="admin-confirm-bg" id="adminConfirmPopup" role="dialog" aria-modal="true" aria-labelledby="adminConfirmTitle">
+    <div class="admin-confirm-card">
+      <div class="admin-confirm-head">
+        <div class="admin-confirm-icon" id="adminConfirmIcon">?</div>
+        <div style="flex:1; min-width:0;">
+          <h2 class="admin-confirm-title" id="adminConfirmTitle">Confirmar ação</h2>
+          <p class="admin-confirm-msg" id="adminConfirmMsg"></p>
+        </div>
+      </div>
+      <div class="admin-confirm-detail" id="adminConfirmDetail"></div>
+      <div class="admin-confirm-actions">
+        <button class="btn btn-ghost" id="adminConfirmCancel">Cancelar</button>
+        <button class="btn btn-primary" id="adminConfirmOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================================================
        SCRIPT
        ============================================================ -->
@@ -3592,6 +3694,7 @@
       if (el && el.innerHTML !== html) el.innerHTML = html;
     }
     const fmtBRL = (v) => "R$ " + Number(v ?? 0).toFixed(2).replace(".", ",");
+    const FIADO_TAXA_FIXA_VALOR = 8;
     const fmtData = (d) => new Date(d + "T12:00:00").toLocaleDateString("pt-BR");
     const escHtml = (v) => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     const jsArg = (v) => String(v ?? "").replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/\r?\n/g, " ");
@@ -3635,6 +3738,70 @@
       d.setDate(d.getDate() + dias);
       return dataLocalISO(d);
     };
+
+    function totalCatalogoPedido(p = {}) {
+      const qtd = Math.max(1, Number(p.quantidade || 1));
+      const precoPrato = Number(p.prato?.preco);
+      if (!Number.isFinite(precoPrato) || precoPrato <= 0) return null;
+      const extras = (p.acompanhamentos || []).reduce((s, item) => {
+        const acomp = item.acompanhamento || item;
+        const qtdAcomp = Math.max(1, Number(item.quantidade || 1));
+        return s + (Number(acomp?.preco_extra || 0) * qtdAcomp);
+      }, 0);
+      return Number(((precoPrato * qtd) + extras).toFixed(2));
+    }
+
+    function pedidoFiadoSemTaxaFixa(p = {}) {
+      if (p.forma_pagamento !== "fiado") return false;
+      const atual = Number(p.preco_total || 0);
+      const base = totalCatalogoPedido(p);
+      if (!Number.isFinite(atual) || !Number.isFinite(base)) return false;
+      return atual + 0.004 < base + FIADO_TAXA_FIXA_VALOR;
+    }
+
+    function valorPedidoRegraFiado(p = {}) {
+      const atual = Number(p.preco_total || 0);
+      if (!pedidoFiadoSemTaxaFixa(p)) return atual;
+      const base = totalCatalogoPedido(p);
+      return Number(Math.max(atual, base + FIADO_TAXA_FIXA_VALOR).toFixed(2));
+    }
+
+    function normalizarPedidoRegraFiado(p = {}) {
+      const precoAjustado = valorPedidoRegraFiado(p);
+      return { ...p, preco_total_original: Number(p.preco_total || 0), preco_total: precoAjustado };
+    }
+
+    function confirmarAdmin({ titulo = "Confirmar ação", mensagem = "", detalhe = "", confirmar = "Confirmar", cancelar = "Cancelar", icone = "?" } = {}) {
+      const popup = $("adminConfirmPopup");
+      if (!popup) return Promise.resolve(window.confirm([mensagem, detalhe].filter(Boolean).join("\n\n")));
+      $("adminConfirmIcon").textContent = icone;
+      $("adminConfirmTitle").textContent = titulo;
+      $("adminConfirmMsg").textContent = mensagem;
+      $("adminConfirmOk").textContent = confirmar;
+      $("adminConfirmCancel").textContent = cancelar;
+      const detailEl = $("adminConfirmDetail");
+      detailEl.textContent = detalhe || "";
+      detailEl.classList.toggle("show", !!detalhe);
+      popup.classList.add("show");
+      return new Promise(resolve => {
+        const finalizar = (ok) => {
+          popup.classList.remove("show");
+          $("adminConfirmOk").removeEventListener("click", onOk);
+          $("adminConfirmCancel").removeEventListener("click", onCancel);
+          popup.removeEventListener("click", onBg);
+          document.removeEventListener("keydown", onKey);
+          resolve(ok);
+        };
+        const onOk = () => finalizar(true);
+        const onCancel = () => finalizar(false);
+        const onBg = (event) => { if (event.target === popup) finalizar(false); };
+        const onKey = (event) => { if (event.key === "Escape") finalizar(false); };
+        $("adminConfirmOk").addEventListener("click", onOk);
+        $("adminConfirmCancel").addEventListener("click", onCancel);
+        popup.addEventListener("click", onBg);
+        document.addEventListener("keydown", onKey);
+      });
+    }
 
     function normalizarBuscaAdmin(valor) {
       return String(valor || "")
@@ -3699,7 +3866,8 @@
 
         const dados = mapaFiado.get(colabId);
         const dias = diasEmAberto(p.data);
-        dados.total += Number(p.preco_total);
+        const valor = valorPedidoRegraFiado(p);
+        dados.total += valor;
         dados.ids.push(p.id);
         dados.maxDias = Math.max(dados.maxDias, dias);
         if (p.data < dados.dataMaisAntiga) dados.dataMaisAntiga = p.data;
@@ -3708,7 +3876,7 @@
           data: p.data,
           criado_em: p.criado_em,
           dias,
-          valor: Number(p.preco_total),
+          valor,
           prato: p.prato?.nome || "Pedido",
           fornecedor: p.fornecedor?.nome || "Fornecedor"
         });
@@ -3810,13 +3978,14 @@
           });
         }
         const dados = mapa.get(colabId);
-        dados.total += Number(p.preco_total || 0);
+        const valor = valorPedidoRegraFiado(p);
+        dados.total += valor;
         dados.ids.push(p.id);
         dados.compras.push({
           id: p.id,
           data: p.data,
           criado_em: p.criado_em,
-          valor: Number(p.preco_total || 0),
+          valor,
           prato: p.prato?.nome || "Pedido",
           fornecedor: p.fornecedor?.nome || "Fornecedor"
         });
@@ -4576,10 +4745,10 @@
 
       const { data: pedidos, error } = await query;
       if (error) throw error;
-      return pedidos || [];
+      return (pedidos || []).map(normalizarPedidoRegraFiado);
     }
 
-    const somaPedidos = (pedidos) => pedidos.reduce((s, p) => s + Number(p.preco_total || 0), 0);
+    const somaPedidos = (pedidos) => pedidos.reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
     const pedidoMinutos = (p) => p.criado_em ? Math.max(0, Math.floor((Date.now() - new Date(p.criado_em).getTime()) / 60000)) : 0;
     const pedidoPix = (p) => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
     const textoAcomps = (p) => (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
@@ -4707,7 +4876,7 @@
         const key = keyFn(p) || "Nao informado";
         if (!map.has(key)) map.set(key, { nome: labelFn(p) || key, total: 0, qtd: 0 });
         const item = map.get(key);
-        item.total += Number(p.preco_total || 0);
+        item.total += valorPedidoRegraFiado(p);
         item.qtd += 1;
       });
       return [...map.values()].sort((a, b) => b.total - a.total);
@@ -4725,14 +4894,14 @@
       $("relatoriosConteudo").innerHTML = '<div class="loading">Gerando relatorio...</div>';
       try {
         const { data, error } = await sb.from("pedidos")
-          .select("id, data, preco_total, quantidade, forma_pagamento, status_pagamento, status, prato:pratos(nome), fornecedor:fornecedores(nome), colaborador:colaboradores(nome)")
+          .select("id, data, preco_total, quantidade, forma_pagamento, status_pagamento, status, prato:pratos(nome, preco), fornecedor:fornecedores(nome), colaborador:colaboradores(nome)")
           .gte("data", inicio)
           .lte("data", fim)
           .neq("status", "cancelado")
           .neq("status", "aguardando_pagamento")
           .order("data", { ascending: true });
         if (error) throw error;
-        const pedidos = data || [];
+        const pedidos = (data || []).map(normalizarPedidoRegraFiado);
         const total = somaPedidos(pedidos);
         const pagos = pedidos.filter(p => p.status_pagamento === "pago");
         const porDia = agruparTotal(pedidos, p => p.data, p => fmtData(p.data));
@@ -4792,7 +4961,7 @@
     }
 
     function valorPedidos(arr) {
-      return arr.reduce((s, p) => s + Number(p.preco_total || 0), 0);
+      return arr.reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
     }
 
     function acompTextoRelatorio(p) {
@@ -4812,7 +4981,7 @@
         const key = keyFn(p) || "Nao informado";
         if (!map.has(key)) map.set(key, { nome: labelFn(p) || key, qtd: 0, total: 0, pago: 0, pendente: 0 });
         const item = map.get(key);
-        const valor = Number(p.preco_total || 0);
+        const valor = valorPedidoRegraFiado(p);
         item.qtd += 1;
         item.total += valor;
         if (p.status_pagamento === "pago") item.pago += valor;
@@ -4827,7 +4996,7 @@
           id, data, criado_em, pago_em, preco_total, quantidade, observacoes, nome_pessoa,
           forma_pagamento, status_pagamento, status, comprovante_status, comprovante_url,
           pedido_coletivo_id, infinitepay_paid_amount,
-          prato:pratos(nome, categoria),
+          prato:pratos(nome, categoria, preco),
           fornecedor:fornecedores(nome),
           colaborador:colaboradores(nome, matricula, empresa, whatsapp),
           acompanhamentos:pedido_acompanhamentos(
@@ -4840,7 +5009,7 @@
         .order("data", { ascending: true })
         .order("criado_em", { ascending: true });
       if (error) throw error;
-      return data || [];
+      return (data || []).map(normalizarPedidoRegraFiado);
     }
 
     async function carregarBibliotecaPdf() {
@@ -4915,7 +5084,7 @@
         REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento,
         p.status_pagamento === "pago" ? "Pago" : "Pendente",
         REL_STATUS_LABEL[p.status] || p.status,
-        fmtBRL(p.preco_total),
+        fmtBRL(valorPedidoRegraFiado(p)),
         p.observacoes || "-"
       ]);
     }
@@ -5023,7 +5192,7 @@
             fmtData(p.data),
             REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento,
             p.status_pagamento === "pago" ? "Pago" : "Pendente",
-            fmtBRL(p.preco_total),
+            fmtBRL(valorPedidoRegraFiado(p)),
             p.observacoes || "-"
           ]),
           theme: "grid",
@@ -5296,10 +5465,11 @@
         texto += `${i + 1}. *${p.colaborador?.nome || "Cliente"}*\n`;
         texto += `   ${textoQtd(p)}${p.prato?.nome || "Pedido"}`;
         if (acomps) texto += ` + ${acomps}`;
-        texto += ` - ${fmtBRL(p.preco_total)}\n`;
+        const valor = valorPedidoRegraFiado(p);
+        texto += ` - ${fmtBRL(valor)}\n`;
         texto += `   Pagamento: ${REL_PAY_LABEL[p.forma_pagamento] || p.forma_pagamento || "-"}\n`;
         if (p.observacoes) texto += `   Obs: _${p.observacoes}_\n`;
-        total += Number(p.preco_total || 0);
+        total += valor;
       });
       texto += `\n--------------------\n*Total: ${grupo.pedidos.length} pedido(s) - ${fmtBRL(total)}*`;
       return { texto, total };
@@ -5307,7 +5477,7 @@
 
     function mensagemPagarMaisTardeWhats(p) {
       const primeiro = (p.colaborador?.nome || "cliente").split(" ")[0];
-      return `Olá ${primeiro}!\n\nComprovante do seu pedido de hoje:\n\nProduto: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nValor: ${fmtBRL(p.preco_total)}\nPagamento escolhido: Pagar mais tarde${linkPagamentoTexto(p.infinitepay_checkout_url)}\n\nPor favor, realize o pagamento até hoje. Esta mensagem serve como lembrete e comprovante da compra registrada.`;
+      return `Olá ${primeiro}!\n\nComprovante do seu pedido de hoje:\n\nProduto: ${textoQtd(p)}${p.prato?.nome || "Pedido"}\nRestaurante: ${p.fornecedor?.nome || "Restaurante"}\nValor: ${fmtBRL(valorPedidoRegraFiado(p))}\nPagamento escolhido: Pagar mais tarde${linkPagamentoTexto(p.infinitepay_checkout_url)}\n\nPor favor, realize o pagamento até hoje. Esta mensagem serve como lembrete e comprovante da compra registrada.`;
     }
 
     function agruparFiadosPorCliente(pedidos) {
@@ -5317,9 +5487,10 @@
         const key = c.id || c.whatsapp || c.nome || p.id;
         if (!mapa.has(key)) mapa.set(key, { id: c.id || "", nome: c.nome || "Cliente", whatsapp: c.whatsapp || "", empresa: c.empresa || "", matricula: c.matricula || "", total: 0, compras: [], checkoutUrl: "" });
         const item = mapa.get(key);
-        item.total += Number(p.preco_total || 0);
+        const valor = valorPedidoRegraFiado(p);
+        item.total += valor;
         if (!item.checkoutUrl && p.infinitepay_checkout_url) item.checkoutUrl = p.infinitepay_checkout_url;
-        item.compras.push({ id: p.id, data: p.data, produto: `${textoQtd(p)}${p.prato?.nome || "Pedido"}`, fornecedor: p.fornecedor?.nome || "Restaurante", valor: Number(p.preco_total || 0) });
+        item.compras.push({ id: p.id, data: p.data, produto: `${textoQtd(p)}${p.prato?.nome || "Pedido"}`, fornecedor: p.fornecedor?.nome || "Restaurante", valor });
       });
       return [...mapa.values()].sort((a, b) => b.total - a.total);
     }
@@ -5722,7 +5893,7 @@
       const nomesAcomp = (p) => (p.acompanhamentos || []).map(a => a.acompanhamento?.nome).filter(Boolean).join(", ");
       const horarioPedido = (p) => p.criado_em ? new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
       const minutosDesde = (p) => p.criado_em ? Math.max(0, Math.floor((Date.now() - new Date(p.criado_em).getTime()) / 60000)) : 0;
-      const soma = (arr) => arr.reduce((s, p) => s + Number(p.preco_total), 0);
+      const soma = (arr) => arr.reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
       const isPix = (p) => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento);
 
       // STATS GERAIS DO DIA
@@ -5812,11 +5983,12 @@
         }
         const r = resumoFornecedor.get(fid);
         r.qtd += 1;
-        r.total += Number(p.preco_total);
-        if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) r.pix += Number(p.preco_total);
-        if (p.forma_pagamento === "cartao_infinitepay") r.cartao += Number(p.preco_total);
-        if (p.forma_pagamento === "dinheiro") r.dinheiro += Number(p.preco_total);
-        if (p.forma_pagamento === "fiado") r.fiado += Number(p.preco_total);
+        const valor = valorPedidoRegraFiado(p);
+        r.total += valor;
+        if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento)) r.pix += valor;
+        if (p.forma_pagamento === "cartao_infinitepay") r.cartao += valor;
+        if (p.forma_pagamento === "dinheiro") r.dinheiro += valor;
+        if (p.forma_pagamento === "fiado") r.fiado += valor;
         if (["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente") r.comprovantes += 1;
       });
 
@@ -7565,14 +7737,18 @@ Bom apetite!`;
     // =====================================================================
     // FINANCEIRO
     // =====================================================================
-    const FINANCEIRO_FIADO_TAXA_FIXA = 8;
+    const FINANCEIRO_FIADO_TAXA_FIXA = FIADO_TAXA_FIXA_VALOR;
 
     function precoMovimentoFinanceiro(pedido = {}, destino) {
-      const atual = Number(pedido.preco_total || 0);
+      const atualBanco = Number(pedido.preco_total || 0);
       const eraFiado = pedido.forma_pagamento === "fiado";
-      if (destino === "fiado" && !eraFiado) return Number((atual + FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
-      if (destino === "pendente" && eraFiado) return Number(Math.max(0, atual - FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
-      return Number(atual.toFixed(2));
+      if (destino === "fiado" && !eraFiado) return Number((atualBanco + FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
+      if (destino === "pendente" && eraFiado) {
+        return pedidoFiadoSemTaxaFixa(pedido)
+          ? Number(atualBanco.toFixed(2))
+          : Number(Math.max(0, atualBanco - FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
+      }
+      return Number(atualBanco.toFixed(2));
     }
 
     function renderCentralClientesFinanceiro(pedidos = []) {
@@ -7674,21 +7850,28 @@ Bom apetite!`;
       if (!payload) return;
       const { data: pedidoAtual, error: pedidoAtualError } = await sb
         .from("pedidos")
-        .select("id, preco_total, forma_pagamento")
+        .select("id, preco_total, quantidade, forma_pagamento, prato:pratos(preco), acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))")
         .eq("id", id)
         .maybeSingle();
       if (pedidoAtualError || !pedidoAtual) {
         alert("Erro ao buscar pedido: " + (pedidoAtualError?.message || "pedido nao encontrado."));
         return;
       }
-      const precoAnterior = Number(pedidoAtual.preco_total || 0);
+      const precoAnterior = valorPedidoRegraFiado(pedidoAtual);
       const precoNovo = precoMovimentoFinanceiro(pedidoAtual, destino);
       if (precoNovo !== precoAnterior) payload.preco_total = precoNovo;
       const label = destino === "pago" ? "pago" : destino === "fiado" ? "fiado" : "pagamento pendente";
       const ajustePreco = precoNovo !== precoAnterior
-        ? `\n\nValor: ${fmtBRL(precoAnterior)} -> ${fmtBRL(precoNovo)}${destino === "fiado" ? " (taxa fixa do fiado)" : " (taxa do fiado removida)"}`
+        ? `Valor: ${fmtBRL(precoAnterior)} -> ${fmtBRL(precoNovo)}${destino === "fiado" ? " (taxa fixa do fiado)" : " (taxa do fiado removida)"}`
         : "";
-      if (!confirm(`Mover este pedido para ${label}?${ajustePreco}`)) return;
+      const confirmado = await confirmarAdmin({
+        titulo: "Mover pagamento",
+        mensagem: `Mover este pedido para ${label}?`,
+        detalhe: ajustePreco,
+        confirmar: destino === "pago" ? "Marcar pago" : "Mover",
+        icone: destino === "fiado" ? "$" : "?"
+      });
+      if (!confirmado) return;
       const { error } = await sb.from("pedidos").update(payload).eq("id", id);
       if (error) {
         alert("Erro ao mover pedido: " + error.message);
@@ -7722,20 +7905,21 @@ Bom apetite!`;
       inicioSemana.setDate(inicioSemana.getDate() - ((inicioSemana.getDay() + 6) % 7));
       const inicioSemanaStr = dataLocalISO(inicioSemana);
       const { data: pedidosMes } = await sb.from("pedidos")
-        .select("preco_total, status_pagamento, forma_pagamento")
+        .select("preco_total, quantidade, status_pagamento, forma_pagamento, prato:pratos(preco), acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))")
         .gte("data", inicioMesStr)
         .neq("status", "cancelado")
         .neq("status", "aguardando_pagamento");
       const { data: concluidosMes } = await sb.from("pedidos")
-        .select("preco_total, concluido_em, data, status")
+        .select("preco_total, quantidade, concluido_em, data, status, forma_pagamento, prato:pratos(preco), acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))")
         .eq("status", "concluido")
         .gte("concluido_em", inicioMesStr);
       const { data: centralPedidos, error: centralError } = await sb.from("pedidos")
         .select(`
           id, preco_total, data, criado_em, forma_pagamento, status_pagamento, status, pago_em,
-          prato:pratos(nome),
+          prato:pratos(nome, preco),
           fornecedor:fornecedores(nome),
-          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp),
+          acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))
         `)
         .or(`data.eq.${hojeStr},status_pagamento.eq.pendente`)
         .neq("status", "cancelado")
@@ -7743,19 +7927,21 @@ Bom apetite!`;
       if ($("finClientesStatus")) {
         setHTMLIfChanged("finClientesStatus", centralError
           ? `<div class="alert alert-error show">${centralError.message}</div>`
-          : renderCentralClientesFinanceiro(centralPedidos || []));
+          : renderCentralClientesFinanceiro((centralPedidos || []).map(normalizarPedidoRegraFiado)));
       }
 
-      const totalMes = (pedidosMes || []).reduce((s, p) => s + Number(p.preco_total), 0);
-      const totalPago = (pedidosMes || []).filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
+      const pedidosMesNorm = (pedidosMes || []).map(normalizarPedidoRegraFiado);
+      const concluidosMesNorm = (concluidosMes || []).map(normalizarPedidoRegraFiado);
+      const totalMes = pedidosMesNorm.reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
+      const totalPago = pedidosMesNorm.filter(p => p.status_pagamento === "pago").reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
       const totalPendente = totalMes - totalPago;
-      const totalFiado = (pedidosMes || []).filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente").reduce((s, p) => s + Number(p.preco_total), 0);
-      const totalPixPago = (pedidosMes || []).filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
-      const concluidos = (concluidosMes || []).filter(p => p.concluido_em);
+      const totalFiado = pedidosMesNorm.filter(p => p.forma_pagamento === "fiado" && p.status_pagamento === "pendente").reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
+      const totalPixPago = pedidosMesNorm.filter(p => ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pago").reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
+      const concluidos = concluidosMesNorm.filter(p => p.concluido_em);
       const dataConclusao = (p) => dataLocalISO(new Date(p.concluido_em));
-      const concluidoHoje = concluidos.filter(p => dataConclusao(p) === hojeStr).reduce((s, p) => s + Number(p.preco_total), 0);
-      const concluidoSemana = concluidos.filter(p => dataConclusao(p) >= inicioSemanaStr).reduce((s, p) => s + Number(p.preco_total), 0);
-      const concluidoMes = concluidos.reduce((s, p) => s + Number(p.preco_total), 0);
+      const concluidoHoje = concluidos.filter(p => dataConclusao(p) === hojeStr).reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
+      const concluidoSemana = concluidos.filter(p => dataConclusao(p) >= inicioSemanaStr).reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
+      const concluidoMes = concluidos.reduce((s, p) => s + valorPedidoRegraFiado(p), 0);
 
       setHTMLIfChanged("finStats", `
         <div class="stat"><div class="stat-label">Faturado mês</div><div class="stat-value brick">${fmtBRL(totalMes)}</div></div>
@@ -7772,9 +7958,11 @@ Bom apetite!`;
       const { data: fiados } = await sb.from("pedidos")
         .select(`
           id, preco_total, data, criado_em, comprovante_url,
-          prato:pratos(nome),
+          quantidade,
+          prato:pratos(nome, preco),
           fornecedor:fornecedores(nome),
-          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp),
+          acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))
         `)
         .eq("forma_pagamento", "fiado").eq("status_pagamento", "pendente")
         .neq("status", "cancelado")
@@ -7783,10 +7971,11 @@ Bom apetite!`;
 
       const { data: pagarMaisTarde } = await sb.from("pedidos")
         .select(`
-          id, preco_total, data, criado_em,
-          prato:pratos(nome),
+          id, preco_total, quantidade, data, criado_em,
+          prato:pratos(nome, preco),
           fornecedor:fornecedores(nome),
-          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp),
+          acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))
         `)
         .eq("forma_pagamento", "pagar_mais_tarde")
         .eq("status_pagamento", "pendente")
@@ -7794,7 +7983,7 @@ Bom apetite!`;
         .neq("status", "aguardando_pagamento")
         .order("data", { ascending: false });
 
-      setHTMLIfChanged("finSaldos", renderPagarMaisTardeAdmin(pagarMaisTarde || []) + renderFiadosAbertosAdmin(fiados || []));
+      setHTMLIfChanged("finSaldos", renderPagarMaisTardeAdmin((pagarMaisTarde || []).map(normalizarPedidoRegraFiado)) + renderFiadosAbertosAdmin((fiados || []).map(normalizarPedidoRegraFiado)));
 
       // ---- PIX com comprovante pendente ----
       const { data: pixPend } = await sb.from("pedidos")
@@ -7827,7 +8016,7 @@ Bom apetite!`;
 
       // ---- Faturamento por fornecedor ----
       const { data: forn } = await sb.from("pedidos")
-        .select("preco_total, fornecedor:fornecedores(id, nome)")
+        .select("preco_total, quantidade, forma_pagamento, fornecedor:fornecedores(id, nome), prato:pratos(preco), acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(preco_extra))")
         .gte("data", inicioMesStr)
         .neq("status", "cancelado")
         .neq("status", "aguardando_pagamento");
@@ -7837,7 +8026,7 @@ Bom apetite!`;
         if (!p.fornecedor) return;
         const id = p.fornecedor.id;
         if (!mapaF.has(id)) mapaF.set(id, { nome: p.fornecedor.nome, total: 0 });
-        mapaF.get(id).total += Number(p.preco_total);
+        mapaF.get(id).total += valorPedidoRegraFiado(p);
       });
 
       if (mapaF.size === 0) setHTMLIfChanged("finFornecedores", '<div class="empty">Sem pedidos no mês.</div>');
@@ -8267,7 +8456,7 @@ Bom apetite!`;
         const socios = sociosResp.data || [];
         const vincFor = fornResp.data || [];
         const vincProd = prodResp.data || [];
-        const pedidosBrutos = pedidosResp.data || [];
+        const pedidosBrutos = (pedidosResp.data || []).map(normalizarPedidoRegraFiado);
         const pedidos = pedidosBrutos.filter(pedidoContaParaSocios);
         const checkoutsIgnorados = pedidosBrutos.filter(p => p.data >= inicioMes && p.forma_pagamento === "cartao_infinitepay" && !pedidoContaParaSocios(p)).length;
         const pratos = pratosResp.data || [];
