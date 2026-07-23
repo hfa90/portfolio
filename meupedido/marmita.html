@@ -1138,6 +1138,115 @@
       min-width: 0;
     }
 
+    .grupo-picker {
+      margin-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .grupo-produto-selecionado {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(52, 199, 89, .22);
+      background: rgba(52, 199, 89, .08);
+    }
+
+    .grupo-busca {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 14px;
+      border: 1px solid rgba(0, 0, 0, .08);
+      background: rgba(255, 255, 255, .78);
+      padding: 0 12px;
+      color: var(--ink);
+      font: inherit;
+      outline: none;
+    }
+
+    .grupo-busca:focus {
+      border-color: rgba(185, 74, 42, .38);
+      box-shadow: 0 0 0 4px rgba(185, 74, 42, .10);
+    }
+
+    .grupo-categorias {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scrollbar-width: none;
+    }
+
+    .grupo-categorias::-webkit-scrollbar {
+      display: none;
+    }
+
+    .grupo-chip {
+      border: 1px solid rgba(0, 0, 0, .08);
+      background: rgba(255, 255, 255, .68);
+      color: var(--ink-soft);
+      border-radius: 999px;
+      padding: 8px 11px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+      min-height: 34px;
+    }
+
+    .grupo-chip.active {
+      background: var(--brick);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .grupo-produtos-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      max-height: 310px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .grupo-produto-card {
+      text-align: left;
+      border: 1px solid rgba(0, 0, 0, .07);
+      background: rgba(255, 255, 255, .72);
+      color: var(--ink);
+      border-radius: 14px;
+      padding: 9px;
+      min-height: 96px;
+      display: grid;
+      gap: 5px;
+      align-content: start;
+    }
+
+    .grupo-produto-card.active {
+      border-color: rgba(52, 199, 89, .46);
+      background: rgba(52, 199, 89, .10);
+      box-shadow: 0 0 0 3px rgba(52, 199, 89, .08);
+    }
+
+    .grupo-produto-nome {
+      font-weight: 900;
+      line-height: 1.14;
+    }
+
+    .grupo-produto-meta {
+      font-size: 11px;
+      color: var(--ink-tertiary);
+      line-height: 1.25;
+    }
+
+    .grupo-produto-preco {
+      font-weight: 900;
+      color: var(--brick);
+      margin-top: auto;
+    }
+
     .pedido-status-label {
       font-size: 10px;
       text-transform: uppercase;
@@ -2857,6 +2966,20 @@
     :root[data-theme="dark"] .filter-menu .filter-chip.active {
       background: rgba(224, 112, 76, .18);
       color: var(--brick);
+    }
+
+    :root[data-theme="dark"] .grupo-busca,
+    :root[data-theme="dark"] .grupo-chip,
+    :root[data-theme="dark"] .grupo-produto-card {
+      background: rgba(244, 234, 220, .08);
+      border-color: rgba(244, 234, 220, .14);
+      color: var(--ink);
+    }
+
+    :root[data-theme="dark"] .grupo-produto-selecionado,
+    :root[data-theme="dark"] .grupo-produto-card.active {
+      background: rgba(52, 199, 89, .12);
+      border-color: rgba(52, 199, 89, .28);
     }
 
     :root[data-theme="dark"] .input,
@@ -5376,6 +5499,74 @@
         .sort((a, b) => String(a.prato_nome || "").localeCompare(String(b.prato_nome || "")));
     }
 
+    const GRUPO_CATEGORIAS = [
+      { id: "marmita", label: "Marmitas" },
+      { id: "bebida", label: "Bebidas" },
+      { id: "sobremesa", label: "Sobremesas" },
+      { id: "lanche", label: "Lanches" },
+      { id: "todos", label: "Todos" }
+    ];
+
+    function primeiroProdutoGrupo() {
+      const produtos = produtosGrupoDisponiveis();
+      return produtos.find(p => categoriaProduto(p.prato_categoria) === "marmita") || produtos[0] || null;
+    }
+
+    function produtoGrupoPorId(id) {
+      return produtosGrupoDisponiveis().find(p => String(p.prato_id) === String(id)) || null;
+    }
+
+    function textoBuscaProdutoGrupo(produto = {}) {
+      return normalizarBusca([
+        produto.prato_nome,
+        produto.fornecedor_nome,
+        produto.prato_descricao,
+        categoriaProduto(produto.prato_categoria)
+      ].filter(Boolean).join(" "));
+    }
+
+    function filtrarProdutosGrupo(item = {}, produtos = produtosGrupoDisponiveis()) {
+      const categoria = item.categoriaProduto || "marmita";
+      const tokens = termosBusca(item.buscaProduto || "");
+      return produtos
+        .filter(p => categoria === "todos" || categoriaProduto(p.prato_categoria) === categoria)
+        .map(p => {
+          const texto = textoBuscaProdutoGrupo(p);
+          const score = tokens.reduce((s, t) => s + (texto.includes(t) ? (texto.startsWith(t) ? 5 : 3) : 0), 0);
+          return { ...p, __score: score };
+        })
+        .filter(p => !tokens.length || p.__score > 0)
+        .sort((a, b) => (b.__score - a.__score) || Number(a.prato_preco || 0) - Number(b.prato_preco || 0) || String(a.prato_nome || "").localeCompare(String(b.prato_nome || "")))
+        .slice(0, 10);
+    }
+
+    function renderOpcoesProdutoGrupo(item, index, produtos = produtosGrupoDisponiveis()) {
+      const filtrados = filtrarProdutosGrupo(item, produtos);
+      if (!produtos.length) return '<div class="alert alert-error show">Nenhum produto disponível hoje para pedido em grupo.</div>';
+      if (!filtrados.length) return '<div class="empty">Nenhum produto encontrado. Tente outro nome ou categoria.</div>';
+      return `<div class="grupo-produtos-grid">${filtrados.map(p => `
+        <button class="grupo-produto-card ${String(item.prato_id || "") === String(p.prato_id) ? "active" : ""}" type="button" data-grupo-selecionar="${index}" data-prato-id="${p.prato_id}">
+          <span class="grupo-produto-nome">${esc(p.prato_nome)}</span>
+          <span class="grupo-produto-meta">${esc(p.fornecedor_nome || "Restaurante")} · ${esc(CATEGORIAS_STORY[categoriaProduto(p.prato_categoria)]?.label || "Produto")}</span>
+          ${p.prato_descricao ? `<span class="grupo-produto-meta">${esc(String(p.prato_descricao).slice(0, 72))}</span>` : ""}
+          <span class="grupo-produto-preco">${fmtBRL(p.prato_preco)}</span>
+        </button>
+      `).join("")}</div>`;
+    }
+
+    function atualizarOpcoesProdutoGrupo(index) {
+      const wrap = document.querySelector(`[data-grupo-opcoes="${index}"]`);
+      const item = state.grupoItens[index];
+      if (!wrap || !item) return;
+      wrap.innerHTML = renderOpcoesProdutoGrupo(item, index);
+      wrap.querySelectorAll("[data-grupo-selecionar]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          item.prato_id = btn.dataset.pratoId || "";
+          renderGrupoItens();
+        });
+      });
+    }
+
     async function prepararPedidoGrupo() {
       if (!getColab()) {
         $("grupoItens").innerHTML = `<div class="empty">Entre com sua matrícula para montar pedido em grupo.</div>`;
@@ -5387,7 +5578,6 @@
 
     function renderGrupoItens() {
       const produtos = produtosGrupoDisponiveis();
-      const options = produtos.map(p => `<option value="${p.prato_id}">${esc(p.prato_nome)} - ${esc(p.fornecedor_nome)} - ${fmtBRL(p.prato_preco)}</option>`).join("");
       $("grupoItens").innerHTML = `
         <h3>Pessoas no pedido</h3>
         ${state.grupoItens.length ? state.grupoItens.map((item, index) => `
@@ -5399,18 +5589,42 @@
               </div>
               <button class="btn btn-ghost btn-sm" type="button" data-grupo-remover="${index}">Remover</button>
             </div>
-            <div class="field" style="margin-top:10px;"><label>Produto</label><select data-grupo-prato="${index}">${options}</select></div>
+            ${(() => {
+              const selecionado = produtoGrupoPorId(item.prato_id) || primeiroProdutoGrupo();
+              item.prato_id = item.prato_id || selecionado?.prato_id || "";
+              item.categoriaProduto = item.categoriaProduto || "marmita";
+              return `<div class="grupo-picker">
+                <div class="grupo-produto-selecionado">
+                  <div style="min-width:0;">
+                    <div class="pedido-status-label">Produto escolhido</div>
+                    <strong>${esc(selecionado?.prato_nome || "Escolha um produto")}</strong>
+                    <div class="small muted">${selecionado ? `${esc(selecionado.fornecedor_nome || "Restaurante")} · ${fmtBRL(selecionado.prato_preco)}` : "Use a busca abaixo"}</div>
+                  </div>
+                  <span class="badge pago">${selecionado ? "OK" : "pendente"}</span>
+                </div>
+                <input class="grupo-busca" data-grupo-busca="${index}" type="search" value="${esc(item.buscaProduto || "")}" placeholder="Buscar marmita, carne, restaurante..." />
+                <div class="grupo-categorias">
+                  ${GRUPO_CATEGORIAS.map(cat => `<button class="grupo-chip ${item.categoriaProduto === cat.id ? "active" : ""}" type="button" data-grupo-categoria="${index}" data-categoria="${cat.id}">${cat.label}</button>`).join("")}
+                </div>
+                <div data-grupo-opcoes="${index}">${renderOpcoesProdutoGrupo(item, index, produtos)}</div>
+              </div>`;
+            })()}
             <div class="field"><label>Observação</label><input class="input" data-grupo-obs="${index}" value="${esc(item.observacoes || "")}" placeholder="Ex.: sem cebola" /></div>
           </div>
         `).join("") : '<div class="empty">Busque uma matrícula para começar.</div>'}
         ${!produtos.length ? '<div class="alert alert-error show">Nenhum produto disponível hoje para pedido em grupo.</div>' : ""}`;
       state.grupoItens.forEach((item, index) => {
-        const select = document.querySelector(`[data-grupo-prato="${index}"]`);
-        if (select) {
-          select.value = item.prato_id || produtos[0]?.prato_id || "";
-          item.prato_id = select.value;
-          select.addEventListener("change", () => item.prato_id = select.value);
-        }
+        atualizarOpcoesProdutoGrupo(index);
+        document.querySelector(`[data-grupo-busca="${index}"]`)?.addEventListener("input", (e) => {
+          item.buscaProduto = e.target.value;
+          atualizarOpcoesProdutoGrupo(index);
+        });
+        document.querySelectorAll(`[data-grupo-categoria="${index}"]`).forEach(btn => {
+          btn.addEventListener("click", () => {
+            item.categoriaProduto = btn.dataset.categoria || "marmita";
+            renderGrupoItens();
+          });
+        });
         const obs = document.querySelector(`[data-grupo-obs="${index}"]`);
         obs?.addEventListener("input", () => item.observacoes = obs.value);
       });
@@ -5445,13 +5659,15 @@
         if (resp.error) throw resp.error;
         const encontrado = (resp.data || [])[0];
         if (encontrado) {
-          const primeiroProduto = produtosGrupoDisponiveis()[0];
+          const primeiroProduto = primeiroProdutoGrupo();
           state.grupoItens.push({
             colaborador_id: encontrado.id,
             nome: encontrado.nome,
             matricula: encontrado.matricula,
             responsavel: false,
             prato_id: primeiroProduto?.prato_id || "",
+            categoriaProduto: "marmita",
+            buscaProduto: "",
             observacoes: ""
           });
           $("grupoMatricula").value = "";
@@ -5477,13 +5693,15 @@
         $("grupoNaoEncontradoNome").focus();
         return;
       }
-      const primeiroProduto = produtosGrupoDisponiveis()[0];
+      const primeiroProduto = primeiroProdutoGrupo();
       state.grupoItens.push({
         colaborador_id: getColab()?.id || "",
         nome,
         matricula: $("grupoNaoEncontradoPopup").dataset.matricula || "",
         responsavel: true,
         prato_id: primeiroProduto?.prato_id || "",
+        categoriaProduto: "marmita",
+        buscaProduto: "",
         observacoes: `Pessoa sem cadastro: ${nome}`
       });
       $("grupoNaoEncontradoPopup").classList.remove("show");

@@ -7565,6 +7565,16 @@ Bom apetite!`;
     // =====================================================================
     // FINANCEIRO
     // =====================================================================
+    const FINANCEIRO_FIADO_TAXA_FIXA = 8;
+
+    function precoMovimentoFinanceiro(pedido = {}, destino) {
+      const atual = Number(pedido.preco_total || 0);
+      const eraFiado = pedido.forma_pagamento === "fiado";
+      if (destino === "fiado" && !eraFiado) return Number((atual + FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
+      if (destino === "pendente" && eraFiado) return Number(Math.max(0, atual - FINANCEIRO_FIADO_TAXA_FIXA).toFixed(2));
+      return Number(atual.toFixed(2));
+    }
+
     function renderCentralClientesFinanceiro(pedidos = []) {
       if (!pedidos.length) return '<div class="card empty">Nenhum cliente com pedido ou pendência para mostrar.</div>';
       const hoje = hojeISO();
@@ -7584,7 +7594,7 @@ Bom apetite!`;
         {
           id: "fiado",
           titulo: "Fiado",
-          dica: "Conta em aberto",
+          dica: `Conta em aberto (+${fmtBRL(FINANCEIRO_FIADO_TAXA_FIXA)})`,
           itens: pedidos.filter(p => p.status_pagamento === "pendente" && p.forma_pagamento === "fiado")
         },
         {
@@ -7662,8 +7672,23 @@ Bom apetite!`;
       };
       const payload = mapa[destino];
       if (!payload) return;
+      const { data: pedidoAtual, error: pedidoAtualError } = await sb
+        .from("pedidos")
+        .select("id, preco_total, forma_pagamento")
+        .eq("id", id)
+        .maybeSingle();
+      if (pedidoAtualError || !pedidoAtual) {
+        alert("Erro ao buscar pedido: " + (pedidoAtualError?.message || "pedido nao encontrado."));
+        return;
+      }
+      const precoAnterior = Number(pedidoAtual.preco_total || 0);
+      const precoNovo = precoMovimentoFinanceiro(pedidoAtual, destino);
+      if (precoNovo !== precoAnterior) payload.preco_total = precoNovo;
       const label = destino === "pago" ? "pago" : destino === "fiado" ? "fiado" : "pagamento pendente";
-      if (!confirm(`Mover este pedido para ${label}?`)) return;
+      const ajustePreco = precoNovo !== precoAnterior
+        ? `\n\nValor: ${fmtBRL(precoAnterior)} -> ${fmtBRL(precoNovo)}${destino === "fiado" ? " (taxa fixa do fiado)" : " (taxa do fiado removida)"}`
+        : "";
+      if (!confirm(`Mover este pedido para ${label}?${ajustePreco}`)) return;
       const { error } = await sb.from("pedidos").update(payload).eq("id", id);
       if (error) {
         alert("Erro ao mover pedido: " + error.message);
@@ -7672,7 +7697,12 @@ Bom apetite!`;
       if (destino === "pago") {
         await sb.from("pedidos").update({ status: "aberto" }).eq("id", id).eq("status", "aguardando_pagamento");
       }
-      await registrarAuditoria("moveu pagamento do cliente", "pedidos", id, { destino });
+      await registrarAuditoria("moveu pagamento do cliente", "pedidos", id, {
+        destino,
+        preco_anterior: precoAnterior,
+        preco_novo: precoNovo,
+        taxa_fiado_central: destino === "fiado" || pedidoAtual.forma_pagamento === "fiado" ? FINANCEIRO_FIADO_TAXA_FIXA : 0
+      });
       await carregarFinanceiro();
       if (document.querySelector(".drawer-item.active")?.dataset?.section === "pedidos") await carregarPedidos({ silent: true });
     };
