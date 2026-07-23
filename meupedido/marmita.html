@@ -3028,6 +3028,7 @@
 
     <div class="segmented rise rise-2">
       <button class="active" data-tab="cardapio">Cardápio</button>
+      <button data-tab="grupo">Grupo</button>
       <button data-tab="meusPedidos">Meus pedidos</button>
       <button data-tab="perfil">Perfil</button>
     </div>
@@ -3070,6 +3071,31 @@
         </div>
       </div>
       <div id="meusPedidosList" class="loading">Carregando…</div>
+    </div>
+
+    <div id="tab-grupo" class="hidden rise rise-3">
+      <div class="card">
+        <p class="eyebrow">Pedido em grupo inteligente</p>
+        <h2>Monte pedidos para várias pessoas</h2>
+        <p class="small muted">Digite a matrícula de cada pessoa. Se ela tiver cadastro, a cobrança aparece no perfil correto. Se não tiver, você pode cadastrar ou assumir a responsabilidade na sua conta.</p>
+        <div class="row">
+          <div class="field"><label>Matrícula</label><input id="grupoMatricula" class="input" inputmode="numeric" placeholder="Ex.: 12345" /></div>
+          <button id="grupoBuscar" class="btn btn-primary btn-block btn-pill" type="button">Buscar</button>
+        </div>
+        <div id="grupoBuscaResultado" class="small muted"></div>
+      </div>
+      <div id="grupoItens" class="card" style="margin-top:12px;"></div>
+      <div class="card" style="margin-top:12px;">
+        <div class="field"><label>Pagamento padrão</label>
+          <select id="grupoPagamento">
+            <option value="pagar_mais_tarde">Pagar mais tarde para cada cliente</option>
+            <option value="fiado">Fiado para cada cliente</option>
+            <option value="pix_empresa">PIX Empresa pendente</option>
+          </select>
+        </div>
+        <button id="grupoFinalizar" class="btn btn-primary btn-block btn-pill" type="button">Enviar pedido em grupo</button>
+        <div id="grupoAlert" class="alert alert-error" style="margin-top:12px;"></div>
+      </div>
     </div>
 
     <div id="tab-perfil" class="hidden rise rise-3">
@@ -3402,6 +3428,24 @@
     </div>
   </div>
 
+  <div class="debt-popup-bg" id="grupoNaoEncontradoPopup">
+    <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="grupoNaoEncontradoTitle">
+      <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+        <div>
+          <p class="eyebrow">Matrícula não encontrada</p>
+          <h2 class="debt-popup-title" id="grupoNaoEncontradoTitle">Como deseja seguir?</h2>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="grupoNaoEncontradoClose" aria-label="Fechar">×</button>
+      </div>
+      <p id="grupoNaoEncontradoMsg" class="muted">Essa pessoa ainda não tem cadastro.</p>
+      <div class="field"><label>Nome para controle</label><input id="grupoNaoEncontradoNome" class="input" placeholder="Nome da pessoa" /></div>
+      <div class="debt-actions">
+        <button class="btn btn-primary btn-block btn-pill" id="grupoCadastrarPessoa">Fazer cadastro</button>
+        <button class="btn btn-ghost btn-block btn-pill" id="grupoAssumirPessoa">Pedir na minha conta</button>
+      </div>
+    </div>
+  </div>
+
   <div class="debt-popup-bg" id="accountSetupPopup">
     <div class="debt-popup" role="dialog" aria-modal="true" aria-labelledby="accountSetupTitle">
       <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
@@ -3423,6 +3467,16 @@
       <div id="accountProfileForm" class="hidden">
         <div class="field"><label>Nome da empresa</label><input id="accountEmpresa" class="input" /></div>
         <div class="field"><label>Endereço / ponto de entrega</label><input id="accountEndereco" class="input" placeholder="Rua, unidade, setor ou ponto de entrega" /></div>
+        <div class="field"><label>E-mail para checkout</label><input id="accountEmail" class="input" type="email" inputmode="email" placeholder="voce@email.com" /></div>
+        <div class="row">
+          <div class="field"><label>CEP</label><input id="accountCep" class="input" inputmode="numeric" placeholder="69000000" /></div>
+          <div class="field"><label>Número</label><input id="accountNumero" class="input" inputmode="numeric" placeholder="123" /></div>
+        </div>
+        <div class="field"><label>Rua</label><input id="accountRua" class="input" placeholder="Rua / avenida" /></div>
+        <div class="row">
+          <div class="field"><label>Bairro</label><input id="accountBairro" class="input" /></div>
+          <div class="field"><label>Complemento</label><input id="accountComplemento" class="input" placeholder="Apto, bloco..." /></div>
+        </div>
         <div class="debt-actions">
           <button class="btn btn-primary btn-block btn-pill" id="accountSaveProfile">Salvar cadastro</button>
           <button class="btn btn-ghost btn-block btn-pill" id="accountSkipProfile">Pular por enquanto</button>
@@ -3598,6 +3652,7 @@
       pedidoQtd: 1,
       carrinho: [],
       carrinhoPagamento: null,
+      grupoItens: [],
       fidelidadeSaldo: 0,
       fidelidadeResumo: null,
       currentScreen: "screen-home",
@@ -3737,6 +3792,11 @@
         await carregarPerfilCliente();
         return;
       }
+      if (state.authDestino === "grupo") {
+        await abrirHome();
+        ativarTab("grupo");
+        return;
+      }
       await abrirHome();
     }
 
@@ -3769,10 +3829,16 @@
         $("accountSetupEyebrow").textContent = obrigatorio ? "Cadastro obrigatório" : "Complete seu cadastro";
         $("accountSetupTitle").textContent = "Empresa e entrega";
         $("accountSetupMsg").textContent = obrigatorio
-          ? "Para finalizar o pedido, informe a empresa e o ponto de entrega."
-          : "Você pode preencher agora ou deixar para antes de finalizar o pedido.";
+          ? "Para finalizar o pedido, informe a empresa, entrega e os dados que agilizam o checkout."
+          : "Você pode preencher agora para pagar mais rápido na InfinitePay.";
         $("accountEmpresa").value = colab?.empresa || "";
         $("accountEndereco").value = colab?.endereco_empresa || "";
+        $("accountEmail").value = colab?.email || "";
+        $("accountCep").value = colab?.cep || "";
+        $("accountRua").value = colab?.endereco_rua || "";
+        $("accountBairro").value = colab?.endereco_bairro || "";
+        $("accountNumero").value = colab?.endereco_numero || "";
+        $("accountComplemento").value = colab?.endereco_complemento || "";
         setTimeout(() => $("accountEmpresa").focus(), 80);
       }
       $("accountSetupPopup").classList.add("show");
@@ -3834,12 +3900,28 @@
       }
     }
 
+    async function salvarPerfilClienteRpc(payload, extras = {}) {
+      let resp = await sb.rpc("salvar_perfil_cliente", { ...payload, ...extras });
+      if (resp.error && /schema cache|Could not find|p_email|p_cep|p_endereco_rua|function/i.test(resp.error.message || "")) {
+        resp = await sb.rpc("salvar_perfil_cliente", payload);
+      }
+      return resp;
+    }
+
     async function salvarCadastroObrigatorio() {
       const colab = getColab();
       if (!colab) return mostrarLogin("perfil", "Entre novamente para completar seu cadastro.");
       const alertEl = $("accountSetupAlert");
       const empresa = $("accountEmpresa").value.trim();
       const endereco = $("accountEndereco").value.trim();
+      const extras = {
+        p_email: $("accountEmail").value.trim() || null,
+        p_cep: $("accountCep").value.trim().replace(/\D/g, "") || null,
+        p_endereco_rua: $("accountRua").value.trim() || null,
+        p_endereco_bairro: $("accountBairro").value.trim() || null,
+        p_endereco_numero: $("accountNumero").value.trim() || null,
+        p_endereco_complemento: $("accountComplemento").value.trim() || null
+      };
       alertEl.classList.remove("show");
       if (!empresa || !endereco) {
         alertEl.textContent = "Informe empresa e endereço/ponto de entrega.";
@@ -3849,7 +3931,7 @@
       $("accountSaveProfile").disabled = true;
       $("accountSaveProfile").textContent = "Salvando...";
       try {
-        const { error } = await sb.rpc("salvar_perfil_cliente", {
+        const payload = {
           p_colaborador_id: colab.id,
           p_whatsapp: colab.whatsapp || "",
           p_empresa: empresa,
@@ -3858,9 +3940,21 @@
           p_observacoes: null,
           p_receber_notificacoes: true,
           p_session_token: colab.session_token || ""
-        });
+        };
+        const { error } = await salvarPerfilClienteRpc(payload, extras);
         if (error) throw error;
-        setColab({ ...colab, empresa, endereco_empresa: endereco, cadastro_incompleto: false });
+        setColab({
+          ...colab,
+          empresa,
+          endereco_empresa: endereco,
+          email: extras.p_email || "",
+          cep: extras.p_cep || "",
+          endereco_rua: extras.p_endereco_rua || "",
+          endereco_bairro: extras.p_endereco_bairro || "",
+          endereco_numero: extras.p_endereco_numero || "",
+          endereco_complemento: extras.p_endereco_complemento || "",
+          cadastro_incompleto: false
+        });
         atualizarHeaderCliente();
         $("accountSetupPopup").classList.remove("show");
         if (accountPopupResolve) accountPopupResolve(true);
@@ -4711,7 +4805,7 @@
       alvo.innerHTML = `<div class="loyalty-card">
         <div class="small muted">Programa de fidelidade</div>
         <div class="loyalty-points">${fmtBRL(saldo)}</div>
-        <p class="small" style="margin:4px 0 0;">Cada marmita paga soma ${fmtBRL(credito)}. Use o saldo para resgatar produtos inteiros.</p>
+        <p class="small" style="margin:4px 0 0;">Cada marmita paga soma ${fmtBRL(credito)}. Refrigerante/bebida sem marmita soma R$ 0,10. Use o saldo para resgatar produtos inteiros.</p>
         ${renderOpcoesResgateHtml(saldo)}
         <div class="quick-row" style="position:relative; z-index:1; margin-top:12px;">
           <button class="quick-chip" id="btnIrFavoritos">Favoritos (${perfil.favoritos || 0})</button>
@@ -5270,6 +5364,194 @@
       aplicarFiltrosCardapio();
     }
 
+    function produtosGrupoDisponiveis() {
+      const vistos = new Set();
+      return (state.cardapio || [])
+        .filter(item => ["marmita", "bebida", "sobremesa", "lanche"].includes(categoriaProduto(item.prato_categoria)))
+        .filter(item => {
+          if (!item.prato_id || vistos.has(item.prato_id)) return false;
+          vistos.add(item.prato_id);
+          return true;
+        })
+        .sort((a, b) => String(a.prato_nome || "").localeCompare(String(b.prato_nome || "")));
+    }
+
+    async function prepararPedidoGrupo() {
+      if (!getColab()) {
+        $("grupoItens").innerHTML = `<div class="empty">Entre com sua matrícula para montar pedido em grupo.</div>`;
+        return;
+      }
+      if (!state.cardapio.length) await carregarCardapio();
+      renderGrupoItens();
+    }
+
+    function renderGrupoItens() {
+      const produtos = produtosGrupoDisponiveis();
+      const options = produtos.map(p => `<option value="${p.prato_id}">${esc(p.prato_nome)} - ${esc(p.fornecedor_nome)} - ${fmtBRL(p.prato_preco)}</option>`).join("");
+      $("grupoItens").innerHTML = `
+        <h3>Pessoas no pedido</h3>
+        ${state.grupoItens.length ? state.grupoItens.map((item, index) => `
+          <div class="pedido-status-item" style="margin-top:10px;">
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+              <div>
+                <strong>${esc(item.nome)}</strong>
+                <div class="small muted">${item.responsavel ? "Na sua responsabilidade" : `Matrícula ${esc(item.matricula || "")}`}</div>
+              </div>
+              <button class="btn btn-ghost btn-sm" type="button" data-grupo-remover="${index}">Remover</button>
+            </div>
+            <div class="field" style="margin-top:10px;"><label>Produto</label><select data-grupo-prato="${index}">${options}</select></div>
+            <div class="field"><label>Observação</label><input class="input" data-grupo-obs="${index}" value="${esc(item.observacoes || "")}" placeholder="Ex.: sem cebola" /></div>
+          </div>
+        `).join("") : '<div class="empty">Busque uma matrícula para começar.</div>'}
+        ${!produtos.length ? '<div class="alert alert-error show">Nenhum produto disponível hoje para pedido em grupo.</div>' : ""}`;
+      state.grupoItens.forEach((item, index) => {
+        const select = document.querySelector(`[data-grupo-prato="${index}"]`);
+        if (select) {
+          select.value = item.prato_id || produtos[0]?.prato_id || "";
+          item.prato_id = select.value;
+          select.addEventListener("change", () => item.prato_id = select.value);
+        }
+        const obs = document.querySelector(`[data-grupo-obs="${index}"]`);
+        obs?.addEventListener("input", () => item.observacoes = obs.value);
+      });
+      document.querySelectorAll("[data-grupo-remover]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.grupoItens.splice(Number(btn.dataset.grupoRemover), 1);
+          renderGrupoItens();
+        });
+      });
+    }
+
+    async function buscarColaboradorGrupo() {
+      const colab = getColab();
+      if (!colab) return mostrarLogin("home", "Entre para montar pedido em grupo.");
+      const busca = $("grupoMatricula").value.trim();
+      $("grupoBuscaResultado").textContent = "";
+      if (busca.length < 2) {
+        $("grupoBuscaResultado").textContent = "Digite ao menos 2 caracteres da matrícula.";
+        return;
+      }
+      $("grupoBuscar").disabled = true;
+      $("grupoBuscar").textContent = "Buscando...";
+      try {
+        let resp = await sb.rpc("buscar_colaborador_coletivo", {
+          p_busca: busca,
+          p_colaborador_id: colab.id,
+          p_session_token: colab.session_token || ""
+        });
+        if (resp.error && /Could not find|schema cache|function/i.test(resp.error.message || "")) {
+          resp = await sb.rpc("buscar_colaborador_coletivo", { p_busca: busca });
+        }
+        if (resp.error) throw resp.error;
+        const encontrado = (resp.data || [])[0];
+        if (encontrado) {
+          const primeiroProduto = produtosGrupoDisponiveis()[0];
+          state.grupoItens.push({
+            colaborador_id: encontrado.id,
+            nome: encontrado.nome,
+            matricula: encontrado.matricula,
+            responsavel: false,
+            prato_id: primeiroProduto?.prato_id || "",
+            observacoes: ""
+          });
+          $("grupoMatricula").value = "";
+          $("grupoBuscaResultado").textContent = `${encontrado.nome} adicionado ao grupo.`;
+          renderGrupoItens();
+          return;
+        }
+        $("grupoNaoEncontradoMsg").textContent = `A matrícula ${busca} ainda não tem cadastro.`;
+        $("grupoNaoEncontradoNome").value = "";
+        $("grupoNaoEncontradoPopup").dataset.matricula = busca;
+        $("grupoNaoEncontradoPopup").classList.add("show");
+      } catch (err) {
+        $("grupoBuscaResultado").textContent = err?.message || "Não consegui buscar essa matrícula.";
+      } finally {
+        $("grupoBuscar").disabled = false;
+        $("grupoBuscar").textContent = "Buscar";
+      }
+    }
+
+    function assumirPessoaSemCadastroGrupo() {
+      const nome = $("grupoNaoEncontradoNome").value.trim();
+      if (!nome) {
+        $("grupoNaoEncontradoNome").focus();
+        return;
+      }
+      const primeiroProduto = produtosGrupoDisponiveis()[0];
+      state.grupoItens.push({
+        colaborador_id: getColab()?.id || "",
+        nome,
+        matricula: $("grupoNaoEncontradoPopup").dataset.matricula || "",
+        responsavel: true,
+        prato_id: primeiroProduto?.prato_id || "",
+        observacoes: `Pessoa sem cadastro: ${nome}`
+      });
+      $("grupoNaoEncontradoPopup").classList.remove("show");
+      $("grupoMatricula").value = "";
+      $("grupoBuscaResultado").textContent = `${nome} entrou na sua responsabilidade.`;
+      renderGrupoItens();
+    }
+
+    async function finalizarPedidoGrupo() {
+      const colab = getColab();
+      const alertEl = $("grupoAlert");
+      alertEl.classList.remove("show");
+      if (!colab) return mostrarLogin("home", "Entre para enviar pedido em grupo.");
+      if (!await garantirCadastroProntoParaPedido(alertEl)) return;
+      const itens = state.grupoItens.map(item => ({
+        colaborador_id: item.responsavel ? colab.id : item.colaborador_id,
+        responsavel: !!item.responsavel,
+        nome: item.nome,
+        matricula: item.matricula || null,
+        prato_id: item.prato_id,
+        observacoes: item.observacoes || null
+      })).filter(item => item.nome && item.prato_id && item.colaborador_id);
+      if (!itens.length) {
+        alertEl.textContent = "Adicione pelo menos uma pessoa e escolha o produto.";
+        alertEl.classList.add("show");
+        return;
+      }
+      $("grupoFinalizar").disabled = true;
+      $("grupoFinalizar").textContent = "Enviando...";
+      try {
+        const { data, error } = await sb.rpc("criar_pedido_grupo_inteligente", {
+          p_solicitante_id: colab.id,
+          p_itens: itens,
+          p_forma_pagamento: $("grupoPagamento").value || "pagar_mais_tarde",
+          p_session_token: colab.session_token || ""
+        });
+        if (error) throw error;
+        const resp = typeof data === "string" ? JSON.parse(data) : data;
+        state.grupoItens = [];
+        renderGrupoItens();
+        mostrarToast("OK", "Grupo enviado", `${resp?.qtd_pedidos || itens.length} pedido(s) criado(s) e organizados por cliente.`);
+        ativarTab("meusPedidos");
+        await carregarMeusPedidos();
+      } catch (err) {
+        alertEl.textContent = err?.message || "Não foi possível enviar o pedido em grupo.";
+        alertEl.classList.add("show");
+      } finally {
+        $("grupoFinalizar").disabled = false;
+        $("grupoFinalizar").textContent = "Enviar pedido em grupo";
+      }
+    }
+
+    $("grupoBuscar")?.addEventListener("click", buscarColaboradorGrupo);
+    $("grupoMatricula")?.addEventListener("keydown", e => {
+      if (e.key === "Enter") buscarColaboradorGrupo();
+    });
+    $("grupoFinalizar")?.addEventListener("click", finalizarPedidoGrupo);
+    $("grupoNaoEncontradoClose")?.addEventListener("click", () => $("grupoNaoEncontradoPopup").classList.remove("show"));
+    $("grupoAssumirPessoa")?.addEventListener("click", assumirPessoaSemCadastroGrupo);
+    $("grupoCadastrarPessoa")?.addEventListener("click", () => {
+      $("grupoNaoEncontradoPopup").classList.remove("show");
+      state.authDestino = "grupo";
+      $("cadMatricula").value = $("grupoNaoEncontradoPopup").dataset.matricula || "";
+      $("cadNome").value = $("grupoNaoEncontradoNome").value.trim();
+      $("cadastroAlert").classList.remove("show");
+      showScreen("screen-cadastro");
+    });
+
     async function carregarMeusPedidos(options = {}) {
       const silent = !!options.silent;
       const lista = $("meusPedidosList");
@@ -5372,6 +5654,9 @@
         const isPixPendente = ["pix_empresa", "pix_fornecedor"].includes(p.forma_pagamento) && p.status_pagamento === "pendente";
         const deveAnexar = isPixPendente && (!p.comprovante_status || ["sem_comprovante", "rejeitado"].includes(p.comprovante_status));
         const aguardandoAnalise = isPixPendente && p.comprovante_status === "enviado";
+        const podePagarInfinitePay = p.status_pagamento === "pendente"
+          && ["pix_empresa", "pix_fornecedor", "pagar_mais_tarde", "fiado", "cartao_infinitepay"].includes(p.forma_pagamento)
+          && p.status !== "cancelado";
         const acaoComprovante = deveAnexar
           ? `<button class="btn btn-primary btn-sm btn-pill btn-block btn-reenviar-comprovante" data-pedido="${p.id}">
               ${p.comprovante_status === "rejeitado" ? "Anexar comprovante correto" : "Enviar comprovante"}
@@ -5424,6 +5709,9 @@
             <span class="pedido-valor">${fmtBRL(p.preco_total)}</span>
           </div>
           <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator); display:grid; gap:8px;">
+            ${podePagarInfinitePay ? `<button class="btn btn-primary btn-sm btn-pill btn-block btn-pagar-infinitepay" data-pedido="${p.id}">
+              💳 Pagar agora com InfinitePay
+            </button>` : ""}
             ${acaoComprovante}
             <button class="btn btn-secondary btn-sm btn-pill btn-block btn-acompanhar-pedido" data-pedido="${p.id}">
               Acompanhar pedido
@@ -5537,6 +5825,22 @@
       const btnPix = document.getElementById("btnAbrirPix");
       if (btnPix) btnPix.addEventListener("click", () => abrirPixSheet(totalPixPendente, "pix"));
 
+      lista.querySelectorAll(".btn-pagar-infinitepay").forEach(btn => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const original = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = "Abrindo checkout...";
+          try {
+            await abrirCheckoutInfinitePayPedidos([btn.dataset.pedido]);
+          } catch (err) {
+            mostrarToast("⚠️", "Checkout indisponível", err?.message || "Tente novamente.");
+            btn.disabled = false;
+            btn.textContent = original;
+          }
+        });
+      });
+
       verificarBannerNotificacoes();
       iniciarPollingFiado();
 
@@ -5604,6 +5908,12 @@
         empresa: p.empresa || "",
         endereco_empresa: p.endereco_empresa || "",
         whatsapp: p.whatsapp || colab.whatsapp || "",
+        email: p.email || "",
+        cep: p.cep || "",
+        endereco_rua: p.endereco_rua || "",
+        endereco_bairro: p.endereco_bairro || "",
+        endereco_numero: p.endereco_numero || "",
+        endereco_complemento: p.endereco_complemento || "",
         pin_alteracao_obrigatoria: !!p.pin_alteracao_obrigatoria,
         cadastro_incompleto: !!p.cadastro_incompleto || !p.empresa || !p.endereco_empresa
       });
@@ -5616,7 +5926,7 @@
         <div class="loyalty-card">
           <div class="small muted">Clube da Marmita</div>
           <div class="loyalty-points">${fmtBRL(saldo)}</div>
-          <p class="small">${pedidosPontuados} marmita(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)}.</p>
+          <p class="small">${pedidosPontuados} compra(s) pontuada(s). Cada marmita paga soma ${fmtBRL(credito)}. Se comprar apenas refrigerante/bebida, você recebe R$ 0,10 de bônus para acumular.</p>
           ${renderOpcoesResgateHtml(saldo)}
         </div>` : "";
       alvo.innerHTML = `
@@ -5633,8 +5943,19 @@
           <div class="field"><label>Nome</label><input class="input" value="${esc(p.nome)}" disabled /></div>
           <div class="field"><label>Matrícula</label><input class="input" value="${esc(p.matricula)}" disabled /></div>
           <div class="field"><label>WhatsApp</label><input id="perfilWhatsapp" class="input" inputmode="tel" value="${esc(p.whatsapp || "")}" /></div>
+          <div class="field"><label>E-mail para checkout InfinitePay</label><input id="perfilEmail" class="input" type="email" inputmode="email" value="${esc(p.email || "")}" placeholder="voce@email.com" /></div>
           <div class="field"><label>Empresa</label><input id="perfilEmpresa" class="input" value="${esc(p.empresa || "")}" /></div>
           <div class="field"><label>Endereço / ponto de entrega</label><input id="perfilEndereco" class="input" value="${esc(p.endereco_empresa || "")}" /></div>
+          <div class="row">
+            <div class="field"><label>CEP</label><input id="perfilCep" class="input" inputmode="numeric" value="${esc(p.cep || "")}" placeholder="69000000" /></div>
+            <div class="field"><label>Número</label><input id="perfilNumero" class="input" inputmode="numeric" value="${esc(p.endereco_numero || "")}" placeholder="123" /></div>
+          </div>
+          <div class="field"><label>Rua</label><input id="perfilRua" class="input" value="${esc(p.endereco_rua || "")}" /></div>
+          <div class="row">
+            <div class="field"><label>Bairro</label><input id="perfilBairro" class="input" value="${esc(p.endereco_bairro || "")}" /></div>
+            <div class="field"><label>Complemento</label><input id="perfilComplemento" class="input" value="${esc(p.endereco_complemento || "")}" /></div>
+          </div>
+          <p class="small muted">Esses dados deixam o pagamento na InfinitePay mais rápido, com nome, e-mail, telefone e endereço já preenchidos quando possível.</p>
           <div class="field"><label>Pagamento preferido</label>
             <select id="perfilPagamento">
               <option value="">Escolher em cada pedido</option>
@@ -5671,12 +5992,26 @@
           p_receber_notificacoes: $("perfilNotif").checked,
           p_session_token: colab.session_token || ""
         };
-        const { error } = await sb.rpc("salvar_perfil_cliente", payload);
+        const extras = {
+          p_email: $("perfilEmail").value.trim() || null,
+          p_cep: $("perfilCep").value.trim().replace(/\D/g, "") || null,
+          p_endereco_rua: $("perfilRua").value.trim() || null,
+          p_endereco_bairro: $("perfilBairro").value.trim() || null,
+          p_endereco_numero: $("perfilNumero").value.trim() || null,
+          p_endereco_complemento: $("perfilComplemento").value.trim() || null
+        };
+        const { error } = await salvarPerfilClienteRpc(payload, extras);
         if (error) throw error;
         setColab({
           ...colab,
           empresa: payload.p_empresa,
           endereco_empresa: payload.p_endereco_empresa,
+          email: extras.p_email || "",
+          cep: extras.p_cep || "",
+          endereco_rua: extras.p_endereco_rua || "",
+          endereco_bairro: extras.p_endereco_bairro || "",
+          endereco_numero: extras.p_endereco_numero || "",
+          endereco_complemento: extras.p_endereco_complemento || "",
           cadastro_incompleto: !payload.p_empresa || !payload.p_endereco_empresa
         });
         atualizarHeaderCliente();
@@ -5769,7 +6104,9 @@
       });
       $("tab-cardapio").classList.toggle("hidden", target !== "cardapio");
       $("tab-meusPedidos").classList.toggle("hidden", target !== "meusPedidos");
+      $("tab-grupo").classList.toggle("hidden", target !== "grupo");
       $("tab-perfil").classList.toggle("hidden", target !== "perfil");
+      if (target === "grupo") prepararPedidoGrupo();
     }
 
     function atualizarRotuloFiltroCardapio() {
@@ -7781,7 +8118,7 @@
       $("fidelidadePopupTitulo").textContent = principal.titulo || (recompensas.length ? "Resgate liberado!" : "Credito recebido");
       $("fidelidadePopupMsg").textContent = eventos.length === 1
         ? principal.mensagem
-        : `Voce recebeu ${fmtBRL(totalCredito)} em ${eventos.length} marmita(s) paga(s). Quando o saldo cobrir um produto inteiro, o resgate aparece no pagamento.`;
+        : `Voce recebeu ${fmtBRL(totalCredito)} em ${eventos.length} compra(s) pontuada(s). Refrigerante/bebida sem marmita soma R$ 0,10. Quando o saldo cobrir um produto inteiro, o resgate aparece no pagamento.`;
       $("fidelidadePopup").classList.add("show");
       tocarSom(recompensas.length ? "alerta" : "info");
     }

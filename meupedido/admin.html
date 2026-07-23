@@ -3127,6 +3127,13 @@
           <button class="btn btn-primary btn-block" onclick="abrirModalPrato()">+ Novo prato</button>
         </div>
       </div>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label>Pesquisa inteligente</label>
+          <input id="buscaPratosAdmin" class="input" type="search" placeholder="Digite prato, fornecedor, categoria, valor ou status..." oninput="filtrarTabelaAdmin('pratosLista', this.value, 'buscaPratosResumo')" />
+        </div>
+        <p id="buscaPratosResumo" class="small muted" style="margin:0;">Busque por qualquer detalhe do prato cadastrado.</p>
+      </div>
       <div id="pratosLista" class="loading">Carregando…</div>
     </section>
 
@@ -3137,6 +3144,13 @@
         <div class="sh-actions">
           <button class="btn btn-primary btn-block" onclick="abrirModalAcomp()">+ Novo</button>
         </div>
+      </div>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label>Pesquisa inteligente</label>
+          <input id="buscaAcompAdmin" class="input" type="search" placeholder="Digite acompanhamento, fornecedor, valor ou status..." oninput="filtrarTabelaAdmin('acompLista', this.value, 'buscaAcompResumo')" />
+        </div>
+        <p id="buscaAcompResumo" class="small muted" style="margin:0;">Encontre acompanhamentos sem rolar a lista inteira.</p>
       </div>
       <div id="acompLista" class="loading">Carregando…</div>
     </section>
@@ -3150,6 +3164,13 @@
           <button class="btn btn-primary btn-block" onclick="abrirModalColab()">+ Novo colaborador</button>
         </div>
       </div>
+      <div class="card" style="margin-bottom:12px;">
+        <div class="field" style="margin-bottom:6px;">
+          <label>Pesquisa inteligente</label>
+          <input id="buscaColabAdmin" class="input" type="search" placeholder="Digite nome, matrícula, empresa, WhatsApp ou status..." oninput="filtrarTabelaAdmin('colabLista', this.value, 'buscaColabResumo')" />
+        </div>
+        <p id="buscaColabResumo" class="small muted" style="margin:0;">A busca ignora acentos e combina várias palavras.</p>
+      </div>
       <div id="colabLista" class="loading">Carregando…</div>
     </section>
 
@@ -3158,6 +3179,17 @@
       <h1>Financeiro</h1>
       <p class="muted small">Saldos, fiado, PIX e pagamentos recebidos.</p>
       <div id="finStats" class="stats"></div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="section-head" style="margin-bottom:10px;">
+          <div>
+            <h2>Central de clientes</h2>
+            <p class="small muted" style="margin:0;">Mova pedidos entre pendente, fiado e pago. O status muda no perfil e em Meus pedidos do cliente.</p>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="carregarFinanceiro()">Atualizar</button>
+        </div>
+        <div id="finClientesStatus" class="loading">Carregando clientes...</div>
+      </div>
 
       <div id="finSaldos" class="loading" style="margin-top: 12px;">Carregando…</div>
 
@@ -3188,16 +3220,16 @@
           <button class="btn btn-primary btn-block" id="btnNovoSocio" onclick="abrirModalSocio()">Novo sócio</button>
         </div>
       </div>
-      <p class="muted small">A regra oficial é sempre em cima do adicional de R$ 3,00 por item vendido: produto próprio fica para o sócio master; indicação de restaurante divide 50% para o indicador e 50% para o master.</p>
+      <p class="muted small">Indicação de restaurante divide o adicional de R$ 3,00 por item. Produto próprio usa lucro real: venda menos custo, dividido entre vendedor e master.</p>
       <div class="socios-regra" id="sociosRegra">
         <article class="regra-card">
           <strong>Produto próprio do sócio</strong>
           <div class="regra-formula">
             <span class="regra-chip">valor do produto</span>
             <span>+</span>
-            <span class="regra-chip master">R$ 3,00 master</span>
+            <span class="regra-chip master">Lucro 50/50</span>
           </div>
-          <p class="small muted" style="margin:0;">Quando o sócio vende o próprio produto, os R$ 3,00 são integralmente do sócio master escolhido.</p>
+          <p class="small muted" style="margin:0;">Quando o sócio vende o próprio produto, o custo volta para o vendedor e o lucro é dividido com o master.</p>
         </article>
         <article class="regra-card">
           <strong>Restaurante indicado pelo sócio</strong>
@@ -3598,6 +3630,37 @@
       const d = new Date();
       d.setDate(d.getDate() + dias);
       return dataLocalISO(d);
+    };
+
+    function normalizarBuscaAdmin(valor) {
+      return String(valor || "")
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim();
+    }
+
+    window.filtrarTabelaAdmin = (listaId, termo, resumoId = "") => {
+      const alvo = $(listaId);
+      if (!alvo) return;
+      const rows = [...alvo.querySelectorAll("tbody tr")];
+      if (!rows.length) {
+        if (resumoId && $(resumoId)) $(resumoId).textContent = "Nenhum item carregado para pesquisar.";
+        return;
+      }
+      const tokens = normalizarBuscaAdmin(termo).split(" ").filter(Boolean);
+      let visiveis = 0;
+      rows.forEach(row => {
+        const texto = normalizarBuscaAdmin(row.textContent);
+        const match = tokens.every(t => texto.includes(t));
+        row.style.display = match ? "" : "none";
+        if (match) visiveis += 1;
+      });
+      if (resumoId && $(resumoId)) {
+        $(resumoId).textContent = tokens.length
+          ? `${visiveis} de ${rows.length} resultado(s) encontrado(s).`
+          : `${rows.length} item(ns) carregado(s).`;
+      }
     };
 
     function renderFiadosAbertosAdmin(fiadosPendentes) {
@@ -6919,6 +6982,7 @@ Bom apetite!`;
           </td>
         </tr>`;
         }).join("")}</tbody></table>`;
+      filtrarTabelaAdmin("pratosLista", $("buscaPratosAdmin")?.value || "", "buscaPratosResumo");
     }
 
     window.abrirModalPrato = async (p = null) => {
@@ -7047,6 +7111,7 @@ Bom apetite!`;
           </td>
         </tr>`;
         }).join("")}</tbody></table>`;
+      filtrarTabelaAdmin("acompLista", $("buscaAcompAdmin")?.value || "", "buscaAcompResumo");
     }
 
     window.abrirModalAcomp = async (a = null) => {
@@ -7239,7 +7304,7 @@ Bom apetite!`;
 
     async function carregarColaboradores() {
       $("colabLista").innerHTML = '<div class="loading">Carregando…</div>';
-      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, ativo, fiado_bloqueado, pin_alteracao_obrigatoria").order("nome");
+      const { data } = await sb.from("colaboradores").select("id, nome, matricula, empresa, endereco_empresa, whatsapp, email, cep, endereco_rua, endereco_bairro, endereco_numero, endereco_complemento, ativo, fiado_bloqueado, pin_alteracao_obrigatoria").order("nome");
       if (!data || data.length === 0) {
         $("colabLista").innerHTML = '<div class="empty">Nenhum colaborador cadastrado.</div>';
         return;
@@ -7266,6 +7331,7 @@ Bom apetite!`;
             <button class="btn btn-danger btn-sm" onclick="excluirColab('${c.id}')">Excluir</button>
           </td>
         </tr>`).join("")}</tbody></table>`;
+      filtrarTabelaAdmin("colabLista", $("buscaColabAdmin")?.value || "", "buscaColabResumo");
     }
 
     function normalizarHeaderImportacao(v) {
@@ -7398,6 +7464,16 @@ Bom apetite!`;
         <div class="field"><label>Empresa (ex: RD Saúde, Ambev…)</label><input id="cSetor" class="input" value="${c?.empresa ?? ""}"/></div>
         <div class="field"><label>Endereço da empresa</label><input id="cEndEmpresa" class="input" value="${c?.endereco_empresa ?? ""}" placeholder="Rua, unidade, setor ou ponto de entrega"/></div>
         <div class="field"><label>WhatsApp (com DDI/DDD)</label><input id="cWhats" class="input" inputmode="numeric" value="${c?.whatsapp ?? ""}" placeholder="5511999999999"/></div>
+        <div class="field"><label>E-mail para checkout</label><input id="cEmail" class="input" type="email" inputmode="email" value="${c?.email ?? ""}" placeholder="cliente@email.com"/></div>
+        <div class="row">
+          <div class="field"><label>CEP</label><input id="cCep" class="input" inputmode="numeric" value="${c?.cep ?? ""}" placeholder="69000000"/></div>
+          <div class="field"><label>Número</label><input id="cNumero" class="input" value="${c?.endereco_numero ?? ""}" placeholder="123"/></div>
+        </div>
+        <div class="field"><label>Rua</label><input id="cRua" class="input" value="${c?.endereco_rua ?? ""}" placeholder="Rua / avenida"/></div>
+        <div class="row">
+          <div class="field"><label>Bairro</label><input id="cBairro" class="input" value="${c?.endereco_bairro ?? ""}"/></div>
+          <div class="field"><label>Complemento</label><input id="cComplemento" class="input" value="${c?.endereco_complemento ?? ""}"/></div>
+        </div>
         ${!c ? '<div class="field"><label>PIN (4 dígitos)</label><input id="cPin" class="input" maxlength="4" inputmode="numeric" placeholder="ex.: 1234"/></div>' : ""}
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cFiadoBloq" ${c?.fiado_bloqueado ? "checked" : ""} style="width:20px;height:20px;"/> Bloquear compra no fiado</label></div>
         <div class="field"><label style="display:flex; align-items:center; gap:8px;"><input type="checkbox" id="cAtivo" ${c?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;"/> Ativo</label></div>`;
@@ -7411,6 +7487,12 @@ Bom apetite!`;
           empresa: $("cSetor").value.trim() || null,
           endereco_empresa: $("cEndEmpresa").value.trim() || null,
           whatsapp: $("cWhats").value.trim().replace(/\D/g, "") || null,
+          email: $("cEmail").value.trim() || null,
+          cep: $("cCep").value.trim().replace(/\D/g, "") || null,
+          endereco_rua: $("cRua").value.trim() || null,
+          endereco_bairro: $("cBairro").value.trim() || null,
+          endereco_numero: $("cNumero").value.trim() || null,
+          endereco_complemento: $("cComplemento").value.trim() || null,
           fiado_bloqueado: $("cFiadoBloq").checked,
           ativo: $("cAtivo").checked
         };
@@ -7479,9 +7561,122 @@ Bom apetite!`;
     // =====================================================================
     // FINANCEIRO
     // =====================================================================
+    function renderCentralClientesFinanceiro(pedidos = []) {
+      if (!pedidos.length) return '<div class="card empty">Nenhum cliente com pedido ou pendência para mostrar.</div>';
+      const hoje = hojeISO();
+      const buckets = [
+        {
+          id: "pedidos",
+          titulo: "Pedidos de hoje",
+          dica: "Tudo que entrou hoje",
+          itens: pedidos.filter(p => p.data === hoje)
+        },
+        {
+          id: "pendente",
+          titulo: "Pagamento pendente",
+          dica: "Cobrar até hoje",
+          itens: pedidos.filter(p => p.status_pagamento === "pendente" && p.forma_pagamento !== "fiado")
+        },
+        {
+          id: "fiado",
+          titulo: "Fiado",
+          dica: "Conta em aberto",
+          itens: pedidos.filter(p => p.status_pagamento === "pendente" && p.forma_pagamento === "fiado")
+        },
+        {
+          id: "pago",
+          titulo: "Pagos",
+          dica: "Baixados no sistema",
+          itens: pedidos.filter(p => p.status_pagamento === "pago" && p.data === hoje)
+        }
+      ];
+      const labelForma = {
+        pix_empresa: "Pix Empresa",
+        pix_fornecedor: "Pix Fornecedor",
+        dinheiro: "Dinheiro",
+        fiado: "Fiado",
+        pagar_mais_tarde: "Pagar mais tarde",
+        cartao_infinitepay: "InfinitePay",
+        resgate_fidelidade: "Fidelidade"
+      };
+      const card = (p) => {
+        const cliente = p.colaborador?.nome || "Cliente";
+        const meta = [p.colaborador?.empresa, p.colaborador?.matricula ? `Mat. ${p.colaborador.matricula}` : "", fmtData(p.data)].filter(Boolean).join(" - ");
+        return `<article class="audit-item" style="gap:10px;">
+          <div>
+            <strong>${escHtml(cliente)}</strong>
+            <div class="small muted">${escHtml(meta || "Sem dados extras")}</div>
+            <div class="small muted">${escHtml(p.prato?.nome || "Pedido")} · ${escHtml(p.fornecedor?.nome || "Restaurante")} · ${escHtml(labelForma[p.forma_pagamento] || p.forma_pagamento || "-")}</div>
+          </div>
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span class="badge ${p.status_pagamento === "pago" ? "pago" : p.forma_pagamento === "fiado" ? "fiado" : "pendente"}">${p.status_pagamento === "pago" ? "pago" : p.forma_pagamento === "fiado" ? "fiado" : "pendente"}</span>
+            <strong>${fmtBRL(p.preco_total)}</strong>
+          </div>
+          <div class="toolbar" style="margin:0;">
+            <button class="btn btn-ghost btn-sm" onclick="moverPedidoFinanceiro('${p.id}', 'pendente')">Pendente</button>
+            <button class="btn btn-ghost btn-sm" onclick="moverPedidoFinanceiro('${p.id}', 'fiado')">Fiado</button>
+            <button class="btn btn-olive btn-sm" onclick="moverPedidoFinanceiro('${p.id}', 'pago')">Pago</button>
+          </div>
+        </article>`;
+      };
+      return `<div class="tool-grid">${buckets.map(bucket => `
+        <section class="tool-card">
+          <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+            <div>
+              <h3 style="margin-bottom:2px;">${bucket.titulo}</h3>
+              <p class="small muted" style="margin:0;">${bucket.dica}</p>
+            </div>
+            <span class="badge ${bucket.id === "pago" ? "pago" : bucket.id === "fiado" ? "fiado" : "pendente"}">${bucket.itens.length}</span>
+          </div>
+          <div class="audit-list" style="margin-top:10px; max-height:420px; overflow:auto;">
+            ${bucket.itens.length ? bucket.itens.map(card).join("") : '<div class="small muted">Nenhum cliente aqui.</div>'}
+          </div>
+        </section>`).join("")}</div>`;
+    }
+
+    window.moverPedidoFinanceiro = async (id, destino) => {
+      const mapa = {
+        pendente: {
+          forma_pagamento: "pagar_mais_tarde",
+          status_pagamento: "pendente",
+          pago_em: null,
+          comprovante_status: "sem_comprovante"
+        },
+        fiado: {
+          forma_pagamento: "fiado",
+          status_pagamento: "pendente",
+          pago_em: null,
+          comprovante_status: "sem_comprovante"
+        },
+        pago: {
+          status_pagamento: "pago",
+          pago_em: new Date().toISOString(),
+          comprovante_status: "aprovado",
+          comprovante_motivo: null,
+          comprovante_revisado_em: new Date().toISOString()
+        }
+      };
+      const payload = mapa[destino];
+      if (!payload) return;
+      const label = destino === "pago" ? "pago" : destino === "fiado" ? "fiado" : "pagamento pendente";
+      if (!confirm(`Mover este pedido para ${label}?`)) return;
+      const { error } = await sb.from("pedidos").update(payload).eq("id", id);
+      if (error) {
+        alert("Erro ao mover pedido: " + error.message);
+        return;
+      }
+      if (destino === "pago") {
+        await sb.from("pedidos").update({ status: "aberto" }).eq("id", id).eq("status", "aguardando_pagamento");
+      }
+      await registrarAuditoria("moveu pagamento do cliente", "pedidos", id, { destino });
+      await carregarFinanceiro();
+      if (document.querySelector(".drawer-item.active")?.dataset?.section === "pedidos") await carregarPedidos({ silent: true });
+    };
+
     async function carregarFinanceiro() {
       $("finSaldos").innerHTML = '<div class="loading">Carregando…</div>';
       $("finFornecedores").innerHTML = '<div class="loading">Carregando…</div>';
+      if ($("finClientesStatus")) $("finClientesStatus").innerHTML = '<div class="loading">Carregando clientes...</div>';
 
       const inicioMes = new Date(); inicioMes.setDate(1);
       const inicioMesStr = dataLocalISO(inicioMes);
@@ -7498,6 +7693,21 @@ Bom apetite!`;
         .select("preco_total, concluido_em, data, status")
         .eq("status", "concluido")
         .gte("concluido_em", inicioMesStr);
+      const { data: centralPedidos, error: centralError } = await sb.from("pedidos")
+        .select(`
+          id, preco_total, data, criado_em, forma_pagamento, status_pagamento, status, pago_em,
+          prato:pratos(nome),
+          fornecedor:fornecedores(nome),
+          colaborador:colaboradores(id, nome, matricula, empresa, whatsapp)
+        `)
+        .or(`data.eq.${hojeStr},status_pagamento.eq.pendente`)
+        .neq("status", "cancelado")
+        .order("criado_em", { ascending: false });
+      if ($("finClientesStatus")) {
+        $("finClientesStatus").innerHTML = centralError
+          ? `<div class="alert alert-error show">${centralError.message}</div>`
+          : renderCentralClientesFinanceiro(centralPedidos || []);
+      }
 
       const totalMes = (pedidosMes || []).reduce((s, p) => s + Number(p.preco_total), 0);
       const totalPago = (pedidosMes || []).filter(p => p.status_pagamento === "pago").reduce((s, p) => s + Number(p.preco_total), 0);
@@ -7664,21 +7874,24 @@ Bom apetite!`;
       };
     }
 
-    function calcularRegraSocietaria({ receita = 0, quantidade = 1, tipo = "indicacao" } = {}) {
+    function calcularRegraSocietaria({ receita = 0, quantidade = 1, tipo = "indicacao", custo = 0 } = {}) {
       const qtd = Math.max(1, Number(quantidade || 1));
       const venda = Math.max(0, Number(receita || 0));
+      const custoTotal = Math.max(0, Number(custo || 0)) * qtd;
       const adicionalTotal = SOCIO_ADICIONAL_UNITARIO * qtd;
       const baseParceiro = Math.max(0, venda - adicionalTotal);
       if (tipo === "proprio") {
+        const lucroTotal = Math.max(0, venda - custoTotal);
+        const metadeLucro = lucroTotal / 2;
         return {
           tipo,
           unidades: qtd,
           receita: venda,
-          baseParceiro,
-          socioRecebe: baseParceiro,
-          socioComissao: 0,
-          masterRecebe: adicionalTotal,
-          adicionalTotal
+          baseParceiro: custoTotal,
+          socioRecebe: custoTotal + metadeLucro,
+          socioComissao: metadeLucro,
+          masterRecebe: metadeLucro,
+          adicionalTotal: lucroTotal
         };
       }
       return {
@@ -8039,7 +8252,7 @@ Bom apetite!`;
             <div class="section-head" style="margin-bottom:10px;">
               <div>
                 <h2 style="margin:0;">Sócio master</h2>
-                <p class="small muted" style="margin:4px 0 0;">Escolha qual sócio recebe a parte master dos R$ 3,00.</p>
+                <p class="small muted" style="margin:4px 0 0;">Escolha qual sócio recebe a parte master das indicações e dos lucros de produtos próprios.</p>
               </div>
               <span class="socio-chip master">${masterSocio ? escHtml(masterSocio.nome) : "Não definido"}</span>
             </div>
@@ -8095,7 +8308,8 @@ Bom apetite!`;
           const regra = calcularRegraSocietaria({
             receita,
             quantidade: p.quantidade,
-            tipo: produtoLink ? "proprio" : "indicacao"
+            tipo: produtoLink ? "proprio" : "indicacao",
+            custo: produtoLink ? Number(p.prato?.custo_unitario || 0) : 0
           });
           movimentosSocios.push({
             id: p.id,
@@ -8168,7 +8382,7 @@ Bom apetite!`;
               <strong>${escHtml(s.nome)}</strong>
               <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"} · Fiado: ${s.aceita_fiado ? `aceita (+${fmtBRL(Number(s.fiado_valor_extra || 0))})` : "não aceita"}</div>
               <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item)`).join(", ") || "nenhuma"}</div>
-              <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (R$ 3,00 ${escHtml(masterNome)} por item)`).join(", ") || "nenhum"}</div>
+              <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (lucro dividido com ${escHtml(masterNome)})`).join(", ") || "nenhum"}</div>
               <button class="btn btn-olive btn-sm ${acessoSocio ? "" : "hidden"}" style="margin-top:10px;" onclick="copiarCardapioSocio('${s.id}', this)">Copiar meu cardápio</button>
             </div>
             <div class="actions ${acessoSocio ? "hidden" : ""}">
@@ -8185,7 +8399,7 @@ Bom apetite!`;
           <div class="field ${acessoSocio ? "hidden" : ""}"><label>Sócio</label><select id="simSocio">${sociosVisiveis.map(s => `<option value="${s.id}">${escHtml(s.nome)}</option>`).join("")}</select></div>
           <div class="field"><label>Forma de venda</label><select id="simTipo"><option value="indicacao">Restaurante indicado</option><option value="proprio">Produto próprio do sócio</option></select></div>
           <div class="row">
-            <div class="field"><label>Preço sem os R$ 3,00</label><input id="simPrecoBase" class="input" type="number" min="0" step="0.01" value="20" /></div>
+            <div class="field"><label>Preço base / venda</label><input id="simPrecoBase" class="input" type="number" min="0" step="0.01" value="20" /></div>
             <div class="field"><label>Quantidade</label><input id="simQtd" class="input" type="number" min="1" step="1" value="10" /></div>
           </div>
           <div id="simResultado" class="payment-card" style="padding:12px;"></div>`;
@@ -8198,16 +8412,18 @@ Bom apetite!`;
           const tipo = $("simTipo").value;
           const qtd = Math.max(1, Number($("simQtd").value || 1));
           const baseUnit = Math.max(0, Number($("simPrecoBase").value || 0));
-          const regra = calcularRegraSocietaria({ receita: (baseUnit + SOCIO_ADICIONAL_UNITARIO) * qtd, quantidade: qtd, tipo });
+          const receitaSimulada = tipo === "indicacao" ? (baseUnit + SOCIO_ADICIONAL_UNITARIO) * qtd : baseUnit * qtd;
+          const custoSimulado = tipo === "proprio" ? Math.max(0, baseUnit - SOCIO_ADICIONAL_UNITARIO) : 0;
+          const regra = calcularRegraSocietaria({ receita: receitaSimulada, quantidade: qtd, tipo, custo: custoSimulado });
           $("simResultado").innerHTML = `
             <strong>${tipo === "indicacao" ? "Indicação de restaurante" : "Produto próprio do sócio"}</strong>
-            <div class="small muted" style="margin-top:4px;">Preço na plataforma: ${fmtBRL(baseUnit + SOCIO_ADICIONAL_UNITARIO)} por item · ${qtd} unidade(s)</div>
+            <div class="small muted" style="margin-top:4px;">Preço na plataforma: ${fmtBRL(tipo === "indicacao" ? baseUnit + SOCIO_ADICIONAL_UNITARIO : baseUnit)} por item · ${qtd} unidade(s)</div>
             ${graficoSocioValores([
-              { label: tipo === "indicacao" ? "Restaurante" : "Sócio", valor: regra.baseParceiro, classe: "base" },
+              { label: tipo === "indicacao" ? "Restaurante" : "Custo do produto", valor: regra.baseParceiro, classe: "base" },
               { label: "Sócio", valor: regra.socioComissao, classe: "socio" },
               { label: masterNome, valor: regra.masterRecebe, classe: "master" }
             ])}
-            <div class="small muted" style="margin-top:8px;">${tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : `${escHtml(socio.nome)} recebe o valor do produto (${fmtBRL(regra.baseParceiro)}) e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
+            <div class="small muted" style="margin-top:8px;">${tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : `Lucro dividido: ${escHtml(socio.nome)} recebe custo + ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
         };
         ["simSocio", "simTipo", "simPrecoBase", "simQtd"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
         atualizarSimulador();
@@ -8242,7 +8458,7 @@ Bom apetite!`;
           <div class="field"><label>Valor extra do fiado</label><input id="socioFiadoExtra" class="input" type="number" min="0" step="0.01" value="${Number(s?.fiado_valor_extra || 0).toFixed(2)}" /></div>
         </div>
         <div class="socio-split-note small" style="margin-bottom:12px;">O fiado fica visível apenas nos produtos/restaurantes deste sócio quando ele aceitar. O valor extra configurado entra sobre o pedido fiado inteiro, seja marmita, bebida, sobremesa ou lanche.</div>
-        <div class="socio-split-note small" style="margin-bottom:12px;">A divisão não usa percentual: produto próprio gera R$ 3,00 para ${escHtml(masterNome)}; indicação divide a taxa de operação de R$ 3,00 em R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item.</div>
+        <div class="socio-split-note small" style="margin-bottom:12px;">Indicação divide a taxa de operação de R$ 3,00 em R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio divide o lucro real entre vendedor e master.</div>
         <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAtivo" type="checkbox" ${s?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;" /> Ativo</label>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
@@ -8301,7 +8517,7 @@ Bom apetite!`;
         <div class="field"><label>Forma de venda</label><select id="vincTipo"><option value="fornecedor">Restaurante indicado pelo sócio</option><option value="produto">Produto próprio do sócio</option></select></div>
         <div class="field" id="vincFornecedorWrap"><label>Restaurante / fornecedor indicado</label><select id="vincFornecedor">${fornecedores.map(f => `<option value="${f.id}">${escHtml(f.nome)}</option>`).join("")}</select></div>
         <div class="field hidden" id="vincProdutoWrap"><label>Produto próprio</label><select id="vincProduto">${pratos.map(p => `<option value="${p.id}">${escHtml(p.nome)} - ${CATEGORIAS_PRATOS[p.categoria] || "Produto"}</option>`).join("")}</select></div>
-        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio: R$ 3,00 para ${escHtml(masterNome)} por item.</div>`;
+        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio: lucro real dividido entre vendedor e master.</div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
       $("vincTipo").addEventListener("change", () => {
