@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#f6efe3" />
+  <meta name="description" content="Venda rapida vinculada ao Meu Pedido." />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <title>Venda rapida - Meu Pedido</title>
+
+  <script>
+    window.SUPABASE_URL = "https://cppvmfreprsgswbjpovn.supabase.co";
+    window.SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwcHZtZnJlcHJzZ3N3Ympwb3ZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MTU5OTksImV4cCI6MjA5OTA5MTk5OX0.dYdUD5nqkYE8aTlbq6vhQzOcdfF6U3X6J30olS-TPZ8";
+  </script>
+
+  <style>
+    :root {
+      --bg: #f6efe3;
+      --paper: #fffaf0;
+      --ink: #1c1c1e;
+      --muted: #6b594b;
+      --line: #d9c9ad;
+      --brick: #b94a2a;
+      --olive: #5e6b3a;
+      --mustard: #d29822;
+      --green: #34c759;
+      --danger: #c53030;
+      --shadow: 0 10px 30px -18px rgba(42, 31, 23, .35);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink); }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+    .app { min-height: 100vh; padding: 18px clamp(14px, 3vw, 28px) 116px; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .brand { min-width: 0; }
+    .eyebrow { margin: 0 0 3px; color: var(--olive); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 0; font-size: clamp(26px, 5vw, 44px); line-height: 1.02; letter-spacing: 0; }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+    .btn { border: 0; border-radius: 999px; min-height: 44px; padding: 0 16px; font-weight: 800; background: var(--paper); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+    .btn-primary { background: #000; color: #fff; box-shadow: none; }
+    .btn-olive { background: var(--olive); color: #fff; box-shadow: none; }
+    .btn-danger { color: var(--danger); }
+    .icon-btn { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; align-items: start; }
+    .panel { background: rgba(255, 250, 240, .74); border: 1px solid var(--line); border-radius: 8px; padding: 14px; box-shadow: var(--shadow); }
+    .toolbar { display: grid; grid-template-columns: minmax(150px, 260px) minmax(180px, 1fr); gap: 10px; margin-bottom: 14px; }
+    .field { display: grid; gap: 6px; }
+    label { color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .input, select { width: 100%; min-height: 46px; border-radius: 8px; border: 1px solid var(--line); background: #fffaf4; color: var(--ink); padding: 0 12px; outline: none; }
+    .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 12px; }
+    .chip { white-space: nowrap; }
+    .chip.active { background: #000; color: #fff; box-shadow: none; }
+    .products { display: grid; gap: 10px; }
+    .product { min-height: 92px; display: grid; grid-template-columns: 78px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px; border: 1px solid rgba(217, 201, 173, .85); border-radius: 8px; background: #fffaf4; }
+    .photo { width: 78px; height: 72px; border-radius: 8px; background: #eee5d7; object-fit: cover; display: grid; place-items: center; color: #7d7064; font-weight: 900; overflow: hidden; }
+    .photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .product-title { font-size: 17px; font-weight: 800; overflow-wrap: anywhere; }
+    .product-meta { margin-top: 3px; color: var(--muted); font-size: 13px; }
+    .product-price { margin-top: 7px; font-size: 18px; font-weight: 900; }
+    .stepper { display: grid; grid-template-columns: 44px 42px 44px; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: #fff; overflow: hidden; }
+    .stepper button { width: 44px; height: 44px; border: 0; background: #fff; font-size: 24px; }
+    .stepper span { text-align: center; font-weight: 900; }
+    .cart { position: sticky; top: 14px; display: grid; gap: 12px; }
+    .client-card, .cart-card { display: grid; gap: 10px; }
+    .search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+    .results { display: grid; gap: 8px; }
+    .result { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 8px; background: #fffaf4; padding: 10px; }
+    .result.selected { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+    .cart-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; padding: 10px 0; border-bottom: 1px dashed rgba(107, 89, 75, .22); }
+    .cart-line:last-child { border-bottom: 0; }
+    .total-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-top: 8px; }
+    .total { font-size: 24px; font-weight: 950; }
+    .alert { display: none; border-radius: 8px; padding: 10px 12px; background: rgba(197, 48, 48, .10); color: var(--danger); font-size: 13px; font-weight: 700; }
+    .alert.show { display: block; }
+    .success { background: rgba(52, 199, 89, .12); color: #176b33; }
+    .login { width: min(420px, calc(100vw - 28px)); margin: 12vh auto 0; }
+    .login .panel { display: grid; gap: 12px; }
+    .checkout-link { word-break: break-all; padding: 10px; border-radius: 8px; border: 1px dashed var(--olive); background: rgba(94, 107, 58, .10); font-size: 13px; }
+    .bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 14px calc(12px + var(--safe-bottom)); background: rgba(246, 239, 227, .92); border-top: 1px solid var(--line); backdrop-filter: blur(16px); display: none; }
+    .bottom-bar .btn { width: 100%; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .cart { position: static; }
+      .toolbar { grid-template-columns: 1fr; }
+      .product { grid-template-columns: 66px minmax(0, 1fr); }
+      .product .stepper { grid-column: 1 / -1; justify-self: end; }
+      .photo { width: 66px; height: 62px; }
+      .bottom-bar { display: block; }
+    }
+  </style>
+</head>
+
+<body>
+  <main id="loginScreen" class="login hidden">
+    <div class="panel">
+      <p class="eyebrow">Venda rapida</p>
+      <h1>Acesso admin</h1>
+      <div id="loginAlert" class="alert"></div>
+      <div class="field"><label>E-mail</label><input id="email" class="input" type="email" autocomplete="username" /></div>
+      <div class="field"><label>Senha</label><input id="senha" class="input" type="password" autocomplete="current-password" /></div>
+      <button id="btnLogin" class="btn btn-primary">Entrar</button>
+      <a class="small muted" href="admin.html">Voltar ao painel</a>
+    </div>
+  </main>
+
+  <main id="appScreen" class="app hidden">
+    <header class="topbar">
+      <div class="brand">
+        <p class="eyebrow">Meu Pedido</p>
+        <h1>Venda rapida</h1>
+        <div id="adminInfo" class="small muted"></div>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <a class="btn icon-btn" href="admin.html" aria-label="Admin">A</a>
+        <button id="btnSair" class="btn icon-btn" aria-label="Sair">S</button>
+      </div>
+    </header>
+
+    <div class="layout">
+      <section class="panel">
+        <div class="toolbar">
+          <div class="field">
+            <label>Catalogo</label>
+            <select id="socioSelect"></select>
+          </div>
+          <div class="field">
+            <label>Buscar produto</label>
+            <input id="buscaProduto" class="input" type="search" placeholder="Nome, restaurante ou categoria" />
+          </div>
+        </div>
+        <div class="chips" id="categorias"></div>
+        <div id="catalogoAlert" class="alert"></div>
+        <div id="produtos" class="products"></div>
+      </section>
+
+      <aside class="cart">
+        <section class="panel client-card">
+          <h2>Cliente</h2>
+          <div class="search-row">
+            <input id="buscaCliente" class="input" type="search" placeholder="Matricula, nome ou empresa" />
+            <button id="btnBuscarCliente" class="btn">Buscar</button>
+          </div>
+          <div id="clienteAlert" class="alert"></div>
+          <div id="clientesResultado" class="results"></div>
+          <div id="cadastroRapido" class="hidden" style="display:grid; gap:8px;">
+            <div class="field"><label>Nome</label><input id="cadNome" class="input" /></div>
+            <div class="field"><label>Matricula</label><input id="cadMatricula" class="input" /></div>
+            <div class="field"><label>WhatsApp</label><input id="cadWhats" class="input" inputmode="tel" /></div>
+            <div class="field"><label>Empresa</label><input id="cadEmpresa" class="input" placeholder="Venda rapida" /></div>
+            <div class="field"><label>Entrega</label><input id="cadEndereco" class="input" placeholder="Venda rapida" /></div>
+            <div class="field"><label>E-mail</label><input id="cadEmail" class="input" type="email" /></div>
+            <button id="btnCadastrarCliente" class="btn btn-olive">Cadastrar e selecionar</button>
+          </div>
+        </section>
+
+        <section class="panel cart-card">
+          <h2>Carrinho</h2>
+          <div id="clienteSelecionado" class="small muted">Nenhum cliente selecionado.</div>
+          <div id="carrinhoLista" class="small muted">Nenhum produto adicionado.</div>
+          <div class="total-row">
+            <span class="muted">Total</span>
+            <strong id="totalVenda" class="total">R$ 0,00</strong>
+          </div>
+          <div id="checkoutAlert" class="alert"></div>
+          <button id="btnGerarCheckout" class="btn btn-primary">Gerar link unico</button>
+          <div id="checkoutResultado" class="hidden">
+            <div class="checkout-link" id="checkoutUrl"></div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
+              <button id="btnCopiarCheckout" class="btn">Copiar</button>
+              <a id="btnWhatsCheckout" class="btn btn-olive" target="_blank" rel="noopener">WhatsApp</a>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <div class="bottom-bar">
+    <button id="btnMobileCart" class="btn btn-primary">Carrinho - R$ 0,00</button>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+    const sb = createClient(window.SUPABASE_URL, window.SUPABASE_ANON, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    });
+    const $ = id => document.getElementById(id);
+    const fmtBRL = n => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const categoriaNome = c => ({ marmita: "Marmita", bebida: "Bebida", sobremesa: "Sobremesa", lanche: "Lanche" }[c] || "Produto");
+    const state = {
+      admin: null,
+      socios: [],
+      socioId: new URLSearchParams(location.search).get("socio") || new URLSearchParams(location.search).get("s") || "",
+      produtos: [],
+      filtro: "todos",
+      busca: "",
+      cliente: null,
+      carrinho: new Map(),
+      checkoutUrl: ""
+    };
+
+    function showLogin() {
+      $("loginScreen").classList.remove("hidden");
+      $("appScreen").classList.add("hidden");
+    }
+
+    function showApp() {
+      $("loginScreen").classList.add("hidden");
+      $("appScreen").classList.remove("hidden");
+      $("adminInfo").textContent = state.admin ? `${state.admin.nome} - ${state.admin.perfil}` : "";
+    }
+
+    function alertMsg(id, msg, ok = false) {
+      const el = $(id);
+      el.textContent = msg || "";
+      el.classList.toggle("show", !!msg);
+      el.classList.toggle("success", ok);
+    }
+
+    async function verificarAdmin() {
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return null;
+      const { data, error } = await sb.from("admins").select("id,nome,email,perfil,ativo,socio_id").eq("id", session.user.id).maybeSingle();
+      if (error || !data?.ativo) return null;
+      return data;
+    }
+
+    async function init() {
+      state.admin = await verificarAdmin();
+      if (!state.admin) {
+        showLogin();
+        return;
+      }
+      showApp();
+      await carregarSocios();
+      await carregarCatalogo();
+    }
+
+    async function login() {
+      alertMsg("loginAlert", "");
+      $("btnLogin").disabled = true;
+      $("btnLogin").textContent = "Entrando...";
+      try {
+        const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+        if (error) throw error;
+        state.admin = await verificarAdmin();
+        if (!state.admin) throw new Error("Usuario sem perfil administrativo ativo.");
+        showApp();
+        await carregarSocios();
+        await carregarCatalogo();
+      } catch (e) {
+        alertMsg("loginAlert", e?.message || "Nao foi possivel entrar.");
+      } finally {
+        $("btnLogin").disabled = false;
+        $("btnLogin").textContent = "Entrar";
+      }
+    }
+
+    async function carregarSocios() {
+      const { data, error } = await sb.from("socios").select("id,nome,ativo").eq("ativo", true).order("nome");
+      if (error) throw error;
+      state.socios = data || [];
+      if (state.admin?.perfil === "socio" && state.admin.socio_id) state.socioId = state.admin.socio_id;
+      if (!state.socioId) state.socioId = state.socios.find(s => /maria/i.test(s.nome || ""))?.id || "";
+      if (!state.socioId && state.socios.length === 1) state.socioId = state.socios[0].id;
+      $("socioSelect").innerHTML = [
+        '<option value="">Selecione o socio</option>',
+        ...state.socios.map(s => `<option value="${s.id}" ${s.id === state.socioId ? "selected" : ""}>${esc(s.nome)}</option>`)
+      ].join("");
+      $("socioSelect").disabled = state.admin?.perfil === "socio";
+    }
+
+    async function carregarCatalogo() {
+      alertMsg("catalogoAlert", "");
+      $("produtos").innerHTML = '<div class="muted">Carregando produtos...</div>';
+      if (!state.socioId) {
+        state.produtos = [];
+        $("produtos").innerHTML = '<div class="muted">Selecione a Maria ou outro socio para ver apenas os produtos vinculados.</div>';
+        renderCategorias();
+        return;
+      }
+      const { data, error } = await sb.rpc("cardapio_socio", { p_socio_id: state.socioId });
+      if (error) {
+        alertMsg("catalogoAlert", error.message);
+        $("produtos").innerHTML = "";
+        return;
+      }
+      state.produtos = data || [];
+      renderCategorias();
+      renderProdutos();
+    }
+
+    function renderCategorias() {
+      const cats = ["todos", ...new Set(state.produtos.map(p => p.prato_categoria || "marmita"))];
+      $("categorias").innerHTML = cats.map(cat => `<button class="btn chip ${state.filtro === cat ? "active" : ""}" data-cat="${cat}">${cat === "todos" ? "Todos" : categoriaNome(cat)}</button>`).join("");
+      $("categorias").querySelectorAll("[data-cat]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          state.filtro = btn.dataset.cat;
+          renderCategorias();
+          renderProdutos();
+        });
+      });
+    }
+
+    function produtosFiltrados() {
+      const q = state.busca.trim().toLowerCase();
+      return state.produtos.filter(p => {
+        const cat = p.prato_categoria || "marmita";
+        const texto = `${p.prato_nome || ""} ${p.fornecedor_nome || ""} ${cat}`.toLowerCase();
+        return (state.filtro === "todos" || cat === state.filtro) && (!q || texto.includes(q));
+      });
+    }
+
+    function renderProdutos() {
+      const produtos = produtosFiltrados();
+      if (!state.produtos.length) {
+        $("produtos").innerHTML = '<div class="muted">Nenhum produto publicado hoje para este socio.</div>';
+        return;
+      }
+      $("produtos").innerHTML = produtos.length ? produtos.map(p => {
+        const qtd = state.carrinho.get(p.prato_id)?.quantidade || 0;
+        const estoque = p.estoque_disponivel == null ? "" : ` - ${p.estoque_disponivel} disp.`;
+        return `<article class="product">
+          <div class="photo">${p.prato_foto_url ? `<img src="${esc(p.prato_foto_url)}" alt="">` : categoriaNome(p.prato_categoria).slice(0, 1)}</div>
+          <div style="min-width:0;">
+            <div class="product-title">${esc(p.prato_nome)}</div>
+            <div class="product-meta">${esc(p.fornecedor_nome || "Restaurante")} - ${categoriaNome(p.prato_categoria)}${estoque}</div>
+            <div class="product-price">${fmtBRL(p.prato_preco)}</div>
+          </div>
+          <div class="stepper" aria-label="Quantidade">
+            <button type="button" data-dec="${p.prato_id}">-</button>
+            <span>${qtd}</span>
+            <button type="button" data-inc="${p.prato_id}">+</button>
+          </div>
+        </article>`;
+      }).join("") : '<div class="muted">Nenhum produto encontrado.</div>';
+      $("produtos").querySelectorAll("[data-inc]").forEach(btn => btn.addEventListener("click", () => alterarQtd(btn.dataset.inc, 1)));
+      $("produtos").querySelectorAll("[data-dec]").forEach(btn => btn.addEventListener("click", () => alterarQtd(btn.dataset.dec, -1)));
+    }
+
+    function alterarQtd(pratoId, delta) {
+      const produto = state.produtos.find(p => p.prato_id === pratoId);
+      if (!produto) return;
+      const atual = state.carrinho.get(pratoId);
+      const quantidade = Math.max(0, Math.min(99, (atual?.quantidade || 0) + delta));
+      if (!quantidade) state.carrinho.delete(pratoId);
+      else state.carrinho.set(pratoId, { produto, quantidade });
+      renderProdutos();
+      renderCarrinho();
+    }
+
+    function totalCarrinho() {
+      return [...state.carrinho.values()].reduce((s, item) => s + Number(item.produto.prato_preco || 0) * item.quantidade, 0);
+    }
+
+    function renderCarrinho() {
+      $("clienteSelecionado").innerHTML = state.cliente
+        ? `<strong>${esc(state.cliente.nome)}</strong><div class="small muted">Matricula ${esc(state.cliente.matricula || "")}${state.cliente.empresa ? ` - ${esc(state.cliente.empresa)}` : ""}</div>`
+        : "Nenhum cliente selecionado.";
+      const itens = [...state.carrinho.values()];
+      $("carrinhoLista").innerHTML = itens.length ? itens.map(item => `
+        <div class="cart-line">
+          <div><strong>${item.quantidade}x ${esc(item.produto.prato_nome)}</strong><div class="small muted">${esc(item.produto.fornecedor_nome || "")}</div></div>
+          <strong>${fmtBRL(Number(item.produto.prato_preco || 0) * item.quantidade)}</strong>
+        </div>`).join("") : "Nenhum produto adicionado.";
+      const total = totalCarrinho();
+      $("totalVenda").textContent = fmtBRL(total);
+      $("btnMobileCart").textContent = `Carrinho - ${fmtBRL(total)}`;
+    }
+
+    async function buscarCliente() {
+      alertMsg("clienteAlert", "");
+      $("clientesResultado").innerHTML = "";
+      $("cadastroRapido").classList.add("hidden");
+      const busca = $("buscaCliente").value.trim();
+      if (busca.length < 2) return alertMsg("clienteAlert", "Digite ao menos 2 caracteres.");
+      $("btnBuscarCliente").disabled = true;
+      $("btnBuscarCliente").textContent = "Buscando...";
+      try {
+        const { data, error } = await sb.rpc("venda_rapida_buscar_colaborador", { p_busca: busca });
+        if (error) throw error;
+        const clientes = data || [];
+        if (!clientes.length) {
+          alertMsg("clienteAlert", "Cliente nao encontrado. Cadastre para vincular a cobranca.");
+          $("cadMatricula").value = busca;
+          $("cadastroRapido").classList.remove("hidden");
+          return;
+        }
+        $("clientesResultado").innerHTML = clientes.map(c => `
+          <button class="result ${state.cliente?.id === c.id ? "selected" : ""}" data-cliente="${c.id}">
+            <strong>${esc(c.nome)}</strong>
+            <div class="small muted">Matricula ${esc(c.matricula || "")}${c.empresa ? ` - ${esc(c.empresa)}` : ""}</div>
+          </button>`).join("");
+        $("clientesResultado").querySelectorAll("[data-cliente]").forEach(btn => {
+          btn.addEventListener("click", () => {
+            state.cliente = clientes.find(c => c.id === btn.dataset.cliente);
+            $("clientesResultado").querySelectorAll(".result").forEach(item => item.classList.toggle("selected", item === btn));
+            alertMsg("clienteAlert", "Cliente selecionado.", true);
+            renderCarrinho();
+          });
+        });
+      } catch (e) {
+        alertMsg("clienteAlert", e?.message || "Nao foi possivel buscar cliente.");
+      } finally {
+        $("btnBuscarCliente").disabled = false;
+        $("btnBuscarCliente").textContent = "Buscar";
+      }
+    }
+
+    async function cadastrarCliente() {
+      alertMsg("clienteAlert", "");
+      $("btnCadastrarCliente").disabled = true;
+      $("btnCadastrarCliente").textContent = "Cadastrando...";
+      try {
+        const { data, error } = await sb.rpc("venda_rapida_cadastrar_colaborador", {
+          p_nome: $("cadNome").value.trim(),
+          p_whatsapp: $("cadWhats").value.trim(),
+          p_matricula: $("cadMatricula").value.trim(),
+          p_empresa: $("cadEmpresa").value.trim() || "Venda rapida",
+          p_endereco_empresa: $("cadEndereco").value.trim() || "Venda rapida",
+          p_email: $("cadEmail").value.trim() || null
+        });
+        if (error) throw error;
+        state.cliente = Array.isArray(data) ? data[0] : data;
+        $("cadastroRapido").classList.add("hidden");
+        $("clientesResultado").innerHTML = "";
+        $("buscaCliente").value = state.cliente?.matricula || "";
+        alertMsg("clienteAlert", "Cliente cadastrado e selecionado.", true);
+        renderCarrinho();
+      } catch (e) {
+        alertMsg("clienteAlert", e?.message || "Nao foi possivel cadastrar.");
+      } finally {
+        $("btnCadastrarCliente").disabled = false;
+        $("btnCadastrarCliente").textContent = "Cadastrar e selecionar";
+      }
+    }
+
+    async function gerarCheckout() {
+      alertMsg("checkoutAlert", "");
+      $("checkoutResultado").classList.add("hidden");
+      if (!state.cliente?.id) return alertMsg("checkoutAlert", "Selecione o cliente pela matricula.");
+      if (!state.carrinho.size) return alertMsg("checkoutAlert", "Adicione pelo menos um produto.");
+      $("btnGerarCheckout").disabled = true;
+      $("btnGerarCheckout").textContent = "Gerando link...";
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session?.access_token) throw new Error("Sessao admin expirada.");
+        const itens = [...state.carrinho.values()].map(item => ({
+          prato_id: item.produto.prato_id,
+          quantidade: item.quantidade,
+          observacoes: null,
+          acompanhamentos: [],
+          acompanhamentos_qtd: {}
+        }));
+        const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: {
+            colaborador_id: state.cliente.id,
+            itens,
+            admin_checkout: true,
+            redirect_url: new URL("marmita.html", location.href).toString()
+          }
+        });
+        if (error) throw error;
+        if (!data?.success || !data?.checkout_url) throw new Error(data?.message || "A InfinitePay nao retornou link.");
+        state.checkoutUrl = data.checkout_url;
+        $("checkoutUrl").textContent = state.checkoutUrl;
+        $("btnWhatsCheckout").href = `https://wa.me/${String(state.cliente.whatsapp || "").replace(/\D/g, "")}?text=${encodeURIComponent(`Seu link de pagamento: ${state.checkoutUrl}`)}`;
+        $("checkoutResultado").classList.remove("hidden");
+        alertMsg("checkoutAlert", `Link unico gerado para ${data.pedido_ids?.length || 1} item(ns).`, true);
+      } catch (e) {
+        let msg = e?.message || "Nao foi possivel gerar o checkout.";
+        if (e?.context?.json) {
+          try {
+            const body = await e.context.clone().json();
+            msg = body?.message || msg;
+          } catch {}
+        }
+        alertMsg("checkoutAlert", msg);
+      } finally {
+        $("btnGerarCheckout").disabled = false;
+        $("btnGerarCheckout").textContent = "Gerar link unico";
+      }
+    }
+
+    $("btnLogin").addEventListener("click", login);
+    [$("email"), $("senha")].forEach(el => el.addEventListener("keydown", e => { if (e.key === "Enter") login(); }));
+    $("btnSair").addEventListener("click", async () => { await sb.auth.signOut(); location.reload(); });
+    $("socioSelect").addEventListener("change", async () => {
+      state.socioId = $("socioSelect").value;
+      state.carrinho.clear();
+      const url = new URL(location.href);
+      if (state.socioId) url.searchParams.set("socio", state.socioId);
+      else url.searchParams.delete("socio");
+      history.replaceState(null, "", url);
+      renderCarrinho();
+      await carregarCatalogo();
+    });
+    $("buscaProduto").addEventListener("input", () => { state.busca = $("buscaProduto").value; renderProdutos(); });
+    $("btnBuscarCliente").addEventListener("click", buscarCliente);
+    $("buscaCliente").addEventListener("keydown", e => { if (e.key === "Enter") buscarCliente(); });
+    $("btnCadastrarCliente").addEventListener("click", cadastrarCliente);
+    $("btnGerarCheckout").addEventListener("click", gerarCheckout);
+    $("btnCopiarCheckout").addEventListener("click", async () => {
+      if (!state.checkoutUrl) return;
+      await navigator.clipboard.writeText(state.checkoutUrl);
+      $("btnCopiarCheckout").textContent = "Copiado";
+      setTimeout(() => $("btnCopiarCheckout").textContent = "Copiar", 1400);
+    });
+    $("btnMobileCart").addEventListener("click", () => document.querySelector(".cart").scrollIntoView({ behavior: "smooth" }));
+
+    renderCarrinho();
+    init().catch(e => {
+      showLogin();
+      alertMsg("loginAlert", e?.message || "Nao foi possivel iniciar.");
+    });
+  </script>
+</body>
+
+</html>

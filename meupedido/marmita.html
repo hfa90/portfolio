@@ -6114,6 +6114,14 @@
       };
 
       function renderPedidoCard(p) {
+        const idsMesmoCarrinho = p.pedido_carrinho_id
+          ? pedidos
+            .filter(item => item.pedido_carrinho_id === p.pedido_carrinho_id
+              && item.status_pagamento === "pendente"
+              && ["pix_empresa", "pix_fornecedor", "pagar_mais_tarde", "fiado", "cartao_infinitepay"].includes(item.forma_pagamento)
+              && item.status !== "cancelado")
+            .map(item => item.id)
+          : [];
         const isFiado = p.forma_pagamento === "fiado" && p.status_pagamento === "pendente";
         const badgeClass = p.comprovante_status === "rejeitado" ? "rejeitado" : (isFiado ? "fiado" : p.status_pagamento);
         const badgeText = p.comprovante_status === "rejeitado" ? "Rejeitado" : (isFiado ? "Fiado" : p.status_pagamento);
@@ -6185,7 +6193,7 @@
           </div>
           <div style="margin-top:10px; padding-top:10px; border-top: 0.5px solid var(--separator); display:grid; gap:8px;">
             ${podePagarInfinitePay ? `<button class="btn btn-primary btn-sm btn-pill btn-block btn-pagar-infinitepay" data-pedido="${p.id}">
-              💳 Pagar agora com InfinitePay
+              💳 ${idsMesmoCarrinho.length > 1 ? `Pagar carrinho (${idsMesmoCarrinho.length} itens)` : "Pagar agora com InfinitePay"}
             </button>` : ""}
             ${acaoComprovante}
             <button class="btn btn-secondary btn-sm btn-pill btn-block btn-acompanhar-pedido" data-pedido="${p.id}">
@@ -6303,11 +6311,20 @@
       lista.querySelectorAll(".btn-pagar-infinitepay").forEach(btn => {
         btn.addEventListener("click", async (e) => {
           e.stopPropagation();
+          const pedidoBase = pedidos.find(p => String(p.id) === String(btn.dataset.pedido));
+          const idsCheckout = pedidoBase?.pedido_carrinho_id
+            ? pedidos
+              .filter(p => p.pedido_carrinho_id === pedidoBase.pedido_carrinho_id
+                && p.status_pagamento === "pendente"
+                && ["pix_empresa", "pix_fornecedor", "pagar_mais_tarde", "fiado", "cartao_infinitepay"].includes(p.forma_pagamento)
+                && p.status !== "cancelado")
+              .map(p => p.id)
+            : [btn.dataset.pedido];
           const original = btn.textContent;
           btn.disabled = true;
           btn.textContent = "Abrindo checkout...";
           try {
-            await abrirCheckoutInfinitePayPedidos([btn.dataset.pedido]);
+            await abrirCheckoutInfinitePayPedidos(idsCheckout);
           } catch (err) {
             mostrarToast("⚠️", "Checkout indisponível", err?.message || "Tente novamente.");
             btn.disabled = false;
