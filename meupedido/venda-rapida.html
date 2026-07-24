@@ -84,6 +84,7 @@
     .login { width: min(420px, calc(100vw - 28px)); margin: 12vh auto 0; }
     .login .panel { display: grid; gap: 12px; }
     .checkout-link { word-break: break-all; padding: 10px; border-radius: 8px; border: 1px dashed var(--olive); background: rgba(94, 107, 58, .10); font-size: 13px; }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 14px calc(12px + var(--safe-bottom)); background: rgba(246, 239, 227, .92); border-top: 1px solid var(--line); backdrop-filter: blur(16px); display: none; }
     .bottom-bar .btn { width: 100%; }
 
@@ -91,6 +92,7 @@
       .layout { grid-template-columns: 1fr; }
       .cart { position: static; }
       .toolbar { grid-template-columns: 1fr; }
+      .action-grid { grid-template-columns: 1fr; }
       .product { grid-template-columns: 66px minmax(0, 1fr); }
       .product .stepper { grid-column: 1 / -1; justify-self: end; }
       .photo { width: 66px; height: 62px; }
@@ -171,7 +173,10 @@
             <strong id="totalVenda" class="total">R$ 0,00</strong>
           </div>
           <div id="checkoutAlert" class="alert"></div>
-          <button id="btnGerarCheckout" class="btn btn-primary">Gerar link unico</button>
+          <div class="action-grid">
+            <button id="btnGerarCheckout" class="btn btn-primary">Cartao InfinitePay</button>
+            <button id="btnPagarMaisTarde" class="btn btn-olive">Pagar Mais Tarde</button>
+          </div>
           <div id="checkoutResultado" class="hidden">
             <div class="checkout-link" id="checkoutUrl"></div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;">
@@ -379,6 +384,29 @@
       $("btnMobileCart").textContent = `Carrinho - ${fmtBRL(total)}`;
     }
 
+    function payloadItensVenda() {
+      return [...state.carrinho.values()].map(item => ({
+        prato_id: item.produto.prato_id,
+        quantidade: item.quantidade,
+        observacoes: null,
+        acompanhamentos: [],
+        acompanhamentos_qtd: {}
+      }));
+    }
+
+    function validarVendaRapida() {
+      if (!state.cliente?.id) return "Selecione o cliente pela matricula.";
+      if (!state.carrinho.size) return "Adicione pelo menos um produto.";
+      return "";
+    }
+
+    function setAcoesVendaCarregando(carregando, textoCheckout = "Cartao InfinitePay", textoMaisTarde = "Pagar Mais Tarde") {
+      $("btnGerarCheckout").disabled = carregando;
+      $("btnPagarMaisTarde").disabled = carregando;
+      $("btnGerarCheckout").textContent = textoCheckout;
+      $("btnPagarMaisTarde").textContent = textoMaisTarde;
+    }
+
     async function buscarCliente() {
       alertMsg("clienteAlert", "");
       $("clientesResultado").innerHTML = "";
@@ -449,20 +477,13 @@
     async function gerarCheckout() {
       alertMsg("checkoutAlert", "");
       $("checkoutResultado").classList.add("hidden");
-      if (!state.cliente?.id) return alertMsg("checkoutAlert", "Selecione o cliente pela matricula.");
-      if (!state.carrinho.size) return alertMsg("checkoutAlert", "Adicione pelo menos um produto.");
-      $("btnGerarCheckout").disabled = true;
-      $("btnGerarCheckout").textContent = "Gerando link...";
+      const erroValidacao = validarVendaRapida();
+      if (erroValidacao) return alertMsg("checkoutAlert", erroValidacao);
+      setAcoesVendaCarregando(true, "Gerando link...", "Pagar Mais Tarde");
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (!session?.access_token) throw new Error("Sessao admin expirada.");
-        const itens = [...state.carrinho.values()].map(item => ({
-          prato_id: item.produto.prato_id,
-          quantidade: item.quantidade,
-          observacoes: null,
-          acompanhamentos: [],
-          acompanhamentos_qtd: {}
-        }));
+        const itens = payloadItensVenda();
         const { data, error } = await sb.functions.invoke("infinitepay-create-link", {
           headers: { Authorization: `Bearer ${session.access_token}` },
           body: {
@@ -489,8 +510,36 @@
         }
         alertMsg("checkoutAlert", msg);
       } finally {
-        $("btnGerarCheckout").disabled = false;
-        $("btnGerarCheckout").textContent = "Gerar link unico";
+        setAcoesVendaCarregando(false);
+      }
+    }
+
+    async function registrarPagarMaisTarde() {
+      alertMsg("checkoutAlert", "");
+      $("checkoutResultado").classList.add("hidden");
+      const erroValidacao = validarVendaRapida();
+      if (erroValidacao) return alertMsg("checkoutAlert", erroValidacao);
+      setAcoesVendaCarregando(true, "Cartao InfinitePay", "Registrando...");
+      try {
+        const itens = payloadItensVenda();
+        const { data, error } = await sb.rpc("venda_rapida_criar_pedido_carrinho", {
+          p_colaborador_id: state.cliente.id,
+          p_itens: itens,
+          p_forma_pagamento: "pagar_mais_tarde",
+          p_observacoes: null
+        });
+        if (error) throw error;
+        const resp = typeof data === "string" ? JSON.parse(data) : data;
+        const qtd = resp?.pedido_ids?.length || itens.length;
+        state.carrinho.clear();
+        state.checkoutUrl = "";
+        renderProdutos();
+        renderCarrinho();
+        alertMsg("checkoutAlert", `${qtd} pedido(s) registrado(s) em Pagar Mais Tarde para ${state.cliente.nome}.`, true);
+      } catch (e) {
+        alertMsg("checkoutAlert", e?.message || "Nao foi possivel registrar Pagar Mais Tarde.");
+      } finally {
+        setAcoesVendaCarregando(false);
       }
     }
 
@@ -512,6 +561,7 @@
     $("buscaCliente").addEventListener("keydown", e => { if (e.key === "Enter") buscarCliente(); });
     $("btnCadastrarCliente").addEventListener("click", cadastrarCliente);
     $("btnGerarCheckout").addEventListener("click", gerarCheckout);
+    $("btnPagarMaisTarde").addEventListener("click", registrarPagarMaisTarde);
     $("btnCopiarCheckout").addEventListener("click", async () => {
       if (!state.checkoutUrl) return;
       await navigator.clipboard.writeText(state.checkoutUrl);
