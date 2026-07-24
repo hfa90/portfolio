@@ -3306,7 +3306,7 @@
           <button class="btn btn-primary btn-block" id="btnNovoSocio" onclick="abrirModalSocio()">Novo sócio</button>
         </div>
       </div>
-      <p class="muted small">Indicação de restaurante divide o adicional de R$ 3,00 por item. Produto próprio usa lucro real: venda menos custo, dividido entre vendedor e master.</p>
+      <p class="muted small">Indicação de restaurante divide o adicional de R$ 3,00 por item. Bebidas dividem comissão fixa de R$ 2,00 por unidade entre vendedor e master. Produto próprio usa lucro real: venda menos custo, dividido entre vendedor e master.</p>
       <div class="socios-regra" id="sociosRegra">
         <article class="regra-card">
           <strong>Produto próprio do sócio</strong>
@@ -3327,6 +3327,17 @@
             <span class="regra-chip master">R$ 1,50 master</span>
           </div>
           <p class="small muted" style="margin:0;">Exemplo: marmita de R$ 20,00 vira R$ 23,00. Seu Pedro recebe R$ 1,50 e o master escolhido recebe R$ 1,50.</p>
+        </article>
+        <article class="regra-card">
+          <strong>Bebidas</strong>
+          <div class="regra-formula">
+            <span class="regra-chip">valor da bebida</span>
+            <span>+</span>
+            <span class="regra-chip socio">R$ 1,00 sócio</span>
+            <span>+</span>
+            <span class="regra-chip master">R$ 1,00 master</span>
+          </div>
+          <p class="small muted" style="margin:0;">Qualquer bebida gera R$ 2,00 de comissão por unidade, dividida entre o sócio vendedor e o master.</p>
         </article>
       </div>
       <div id="sociosMasterPanel" class="card" style="margin-bottom:14px;"></div>
@@ -4991,14 +5002,50 @@
       return [...map.values()].sort((a, b) => b.total - a.total);
     }
 
+    function resumoVendasSociosRelatorio(movimentos = []) {
+      const map = new Map();
+      movimentos.forEach(item => {
+        const id = item.socio_id || "__sem_socio__";
+        if (!map.has(id)) {
+          map.set(id, {
+            id,
+            nome: item.socio_nome || "Sócio",
+            pedidos: new Set(),
+            unidades: 0,
+            vendas: 0,
+            comissaoSocio: 0,
+            comissaoMaster: 0,
+            comissaoTotal: 0,
+            bebidas: 0,
+            indicacoes: 0,
+            proprios: 0
+          });
+        }
+        const row = map.get(id);
+        row.pedidos.add(item.id);
+        row.unidades += Number(item.quantidade || 0);
+        row.vendas += Number(item.receita || 0);
+        row.comissaoSocio += Number(item.regra?.socioComissao || 0);
+        row.comissaoMaster += Number(item.regra?.masterRecebe || 0);
+        row.comissaoTotal += Number(item.regra?.socioComissao || 0) + Number(item.regra?.masterRecebe || 0);
+        if (item.categoria === "bebida") row.bebidas += Number(item.quantidade || 0);
+        else if (item.tipo === "proprio") row.proprios += Number(item.quantidade || 0);
+        else row.indicacoes += Number(item.quantidade || 0);
+      });
+      return [...map.values()]
+        .map(row => ({ ...row, pedidos: row.pedidos.size }))
+        .sort((a, b) => b.vendas - a.vendas || a.nome.localeCompare(b.nome));
+    }
+
     async function buscarPedidosRelatorioPdf(inicio, fim) {
       const { data, error } = await sb.from("pedidos")
         .select(`
           id, data, criado_em, pago_em, preco_total, quantidade, observacoes, nome_pessoa,
+          fornecedor_id, prato_id,
           forma_pagamento, status_pagamento, status, comprovante_status, comprovante_url,
           pedido_coletivo_id, infinitepay_paid_amount,
-          prato:pratos(nome, categoria, preco),
-          fornecedor:fornecedores(nome),
+          prato:pratos(id, nome, categoria, preco, custo_unitario),
+          fornecedor:fornecedores(id, nome),
           colaborador:colaboradores(nome, matricula, empresa, whatsapp),
           acompanhamentos:pedido_acompanhamentos(
             quantidade,
@@ -5011,6 +5058,86 @@
         .order("criado_em", { ascending: true });
       if (error) throw error;
       return (data || []).map(normalizarPedidoRegraFiado);
+    }
+
+    function origemSocioTexto(item = {}) {
+      if (item.categoria === "bebida") return "Bebida";
+      return item.tipo === "proprio" ? "Produto próprio" : "Indicação";
+    }
+
+    function montarMovimentosSociosRelatorio(pedidos, contexto = {}) {
+      const socios = contexto.socios || [];
+      const vincFor = contexto.vincFor || [];
+      const vincProd = contexto.vincProd || [];
+      const socioMap = new Map(socios.map(s => [s.id, s]));
+      const masterId = contexto.masterId || "";
+      const masterNome = contexto.masterNome || "Master";
+      return (pedidos || [])
+        .filter(pedidoContaParaSocios)
+        .map(p => {
+          const produtoLink = vincProd.find(v => v.prato_id === p.prato_id && socioMap.get(v.socio_id)?.ativo !== false);
+          const fornecedorLink = produtoLink ? null : vincFor.find(v => v.fornecedor_id === p.fornecedor_id && socioMap.get(v.socio_id)?.ativo !== false);
+          const link = produtoLink || fornecedorLink;
+          if (!link) return null;
+          const receita = Number(p.preco_total || 0);
+          const categoria = p.prato?.categoria || "marmita";
+          const regra = calcularRegraSocietaria({
+            receita,
+            quantidade: p.quantidade,
+            tipo: produtoLink ? "proprio" : "indicacao",
+            custo: produtoLink ? Number(p.prato?.custo_unitario || 0) : 0,
+            categoria
+          });
+          return {
+            id: p.id,
+            socio_id: link.socio_id,
+            socio_nome: socioMap.get(link.socio_id)?.nome || "Sócio",
+            master_id: masterId,
+            master_nome: masterNome,
+            data: p.data,
+            criado_em: p.criado_em,
+            cliente: p.colaborador?.nome || p.nome_pessoa || "Cliente",
+            empresa: p.colaborador?.empresa || "",
+            fornecedor: p.fornecedor?.nome || "Fornecedor",
+            produto: p.prato?.nome || "Produto",
+            quantidade: Number(p.quantidade || 1),
+            receita,
+            preco_total: receita,
+            categoria,
+            tipo: produtoLink ? "proprio" : "indicacao",
+            forma_pagamento: p.forma_pagamento,
+            status_pagamento: p.status_pagamento,
+            regra
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => String(a.socio_nome || "").localeCompare(String(b.socio_nome || "")) || String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
+    }
+
+    async function buscarSociosRelatorioFinanceiro(pedidos) {
+      const [sociosResp, fornResp, prodResp, masterConfigResp] = await Promise.all([
+        sb.from("socios").select("id, nome, ativo").order("nome"),
+        sb.from("socio_fornecedores").select("socio_id, fornecedor_id"),
+        sb.from("socio_produtos").select("socio_id, prato_id"),
+        sb.from("configuracoes").select("valor").eq("chave", SOCIO_MASTER_CONFIG_KEY).maybeSingle()
+      ]);
+      const erro = sociosResp.error || fornResp.error || prodResp.error || masterConfigResp.error;
+      if (erro) throw erro;
+      const socios = sociosResp.data || [];
+      const socioMap = new Map(socios.map(s => [s.id, s]));
+      const masterIdSalvo = masterConfigResp.data?.valor || "";
+      const masterSocio = socioMap.get(masterIdSalvo) || socios.find(s => s.ativo !== false && /hayden/i.test(s.nome || ""));
+      const contexto = {
+        socios,
+        vincFor: fornResp.data || [],
+        vincProd: prodResp.data || [],
+        masterId: masterSocio?.ativo !== false ? masterSocio?.id : "",
+        masterNome: masterSocio?.nome || "Hayden"
+      };
+      return {
+        ...contexto,
+        movimentos: montarMovimentosSociosRelatorio(pedidos, contexto)
+      };
     }
 
     async function carregarBibliotecaPdf() {
@@ -5108,6 +5235,14 @@
         const pendentes = ativos.filter(p => p.status_pagamento !== "pago");
         const fiados = ativos.filter(p => p.forma_pagamento === "fiado");
         const fiadosAbertos = fiados.filter(p => p.status_pagamento !== "pago");
+        const sociosRel = await buscarSociosRelatorioFinanceiro(ativos);
+        const movimentosSocios = sociosRel.movimentos || [];
+        const vendasPorSocio = resumoVendasSociosRelatorio(movimentosSocios);
+        const repassesPorSocio = resumoPorSocioRelatorio(movimentosSocios, {
+          todosSocios: sociosRel.socios,
+          masterId: sociosRel.masterId,
+          masterNome: sociosRel.masterNome
+        });
 
         addTituloPdf(doc, periodo);
         doc.setFontSize(10);
@@ -5203,6 +5338,105 @@
           didDrawPage: () => addTituloPdf(doc, periodo)
         });
         if (!fiadosAbertos.length) doc.text("Nenhum fiado em aberto no periodo.", 14, 44);
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        doc.setFontSize(10);
+        doc.text("Vendas e comissoes por socio", 14, 38);
+        autoTable(doc, {
+          startY: 43,
+          head: [["Sócio vendedor", "Pedidos", "Unid.", "Bebidas", "Indicações", "Próprios", "Valor das vendas", "Comissão vendedor", `Comissão master ${sociosRel.masterNome}`, "Total comissão"]],
+          body: vendasPorSocio.map(item => [
+            item.nome,
+            item.pedidos,
+            item.unidades,
+            item.bebidas,
+            item.indicacoes,
+            item.proprios,
+            fmtBRL(item.vendas),
+            fmtBRL(item.comissaoSocio),
+            fmtBRL(item.comissaoMaster),
+            fmtBRL(item.comissaoTotal)
+          ]),
+          theme: "grid",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 7.2, cellPadding: 1.6, overflow: "linebreak" },
+          headStyles: { fillColor: [94, 107, 58] },
+          columnStyles: {
+            6: { halign: "right" },
+            7: { halign: "right" },
+            8: { halign: "right" },
+            9: { halign: "right" }
+          }
+        });
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          head: [["Sócio", "Papel", "Pedidos", "Unid.", "Faturamento vinculado", "Repasse sócio", "Repasse master", "Total a receber"]],
+          body: repassesPorSocio.map(item => [
+            item.nome,
+            item.papel,
+            item.pedidos,
+            item.unidades,
+            fmtBRL(item.faturamento),
+            fmtBRL(item.socio),
+            fmtBRL(item.master),
+            fmtBRL(item.total)
+          ]),
+          theme: "striped",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 7.2, cellPadding: 1.6, overflow: "linebreak" },
+          headStyles: { fillColor: [185, 74, 42] },
+          columnStyles: {
+            4: { halign: "right" },
+            5: { halign: "right" },
+            6: { halign: "right" },
+            7: { halign: "right" }
+          }
+        });
+        if (!movimentosSocios.length) doc.text("Nenhuma venda vinculada a sócios no periodo.", 14, 48);
+
+        doc.addPage();
+        addTituloPdf(doc, periodo);
+        doc.setFontSize(10);
+        doc.text("Quem comprou, o que comprou e comissao", 14, 38);
+        autoTable(doc, {
+          startY: 43,
+          head: [["Data", "Hora", "Sócio vendedor", "Cliente", "Empresa", "Produto", "Origem", "Unid.", "Valor venda", "Comissão vendedor", `Master ${sociosRel.masterNome}`, "Total comissão"]],
+          body: movimentosSocios.map(item => [
+            fmtData(item.data),
+            fmtDataHora(item.criado_em),
+            item.socio_nome || "-",
+            item.cliente || "-",
+            item.empresa || "-",
+            item.produto || "-",
+            origemSocioTexto(item),
+            Number(item.quantidade || 0),
+            fmtBRL(item.receita),
+            fmtBRL(item.regra?.socioComissao || 0),
+            fmtBRL(item.regra?.masterRecebe || 0),
+            fmtBRL((item.regra?.socioComissao || 0) + (item.regra?.masterRecebe || 0))
+          ]),
+          theme: "striped",
+          margin: { top: 34, bottom: 12 },
+          styles: { fontSize: 6.4, cellPadding: 1.2, overflow: "linebreak" },
+          headStyles: { fillColor: [42, 31, 23] },
+          columnStyles: {
+            0: { cellWidth: 16 },
+            1: { cellWidth: 21 },
+            2: { cellWidth: 26 },
+            3: { cellWidth: 26 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 30 },
+            6: { cellWidth: 20 },
+            7: { cellWidth: 12, halign: "right" },
+            8: { cellWidth: 18, halign: "right" },
+            9: { cellWidth: 20, halign: "right" },
+            10: { cellWidth: 18, halign: "right" },
+            11: { cellWidth: 20, halign: "right" }
+          },
+          didDrawPage: () => addTituloPdf(doc, periodo)
+        });
+        if (!movimentosSocios.length) doc.text("Nenhum item vendido por sócio no periodo.", 14, 48);
 
         doc.addPage();
         addTituloPdf(doc, periodo);
@@ -8084,6 +8318,9 @@ Bom apetite!`;
     const SOCIO_ADICIONAL_UNITARIO = 3;
     const SOCIO_INDICACAO_SOCIO_UNIT = SOCIO_ADICIONAL_UNITARIO / 2;
     const SOCIO_INDICACAO_MASTER_UNIT = SOCIO_ADICIONAL_UNITARIO / 2;
+    const SOCIO_BEBIDA_COMISSAO_TOTAL_UNIT = 2;
+    const SOCIO_BEBIDA_SOCIO_UNIT = SOCIO_BEBIDA_COMISSAO_TOTAL_UNIT / 2;
+    const SOCIO_BEBIDA_MASTER_UNIT = SOCIO_BEBIDA_COMISSAO_TOTAL_UNIT / 2;
     const SOCIO_MASTER_CONFIG_KEY = "socio_master_id";
 
     function periodoSociosInfo() {
@@ -8101,10 +8338,25 @@ Bom apetite!`;
       };
     }
 
-    function calcularRegraSocietaria({ receita = 0, quantidade = 1, tipo = "indicacao", custo = 0 } = {}) {
+    function calcularRegraSocietaria({ receita = 0, quantidade = 1, tipo = "indicacao", custo = 0, categoria = "marmita" } = {}) {
       const qtd = Math.max(1, Number(quantidade || 1));
       const venda = Math.max(0, Number(receita || 0));
       const custoTotal = Math.max(0, Number(custo || 0)) * qtd;
+      const categoriaNorm = categoria || "marmita";
+      if (categoriaNorm === "bebida") {
+        const adicionalTotal = SOCIO_BEBIDA_COMISSAO_TOTAL_UNIT * qtd;
+        return {
+          tipo,
+          categoria: categoriaNorm,
+          unidades: qtd,
+          receita: venda,
+          baseParceiro: Math.max(0, venda - adicionalTotal),
+          socioRecebe: SOCIO_BEBIDA_SOCIO_UNIT * qtd,
+          socioComissao: SOCIO_BEBIDA_SOCIO_UNIT * qtd,
+          masterRecebe: SOCIO_BEBIDA_MASTER_UNIT * qtd,
+          adicionalTotal
+        };
+      }
       const adicionalTotal = SOCIO_ADICIONAL_UNITARIO * qtd;
       const baseParceiro = Math.max(0, venda - adicionalTotal);
       if (tipo === "proprio") {
@@ -8112,6 +8364,7 @@ Bom apetite!`;
         const metadeLucro = lucroTotal / 2;
         return {
           tipo,
+          categoria: categoriaNorm,
           unidades: qtd,
           receita: venda,
           baseParceiro: custoTotal,
@@ -8123,6 +8376,7 @@ Bom apetite!`;
       }
       return {
         tipo,
+        categoria: categoriaNorm,
         unidades: qtd,
         receita: venda,
         baseParceiro,
@@ -8134,7 +8388,7 @@ Bom apetite!`;
     }
 
     function bucketSocio() {
-      return { receita: 0, unidades: 0, pedidos: 0, baseParceiro: 0, socioRecebe: 0, socioComissao: 0, masterRecebe: 0, masterDireto: 0, masterUnidades: 0, indicacoes: 0, proprios: 0 };
+      return { receita: 0, unidades: 0, pedidos: 0, baseParceiro: 0, socioRecebe: 0, socioComissao: 0, masterRecebe: 0, masterDireto: 0, masterUnidades: 0, indicacoes: 0, proprios: 0, bebidas: 0 };
     }
 
     function somarRegraNoBucket(bucket, regra) {
@@ -8145,7 +8399,8 @@ Bom apetite!`;
       bucket.socioRecebe += regra.socioRecebe;
       bucket.socioComissao += regra.socioComissao;
       bucket.masterRecebe += regra.masterRecebe;
-      if (regra.tipo === "proprio") bucket.proprios += regra.unidades;
+      if (regra.categoria === "bebida") bucket.bebidas += regra.unidades;
+      else if (regra.tipo === "proprio") bucket.proprios += regra.unidades;
       else bucket.indicacoes += regra.unidades;
     }
 
@@ -8209,10 +8464,11 @@ Bom apetite!`;
         acc.socio += Number(item.recebeComoSocio || 0);
         acc.master += Number(item.recebeComoMaster || 0);
         acc.total += Number(item.totalRecebe || 0);
-        if (item.tipo === "proprio") acc.proprios += Number(item.quantidade || 0);
+        if (item.categoria === "bebida") acc.bebidas += Number(item.quantidade || 0);
+        else if (item.tipo === "proprio") acc.proprios += Number(item.quantidade || 0);
         else acc.indicacoes += Number(item.quantidade || 0);
         return acc;
-      }, { pedidos: 0, unidades: 0, receita: 0, base: 0, socio: 0, master: 0, total: 0, indicacoes: 0, proprios: 0 });
+      }, { pedidos: 0, unidades: 0, receita: 0, base: 0, socio: 0, master: 0, total: 0, indicacoes: 0, proprios: 0, bebidas: 0 });
     }
 
     function dadosRelatorioSocioAtual() {
@@ -8238,7 +8494,7 @@ Bom apetite!`;
         return map.get(id);
       };
       linhas.forEach(item => {
-        const socio = garantir(item.socio_id, item.socio_nome, item.tipo === "proprio" ? "Produto próprio" : "Indicação");
+        const socio = garantir(item.socio_id, item.socio_nome, origemSocioTexto(item));
         if (socio && Number(item.regra.socioRecebe || 0) > 0) {
           socio.unidades += Number(item.quantidade || 0);
           socio.pedidos.add(item.id);
@@ -8291,7 +8547,8 @@ Bom apetite!`;
             ["Total a pagar aos sócios", fmtBRL(resumo.total), "Quanto deve ser repassado conforme a regra"],
             ["Pedidos", resumo.pedidos, `${resumo.unidades} unidade(s)`],
             ["Indicações", resumo.indicacoes, "Unidades vendidas por restaurante indicado"],
-            ["Produtos próprios", resumo.proprios, "Unidades de produto próprio do sócio"]
+            ["Produtos próprios", resumo.proprios, "Unidades de produto próprio do sócio"],
+            ["Bebidas", resumo.bebidas, "Comissão fixa de R$ 2,00 por unidade, dividida 50/50"]
           ],
           theme: "grid",
           styles: { fontSize: 8, cellPadding: 2 },
@@ -8333,7 +8590,7 @@ Bom apetite!`;
             item.fornecedor || "-",
             item.produto || "-",
             item.socio_nome || "-",
-            `${item.tipo === "proprio" ? "Produto próprio" : "Indicação"} (${item.papel})`,
+            `${item.categoria === "bebida" ? "Bebida" : item.tipo === "proprio" ? "Produto próprio" : "Indicação"} (${item.papel})`,
             REL_PAY_LABEL[item.forma_pagamento] || item.forma_pagamento || "-",
             Number(item.quantidade || 0),
             fmtBRL(item.receita),
@@ -8446,7 +8703,7 @@ Bom apetite!`;
           sb.from("socio_produtos").select("*, prato:pratos(id, nome, categoria, fornecedor_id, preco, custo_unitario)"),
           sb.from("pedidos").select(`
             id, data, criado_em, preco_total, quantidade, fornecedor_id, prato_id, status, forma_pagamento, status_pagamento,
-            prato:pratos(id, nome, preco, custo_unitario),
+            prato:pratos(id, nome, categoria, preco, custo_unitario),
             fornecedor:fornecedores(id, nome),
             colaborador:colaboradores(id, nome, empresa, matricula),
             acompanhamentos:pedido_acompanhamentos(quantidade, acompanhamento:acompanhamentos(id, nome, preco_extra, custo_unitario))
@@ -8471,7 +8728,7 @@ Bom apetite!`;
         const fornecedores = fornecedoresResp.data || [];
         const socioMap = new Map(socios.map(s => [s.id, s]));
         const masterIdSalvo = masterConfigResp.data?.valor || "";
-        const masterSocio = socioMap.get(masterIdSalvo);
+        const masterSocio = socioMap.get(masterIdSalvo) || socios.find(s => s.ativo !== false && /hayden/i.test(s.nome || ""));
         const masterId = masterSocio?.ativo !== false ? masterSocio?.id : "";
         const masterNome = masterSocio?.nome || "sócio master";
         const masterRotulo = masterSocio ? masterNome : "master";
@@ -8542,7 +8799,8 @@ Bom apetite!`;
             receita,
             quantidade: p.quantidade,
             tipo: produtoLink ? "proprio" : "indicacao",
-            custo: produtoLink ? Number(p.prato?.custo_unitario || 0) : 0
+            custo: produtoLink ? Number(p.prato?.custo_unitario || 0) : 0,
+            categoria: p.prato?.categoria || "marmita"
           });
           movimentosSocios.push({
             id: p.id,
@@ -8559,6 +8817,7 @@ Bom apetite!`;
             quantidade: Number(p.quantidade || 1),
             receita,
             preco_total: receita,
+            categoria: p.prato?.categoria || "marmita",
             tipo: produtoLink ? "proprio" : "indicacao",
             forma_pagamento: p.forma_pagamento,
             status_pagamento: p.status_pagamento,
@@ -8592,18 +8851,18 @@ Bom apetite!`;
             <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
               <div>
                 <strong>${escHtml(r.socio.nome)}</strong>
-                <div class="small muted">${r.mes.indicacoes} indicação(ões) · ${r.mes.proprios} produto(s) próprio(s) · ${r.mes.pedidos} pedido(s) no mês</div>
+                <div class="small muted">${r.mes.indicacoes} indicação(ões) · ${r.mes.proprios} produto(s) próprio(s) · ${r.mes.bebidas} bebida(s) · ${r.mes.pedidos} pedido(s) no mês</div>
               </div>
               <span class="socio-chip ${r.socio.id === masterId ? "master" : "socio"}">${acessoSocio ? `Você recebe: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}` : `${r.socio.id === masterId ? "Master recebe" : "Sócio recebe"}: ${fmtBRL(totalReceberSocio(r, "mes", masterId))}`}</span>
             </div>
             ${graficoSocioValores([
-              { label: acessoSocio ? "Você (R$ 1,50/item indicado)" : "Sócio (R$ 1,50/item indicado)", valor: r.mes.socioRecebe, classe: "socio" },
-              { label: r.socio.id === masterId ? "Sua parte master" : `Master ${masterRotulo} (R$ 1,50/item indicado)`, valor: r.socio.id === masterId ? r.mes.masterDireto : r.mes.masterRecebe, classe: "master" },
+              { label: acessoSocio ? "Você (comissão)" : "Sócio (comissão)", valor: r.mes.socioRecebe, classe: "socio" },
+              { label: r.socio.id === masterId ? "Sua parte master" : `Master ${masterRotulo}`, valor: r.socio.id === masterId ? r.mes.masterDireto : r.mes.masterRecebe, classe: "master" },
               { label: "Base", valor: r.mes.baseParceiro, classe: "base" }
             ])}
             <div class="row" style="margin-top:10px;">
-              <div class="socio-split-note small"><strong>Hoje:</strong> taxa de operação ${fmtBRL(r.dia.socioComissao + r.dia.masterRecebe)} nas indicações = ${fmtBRL(r.dia.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.dia.masterRecebe)} para master</div>
-              <div class="socio-split-note small"><strong>Semana:</strong> taxa de operação ${fmtBRL(r.semana.socioComissao + r.semana.masterRecebe)} nas indicações = ${fmtBRL(r.semana.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.semana.masterRecebe)} para master</div>
+              <div class="socio-split-note small"><strong>Hoje:</strong> comissão ${fmtBRL(r.dia.socioComissao + r.dia.masterRecebe)} = ${fmtBRL(r.dia.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.dia.masterRecebe)} para master</div>
+              <div class="socio-split-note small"><strong>Semana:</strong> comissão ${fmtBRL(r.semana.socioComissao + r.semana.masterRecebe)} = ${fmtBRL(r.semana.socioComissao)} para ${acessoSocio ? "você" : "este sócio"} + ${fmtBRL(r.semana.masterRecebe)} para master</div>
             </div>
           </article>`).join("")}</div>` : '<div class="card empty">Crie um vínculo de produto próprio ou indicação para ver repasses.</div>';
 
@@ -8614,7 +8873,7 @@ Bom apetite!`;
             <div>
               <strong>${escHtml(s.nome)}</strong>
               <div class="small muted">${s.whatsapp || "Sem WhatsApp"} · ${s.ativo !== false ? "ativo" : "inativo"} · Fiado: ${s.aceita_fiado ? `aceita (+${fmtBRL(Number(s.fiado_valor_extra || 0))})` : "não aceita"}</div>
-              <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item)`).join(", ") || "nenhuma"}</div>
+              <div class="small muted" style="margin-top:6px;">Indicações de restaurante: ${vf.map(v => `${escHtml(v.fornecedor?.nome || "-")} (R$ 1,50 sócio + R$ 1,50 ${escHtml(masterNome)} por item; bebidas R$ 1,00 + R$ 1,00)`).join(", ") || "nenhuma"}</div>
               <div class="small muted">Produtos próprios: ${vp.map(v => `${escHtml(v.prato?.nome || "-")} (lucro dividido com ${escHtml(masterNome)})`).join(", ") || "nenhum"}</div>
               <button class="btn btn-olive btn-sm ${acessoSocio ? "" : "hidden"}" style="margin-top:10px;" onclick="copiarCardapioSocio('${s.id}', this)">Copiar meu cardápio</button>
               <a class="btn btn-primary btn-sm ${acessoSocio ? "" : "hidden"}" style="margin-top:10px;" href="${linkVendaRapidaSocio(s.id)}" target="_blank" rel="noopener">Venda rápida</a>
@@ -8632,7 +8891,7 @@ Bom apetite!`;
 
         $("sociosSimulador").innerHTML = `
           <div class="field ${acessoSocio ? "hidden" : ""}"><label>Sócio</label><select id="simSocio">${sociosVisiveis.map(s => `<option value="${s.id}">${escHtml(s.nome)}</option>`).join("")}</select></div>
-          <div class="field"><label>Forma de venda</label><select id="simTipo"><option value="indicacao">Restaurante indicado</option><option value="proprio">Produto próprio do sócio</option></select></div>
+          <div class="field"><label>Forma de venda</label><select id="simTipo"><option value="indicacao">Restaurante indicado</option><option value="proprio">Produto próprio do sócio</option><option value="bebida">Bebida</option></select></div>
           <div class="row">
             <div class="field"><label>Preço base / venda</label><input id="simPrecoBase" class="input" type="number" min="0" step="0.01" value="20" /></div>
             <div class="field"><label>Quantidade</label><input id="simQtd" class="input" type="number" min="1" step="1" value="10" /></div>
@@ -8644,21 +8903,24 @@ Bom apetite!`;
             $("simResultado").innerHTML = '<div class="small muted">Cadastre sócios e produtos para simular.</div>';
             return;
           }
-          const tipo = $("simTipo").value;
+          const tipoEscolhido = $("simTipo").value;
+          const tipo = tipoEscolhido === "bebida" ? "indicacao" : tipoEscolhido;
+          const categoria = tipoEscolhido === "bebida" ? "bebida" : "marmita";
           const qtd = Math.max(1, Number($("simQtd").value || 1));
           const baseUnit = Math.max(0, Number($("simPrecoBase").value || 0));
-          const receitaSimulada = tipo === "indicacao" ? (baseUnit + SOCIO_ADICIONAL_UNITARIO) * qtd : baseUnit * qtd;
+          const adicionalUnit = categoria === "bebida" ? SOCIO_BEBIDA_COMISSAO_TOTAL_UNIT : SOCIO_ADICIONAL_UNITARIO;
+          const receitaSimulada = tipo === "indicacao" ? (baseUnit + adicionalUnit) * qtd : baseUnit * qtd;
           const custoSimulado = tipo === "proprio" ? Math.max(0, baseUnit - SOCIO_ADICIONAL_UNITARIO) : 0;
-          const regra = calcularRegraSocietaria({ receita: receitaSimulada, quantidade: qtd, tipo, custo: custoSimulado });
+          const regra = calcularRegraSocietaria({ receita: receitaSimulada, quantidade: qtd, tipo, custo: custoSimulado, categoria });
           $("simResultado").innerHTML = `
-            <strong>${tipo === "indicacao" ? "Indicação de restaurante" : "Produto próprio do sócio"}</strong>
-            <div class="small muted" style="margin-top:4px;">Preço na plataforma: ${fmtBRL(tipo === "indicacao" ? baseUnit + SOCIO_ADICIONAL_UNITARIO : baseUnit)} por item · ${qtd} unidade(s)</div>
+            <strong>${categoria === "bebida" ? "Bebida" : tipo === "indicacao" ? "Indicação de restaurante" : "Produto próprio do sócio"}</strong>
+            <div class="small muted" style="margin-top:4px;">Preço na plataforma: ${fmtBRL(tipo === "indicacao" ? baseUnit + adicionalUnit : baseUnit)} por item · ${qtd} unidade(s)</div>
             ${graficoSocioValores([
               { label: tipo === "indicacao" ? "Restaurante" : "Custo do produto", valor: regra.baseParceiro, classe: "base" },
               { label: "Sócio", valor: regra.socioComissao, classe: "socio" },
               { label: masterNome, valor: regra.masterRecebe, classe: "master" }
             ])}
-            <div class="small muted" style="margin-top:8px;">${tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : `Lucro dividido: ${escHtml(socio.nome)} recebe custo + ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
+            <div class="small muted" style="margin-top:8px;">${categoria === "bebida" ? `Bebida divide R$ 2,00 por unidade: ${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : tipo === "indicacao" ? `${escHtml(socio.nome)} recebe ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.` : `Lucro dividido: ${escHtml(socio.nome)} recebe custo + ${fmtBRL(regra.socioComissao)} e ${escHtml(masterNome)} recebe ${fmtBRL(regra.masterRecebe)}.`}</div>`;
         };
         ["simSocio", "simTipo", "simPrecoBase", "simQtd"].forEach(id => $(id)?.addEventListener("input", atualizarSimulador));
         atualizarSimulador();
@@ -8693,7 +8955,7 @@ Bom apetite!`;
           <div class="field"><label>Valor extra do fiado</label><input id="socioFiadoExtra" class="input" type="number" min="0" step="0.01" value="${Number(s?.fiado_valor_extra || 0).toFixed(2)}" /></div>
         </div>
         <div class="socio-split-note small" style="margin-bottom:12px;">O fiado fica visível apenas nos produtos/restaurantes deste sócio quando ele aceitar. O valor extra configurado entra sobre o pedido fiado inteiro, seja marmita, bebida, sobremesa ou lanche.</div>
-        <div class="socio-split-note small" style="margin-bottom:12px;">Indicação divide a taxa de operação de R$ 3,00 em R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio divide o lucro real entre vendedor e master.</div>
+        <div class="socio-split-note small" style="margin-bottom:12px;">Indicação divide a taxa de operação de R$ 3,00 em R$ 1,50 para o sócio e R$ 1,50 para ${escHtml(masterNome)} por item. Bebidas dividem R$ 2,00 em R$ 1,00 para o vendedor e R$ 1,00 para o master. Produto próprio divide o lucro real entre vendedor e master.</div>
         <label class="small" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;"><input id="socioAtivo" type="checkbox" ${s?.ativo !== false ? "checked" : ""} style="width:20px;height:20px;" /> Ativo</label>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
@@ -8752,7 +9014,7 @@ Bom apetite!`;
         <div class="field"><label>Forma de venda</label><select id="vincTipo"><option value="fornecedor">Restaurante indicado pelo sócio</option><option value="produto">Produto próprio do sócio</option></select></div>
         <div class="field" id="vincFornecedorWrap"><label>Restaurante / fornecedor indicado</label><select id="vincFornecedor">${fornecedores.map(f => `<option value="${f.id}">${escHtml(f.nome)}</option>`).join("")}</select></div>
         <div class="field hidden" id="vincProdutoWrap"><label>Produto próprio</label><select id="vincProduto">${pratos.map(p => `<option value="${p.id}">${escHtml(p.nome)} - ${CATEGORIAS_PRATOS[p.categoria] || "Produto"}</option>`).join("")}</select></div>
-        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para ${escHtml(masterNome)} por item. Produto próprio: lucro real dividido entre vendedor e master.</div>`;
+        <div class="socio-split-note small">Restaurante indicado: R$ 1,50 para ${escHtml(s.nome)} e R$ 1,50 para ${escHtml(masterNome)} por item. Bebida: R$ 1,00 para vendedor e R$ 1,00 para master por unidade. Produto próprio: lucro real dividido entre vendedor e master.</div>`;
       $("modalAlert").classList.remove("show");
       $("modal").classList.add("show");
       $("vincTipo").addEventListener("change", () => {
