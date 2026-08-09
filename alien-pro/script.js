@@ -1,6 +1,6 @@
 // ================= CONFIG =================
 const WHATSAPP_NUMBER = "5592994008327";
-function waLink(msg){
+function waLink(msg) {
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(msg)}`;
 }
 
@@ -117,6 +117,166 @@ testimonials.forEach(t => {
   testiGrid.appendChild(el);
 });
 
+// ================= QUOTE CALCULATOR =================
+// NOTA: valores de referência (placeholder). Ajuste para a tabela de preços real da Alien Pró.
+const quoteServices = [
+  {
+    id: "insulfilm",
+    name: "Insulfilm (película solar)",
+    time: "≈ 2h",
+    price: { hatch: [420, 550], sedan: [480, 650], suv: [600, 850] }
+  },
+  {
+    id: "lavagem",
+    name: "Lavagem Técnica",
+    time: "≈ 1h",
+    price: { hatch: [60, 90], sedan: [70, 100], suv: [90, 130] }
+  },
+  {
+    id: "higienizacao",
+    name: "Higienização Interna",
+    time: "≈ 2h30",
+    price: { hatch: [180, 250], sedan: [220, 300], suv: [280, 380] }
+  },
+  {
+    id: "polimento-comercial",
+    name: "Polimento Comercial",
+    time: "≈ 3h",
+    price: { hatch: [250, 350], sedan: [300, 420], suv: [380, 520] }
+  },
+  {
+    id: "polimento-cristalizado",
+    name: "Polimento Cristalizado",
+    time: "≈ 5h",
+    price: { hatch: [550, 750], sedan: [650, 900], suv: [850, 1200] }
+  },
+];
+
+const sizeLabels = {
+  hatch: "Hatch / Compacto",
+  sedan: "Sedan / SUV compacto",
+  suv: "SUV grande / Pickup / Van"
+};
+
+let selectedSize = "sedan";
+
+// populate service select
+const qService = document.getElementById('qService');
+quoteServices.forEach(s => {
+  const opt = document.createElement('option');
+  opt.value = s.id;
+  opt.textContent = s.name;
+  qService.appendChild(opt);
+});
+
+// populate size toggle
+const qSizeToggle = document.getElementById('qSizeToggle');
+Object.keys(sizeLabels).forEach(key => {
+  const btn = document.createElement('div');
+  btn.className = 'size-btn' + (key === selectedSize ? ' active' : '');
+  btn.dataset.size = key;
+  btn.textContent = sizeLabels[key];
+  btn.addEventListener('click', () => {
+    selectedSize = key;
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateQuote();
+  });
+  qSizeToggle.appendChild(btn);
+});
+
+function fmtBRL(n) {
+  return n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0 });
+}
+
+function updateQuote() {
+  const svc = quoteServices.find(s => s.id === qService.value);
+  if (!svc) return;
+  const [min, max] = svc.price[selectedSize];
+  document.getElementById('quotePrice').textContent = `${fmtBRL(min)} – ${fmtBRL(max)}`;
+  document.getElementById('quoteTime').textContent = `Tempo estimado: ${svc.time} · ${sizeLabels[selectedSize]}`;
+
+  const resultBox = document.getElementById('quoteResult');
+  resultBox.classList.remove('pulse');
+  void resultBox.offsetWidth;
+  resultBox.classList.add('pulse');
+
+  const waBtn = document.getElementById('quoteWaBtn');
+  const msg = `Olá! Usei o simulador do site e quero confirmar um orçamento:\n\nServiço: ${svc.name}\nPorte do veículo: ${sizeLabels[selectedSize]}\nFaixa estimada: ${fmtBRL(min)} a ${fmtBRL(max)}\n\nPodem confirmar o valor exato?`;
+  waBtn.href = waLink(msg);
+}
+
+qService.addEventListener('change', updateQuote);
+qService.value = "polimento-comercial";
+updateQuote();
+
+// ================= COMPARISON TABLE: comercial vs cristalizado =================
+const compareRows = [
+  { crit: "Durabilidade do brilho", comercial: "1 a 2 meses", cristalizado: "8 a 12 meses", best: "cristalizado" },
+  { crit: "Remove riscos leves", comercial: "Sim", cristalizado: "Sim", best: "" },
+  { crit: "Protege contra UV/chuva ácida", comercial: "Proteção básica", cristalizado: "Proteção avançada", best: "cristalizado" },
+  { crit: "Efeito espelhado", comercial: "Bom", cristalizado: "Muito alto", best: "cristalizado" },
+  { crit: "Tempo de execução", comercial: "≈ 3h", cristalizado: "≈ 5h", best: "" },
+  { crit: "Indicado para", comercial: "Manutenção / venda do carro", cristalizado: "Proteção de longo prazo", best: "" },
+  { crit: "Investimento", comercial: "$", cristalizado: "$$$", best: "" },
+];
+
+const compareTable = document.getElementById('compareTable');
+const headRow = document.createElement('div');
+headRow.className = 'compare-row head';
+headRow.innerHTML = `
+  <div></div>
+  <div class="col-head comercial">Comercial</div>
+  <div class="col-head cristalizado">Cristalizado</div>
+`;
+compareTable.appendChild(headRow);
+
+compareRows.forEach(r => {
+  const row = document.createElement('div');
+  row.className = 'compare-row';
+  row.innerHTML = `
+    <div class="crit">${r.crit}</div>
+    <div class="val ${r.best === 'comercial' ? 'best' : ''}">${r.comercial}</div>
+    <div class="val ${r.best === 'cristalizado' ? 'best' : ''}">${r.cristalizado}</div>
+  `;
+  compareTable.appendChild(row);
+});
+
+// ================= INSTAGRAM EMBEDS =================
+// Posts públicos reais do @alien_pro_films encontrados via busca.
+// Não temos acesso à contagem de curtidas/comentários (Instagram bloqueia scraping),
+// então troque estas URLs pelas publicações que vocês sabem que performam melhor.
+const igPosts = [
+  "https://www.instagram.com/alien_pro_films/reel/DDuetyTPcmc/",
+  "https://www.instagram.com/alien_pro_films/reel/C9P44D2pSiA/",
+  "https://www.instagram.com/alien_pro_films/reel/DBeNqqZPA9R/",
+  "https://www.instagram.com/alien_pro_films/reel/DFNzcNaPIoW/",
+];
+
+const igTrack = document.getElementById('igEmbedTrack');
+igPosts.forEach(url => {
+  const item = document.createElement('div');
+  item.className = 'ig-embed-item reveal';
+  item.innerHTML = `
+    <blockquote class="instagram-media" data-instgrm-permalink="${url}" data-instgrm-version="14" style="width:100%; margin:0;">
+      <div class="ig-fallback-card">
+        Carregando publicação...<br>
+        <a href="${url}" target="_blank" rel="noopener">Ver no Instagram →</a>
+      </div>
+    </blockquote>
+  `;
+  igTrack.appendChild(item);
+});
+
+// load Instagram's official embed script (client-side, respects Instagram's own embed policy)
+(function loadInstagramEmbed() {
+  const s = document.createElement('script');
+  s.src = "https://www.instagram.com/embed.js";
+  s.async = true;
+  s.onload = () => { if (window.instgrm) window.instgrm.Embeds.process(); };
+  document.body.appendChild(s);
+})();
+
 // ================= WHATSAPP LINKS (static) =================
 document.querySelectorAll('a[href="WA_LINK_GENERIC"]').forEach(a => {
   a.href = waLink("Olá! Vim pelo site da Alien Pró e gostaria de mais informações.");
@@ -134,7 +294,7 @@ const openBtns = [document.getElementById('openSchedule'), document.getElementBy
 const closeModalBtn = document.getElementById('closeModal');
 
 openBtns.forEach(btn => {
-  if(!btn) return;
+  if (!btn) return;
   btn.addEventListener('click', (e) => {
     e.preventDefault();
     scheduleModal.classList.add('active');
@@ -142,7 +302,7 @@ openBtns.forEach(btn => {
 });
 closeModalBtn.addEventListener('click', () => scheduleModal.classList.remove('active'));
 scheduleModal.addEventListener('click', (e) => {
-  if(e.target === scheduleModal) scheduleModal.classList.remove('active');
+  if (e.target === scheduleModal) scheduleModal.classList.remove('active');
 });
 
 document.getElementById('scheduleForm').addEventListener('submit', (e) => {
@@ -153,8 +313,8 @@ document.getElementById('scheduleForm').addEventListener('submit', (e) => {
   const car = document.getElementById('fCar').value.trim();
 
   let msg = `Olá! Quero agendar uma visita na Alien Pró.\n\nNome: ${name}\nServiço: ${service}`;
-  if(date) msg += `\nData preferida: ${date}`;
-  if(car) msg += `\nVeículo: ${car}`;
+  if (date) msg += `\nData preferida: ${date}`;
+  if (car) msg += `\nVeículo: ${car}`;
 
   window.open(waLink(msg), '_blank');
   scheduleModal.classList.remove('active');
@@ -163,12 +323,12 @@ document.getElementById('scheduleForm').addEventListener('submit', (e) => {
 
 // ================= BEAM PARTICLES =================
 const beamParticles = document.getElementById('beamParticles');
-for(let i=0; i<18; i++){
+for (let i = 0; i < 18; i++) {
   const mote = document.createElement('div');
   mote.className = 'mote';
-  mote.style.left = (20 + Math.random()*190) + 'px';
-  mote.style.animationDelay = (Math.random()*2.6) + 's';
-  mote.style.animationDuration = (2 + Math.random()*1.2) + 's';
+  mote.style.left = (20 + Math.random() * 190) + 'px';
+  mote.style.animationDelay = (Math.random() * 2.6) + 's';
+  mote.style.animationDuration = (2 + Math.random() * 1.2) + 's';
   beamParticles.appendChild(mote);
 }
 
@@ -178,37 +338,37 @@ const ctx = canvas.getContext('2d');
 let stars = [];
 let w, h;
 
-function resizeCanvas(){
+function resizeCanvas() {
   w = canvas.width = window.innerWidth;
   h = canvas.height = document.documentElement.scrollHeight;
   generateStars();
 }
 
-function generateStars(){
-  const count = Math.floor((w*h)/9000);
+function generateStars() {
+  const count = Math.floor((w * h) / 9000);
   stars = [];
-  for(let i=0;i<count;i++){
+  for (let i = 0; i < count; i++) {
     stars.push({
-      x: Math.random()*w,
-      y: Math.random()*h,
-      r: Math.random()*1.3 + 0.2,
-      baseAlpha: Math.random()*0.6 + 0.2,
-      speed: Math.random()*0.015 + 0.003,
-      phase: Math.random()*Math.PI*2,
+      x: Math.random() * w,
+      y: Math.random() * h,
+      r: Math.random() * 1.3 + 0.2,
+      baseAlpha: Math.random() * 0.6 + 0.2,
+      speed: Math.random() * 0.015 + 0.003,
+      phase: Math.random() * Math.PI * 2,
       color: Math.random() > 0.85 ? '61,220,132' : '238,247,240'
     });
   }
 }
 
 let t = 0;
-function drawStars(){
-  ctx.clearRect(0,0,w,h);
+function drawStars() {
+  ctx.clearRect(0, 0, w, h);
   t += 1;
-  for(const s of stars){
-    const alpha = s.baseAlpha + Math.sin(t*s.speed + s.phase) * 0.3;
+  for (const s of stars) {
+    const alpha = s.baseAlpha + Math.sin(t * s.speed + s.phase) * 0.3;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-    ctx.fillStyle = `rgba(${s.color},${Math.max(0,alpha)})`;
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${s.color},${Math.max(0, alpha)})`;
     ctx.fill();
   }
   requestAnimationFrame(drawStars);
@@ -216,13 +376,13 @@ function drawStars(){
 
 const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 resizeCanvas();
-if(!prefersReduced){
+if (!prefersReduced) {
   drawStars();
 } else {
-  ctx.clearRect(0,0,w,h);
-  for(const s of stars){
+  ctx.clearRect(0, 0, w, h);
+  for (const s of stars) {
     ctx.beginPath();
-    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
     ctx.fillStyle = `rgba(${s.color},${s.baseAlpha})`;
     ctx.fill();
   }
@@ -237,14 +397,14 @@ window.addEventListener('resize', () => {
 // ================= SCROLL REVEAL =================
 const revealObserver = new IntersectionObserver((entries) => {
   entries.forEach(entry => {
-    if(entry.isIntersecting){
+    if (entry.isIntersecting) {
       entry.target.classList.add('in');
       revealObserver.unobserve(entry.target);
     }
   });
 }, { threshold: 0.15 });
 
-function observeReveals(){
+function observeReveals() {
   document.querySelectorAll('.reveal:not(.in)').forEach(el => revealObserver.observe(el));
 }
 // initial pass + after dynamic content injected
@@ -253,7 +413,7 @@ observeReveals();
 // ================= HEADER SHADOW ON SCROLL =================
 const header = document.querySelector('header');
 window.addEventListener('scroll', () => {
-  if(window.scrollY > 40){
+  if (window.scrollY > 40) {
     header.style.boxShadow = '0 4px 30px rgba(0,0,0,0.4)';
   } else {
     header.style.boxShadow = 'none';
