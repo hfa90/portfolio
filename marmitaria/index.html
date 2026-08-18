@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Marmita Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍱</text></svg>">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Libre+Franklin:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- =============== TOAST =============== -->
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<!-- =============== SUPABASE CONFIG WARNING =============== -->
+<div id="configWarning" class="config-warning hidden">
+  <div class="config-warning-box">
+    <span class="stamp stamp-danger">⚠ Configuração</span>
+    <h2>Conecte seu Supabase</h2>
+    <p>Abra o arquivo <code>config.js</code> e cole sua chave <strong>anon public</strong> do painel do Supabase em <code>SUPABASE_ANON_KEY</code>. Depois rode o <code>schema.sql</code> no SQL Editor do seu projeto.</p>
+  </div>
+</div>
+
+<div class="app" id="app">
+
+  <!-- =============== SIDEBAR / DESKTOP NAV =============== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-emoji">🍱</span>
+      <div class="brand-text">
+        <span class="brand-title">Marmita</span>
+        <span class="brand-sub">Control</span>
+      </div>
+    </div>
+    <nav class="nav" id="navDesktop">
+      <button class="nav-item active" data-view="dashboard"><span class="nav-ico">◧</span>Painel</button>
+      <button class="nav-item" data-view="novo-pedido"><span class="nav-ico">✎</span>Novo Pedido</button>
+      <button class="nav-item" data-view="pedidos"><span class="nav-ico">☰</span>Pedidos</button>
+      <button class="nav-item" data-view="cobranca"><span class="nav-ico">⚑</span>Cobrança</button>
+      <button class="nav-item" data-view="clientes"><span class="nav-ico">◍</span>Clientes</button>
+      <button class="nav-item" data-view="produtos"><span class="nav-ico">▤</span>Produtos</button>
+      <button class="nav-item" data-view="financeiro"><span class="nav-ico">$</span>Financeiro</button>
+    </nav>
+    <div class="sidebar-foot">
+      <span id="clockDate"></span>
+    </div>
+  </aside>
+
+  <!-- =============== MAIN =============== -->
+  <main class="main">
+
+    <header class="topbar">
+      <h1 id="viewTitle">Painel</h1>
+      <span class="topbar-date" id="topbarDate"></span>
+    </header>
+
+    <div class="view-scroll">
+
+      <!-- ---------- DASHBOARD ---------- -->
+      <section class="view active" id="view-dashboard">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Faturado hoje</span>
+            <span class="kpi-value mono" id="kpiHoje">R$ 0,00</span>
+            <span class="kpi-sub" id="kpiHojeCount">0 pedidos</span>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <span class="kpi-label">A receber</span>
+            <span class="kpi-value mono" id="kpiAReceber">R$ 0,00</span>
+            <span class="kpi-sub" id="kpiAReceberCount">0 clientes devendo</span>
+          </div>
+          <div class="kpi-card kpi-accent">
+            <span class="kpi-label">Faturado no mês</span>
+            <span class="kpi-value mono" id="kpiMes">R$ 0,00</span>
+            <span class="kpi-sub" id="kpiMesCount">0 pedidos</span>
+          </div>
+          <div class="kpi-card kpi-success">
+            <span class="kpi-label">Lucro no mês</span>
+            <span class="kpi-value mono" id="kpiLucro">R$ 0,00</span>
+            <span class="kpi-sub" id="kpiLucroMargem">margem 0%</span>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <h2>Pendências recentes</h2>
+          <button class="link-btn" data-goto="cobranca">ver tudo →</button>
+        </div>
+        <div id="dashPendentes" class="ticket-list"></div>
+
+        <div class="section-head">
+          <h2>Últimos pedidos</h2>
+          <button class="link-btn" data-goto="pedidos">ver tudo →</button>
+        </div>
+        <div id="dashUltimos" class="ticket-list"></div>
+      </section>
+
+      <!-- ---------- NOVO PEDIDO ---------- -->
+      <section class="view" id="view-novo-pedido">
+        <form id="formPedido" class="card form-card">
+
+          <div class="field">
+            <label>Cliente</label>
+            <div class="cliente-picker">
+              <input type="text" id="clienteBusca" placeholder="Digite o nome do cliente..." autocomplete="off">
+              <div id="clienteSugestoes" class="suggestions hidden"></div>
+            </div>
+            <div id="clienteSelecionado" class="cliente-chip hidden"></div>
+            <div id="novoClienteBox" class="new-client-box hidden">
+              <input type="text" id="novoClienteWhats" placeholder="WhatsApp (com DDD) — opcional">
+              <button type="button" class="btn btn-ghost btn-sm" id="btnCriarCliente">+ criar cliente</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Itens do pedido</label>
+            <div id="itensProdutos" class="produtos-grid"></div>
+          </div>
+
+          <div class="field">
+            <label>Forma de pagamento</label>
+            <div class="pay-toggle">
+              <button type="button" class="pay-opt active" data-pay="imediato">Paga na hora</button>
+              <button type="button" class="pay-opt" data-pay="quinzena">Paga na quinzena</button>
+            </div>
+            <div id="taxaBox" class="field hidden" style="margin-top:12px">
+              <label>Taxa da quinzena (R$)</label>
+              <input type="number" id="taxaQuinzena" min="0" step="0.5" value="0" inputmode="decimal">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Observações (opcional)</label>
+            <input type="text" id="obsPedido" placeholder="Ex: sem cebola, entregar às 12h...">
+          </div>
+
+          <div class="resumo-total">
+            <div class="resumo-row"><span>Produtos</span><span class="mono" id="resumoProdutos">R$ 0,00</span></div>
+            <div class="resumo-row" id="resumoTaxaRow" style="display:none"><span>Taxa quinzena</span><span class="mono" id="resumoTaxa">R$ 0,00</span></div>
+            <div class="resumo-row resumo-total-row"><span>Total</span><span class="mono" id="resumoTotal">R$ 0,00</span></div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="btnSalvarPedido">Registrar pedido</button>
+        </form>
+      </section>
+
+      <!-- ---------- PEDIDOS ---------- -->
+      <section class="view" id="view-pedidos">
+        <div class="filter-row">
+          <input type="date" id="filtroData">
+          <select id="filtroStatus">
+            <option value="todos">Todos os status</option>
+            <option value="pendente">Pendentes</option>
+            <option value="pago">Pagos</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="btnLimparFiltro">Limpar</button>
+        </div>
+        <div id="listaPedidos" class="ticket-list"></div>
+      </section>
+
+      <!-- ---------- COBRANÇA ---------- -->
+      <section class="view" id="view-cobranca">
+        <p class="view-intro">Clientes com pedidos pendentes de pagamento, agrupados por pessoa. Toque em <strong>WhatsApp</strong> para enviar a cobrança pronta.</p>
+        <div id="listaCobranca" class="ticket-list"></div>
+      </section>
+
+      <!-- ---------- CLIENTES ---------- -->
+      <section class="view" id="view-clientes">
+        <form id="formNovoCliente" class="card form-card form-inline">
+          <input type="text" id="clNome" placeholder="Nome do cliente" required>
+          <input type="text" id="clWhats" placeholder="WhatsApp (DDD+número)">
+          <button type="submit" class="btn btn-primary">Adicionar</button>
+        </form>
+        <div id="listaClientes" class="simple-list"></div>
+      </section>
+
+      <!-- ---------- PRODUTOS ---------- -->
+      <section class="view" id="view-produtos">
+        <form id="formNovoProduto" class="card form-card form-inline">
+          <input type="text" id="prNome" placeholder="Nome do produto" required>
+          <input type="number" id="prCusto" placeholder="Custo (R$)" min="0" step="0.01" required>
+          <input type="number" id="prPreco" placeholder="Preço de venda (R$)" min="0" step="0.01" required>
+          <button type="submit" class="btn btn-primary">Adicionar</button>
+        </form>
+        <div id="listaProdutos" class="simple-list"></div>
+      </section>
+
+      <!-- ---------- FINANCEIRO ---------- -->
+      <section class="view" id="view-financeiro">
+        <div class="filter-row">
+          <select id="finPeriodo">
+            <option value="hoje">Hoje</option>
+            <option value="semana">Últimos 7 dias</option>
+            <option value="mes" selected>Este mês</option>
+            <option value="tudo">Tudo</option>
+          </select>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span class="kpi-label">Faturamento</span>
+            <span class="kpi-value mono" id="finFaturamento">R$ 0,00</span>
+          </div>
+          <div class="kpi-card">
+            <span class="kpi-label">Custo dos produtos</span>
+            <span class="kpi-value mono" id="finCusto">R$ 0,00</span>
+          </div>
+          <div class="kpi-card kpi-success">
+            <span class="kpi-label">Lucro bruto</span>
+            <span class="kpi-value mono" id="finLucro">R$ 0,00</span>
+          </div>
+          <div class="kpi-card kpi-accent">
+            <span class="kpi-label">Taxas de quinzena</span>
+            <span class="kpi-value mono" id="finTaxas">R$ 0,00</span>
+          </div>
+          <div class="kpi-card kpi-danger">
+            <span class="kpi-label">Em aberto (a receber)</span>
+            <span class="kpi-value mono" id="finAberto">R$ 0,00</span>
+          </div>
+          <div class="kpi-card kpi-success">
+            <span class="kpi-label">Já recebido</span>
+            <span class="kpi-value mono" id="finRecebido">R$ 0,00</span>
+          </div>
+        </div>
+
+        <div class="section-head"><h2>Vendas por produto</h2></div>
+        <div id="finProdutos" class="bar-chart"></div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- =============== MOBILE BOTTOM NAV =============== -->
+  <nav class="bottom-nav" id="navMobile">
+    <button class="bn-item active" data-view="dashboard"><span>◧</span>Painel</button>
+    <button class="bn-item" data-view="pedidos"><span>☰</span>Pedidos</button>
+    <button class="bn-item bn-fab" data-view="novo-pedido"><span>+</span></button>
+    <button class="bn-item" data-view="cobranca"><span>⚑</span>Cobrar</button>
+    <button class="bn-item" data-view="financeiro"><span>$</span>Financ.</button>
+  </nav>
+  <div class="bottom-nav-more">
+    <button data-view="clientes">◍ Clientes</button>
+    <button data-view="produtos">▤ Produtos</button>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
