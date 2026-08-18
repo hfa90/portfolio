@@ -9,6 +9,21 @@ const state = {
   carrinho: {},       // { produto_id: quantidade }
   clienteSelecionado: null,
   view: 'dashboard',
+  pedidoEditando: null,   // id do pedido em edição, ou null se for um novo pedido
+  editClienteId: null,
+  editProdutoId: null,
+};
+
+// Ícones estilo SF Symbols (line icons) usados na navegação mobile/desktop
+const ICONS = {
+  dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9a1 1 0 0 0 1 1H9a1 1 0 0 0 1-1v-4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4a1 1 0 0 0 1 1h2.5a1 1 0 0 0 1-1v-9"/></svg>',
+  'novo-pedido': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+  pedidos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h11M8 12h11M8 18h11"/><circle cx="4" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>',
+  cobranca: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg>',
+  mais: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>',
+  clientes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M4.5 20c1.4-3.6 4.4-5.5 7.5-5.5s6.1 1.9 7.5 5.5"/></svg>',
+  produtos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8 12 4l8.5 4-8.5 4-8.5-4Z"/><path d="M3.5 8v8L12 20l8.5-4V8"/><path d="M12 12v8"/></svg>',
+  financeiro: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M14.7 9.8c0-1-.9-1.8-2.4-1.8-1.6 0-2.6.8-2.6 1.9 0 2.6 5.2 1.2 5.2 3.8 0 1.1-1.1 2-2.7 2s-2.7-.7-2.8-1.8"/></svg>',
 };
 
 const BRL = (v) => (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -79,12 +94,43 @@ const VIEW_TITLES = {
 };
 
 function setupNav() {
-  document.querySelectorAll('.nav-item, .bn-item, .bottom-nav-more button, [data-goto]').forEach(btn => {
+  // injeta os ícones nos itens de navegação (sidebar + tab bar + menu "Mais")
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    const ico = btn.querySelector('.nav-ico');
+    if (ico && ICONS[btn.dataset.view]) ico.innerHTML = ICONS[btn.dataset.view];
+  });
+  document.querySelectorAll('.bn-ico').forEach(span => {
+    const view = span.closest('[data-view]')?.dataset.view;
+    if (view && ICONS[view]) span.innerHTML = ICONS[view];
+  });
+
+  document.querySelectorAll('.nav-item, .bn-item, .mais-item, [data-goto]').forEach(btn => {
     btn.addEventListener('click', () => {
       const v = btn.dataset.view || btn.dataset.goto;
-      if (v) switchView(v);
+      if (!v) return;
+      if (v === 'mais') { openSheet('maisOverlay'); return; }
+      if (btn.classList.contains('mais-item')) closeSheet('maisOverlay');
+      if (v === 'novo-pedido' && state.pedidoEditando) resetFormPedido();
+      switchView(v);
     });
   });
+
+  document.getElementById('maisOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'maisOverlay') closeSheet('maisOverlay');
+  });
+}
+
+// =========================================================
+// SHEET / MODAL helpers (usados pelo menu "Mais" e pelas edições)
+// =========================================================
+function openSheet(id) {
+  document.getElementById(id).classList.remove('hidden');
+  requestAnimationFrame(() => document.getElementById(id).classList.add('show'));
+}
+function closeSheet(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('show');
+  setTimeout(() => el.classList.add('hidden'), 250);
 }
 
 function switchView(view) {
@@ -93,8 +139,11 @@ function switchView(view) {
   document.getElementById('view-' + view).classList.add('active');
   document.getElementById('viewTitle').textContent = VIEW_TITLES[view] || view;
 
+  const dentroDoMais = ['clientes', 'produtos', 'financeiro'].includes(view);
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
-  document.querySelectorAll('.bn-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.bn-item').forEach(b =>
+    b.classList.toggle('active', b.dataset.view === view || (b.dataset.view === 'mais' && dentroDoMais))
+  );
 
   window.scrollTo(0, 0);
   const scroller = document.querySelector('.view-scroll');
@@ -204,6 +253,7 @@ function ticketHTML(p) {
   const whatsBtn = (!pago && p.clientes?.whatsapp)
     ? `<button class="btn btn-whats btn-sm" data-whats-pedido="${p.id}">WhatsApp</button>`
     : '';
+  const editBtn = `<button class="btn btn-edit btn-sm" data-edit-pedido="${p.id}">Editar</button>`;
   const delBtn = `<button class="btn btn-ghost btn-sm" data-del-pedido="${p.id}">Excluir</button>`;
 
   return `
@@ -218,7 +268,7 @@ function ticketHTML(p) {
     <div class="ticket-itens">${itensTxt || 'sem itens'}</div>
     <div class="ticket-foot">
       <span class="ticket-total">${BRL(p.valor_total)}${taxaTxt}</span>
-      <div class="ticket-actions">${whatsBtn}${actionBtn}${delBtn}</div>
+      <div class="ticket-actions">${whatsBtn}${editBtn}${actionBtn}${delBtn}</div>
     </div>
   </div>`;
 }
@@ -235,6 +285,9 @@ function bindTicketActions() {
       const p = state.pedidos.find(x => x.id === btn.dataset.whatsPedido);
       if (p) abrirWhatsapp(p.clientes, [p]);
     };
+  });
+  document.querySelectorAll('[data-edit-pedido]').forEach(btn => {
+    btn.onclick = () => editarPedido(btn.dataset.editPedido);
   });
 }
 
@@ -346,6 +399,60 @@ function selecionarCliente(cliente) {
   };
 }
 
+function editarPedido(pedidoId) {
+  const p = state.pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+
+  state.pedidoEditando = pedidoId;
+  resetFormPedido(true); // limpa mas preserva o modo de edição
+
+  if (p.clientes) selecionarCliente(p.clientes);
+
+  state.carrinho = {};
+  (p.itens_pedido || []).forEach(it => { state.carrinho[it.produto_id] = Number(it.quantidade); });
+  renderProdutosGridPedido();
+  Object.entries(state.carrinho).forEach(([id, qtd]) => {
+    const val = document.getElementById(`qtyval-${id}`);
+    const card = document.getElementById(`prodcard-${id}`);
+    if (val) val.textContent = qtd;
+    if (card) card.classList.toggle('active', qtd > 0);
+  });
+
+  document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('active'));
+  const payBtn = document.querySelector(`.pay-opt[data-pay="${p.forma_pagamento}"]`);
+  if (payBtn) payBtn.classList.add('active');
+  const isQuinzena = p.forma_pagamento === 'quinzena';
+  document.getElementById('taxaBox').classList.toggle('hidden', !isQuinzena);
+  document.getElementById('resumoTaxaRow').style.display = isQuinzena ? 'flex' : 'none';
+  document.getElementById('taxaQuinzena').value = p.taxa_quinzena || 0;
+  document.getElementById('obsPedido').value = p.observacoes || '';
+  atualizarResumo();
+
+  document.getElementById('btnSalvarPedido').textContent = 'Salvar alterações';
+  mostrarBotaoCancelarEdicao(true);
+
+  switchView('novo-pedido');
+  document.getElementById('viewTitle').textContent = 'Editar pedido';
+}
+
+function mostrarBotaoCancelarEdicao(mostrar) {
+  let btn = document.getElementById('btnCancelarEdicao');
+  if (mostrar) {
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'btnCancelarEdicao';
+      btn.className = 'btn btn-ghost btn-block';
+      btn.style.marginTop = '10px';
+      btn.textContent = 'Cancelar edição';
+      btn.onclick = () => { resetFormPedido(); switchView('pedidos'); };
+      document.getElementById('formPedido').appendChild(btn);
+    }
+  } else if (btn) {
+    btn.remove();
+  }
+}
+
 function renderProdutosGridPedido() {
   const grid = document.getElementById('itensProdutos');
   grid.innerHTML = state.produtos.map(p => `
@@ -397,6 +504,7 @@ async function salvarPedido(e) {
 
   const isQuinzena = document.querySelector('.pay-opt.active')?.dataset.pay === 'quinzena';
   const taxa = isQuinzena ? (Number(document.getElementById('taxaQuinzena').value) || 0) : 0;
+  const editando = !!state.pedidoEditando;
 
   let valorProdutos = 0;
   const itensPayload = itens.map(([produtoId, qtd]) => {
@@ -415,29 +523,48 @@ async function salvarPedido(e) {
   const btn = document.getElementById('btnSalvarPedido');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
-  const { data: pedido, error } = await supabaseClient.from('pedidos').insert({
-    cliente_id: state.clienteSelecionado.id,
-    data_pedido: hojeISO(),
-    forma_pagamento: isQuinzena ? 'quinzena' : 'imediato',
-    taxa_quinzena: taxa,
-    status_pagamento: isQuinzena ? 'pendente' : 'pago',
-    valor_produtos: valorProdutos,
-    valor_total: valorProdutos + taxa,
-    data_pagamento: isQuinzena ? null : hojeISO(),
-    observacoes: document.getElementById('obsPedido').value.trim() || null,
-  }).select().single();
-
-  if (error) {
-    btn.disabled = false; btn.textContent = 'Registrar pedido';
-    return toast('Erro ao salvar pedido: ' + error.message, true);
+  let pedidoId;
+  if (editando) {
+    pedidoId = state.pedidoEditando;
+    const { error } = await supabaseClient.from('pedidos').update({
+      cliente_id: state.clienteSelecionado.id,
+      forma_pagamento: isQuinzena ? 'quinzena' : 'imediato',
+      taxa_quinzena: taxa,
+      valor_produtos: valorProdutos,
+      valor_total: valorProdutos + taxa,
+      observacoes: document.getElementById('obsPedido').value.trim() || null,
+    }).eq('id', pedidoId);
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Salvar alterações';
+      return toast('Erro ao salvar alterações: ' + error.message, true);
+    }
+    const { error: errDel } = await supabaseClient.from('itens_pedido').delete().eq('pedido_id', pedidoId);
+    if (errDel) toast('Aviso: erro ao atualizar itens antigos: ' + errDel.message, true);
+  } else {
+    const { data: pedido, error } = await supabaseClient.from('pedidos').insert({
+      cliente_id: state.clienteSelecionado.id,
+      data_pedido: hojeISO(),
+      forma_pagamento: isQuinzena ? 'quinzena' : 'imediato',
+      taxa_quinzena: taxa,
+      status_pagamento: isQuinzena ? 'pendente' : 'pago',
+      valor_produtos: valorProdutos,
+      valor_total: valorProdutos + taxa,
+      data_pagamento: isQuinzena ? null : hojeISO(),
+      observacoes: document.getElementById('obsPedido').value.trim() || null,
+    }).select().single();
+    if (error) {
+      btn.disabled = false; btn.textContent = 'Registrar pedido';
+      return toast('Erro ao salvar pedido: ' + error.message, true);
+    }
+    pedidoId = pedido.id;
   }
 
   const { error: errItens } = await supabaseClient.from('itens_pedido').insert(
-    itensPayload.map(it => ({ ...it, pedido_id: pedido.id }))
+    itensPayload.map(it => ({ ...it, pedido_id: pedidoId }))
   );
   if (errItens) toast('Pedido salvo, mas houve erro nos itens: ' + errItens.message, true);
 
-  toast('Pedido registrado ✓');
+  toast(editando ? 'Pedido atualizado ✓' : 'Pedido registrado ✓');
   resetFormPedido();
   await loadPedidos();
   renderAllViews();
@@ -445,9 +572,10 @@ async function salvarPedido(e) {
   btn.disabled = false; btn.textContent = 'Registrar pedido';
 }
 
-function resetFormPedido() {
+function resetFormPedido(preservarEdicao) {
   state.carrinho = {};
   state.clienteSelecionado = null;
+  if (!preservarEdicao) state.pedidoEditando = null;
   document.getElementById('clienteSelecionado').classList.add('hidden');
   document.getElementById('clienteBusca').classList.remove('hidden');
   document.getElementById('clienteBusca').value = '';
@@ -457,6 +585,10 @@ function resetFormPedido() {
   document.querySelector('.pay-opt[data-pay="imediato"]').classList.add('active');
   document.getElementById('taxaBox').classList.add('hidden');
   document.getElementById('resumoTaxaRow').style.display = 'none';
+  if (!preservarEdicao) {
+    document.getElementById('btnSalvarPedido').textContent = 'Registrar pedido';
+    mostrarBotaoCancelarEdicao(false);
+  }
   renderProdutosGridPedido();
   atualizarResumo();
 }
@@ -567,6 +699,32 @@ function setupClientesForm() {
     toast('Cliente adicionado ✓');
     renderClientesList();
   });
+
+  document.getElementById('editClCancel').addEventListener('click', () => closeSheet('editClienteOverlay'));
+  document.getElementById('editClienteOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'editClienteOverlay') closeSheet('editClienteOverlay');
+  });
+  document.getElementById('editClSalvar').addEventListener('click', async () => {
+    const nome = document.getElementById('editClNome').value.trim();
+    const whats = document.getElementById('editClWhats').value.trim();
+    if (!nome) return toast('O nome não pode ficar vazio', true);
+    const { error } = await supabaseClient.from('clientes')
+      .update({ nome, whatsapp: whats || null })
+      .eq('id', state.editClienteId);
+    if (error) return toast('Erro: ' + error.message, true);
+    toast('Cliente atualizado ✓');
+    closeSheet('editClienteOverlay');
+    await refreshAll();
+  });
+}
+
+function abrirEditCliente(id) {
+  const c = state.clientes.find(x => x.id === id);
+  if (!c) return;
+  state.editClienteId = id;
+  document.getElementById('editClNome').value = c.nome || '';
+  document.getElementById('editClWhats').value = c.whatsapp || '';
+  openSheet('editClienteOverlay');
 }
 
 function renderClientesList() {
@@ -580,11 +738,15 @@ function renderClientesList() {
         <span class="simple-item-sub">${c.whatsapp || 'sem WhatsApp'} ${deve > 0 ? '· deve ' + BRL(deve) : ''}</span>
       </div>
       <div class="simple-item-actions">
+        <button class="btn btn-edit btn-sm" data-edit-cliente="${c.id}">Editar</button>
         <button class="btn btn-ghost btn-sm" data-del-cliente="${c.id}">Excluir</button>
       </div>
     </div>`;
   }).join('') || emptyMsg('Nenhum cliente cadastrado ainda');
 
+  document.querySelectorAll('[data-edit-cliente]').forEach(btn => {
+    btn.onclick = () => abrirEditCliente(btn.dataset.editCliente);
+  });
   document.querySelectorAll('[data-del-cliente]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Excluir cliente? Isso também apaga os pedidos dele.')) return;
@@ -614,6 +776,36 @@ function setupProdutosForm() {
     renderProdutosList();
     renderProdutosGridPedido();
   });
+
+  document.getElementById('editPrCancel').addEventListener('click', () => closeSheet('editProdutoOverlay'));
+  document.getElementById('editProdutoOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'editProdutoOverlay') closeSheet('editProdutoOverlay');
+  });
+  document.getElementById('editPrSalvar').addEventListener('click', async () => {
+    const nome = document.getElementById('editPrNome').value.trim();
+    const custo = Number(document.getElementById('editPrCusto').value);
+    const preco = Number(document.getElementById('editPrPreco').value);
+    if (!nome || isNaN(custo) || isNaN(preco)) return toast('Preencha todos os campos', true);
+    const { error } = await supabaseClient.from('produtos')
+      .update({ nome, custo, preco_venda: preco })
+      .eq('id', state.editProdutoId);
+    if (error) return toast('Erro: ' + error.message, true);
+    toast('Produto atualizado ✓');
+    closeSheet('editProdutoOverlay');
+    await loadProdutos();
+    renderProdutosList();
+    renderProdutosGridPedido();
+  });
+}
+
+function abrirEditProduto(id) {
+  const p = state.produtos.find(x => x.id === id);
+  if (!p) return;
+  state.editProdutoId = id;
+  document.getElementById('editPrNome').value = p.nome || '';
+  document.getElementById('editPrCusto').value = p.custo;
+  document.getElementById('editPrPreco').value = p.preco_venda;
+  openSheet('editProdutoOverlay');
 }
 
 function renderProdutosList() {
@@ -627,11 +819,15 @@ function renderProdutosList() {
       </div>
       <div class="simple-item-actions">
         <span class="margin-tag">margem ${margem.toFixed(0)}%</span>
+        <button class="btn btn-edit btn-sm" data-edit-produto="${p.id}">Editar</button>
         <button class="btn btn-ghost btn-sm" data-del-produto="${p.id}">Excluir</button>
       </div>
     </div>`;
   }).join('') || emptyMsg('Nenhum produto cadastrado ainda');
 
+  document.querySelectorAll('[data-edit-produto]').forEach(btn => {
+    btn.onclick = () => abrirEditProduto(btn.dataset.editProduto);
+  });
   document.querySelectorAll('[data-del-produto]').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Excluir este produto?')) return;
