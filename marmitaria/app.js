@@ -4,7 +4,8 @@
 
 const state = {
   clientes: [],
-  produtos: [],
+  produtos: [],        // produtos ativos (aparecem no grid de novo pedido)
+  produtosTodos: [],   // todos os produtos, incl. inativos (usado para não quebrar pedidos antigos)
   pedidos: [],       // pedidos com itens e cliente já anexados
   carrinho: {},       // { produto_id: quantidade }
   clienteSelecionado: null,
@@ -13,6 +14,10 @@ const state = {
   editClienteId: null,
   editProdutoId: null,
 };
+
+function normalize(str) {
+  return (str || '').toString().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
 
 // Ícones estilo SF Symbols (line icons) usados na navegação mobile/desktop
 const ICONS = {
@@ -67,6 +72,8 @@ async function init() {
   setupClientesForm();
   setupProdutosForm();
   setupFiltroPedidos();
+  document.getElementById('buscaCobranca').addEventListener('input', renderCobranca);
+  document.getElementById('buscaClientes').addEventListener('input', renderClientesList);
   document.getElementById('finPeriodo').addEventListener('change', renderFinanceiro);
 
   await refreshAll();
@@ -172,9 +179,10 @@ async function loadClientes() {
 }
 
 async function loadProdutos() {
-  const { data, error } = await supabaseClient.from('produtos').select('*').eq('ativo', true).order('nome');
+  const { data, error } = await supabaseClient.from('produtos').select('*').order('nome');
   if (error) return toast('Erro ao carregar produtos: ' + error.message, true);
-  state.produtos = data || [];
+  state.produtosTodos = data || [];
+  state.produtos = state.produtosTodos.filter(p => p.ativo);
 }
 
 async function loadPedidos() {
@@ -207,6 +215,8 @@ function renderDashboard() {
 
   const clientesDevendo = new Set(pendentes.map(p => p.cliente_id)).size;
 
+  renderSaudacao(totalHoje, pedidosHoje.length, totalPendente, clientesDevendo);
+
   document.getElementById('kpiHoje').textContent = BRL(totalHoje);
   document.getElementById('kpiHojeCount').textContent = `${pedidosHoje.length} pedido${pedidosHoje.length === 1 ? '' : 's'}`;
   document.getElementById('kpiAReceber').textContent = BRL(totalPendente);
@@ -216,12 +226,71 @@ function renderDashboard() {
   document.getElementById('kpiLucro').textContent = BRL(lucroMes);
   document.getElementById('kpiLucroMargem').textContent = `margem ${margem.toFixed(0)}%`;
 
+  // ----- gráfico dos últimos 7 dias -----
+  const dias = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const off = d.getTimezoneOffset();
+    dias.push(new Date(d.getTime() - off * 60000).toISOString().slice(0, 10));
+  }
+  const porDia = dias.map(iso => ({
+    iso,
+    total: state.pedidos.filter(p => p.data_pedido === iso).reduce((s, p) => s + Number(p.valor_total), 0),
+  }));
+  const maxDia = Math.max(1, ...porDia.map(d => d.total));
+  const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  document.getElementById('dashUltimos7').innerHTML = porDia.map(d => {
+    const isHoje = d.iso === hoje;
+    const label = `${diasSemana[new Date(d.iso + 'T12:00:00').getDay()]} ${fmtData(d.iso).slice(0, 5)}${isHoje ? ' (hoje)' : ''}`;
+    return `
+    <div class="bar-row">
+      <span class="bar-label">${label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(d.total / maxDia * 100).toFixed(1)}%"></div></div>
+      <span class="bar-value mono">${BRL(d.total)}</span>
+    </div>`;
+  }).join('');
+
+  // ----- destaques do mês: cliente que mais compra e produto mais vendido -----
+  const porClienteMes = {};
+  const porProdutoMes = {};
+  pedidosMes.forEach(p => {
+    const cid = p.cliente_id;
+    porClienteMes[cid] = porClienteMes[cid] || { nome: p.clientes?.nome || '—', total: 0 };
+    porClienteMes[cid].total += Number(p.valor_total);
+    (p.itens_pedido || []).forEach(it => {
+      const nome = it.produtos?.nome || 'Item';
+      porProdutoMes[nome] = (porProdutoMes[nome] || 0) + Number(it.quantidade);
+    });
+  });
+  const topCliente = Object.values(porClienteMes).sort((a, b) => b.total - a.total)[0];
+  const topProduto = Object.entries(porProdutoMes).sort((a, b) => b[1] - a[1])[0];
+
+  document.getElementById('destCliente').textContent = topCliente ? `${topCliente.nome} · ${BRL(topCliente.total)}` : 'Sem dados ainda';
+  document.getElementById('destProduto').textContent = topProduto ? `${topProduto[0]} · ${topProduto[1]}x vendido${topProduto[1] === 1 ? '' : 's'}` : 'Sem dados ainda';
+
   document.getElementById('dashPendentes').innerHTML =
     pendentes.slice(0, 5).map(ticketHTML).join('') || emptyMsg('Nenhuma pendência 🎉');
   document.getElementById('dashUltimos').innerHTML =
     state.pedidos.slice(0, 5).map(ticketHTML).join('') || emptyMsg('Nenhum pedido registrado ainda');
 
   bindTicketActions();
+}
+
+function renderSaudacao(totalHoje, qtdHoje, totalPendente, clientesDevendo) {
+  const h = new Date().getHours();
+  const saudacao = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+  document.getElementById('greetingHello').textContent = `${saudacao}! 👋`;
+
+  let sub;
+  if (qtdHoje === 0) {
+    sub = 'Você ainda não registrou nenhum pedido hoje.';
+  } else if (totalPendente > 0) {
+    sub = `Hoje: ${BRL(totalHoje)} em ${qtdHoje} pedido${qtdHoje === 1 ? '' : 's'} · ${BRL(totalPendente)} a receber de ${clientesDevendo} cliente${clientesDevendo === 1 ? '' : 's'}.`;
+  } else {
+    sub = `Hoje: ${BRL(totalHoje)} em ${qtdHoje} pedido${qtdHoje === 1 ? '' : 's'} · tudo recebido em dia 🎉`;
+  }
+  document.getElementById('greetingSub').textContent = sub;
 }
 
 function custoPedido(pedido) {
@@ -245,7 +314,7 @@ function ticketHTML(p) {
     ? `<span class="stamp stamp-success">✓ Pago</span>`
     : `<span class="stamp stamp-danger">Pendente</span>`;
   const taxaTxt = Number(p.taxa_quinzena) > 0 ? ` <span style="color:var(--accent-dark)">+ ${BRL(p.taxa_quinzena)} taxa</span>` : '';
-  const formaTxt = p.forma_pagamento === 'quinzena' ? 'Quinzena' : 'Na hora';
+  const formaTxt = { imediato: 'Na hora', mais_tarde: 'Mais tarde', quinzena: 'Quinzena' }[p.forma_pagamento] || p.forma_pagamento;
 
   const actionBtn = pago
     ? ''
@@ -328,6 +397,7 @@ function abrirWhatsapp(cliente, pedidosDoCliente) {
 // NOVO PEDIDO
 // =========================================================
 function setupNovoPedidoForm() {
+  document.getElementById('dataPedido').value = hojeISO();
   const busca = document.getElementById('clienteBusca');
   const sugestoes = document.getElementById('clienteSugestoes');
 
@@ -425,6 +495,7 @@ function editarPedido(pedidoId) {
   document.getElementById('taxaBox').classList.toggle('hidden', !isQuinzena);
   document.getElementById('resumoTaxaRow').style.display = isQuinzena ? 'flex' : 'none';
   document.getElementById('taxaQuinzena').value = p.taxa_quinzena || 0;
+  document.getElementById('dataPedido').value = p.data_pedido;
   document.getElementById('obsPedido').value = p.observacoes || '';
   atualizarResumo();
 
@@ -453,11 +524,21 @@ function mostrarBotaoCancelarEdicao(mostrar) {
   }
 }
 
+function produtosParaGrid() {
+  const idsAtivos = new Set(state.produtos.map(p => p.id));
+  const extras = Object.keys(state.carrinho)
+    .filter(id => !idsAtivos.has(id))
+    .map(id => state.produtosTodos.find(p => p.id === id))
+    .filter(Boolean);
+  return [...state.produtos, ...extras];
+}
+
 function renderProdutosGridPedido() {
   const grid = document.getElementById('itensProdutos');
-  grid.innerHTML = state.produtos.map(p => `
+  const lista = produtosParaGrid();
+  grid.innerHTML = lista.map(p => `
     <div class="produto-card" id="prodcard-${p.id}">
-      <span class="produto-nome">${p.nome}</span>
+      <span class="produto-nome">${p.nome}${!p.ativo ? ' <span style="color:var(--text-muted);font-weight:400">(inativo)</span>' : ''}</span>
       <span class="produto-preco">${BRL(p.preco_venda)}</span>
       <div class="qty-row">
         <button type="button" class="qty-btn" data-qty-minus="${p.id}">−</button>
@@ -485,7 +566,7 @@ function alterarQtd(produtoId, delta) {
 function atualizarResumo() {
   let totalProdutos = 0;
   for (const [id, qtd] of Object.entries(state.carrinho)) {
-    const prod = state.produtos.find(p => p.id === id);
+    const prod = state.produtosTodos.find(p => p.id === id);
     if (prod) totalProdutos += Number(prod.preco_venda) * qtd;
   }
   const isQuinzena = document.querySelector('.pay-opt.active')?.dataset.pay === 'quinzena';
@@ -502,74 +583,83 @@ async function salvarPedido(e) {
   const itens = Object.entries(state.carrinho);
   if (itens.length === 0) return toast('Adicione ao menos um item', true);
 
-  const isQuinzena = document.querySelector('.pay-opt.active')?.dataset.pay === 'quinzena';
+  const formaPagamento = document.querySelector('.pay-opt.active')?.dataset.pay || 'imediato';
+  const isQuinzena = formaPagamento === 'quinzena';
   const taxa = isQuinzena ? (Number(document.getElementById('taxaQuinzena').value) || 0) : 0;
+  const dataPedido = document.getElementById('dataPedido').value || hojeISO();
   const editando = !!state.pedidoEditando;
-
-  let valorProdutos = 0;
-  const itensPayload = itens.map(([produtoId, qtd]) => {
-    const prod = state.produtos.find(p => p.id === produtoId);
-    const subtotal = Number(prod.preco_venda) * qtd;
-    valorProdutos += subtotal;
-    return {
-      produto_id: produtoId,
-      quantidade: qtd,
-      preco_unitario: prod.preco_venda,
-      custo_unitario: prod.custo,
-      subtotal,
-    };
-  });
 
   const btn = document.getElementById('btnSalvarPedido');
   btn.disabled = true; btn.textContent = 'Salvando...';
 
-  let pedidoId;
-  if (editando) {
-    pedidoId = state.pedidoEditando;
-    const { error } = await supabaseClient.from('pedidos').update({
-      cliente_id: state.clienteSelecionado.id,
-      forma_pagamento: isQuinzena ? 'quinzena' : 'imediato',
-      taxa_quinzena: taxa,
-      valor_produtos: valorProdutos,
-      valor_total: valorProdutos + taxa,
-      observacoes: document.getElementById('obsPedido').value.trim() || null,
-    }).eq('id', pedidoId);
-    if (error) {
-      btn.disabled = false; btn.textContent = 'Salvar alterações';
-      return toast('Erro ao salvar alterações: ' + error.message, true);
+  try {
+    let valorProdutos = 0;
+    const itensPayload = itens.map(([produtoId, qtd]) => {
+      // usamos produtosTodos (inclui inativos) para nunca travar ao editar
+      // um pedido antigo que tenha um item que foi descontinuado depois
+      const prod = state.produtosTodos.find(p => p.id === produtoId);
+      if (!prod) throw new Error('Um dos produtos do pedido não foi encontrado. Atualize a página e tente novamente.');
+      const subtotal = Number(prod.preco_venda) * qtd;
+      valorProdutos += subtotal;
+      return {
+        produto_id: produtoId,
+        quantidade: qtd,
+        preco_unitario: prod.preco_venda,
+        custo_unitario: prod.custo,
+        subtotal,
+      };
+    });
+
+    let pedidoId;
+    if (editando) {
+      pedidoId = state.pedidoEditando;
+      const { error } = await supabaseClient.from('pedidos').update({
+        cliente_id: state.clienteSelecionado.id,
+        data_pedido: dataPedido,
+        forma_pagamento: formaPagamento,
+        taxa_quinzena: taxa,
+        valor_produtos: valorProdutos,
+        valor_total: valorProdutos + taxa,
+        observacoes: document.getElementById('obsPedido').value.trim() || null,
+      }).eq('id', pedidoId);
+      if (error) throw error;
+
+      const { error: errDel } = await supabaseClient.from('itens_pedido').delete().eq('pedido_id', pedidoId);
+      if (errDel) throw errDel;
+    } else {
+      const pago = formaPagamento === 'imediato';
+      const { data: pedido, error } = await supabaseClient.from('pedidos').insert({
+        cliente_id: state.clienteSelecionado.id,
+        data_pedido: dataPedido,
+        forma_pagamento: formaPagamento,
+        taxa_quinzena: taxa,
+        status_pagamento: pago ? 'pago' : 'pendente',
+        valor_produtos: valorProdutos,
+        valor_total: valorProdutos + taxa,
+        data_pagamento: pago ? dataPedido : null,
+        observacoes: document.getElementById('obsPedido').value.trim() || null,
+      }).select().single();
+      if (error) throw error;
+      pedidoId = pedido.id;
     }
-    const { error: errDel } = await supabaseClient.from('itens_pedido').delete().eq('pedido_id', pedidoId);
-    if (errDel) toast('Aviso: erro ao atualizar itens antigos: ' + errDel.message, true);
-  } else {
-    const { data: pedido, error } = await supabaseClient.from('pedidos').insert({
-      cliente_id: state.clienteSelecionado.id,
-      data_pedido: hojeISO(),
-      forma_pagamento: isQuinzena ? 'quinzena' : 'imediato',
-      taxa_quinzena: taxa,
-      status_pagamento: isQuinzena ? 'pendente' : 'pago',
-      valor_produtos: valorProdutos,
-      valor_total: valorProdutos + taxa,
-      data_pagamento: isQuinzena ? null : hojeISO(),
-      observacoes: document.getElementById('obsPedido').value.trim() || null,
-    }).select().single();
-    if (error) {
-      btn.disabled = false; btn.textContent = 'Registrar pedido';
-      return toast('Erro ao salvar pedido: ' + error.message, true);
-    }
-    pedidoId = pedido.id;
+
+    const { error: errItens } = await supabaseClient.from('itens_pedido').insert(
+      itensPayload.map(it => ({ ...it, pedido_id: pedidoId }))
+    );
+    if (errItens) throw errItens;
+
+    toast(editando ? 'Pedido atualizado ✓' : 'Pedido registrado ✓');
+    resetFormPedido();
+    await loadPedidos();
+    renderAllViews();
+    switchView('pedidos');
+  } catch (err) {
+    console.error('Erro ao salvar pedido:', err);
+    toast('Erro ao salvar: ' + (err?.message || 'tente novamente'), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = state.pedidoEditando ? 'Salvar alterações' : 'Registrar pedido';
   }
-
-  const { error: errItens } = await supabaseClient.from('itens_pedido').insert(
-    itensPayload.map(it => ({ ...it, pedido_id: pedidoId }))
-  );
-  if (errItens) toast('Pedido salvo, mas houve erro nos itens: ' + errItens.message, true);
-
-  toast(editando ? 'Pedido atualizado ✓' : 'Pedido registrado ✓');
-  resetFormPedido();
-  await loadPedidos();
-  renderAllViews();
-  switchView('pedidos');
-  btn.disabled = false; btn.textContent = 'Registrar pedido';
 }
 
 function resetFormPedido(preservarEdicao) {
@@ -581,6 +671,7 @@ function resetFormPedido(preservarEdicao) {
   document.getElementById('clienteBusca').value = '';
   document.getElementById('obsPedido').value = '';
   document.getElementById('taxaQuinzena').value = 0;
+  document.getElementById('dataPedido').value = hojeISO();
   document.querySelectorAll('.pay-opt').forEach(b => b.classList.remove('active'));
   document.querySelector('.pay-opt[data-pay="imediato"]').classList.add('active');
   document.getElementById('taxaBox').classList.add('hidden');
@@ -599,9 +690,11 @@ function resetFormPedido(preservarEdicao) {
 function setupFiltroPedidos() {
   document.getElementById('filtroData').addEventListener('change', renderPedidosList);
   document.getElementById('filtroStatus').addEventListener('change', renderPedidosList);
+  document.getElementById('buscaPedidos').addEventListener('input', renderPedidosList);
   document.getElementById('btnLimparFiltro').addEventListener('click', () => {
     document.getElementById('filtroData').value = '';
     document.getElementById('filtroStatus').value = 'todos';
+    document.getElementById('buscaPedidos').value = '';
     renderPedidosList();
   });
 }
@@ -609,9 +702,17 @@ function setupFiltroPedidos() {
 function renderPedidosList() {
   const data = document.getElementById('filtroData').value;
   const status = document.getElementById('filtroStatus').value;
+  const busca = normalize(document.getElementById('buscaPedidos').value.trim());
   let lista = state.pedidos;
   if (data) lista = lista.filter(p => p.data_pedido === data);
   if (status !== 'todos') lista = lista.filter(p => p.status_pagamento === status);
+  if (busca) {
+    lista = lista.filter(p => {
+      const nomeMatch = normalize(p.clientes?.nome).includes(busca);
+      const itemMatch = (p.itens_pedido || []).some(it => normalize(it.produtos?.nome).includes(busca));
+      return nomeMatch || itemMatch;
+    });
+  }
 
   document.getElementById('listaPedidos').innerHTML = lista.map(ticketHTML).join('') || emptyMsg('Nenhum pedido encontrado');
   bindTicketActions();
@@ -630,33 +731,32 @@ function renderCobranca() {
     porCliente[cid].total += Number(p.valor_total);
   });
 
-  const grupos = Object.values(porCliente).sort((a, b) => b.total - a.total);
+  let grupos = Object.values(porCliente).sort((a, b) => b.total - a.total);
 
-  document.getElementById('listaCobranca').innerHTML = grupos.map(g => {
-    const itensResumo = g.pedidos.map(p => {
-      const itens = (p.itens_pedido || []).map(it => `${it.quantidade}x ${it.produtos?.nome}`).join(', ');
-      return `${fmtData(p.data_pedido)}: ${itens} (${BRL(p.valor_total)})`;
-    }).join('<br>');
-    return `
-    <div class="ticket">
-      <div class="ticket-top">
+  const buscaEl = document.getElementById('buscaCobranca');
+  const busca = normalize(buscaEl ? buscaEl.value.trim() : '');
+  if (busca) grupos = grupos.filter(g => normalize(g.cliente?.nome).includes(busca));
+
+  document.getElementById('listaCobranca').innerHTML = grupos.map(g => `
+    <div class="cobranca-grupo">
+      <div class="cobranca-grupo-head">
         <div>
           <div class="ticket-cliente">${g.cliente?.nome || '—'}</div>
           <div class="ticket-meta">${g.pedidos.length} pedido${g.pedidos.length === 1 ? '' : 's'} em aberto ${g.cliente?.whatsapp ? '· ' + g.cliente.whatsapp : '· sem WhatsApp cadastrado'}</div>
         </div>
-        <span class="stamp stamp-danger">Deve</span>
-      </div>
-      <div class="ticket-itens">${itensResumo}</div>
-      <div class="ticket-foot">
         <span class="ticket-total">${BRL(g.total)}</span>
-        <div class="ticket-actions">
-          <button class="btn btn-whats btn-sm" data-cobrar-cliente="${g.cliente?.id}">WhatsApp</button>
-          <button class="btn btn-success btn-sm" data-pagar-tudo="${g.cliente?.id}">Marcar tudo pago</button>
-        </div>
       </div>
-    </div>`;
-  }).join('') || emptyMsg('Ninguém devendo — tudo em dia 🎉');
+      <div class="cobranca-grupo-actions">
+        <button class="btn btn-whats btn-sm" data-cobrar-cliente="${g.cliente?.id}">WhatsApp</button>
+        <button class="btn btn-success btn-sm" data-pagar-tudo="${g.cliente?.id}">Marcar tudo pago</button>
+      </div>
+      <div class="cobranca-grupo-pedidos ticket-list">
+        ${g.pedidos.map(ticketHTML).join('')}
+      </div>
+    </div>
+  `).join('') || emptyMsg('Ninguém devendo — tudo em dia 🎉');
 
+  bindTicketActions();
   document.querySelectorAll('[data-cobrar-cliente]').forEach(btn => {
     btn.onclick = () => {
       const g = grupos.find(x => x.cliente?.id === btn.dataset.cobrarCliente);
@@ -708,13 +808,18 @@ function setupClientesForm() {
     const nome = document.getElementById('editClNome').value.trim();
     const whats = document.getElementById('editClWhats').value.trim();
     if (!nome) return toast('O nome não pode ficar vazio', true);
-    const { error } = await supabaseClient.from('clientes')
-      .update({ nome, whatsapp: whats || null })
-      .eq('id', state.editClienteId);
-    if (error) return toast('Erro: ' + error.message, true);
-    toast('Cliente atualizado ✓');
-    closeSheet('editClienteOverlay');
-    await refreshAll();
+    try {
+      const { error } = await supabaseClient.from('clientes')
+        .update({ nome, whatsapp: whats || null })
+        .eq('id', state.editClienteId);
+      if (error) throw error;
+      toast('Cliente atualizado ✓');
+      closeSheet('editClienteOverlay');
+      await refreshAll();
+    } catch (err) {
+      console.error('Erro ao atualizar cliente:', err);
+      toast('Erro ao salvar: ' + (err?.message || 'tente novamente'), true);
+    }
   });
 }
 
@@ -728,7 +833,11 @@ function abrirEditCliente(id) {
 }
 
 function renderClientesList() {
-  document.getElementById('listaClientes').innerHTML = state.clientes.map(c => {
+  const buscaEl = document.getElementById('buscaClientes');
+  const busca = normalize(buscaEl ? buscaEl.value.trim() : '');
+  const lista = busca ? state.clientes.filter(c => normalize(c.nome).includes(busca)) : state.clientes;
+
+  document.getElementById('listaClientes').innerHTML = lista.map(c => {
     const pendentesCliente = state.pedidos.filter(p => p.cliente_id === c.id && p.status_pagamento === 'pendente');
     const deve = pendentesCliente.reduce((s, p) => s + Number(p.valor_total), 0);
     return `
@@ -786,15 +895,20 @@ function setupProdutosForm() {
     const custo = Number(document.getElementById('editPrCusto').value);
     const preco = Number(document.getElementById('editPrPreco').value);
     if (!nome || isNaN(custo) || isNaN(preco)) return toast('Preencha todos os campos', true);
-    const { error } = await supabaseClient.from('produtos')
-      .update({ nome, custo, preco_venda: preco })
-      .eq('id', state.editProdutoId);
-    if (error) return toast('Erro: ' + error.message, true);
-    toast('Produto atualizado ✓');
-    closeSheet('editProdutoOverlay');
-    await loadProdutos();
-    renderProdutosList();
-    renderProdutosGridPedido();
+    try {
+      const { error } = await supabaseClient.from('produtos')
+        .update({ nome, custo, preco_venda: preco })
+        .eq('id', state.editProdutoId);
+      if (error) throw error;
+      toast('Produto atualizado ✓');
+      closeSheet('editProdutoOverlay');
+      await loadProdutos();
+      renderProdutosList();
+      renderProdutosGridPedido();
+    } catch (err) {
+      console.error('Erro ao atualizar produto:', err);
+      toast('Erro ao salvar: ' + (err?.message || 'tente novamente'), true);
+    }
   });
 }
 
@@ -863,29 +977,81 @@ function renderFinanceiro() {
   const custo = lista.reduce((s, p) => s + custoPedido(p), 0);
   const taxas = lista.reduce((s, p) => s + Number(p.taxa_quinzena || 0), 0);
   const lucro = faturamento - custo;
+  const margem = faturamento > 0 ? (lucro / faturamento * 100) : 0;
   const aberto = lista.filter(p => p.status_pagamento === 'pendente').reduce((s, p) => s + Number(p.valor_total), 0);
   const recebido = lista.filter(p => p.status_pagamento === 'pago').reduce((s, p) => s + Number(p.valor_total), 0);
+  const ticketMedio = lista.length > 0 ? faturamento / lista.length : 0;
 
   document.getElementById('finFaturamento').textContent = BRL(faturamento);
   document.getElementById('finCusto').textContent = BRL(custo);
   document.getElementById('finLucro').textContent = BRL(lucro);
+  document.getElementById('finMargem').textContent = `margem ${margem.toFixed(0)}%`;
+  document.getElementById('finTicketMedio').textContent = BRL(ticketMedio);
+  document.getElementById('finQtdPedidos').textContent = `${lista.length} pedido${lista.length === 1 ? '' : 's'}`;
   document.getElementById('finTaxas').textContent = BRL(taxas);
   document.getElementById('finAberto').textContent = BRL(aberto);
   document.getElementById('finRecebido').textContent = BRL(recebido);
 
+  // ----- vendas por produto -----
   const porProduto = {};
   lista.forEach(p => (p.itens_pedido || []).forEach(it => {
     const nome = it.produtos?.nome || 'Item';
     porProduto[nome] = (porProduto[nome] || 0) + Number(it.subtotal);
   }));
-  const max = Math.max(1, ...Object.values(porProduto));
-  const linhas = Object.entries(porProduto).sort((a, b) => b[1] - a[1]);
+  const maxProduto = Math.max(1, ...Object.values(porProduto));
+  const linhasProduto = Object.entries(porProduto).sort((a, b) => b[1] - a[1]);
 
-  document.getElementById('finProdutos').innerHTML = linhas.map(([nome, valor]) => `
+  document.getElementById('finProdutos').innerHTML = linhasProduto.map(([nome, valor]) => `
     <div class="bar-row">
       <span class="bar-label">${nome}</span>
-      <div class="bar-track"><div class="bar-fill" style="width:${(valor / max * 100).toFixed(1)}%"></div></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(valor / maxProduto * 100).toFixed(1)}%"></div></div>
       <span class="bar-value mono">${BRL(valor)}</span>
     </div>
   `).join('') || emptyMsg('Sem vendas no período');
+
+  // ----- vendas nos últimos 7 dias (sempre, independente do filtro de período) -----
+  const dias = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const off = d.getTimezoneOffset();
+    dias.push(new Date(d.getTime() - off * 60000).toISOString().slice(0, 10));
+  }
+  const porDia = dias.map(iso => ({
+    iso,
+    total: state.pedidos.filter(p => p.data_pedido === iso).reduce((s, p) => s + Number(p.valor_total), 0),
+  }));
+  const maxDia = Math.max(1, ...porDia.map(d => d.total));
+  const diasSemana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+  document.getElementById('finUltimos7').innerHTML = porDia.map(d => {
+    const label = `${diasSemana[new Date(d.iso + 'T12:00:00').getDay()]} ${fmtData(d.iso).slice(0, 5)}`;
+    return `
+    <div class="bar-row">
+      <span class="bar-label">${label}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(d.total / maxDia * 100).toFixed(1)}%"></div></div>
+      <span class="bar-value mono">${BRL(d.total)}</span>
+    </div>`;
+  }).join('');
+
+  // ----- ranking de clientes (quem compra mais / quem compra menos) -----
+  const porCliente = {};
+  lista.forEach(p => {
+    const cid = p.cliente_id;
+    if (!porCliente[cid]) porCliente[cid] = { cliente: p.clientes, total: 0, qtd: 0 };
+    porCliente[cid].total += Number(p.valor_total);
+    porCliente[cid].qtd += 1;
+  });
+  const ranking = Object.values(porCliente).sort((a, b) => b.total - a.total);
+  const medalhas = ['🥇', '🥈', '🥉'];
+
+  document.getElementById('finRankingClientes').innerHTML = ranking.map((r, i) => `
+    <div class="rank-item">
+      <span class="rank-pos ${i < 3 ? 'medal' : ''}">${i < 3 ? medalhas[i] : i + 1}</span>
+      <div class="rank-main">
+        <div class="rank-name">${r.cliente?.nome || '—'}</div>
+        <div class="rank-sub">${r.qtd} pedido${r.qtd === 1 ? '' : 's'} · ticket médio ${BRL(r.total / r.qtd)}</div>
+      </div>
+      <span class="rank-value">${BRL(r.total)}</span>
+    </div>
+  `).join('') || emptyMsg('Sem pedidos no período');
 }
