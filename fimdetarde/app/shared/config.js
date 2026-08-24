@@ -1,10 +1,13 @@
-// =========================================================================
-// CONFIGURAÇÃO — cole aqui os dados do seu projeto Supabase
-// Encontre em: app.supabase.com > seu projeto > Project Settings > API
-// =========================================================================
-export const SUPABASE_URL = 'https://SEU-PROJETO.supabase.co';
-export const SUPABASE_ANON_KEY = 'SUA_ANON_KEY_AQUI';
+// =========================================================
+// CONFIGURAÇÃO DO SUPABASE
+// =========================================================
+// 1. No painel do Supabase, vá em: Project Settings > API
+// 2. Copie o "Project URL" e cole em SUPABASE_URL abaixo
+// 3. Copie a chave "anon public" e cole em SUPABASE_ANON_KEY
+// (NUNCA use a chave "service_role" aqui — ela é secreta)
+// =========================================================
 
-// URL base onde o app do cliente (cliente.html) está publicado.
-// Usada para montar o link/QR code de cada mesa e de cada comanda.
-export const APP_BASE_URL = window.location.origin + window.location.pathname.replace(/[^/]+$/, '');
+const SUPABASE_URL = "https://ckfiknmdcoiihlifourc.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZmlrbm1kY29paWhsaWZvdXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMDQ3OTQsImV4cCI6MjEwMjU4MDc5NH0.C8hkyX6CZLzs-QluIHQivS6KkjaVIGrYIpfMXF7r47Y";
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
