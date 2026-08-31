@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lista de presentes — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-4xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a id="lnk-voltar" href="#" class="text-sm text-ink/60 hover:text-ink">← Voltar ao convite</a>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-10">
+    <h1 class="font-display text-3xl font-medium mb-1">Lista de presentes</h1>
+    <p id="subtitulo" class="text-ink/60 mb-8"></p>
+
+    <div id="aviso-desativado" class="hidden bg-white border border-dashed border-ink/20 rounded-2xl p-6 mb-6 text-center">
+      <p class="text-ink/70 mb-3">A lista de presentes está desativada para este convite.</p>
+      <button onclick="ativarLista()" class="px-5 py-2 rounded-full bg-plum text-paper text-sm font-medium">Ativar lista de presentes</button>
+    </div>
+
+    <div id="conteudo-lista" class="hidden">
+      <button onclick="abrirModal()" class="mb-6 px-5 py-3 rounded-full bg-plum text-paper text-sm font-medium">+ Adicionar item</button>
+      <div id="lista-presentes" class="grid sm:grid-cols-2 gap-4"></div>
+      <p id="lista-vazia" class="hidden text-center text-ink/50 py-16">Nenhum presente cadastrado ainda.</p>
+    </div>
+  </main>
+
+  <div id="modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center px-6 z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+      <h2 class="font-display text-xl mb-4">Adicionar presente</h2>
+      <form id="form-add" class="space-y-3">
+        <input id="add-nome" required placeholder="Nome do presente" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <textarea id="add-desc" placeholder="Descrição (opcional)" rows="2" class="w-full border border-ink/15 rounded-lg px-3 py-2"></textarea>
+        <input id="add-preco" type="number" step="0.01" placeholder="Valor estimado (R$, opcional)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <input id="add-imagem" type="url" placeholder="URL da imagem (opcional)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-full border border-ink/15 text-sm">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">Adicionar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+  let invite = null;
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    const slug = getQueryParam('slug');
+    const { data } = await supabase.from('invites').select('*').eq('slug', slug).single();
+    if (!data || data.owner_id !== user.id) { window.location.href = 'dashboard.html'; return; }
+    invite = data;
+    document.getElementById('subtitulo').textContent = invite.title;
+    document.getElementById('lnk-voltar').href = `gerenciar.html?slug=${slug}`;
+    render();
+  })();
+
+  function render() {
+    document.getElementById('aviso-desativado').classList.toggle('hidden', invite.gift_list_enabled);
+    document.getElementById('conteudo-lista').classList.toggle('hidden', !invite.gift_list_enabled);
+    if (invite.gift_list_enabled) carregar();
+  }
+
+  async function ativarLista() {
+    await supabase.from('invites').update({ gift_list_enabled: true }).eq('id', invite.id);
+    invite.gift_list_enabled = true;
+    render();
+  }
+
+  async function carregar() {
+    const { data } = await supabase.from('gifts').select('*').eq('invite_id', invite.id).order('created_at');
+    const lista = data || [];
+    document.getElementById('lista-vazia').classList.toggle('hidden', lista.length > 0);
+    const cores = { disponivel: 'bg-sage/10 text-sage', reservado: 'bg-gold/10 text-gold', recebido: 'bg-ink/10 text-ink' };
+    const labels = { disponivel: 'Disponível', reservado: 'Reservado', recebido: 'Recebido' };
+    document.getElementById('lista-presentes').innerHTML = lista.map(g => `
+      <div class="bg-white border border-ink/10 rounded-2xl p-4">
+        ${g.image_url ? `<img src="${g.image_url}" class="w-full h-32 object-cover rounded-lg mb-3">` : ''}
+        <div class="flex items-start justify-between">
+          <h3 class="font-medium">${g.name}</h3>
+          <span class="text-xs px-2 py-1 rounded-full ${cores[g.status]}">${labels[g.status]}</span>
+        </div>
+        ${g.description ? `<p class="text-xs text-ink/60 mt-1">${g.description}</p>` : ''}
+        ${g.price ? `<p class="text-sm text-ink/70 mt-1">${formatCurrencyBRL(g.price)}</p>` : ''}
+        ${g.reserved_by_name ? `<p class="text-xs text-ink/50 mt-1">Reservado por ${g.reserved_by_name}</p>` : ''}
+        <div class="flex gap-2 mt-3">
+          ${g.status === 'reservado' ? `<button onclick="marcarRecebido('${g.id}')" class="text-xs px-3 py-1 rounded-full border border-ink/15">Marcar recebido</button>` : ''}
+          ${g.status !== 'disponivel' ? `<button onclick="liberar('${g.id}')" class="text-xs px-3 py-1 rounded-full border border-ink/15">Liberar</button>` : ''}
+          <button onclick="apagar('${g.id}')" class="text-xs px-3 py-1 rounded-full text-red-500">Remover</button>
+        </div>
+      </div>`).join('');
+  }
+
+  function abrirModal() { document.getElementById('modal').classList.remove('hidden'); }
+  function fecharModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('form-add').reset(); }
+
+  document.getElementById('form-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await supabase.from('gifts').insert({
+      invite_id: invite.id,
+      name: document.getElementById('add-nome').value,
+      description: document.getElementById('add-desc').value,
+      price: document.getElementById('add-preco').value || null,
+      image_url: document.getElementById('add-imagem').value || null,
+    });
+    fecharModal();
+    carregar();
+  });
+
+  async function marcarRecebido(id) { await supabase.from('gifts').update({ status: 'recebido' }).eq('id', id); carregar(); }
+  async function liberar(id) { await supabase.from('gifts').update({ status: 'disponivel', reserved_by_name: null, reserved_by_phone: null }).eq('id', id); carregar(); }
+  async function apagar(id) { if(!confirm('Remover este presente?')) return; await supabase.from('gifts').delete().eq('id', id); carregar(); }
+</script>
+</body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financeiro do evento — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-4xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a id="lnk-voltar" href="#" class="text-sm text-ink/60 hover:text-ink">← Voltar ao convite</a>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-6 py-10">
+    <h1 class="font-display text-3xl font-medium mb-1">Financeiro do evento</h1>
+    <p id="subtitulo" class="text-ink/60 mb-8"></p>
+
+    <!-- meta -->
+    <section class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-display text-xl">Meta do evento</h2>
+        <button id="btn-editar-meta" class="text-sm text-plum font-medium">Editar meta</button>
+      </div>
+
+      <form id="form-meta" class="hidden grid sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="text-sm font-medium block mb-1">Valor da meta (R$)</label>
+          <input type="number" step="0.01" id="m-goal" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Prazo (data limite)</label>
+          <input type="date" id="m-deadline" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="text-sm font-medium block mb-1">Observações</label>
+          <textarea id="m-notes" rows="2" class="w-full border border-ink/15 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <button type="submit" class="sm:col-span-2 px-5 py-2 rounded-full bg-plum text-paper text-sm font-medium">Salvar meta</button>
+      </form>
+
+      <div class="mb-2 flex justify-between text-sm">
+        <span>Arrecadado: <strong id="v-atual">R$ 0,00</strong></span>
+        <span>Meta: <strong id="v-meta">R$ 0,00</strong></span>
+      </div>
+      <div class="w-full h-3 bg-black/5 rounded-full overflow-hidden">
+        <div id="barra-progresso" class="h-full bg-sage transition-all" style="width:0%"></div>
+      </div>
+      <p id="v-percentual" class="text-xs text-ink/50 mt-1"></p>
+
+      <div id="projecao" class="mt-5 p-4 rounded-xl bg-black/5 text-sm"></div>
+    </section>
+
+    <!-- lançamentos -->
+    <section class="bg-white border border-ink/10 rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-display text-xl">Entradas e saídas</h2>
+        <button onclick="abrirModal()" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">+ Novo lançamento</button>
+      </div>
+      <div id="lista-lancamentos" class="divide-y divide-ink/10"></div>
+      <p id="lista-vazia" class="hidden text-center text-ink/50 py-10">Nenhum lançamento ainda.</p>
+    </section>
+  </main>
+
+  <div id="modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center px-6 z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+      <h2 class="font-display text-xl mb-4">Novo lançamento</h2>
+      <form id="form-add" class="space-y-3">
+        <select id="add-tipo" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          <option value="receita">Entrada (dinheiro que entrou)</option>
+          <option value="despesa">Saída (gasto do evento)</option>
+        </select>
+        <input id="add-desc" required placeholder="Descrição" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <input id="add-valor" type="number" step="0.01" required placeholder="Valor (R$)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <input id="add-data" type="date" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-full border border-ink/15 text-sm">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">Adicionar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+  let invite = null, goal = null, entries = [];
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    const slug = getQueryParam('slug');
+    const { data } = await supabase.from('invites').select('*').eq('slug', slug).single();
+    if (!data || data.owner_id !== user.id) { window.location.href = 'dashboard.html'; return; }
+    invite = data;
+    document.getElementById('subtitulo').textContent = invite.title;
+    document.getElementById('lnk-voltar').href = `gerenciar.html?slug=${slug}`;
+    document.getElementById('add-data').value = new Date().toISOString().slice(0,10);
+    await carregarTudo();
+  })();
+
+  async function carregarTudo() {
+    let { data: g } = await supabase.from('financial_goals').select('*').eq('invite_id', invite.id).maybeSingle();
+    if (!g) {
+      const { data: novo } = await supabase.from('financial_goals').insert({ invite_id: invite.id, goal_amount: 0 }).select().single();
+      g = novo;
+    }
+    goal = g;
+    const { data: e } = await supabase.from('financial_entries').select('*').eq('invite_id', invite.id).order('entry_date', { ascending: false });
+    entries = e || [];
+    renderizar();
+  }
+
+  function renderizar() {
+    document.getElementById('m-goal').value = goal.goal_amount || '';
+    document.getElementById('m-deadline').value = goal.deadline || '';
+    document.getElementById('m-notes').value = goal.notes || '';
+
+    const receitas = entries.filter(x => x.entry_type === 'receita').reduce((s,x) => s+Number(x.amount), 0);
+    const despesas = entries.filter(x => x.entry_type === 'despesa').reduce((s,x) => s+Number(x.amount), 0);
+    const atual = receitas - despesas;
+    const metaVal = Number(goal.goal_amount || 0);
+    const pct = metaVal > 0 ? Math.min(100, Math.max(0, (atual/metaVal)*100)) : 0;
+
+    document.getElementById('v-atual').textContent = formatCurrencyBRL(atual);
+    document.getElementById('v-meta').textContent = formatCurrencyBRL(metaVal);
+    document.getElementById('barra-progresso').style.width = pct + '%';
+    document.getElementById('barra-progresso').className = 'h-full transition-all ' + (pct >= 100 ? 'bg-sage' : pct >= 60 ? 'bg-gold' : 'bg-rose');
+    document.getElementById('v-percentual').textContent = metaVal > 0 ? `${pct.toFixed(0)}% da meta alcançada` : 'Defina uma meta para acompanhar o progresso';
+
+    // projeção
+    const projDiv = document.getElementById('projecao');
+    if (metaVal > 0 && goal.deadline) {
+      const hoje = new Date();
+      const prazo = new Date(goal.deadline + 'T00:00:00');
+      const diasRestantes = Math.max(0, Math.ceil((prazo - hoje) / 86400000));
+      const faltam = Math.max(0, metaVal - atual);
+
+      // taxa média diária de entrada desde o primeiro lançamento
+      const receitasOrdenadas = entries.filter(x => x.entry_type === 'receita').map(x => x.entry_date).sort();
+      let taxaDiaria = 0;
+      if (receitasOrdenadas.length > 0) {
+        const primeiraData = new Date(receitasOrdenadas[0] + 'T00:00:00');
+        const diasDecorridos = Math.max(1, Math.ceil((hoje - primeiraData) / 86400000));
+        taxaDiaria = receitas / diasDecorridos;
+      }
+      const projetado = atual + taxaDiaria * diasRestantes;
+
+      if (diasRestantes === 0 && atual < metaVal) {
+        projDiv.innerHTML = `<strong class="text-rose">O prazo já chegou</strong> e ainda faltam ${formatCurrencyBRL(faltam)} para a meta.`;
+      } else if (atual >= metaVal) {
+        projDiv.innerHTML = `<strong class="text-sage">Meta alcançada! 🎉</strong> Você já tem o suficiente para o evento.`;
+      } else if (taxaDiaria === 0) {
+        const necessarioPorDia = diasRestantes > 0 ? faltam / diasRestantes : faltam;
+        projDiv.innerHTML = `Faltam <strong>${formatCurrencyBRL(faltam)}</strong> em <strong>${diasRestantes} dia(s)</strong>. Isso equivale a juntar cerca de <strong>${formatCurrencyBRL(necessarioPorDia)}/dia</strong> até o prazo.`;
+      } else if (projetado >= metaVal) {
+        projDiv.innerHTML = `<strong class="text-sage">No ritmo atual, a meta será alcançada antes do prazo.</strong> Projeção: ${formatCurrencyBRL(projetado)} até ${formatDatePtBR(goal.deadline)}.`;
+      } else {
+        const necessarioPorDia = diasRestantes > 0 ? faltam / diasRestantes : faltam;
+        projDiv.innerHTML = `No ritmo atual, a projeção é de <strong>${formatCurrencyBRL(projetado)}</strong> até o prazo — abaixo da meta. Para chegar lá, é preciso juntar cerca de <strong>${formatCurrencyBRL(necessarioPorDia)}/dia</strong> nos próximos ${diasRestantes} dia(s).`;
+      }
+    } else {
+      projDiv.innerHTML = `Defina uma meta e um prazo para ver a projeção de quando você vai alcançá-la.`;
+    }
+
+    // lançamentos
+    document.getElementById('lista-vazia').classList.toggle('hidden', entries.length > 0);
+    document.getElementById('lista-lancamentos').innerHTML = entries.map(e => `
+      <div class="py-3 flex items-center justify-between">
+        <div>
+          <p class="text-sm font-medium">${e.description}</p>
+          <p class="text-xs text-ink/50">${formatDatePtBR(e.entry_date)}</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-sm font-medium ${e.entry_type === 'receita' ? 'text-sage' : 'text-rose'}">${e.entry_type === 'receita' ? '+' : '-'} ${formatCurrencyBRL(e.amount)}</span>
+          <button onclick="apagarLancamento('${e.id}')" class="text-xs text-ink/40 hover:text-red-500">Remover</button>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('btn-editar-meta').addEventListener('click', () => document.getElementById('form-meta').classList.toggle('hidden'));
+
+  document.getElementById('form-meta').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await supabase.from('financial_goals').update({
+      goal_amount: document.getElementById('m-goal').value || 0,
+      deadline: document.getElementById('m-deadline').value || null,
+      notes: document.getElementById('m-notes').value,
+    }).eq('id', goal.id);
+    showToast('Meta atualizada');
+    await carregarTudo();
+    document.getElementById('form-meta').classList.add('hidden');
+  });
+
+  function abrirModal() { document.getElementById('modal').classList.remove('hidden'); }
+  function fecharModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('form-add').reset(); document.getElementById('add-data').value = new Date().toISOString().slice(0,10); }
+
+  document.getElementById('form-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await supabase.from('financial_entries').insert({
+      invite_id: invite.id,
+      entry_type: document.getElementById('add-tipo').value,
+      description: document.getElementById('add-desc').value,
+      amount: document.getElementById('add-valor').value,
+      entry_date: document.getElementById('add-data').value || new Date().toISOString().slice(0,10),
+    });
+    fecharModal();
+    await carregarTudo();
+  });
+
+  async function apagarLancamento(id) {
+    await supabase.from('financial_entries').delete().eq('id', id);
+    await carregarTudo();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jogos da festa — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @media print { body * { visibility: hidden; } #area-impressao, #area-impressao * { visibility: visible; } #area-impressao { position: absolute; top:0; left:0; width:100%; } }
+</style>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10 print:hidden">
+    <div class="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a id="lnk-voltar" href="#" class="text-sm text-ink/60 hover:text-ink">← Voltar ao convite</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-10 print:hidden">
+    <h1 class="font-display text-3xl font-medium mb-1">Jogos da festa</h1>
+    <p id="subtitulo" class="text-ink/60 mb-8"></p>
+
+    <div class="flex gap-2 mb-8 flex-wrap">
+      <button data-tab="perguntas" class="tab-btn px-4 py-2 rounded-full text-sm font-medium bg-ink text-paper">❓ Perguntas e Respostas</button>
+      <button data-tab="sorteio" class="tab-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">🎯 Sorteio</button>
+      <button data-tab="bingo" class="tab-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">🎱 Bingo</button>
+    </div>
+
+    <!-- PERGUNTAS E RESPOSTAS -->
+    <section id="tab-perguntas">
+      <div class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+        <h2 class="font-display text-xl mb-3">Adicionar pergunta sobre o(a) aniversariante</h2>
+        <form id="form-pergunta" class="space-y-3">
+          <input id="p-pergunta" required placeholder="Ex: Qual é a comida favorita dela?" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          <div class="grid sm:grid-cols-2 gap-3">
+            <input id="p-op0" required placeholder="Alternativa 1 (correta)" class="w-full border border-sage rounded-lg px-3 py-2">
+            <input id="p-op1" required placeholder="Alternativa 2" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+            <input id="p-op2" placeholder="Alternativa 3 (opcional)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+            <input id="p-op3" placeholder="Alternativa 4 (opcional)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          </div>
+          <input id="p-prenda" placeholder="Prenda para quem errar (opcional). Ex: Imitar um animal" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          <button type="submit" class="px-5 py-2 rounded-full bg-plum text-paper text-sm font-medium">Adicionar pergunta</button>
+        </form>
+      </div>
+
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-display text-xl">Perguntas cadastradas</h2>
+        <button onclick="iniciarApresentacao()" id="btn-apresentar" class="px-5 py-2 rounded-full bg-sage text-white text-sm font-medium hidden">▶ Modo apresentação</button>
+      </div>
+      <div id="lista-perguntas" class="space-y-3"></div>
+      <p id="perguntas-vazio" class="hidden text-center text-ink/50 py-10">Nenhuma pergunta cadastrada ainda.</p>
+    </section>
+
+    <!-- SORTEIO -->
+    <section id="tab-sorteio" class="hidden">
+      <div class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+        <div class="flex gap-2 mb-4">
+          <button id="btn-fonte-confirmados" class="fonte-btn px-4 py-2 rounded-full text-sm font-medium bg-ink text-paper">Usar convidados confirmados</button>
+          <button id="btn-fonte-lista" class="fonte-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">Usar lista personalizada</button>
+        </div>
+        <textarea id="lista-personalizada" class="hidden w-full border border-ink/15 rounded-lg px-3 py-2" rows="4" placeholder="Um nome por linha"></textarea>
+        <p id="contagem-participantes" class="text-sm text-ink/60 mt-2"></p>
+      </div>
+
+      <div class="bg-white border border-ink/10 rounded-2xl p-10 text-center">
+        <div id="roleta" class="font-display text-4xl mb-6 h-16 flex items-center justify-center">🎉</div>
+        <button onclick="sortear()" class="px-8 py-3 rounded-full bg-plum text-paper font-medium">Sortear</button>
+      </div>
+    </section>
+
+    <!-- BINGO -->
+    <section id="tab-bingo" class="hidden">
+      <div class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+        <h2 class="font-display text-xl mb-3">Gerar cartelas</h2>
+        <div class="flex flex-wrap items-end gap-3">
+          <div>
+            <label class="text-sm font-medium block mb-1">Quantidade de cartelas</label>
+            <input id="qtd-cartelas" type="number" value="6" min="1" max="60" class="border border-ink/15 rounded-lg px-3 py-2 w-32">
+          </div>
+          <button onclick="gerarCartelas()" class="px-5 py-2 rounded-full bg-plum text-paper text-sm font-medium">Gerar cartelas</button>
+          <button onclick="window.print()" class="px-5 py-2 rounded-full border border-ink/15 text-sm font-medium">Imprimir cartelas</button>
+        </div>
+      </div>
+
+      <div class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+        <h2 class="font-display text-xl mb-3">Sorteador de números (1 a 75)</h2>
+        <div class="flex items-center gap-4">
+          <div id="numero-atual" class="font-display text-5xl w-24 h-24 rounded-full bg-plum text-paper flex items-center justify-center">–</div>
+          <div class="flex flex-col gap-2">
+            <button onclick="sortearNumeroBingo()" class="px-5 py-2 rounded-full bg-plum text-paper text-sm font-medium">Sortear número</button>
+            <button onclick="resetarBingo()" class="px-5 py-2 rounded-full border border-ink/15 text-sm font-medium">Reiniciar</button>
+          </div>
+        </div>
+        <p class="text-sm text-ink/60 mt-4">Números já sorteados:</p>
+        <div id="historico-bingo" class="flex flex-wrap gap-2 mt-2"></div>
+      </div>
+
+      <div id="area-impressao" class="grid sm:grid-cols-2 gap-6"></div>
+    </section>
+  </main>
+
+  <!-- modo apresentação (fullscreen) -->
+  <div id="apresentacao" class="hidden fixed inset-0 bg-ink text-paper z-50 flex flex-col items-center justify-center px-6">
+    <button onclick="fecharApresentacao()" class="absolute top-6 right-6 text-paper/60 hover:text-paper text-sm">Fechar ✕</button>
+    <p id="ap-contador" class="text-sm text-gold mb-4"></p>
+    <h2 id="ap-pergunta" class="font-display text-3xl md:text-4xl text-center max-w-2xl mb-8"></h2>
+    <div id="ap-opcoes" class="grid sm:grid-cols-2 gap-4 w-full max-w-2xl"></div>
+    <p id="ap-prenda" class="mt-6 text-rose text-sm"></p>
+    <div class="flex gap-4 mt-10">
+      <button onclick="revelarResposta()" class="px-6 py-3 rounded-full bg-gold text-ink font-medium">Revelar resposta</button>
+      <button onclick="proximaPergunta()" class="px-6 py-3 rounded-full border border-paper/30 font-medium">Próxima →</button>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+  let invite = null, perguntas = [], apIndex = 0, drawnBingo = [];
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    const slug = getQueryParam('slug');
+    const { data } = await supabase.from('invites').select('*').eq('slug', slug).single();
+    if (!data || data.owner_id !== user.id) { window.location.href = 'dashboard.html'; return; }
+    invite = data;
+    document.getElementById('subtitulo').textContent = invite.title;
+    document.getElementById('lnk-voltar').href = `gerenciar.html?slug=${slug}`;
+    await carregarPerguntas();
+    await prepararSorteio();
+  })();
+
+  // ---------- abas ----------
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('bg-ink','text-paper'); b.classList.add('border','border-ink/15'); });
+    btn.classList.add('bg-ink','text-paper'); btn.classList.remove('border','border-ink/15');
+    ['perguntas','sorteio','bingo'].forEach(t => document.getElementById('tab-'+t).classList.toggle('hidden', t !== btn.dataset.tab));
+  }));
+
+  // ---------- perguntas e respostas ----------
+  async function carregarPerguntas() {
+    const { data } = await supabase.from('game_questions').select('*').eq('invite_id', invite.id).order('order_index');
+    perguntas = data || [];
+    document.getElementById('perguntas-vazio').classList.toggle('hidden', perguntas.length > 0);
+    document.getElementById('btn-apresentar').classList.toggle('hidden', perguntas.length === 0);
+    document.getElementById('lista-perguntas').innerHTML = perguntas.map((p, i) => `
+      <div class="bg-white border border-ink/10 rounded-2xl p-4 flex items-start justify-between">
+        <div>
+          <p class="font-medium">${i+1}. ${p.question}</p>
+          <p class="text-xs text-ink/50 mt-1">Opções: ${p.options.join(' • ')}</p>
+          <p class="text-xs text-sage mt-1">Correta: ${p.options[p.correct_index]}</p>
+          ${p.penalty ? `<p class="text-xs text-rose mt-1">Prenda: ${p.penalty}</p>` : ''}
+        </div>
+        <button onclick="apagarPergunta('${p.id}')" class="text-xs text-red-500">Remover</button>
+      </div>`).join('');
+  }
+
+  document.getElementById('form-pergunta').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const opcoes = [
+      document.getElementById('p-op0').value,
+      document.getElementById('p-op1').value,
+      document.getElementById('p-op2').value,
+      document.getElementById('p-op3').value,
+    ].filter(Boolean);
+    await supabase.from('game_questions').insert({
+      invite_id: invite.id,
+      question: document.getElementById('p-pergunta').value,
+      options: opcoes,
+      correct_index: 0,
+      penalty: document.getElementById('p-prenda').value || null,
+      order_index: perguntas.length,
+    });
+    document.getElementById('form-pergunta').reset();
+    await carregarPerguntas();
+  });
+
+  async function apagarPergunta(id) {
+    await supabase.from('game_questions').delete().eq('id', id);
+    await carregarPerguntas();
+  }
+
+  function iniciarApresentacao() {
+    apIndex = 0;
+    document.getElementById('apresentacao').classList.remove('hidden');
+    mostrarPerguntaAtual();
+  }
+  function fecharApresentacao() { document.getElementById('apresentacao').classList.add('hidden'); }
+  function mostrarPerguntaAtual() {
+    const p = perguntas[apIndex];
+    document.getElementById('ap-contador').textContent = `Pergunta ${apIndex+1} de ${perguntas.length}`;
+    document.getElementById('ap-pergunta').textContent = p.question;
+    document.getElementById('ap-prenda').textContent = p.penalty ? `Prenda para quem errar: ${p.penalty}` : '';
+    document.getElementById('ap-opcoes').innerHTML = p.options.map((op, i) => `<div data-i="${i}" class="opcao-ap p-4 rounded-xl border border-paper/20">${op}</div>`).join('');
+  }
+  function revelarResposta() {
+    const p = perguntas[apIndex];
+    document.querySelectorAll('.opcao-ap').forEach(el => {
+      if (Number(el.dataset.i) === p.correct_index) el.classList.add('bg-sage','border-sage');
+    });
+  }
+  function proximaPergunta() {
+    apIndex = (apIndex + 1) % perguntas.length;
+    mostrarPerguntaAtual();
+  }
+
+  // ---------- sorteio ----------
+  let fonteSorteio = 'confirmados';
+  document.getElementById('btn-fonte-confirmados').addEventListener('click', () => trocarFonte('confirmados'));
+  document.getElementById('btn-fonte-lista').addEventListener('click', () => trocarFonte('lista'));
+  function trocarFonte(f) {
+    fonteSorteio = f;
+    document.getElementById('lista-personalizada').classList.toggle('hidden', f !== 'lista');
+    document.getElementById('btn-fonte-confirmados').classList.toggle('bg-ink', f==='confirmados');
+    document.getElementById('btn-fonte-confirmados').classList.toggle('text-paper', f==='confirmados');
+    document.getElementById('btn-fonte-lista').classList.toggle('bg-ink', f==='lista');
+    document.getElementById('btn-fonte-lista').classList.toggle('text-paper', f==='lista');
+    prepararSorteio();
+  }
+  let confirmadosCache = [];
+  async function prepararSorteio() {
+    const { data } = await supabase.from('guests').select('name').eq('invite_id', invite.id).eq('status', 'confirmado');
+    confirmadosCache = (data || []).map(g => g.name);
+    atualizarContagem();
+  }
+  document.getElementById('lista-personalizada').addEventListener('input', atualizarContagem);
+  function participantesAtuais() {
+    if (fonteSorteio === 'confirmados') return confirmadosCache;
+    return document.getElementById('lista-personalizada').value.split('\n').map(s => s.trim()).filter(Boolean);
+  }
+  function atualizarContagem() {
+    document.getElementById('contagem-participantes').textContent = `${participantesAtuais().length} participante(s) no sorteio`;
+  }
+  function sortear() {
+    const participantes = participantesAtuais();
+    if (participantes.length === 0) { showToast('Adicione participantes antes de sortear', 'erro'); return; }
+    const roleta = document.getElementById('roleta');
+    let ciclos = 0;
+    const intervalo = setInterval(() => {
+      roleta.textContent = participantes[Math.floor(Math.random()*participantes.length)];
+      ciclos++;
+      if (ciclos > 18) {
+        clearInterval(intervalo);
+        const vencedor = participantes[Math.floor(Math.random()*participantes.length)];
+        roleta.textContent = '🎉 ' + vencedor;
+        lancarConfete();
+      }
+    }, 90);
+  }
+  function lancarConfete() {
+    const cores = ['#C9974B','#D98A8E','#5B9BD5','#6F8F6B','#4A2545'];
+    for (let i=0;i<40;i++) {
+      const p = document.createElement('div');
+      p.className = 'confetti-piece';
+      p.style.left = Math.random()*100+'vw';
+      p.style.background = cores[Math.floor(Math.random()*cores.length)];
+      p.style.animationDuration = (2+Math.random()*1.5)+'s';
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 3600);
+    }
+  }
+
+  // ---------- bingo ----------
+  function gerarCartela() {
+    const colunas = [[1,15],[16,30],[31,45],[46,60],[61,75]];
+    const cartela = colunas.map(([min,max]) => {
+      const nums = [];
+      while (nums.length < 5) {
+        const n = Math.floor(Math.random()*(max-min+1))+min;
+        if (!nums.includes(n)) nums.push(n);
+      }
+      return nums;
+    });
+    // transpõe para linhas, coluna central (índice 2, linha 2) é "livre"
+    const linhas = [];
+    for (let l=0;l<5;l++) {
+      linhas.push(colunas.map((_,c) => (l===2 && c===2) ? 'LIVRE' : cartela[c][l]));
+    }
+    return linhas;
+  }
+  function gerarCartelas() {
+    const qtd = Number(document.getElementById('qtd-cartelas').value) || 1;
+    const container = document.getElementById('area-impressao');
+    container.innerHTML = '';
+    for (let i=0;i<qtd;i++) {
+      const linhas = gerarCartela();
+      const div = document.createElement('div');
+      div.className = 'border-2 border-ink rounded-xl p-4 break-inside-avoid';
+      div.innerHTML = `
+        <p class="text-center font-display text-lg mb-2">${invite.title}</p>
+        <div class="grid grid-cols-5 gap-1 text-center font-medium">
+          <div class="bg-ink text-paper py-1 rounded">B</div><div class="bg-ink text-paper py-1 rounded">I</div><div class="bg-ink text-paper py-1 rounded">N</div><div class="bg-ink text-paper py-1 rounded">G</div><div class="bg-ink text-paper py-1 rounded">O</div>
+          ${linhas.map(l => l.map(v => `<div class="border border-ink/20 py-2 ${v==='LIVRE' ? 'bg-gold/20 text-xs' : ''}">${v}</div>`).join('')).join('')}
+        </div>`;
+      container.appendChild(div);
+    }
+  }
+  function sortearNumeroBingo() {
+    if (drawnBingo.length >= 75) { showToast('Todos os números já foram sorteados'); return; }
+    let n;
+    do { n = Math.floor(Math.random()*75)+1; } while (drawnBingo.includes(n));
+    drawnBingo.push(n);
+    document.getElementById('numero-atual').textContent = n;
+    document.getElementById('historico-bingo').innerHTML = drawnBingo.map(x => `<span class="w-9 h-9 flex items-center justify-center rounded-full bg-black/5 text-sm">${x}</span>`).join('');
+  }
+  function resetarBingo() {
+    drawnBingo = [];
+    document.getElementById('numero-atual').textContent = '–';
+    document.getElementById('historico-bingo').innerHTML = '';
+  }
+</script>
+</body>
+</html>

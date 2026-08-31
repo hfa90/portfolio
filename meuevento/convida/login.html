@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrar — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen flex items-center justify-center px-6">
+
+  <div class="w-full max-w-md">
+    <a href="index.html" class="font-display text-2xl font-semibold">Convida</a>
+
+    <div class="mt-8 bg-white rounded-2xl border border-ink/10 p-8">
+      <div class="flex gap-2 mb-6 bg-black/5 rounded-full p-1">
+        <button id="tab-login" class="flex-1 py-2 rounded-full text-sm font-medium transition-colors">Entrar</button>
+        <button id="tab-cadastro" class="flex-1 py-2 rounded-full text-sm font-medium transition-colors">Criar conta</button>
+      </div>
+
+      <form id="form-login" class="space-y-4">
+        <div>
+          <label class="text-sm font-medium block mb-1">E-mail</label>
+          <input type="email" id="login-email" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Senha</label>
+          <input type="password" id="login-senha" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <button type="submit" class="w-full py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors">Entrar</button>
+        <p id="login-erro" class="text-sm text-red-600 hidden"></p>
+      </form>
+
+      <form id="form-cadastro" class="space-y-4 hidden">
+        <div>
+          <label class="text-sm font-medium block mb-1">Seu nome</label>
+          <input type="text" id="cad-nome" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">E-mail</label>
+          <input type="email" id="cad-email" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Senha (mínimo 6 caracteres)</label>
+          <input type="password" id="cad-senha" required minlength="6" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <button type="submit" class="w-full py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors">Criar conta</button>
+        <p id="cadastro-erro" class="text-sm text-red-600 hidden"></p>
+        <p id="cadastro-sucesso" class="text-sm text-sage hidden"></p>
+      </form>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+  const tabLogin = document.getElementById('tab-login');
+  const tabCadastro = document.getElementById('tab-cadastro');
+  const formLogin = document.getElementById('form-login');
+  const formCadastro = document.getElementById('form-cadastro');
+
+  function setTab(modo) {
+    const isCadastro = modo === 'cadastro';
+    formLogin.classList.toggle('hidden', isCadastro);
+    formCadastro.classList.toggle('hidden', !isCadastro);
+    tabLogin.classList.toggle('bg-white', !isCadastro);
+    tabLogin.classList.toggle('shadow', !isCadastro);
+    tabCadastro.classList.toggle('bg-white', isCadastro);
+    tabCadastro.classList.toggle('shadow', isCadastro);
+  }
+  tabLogin.addEventListener('click', () => setTab('login'));
+  tabCadastro.addEventListener('click', () => setTab('cadastro'));
+  setTab(getQueryParam('modo') === 'cadastro' ? 'cadastro' : 'login');
+
+  formLogin.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const erroEl = document.getElementById('login-erro');
+    erroEl.classList.add('hidden');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: document.getElementById('login-email').value,
+      password: document.getElementById('login-senha').value,
+    });
+    if (error) {
+      erroEl.textContent = 'Não foi possível entrar: ' + error.message;
+      erroEl.classList.remove('hidden');
+      return;
+    }
+    window.location.href = 'dashboard.html';
+  });
+
+  formCadastro.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const erroEl = document.getElementById('cadastro-erro');
+    const sucessoEl = document.getElementById('cadastro-sucesso');
+    erroEl.classList.add('hidden');
+    sucessoEl.classList.add('hidden');
+    const { data, error } = await supabase.auth.signUp({
+      email: document.getElementById('cad-email').value,
+      password: document.getElementById('cad-senha').value,
+      options: { data: { name: document.getElementById('cad-nome').value } },
+    });
+    if (error) {
+      erroEl.textContent = 'Não foi possível criar sua conta: ' + error.message;
+      erroEl.classList.remove('hidden');
+      return;
+    }
+    if (data.session) {
+      window.location.href = 'dashboard.html';
+    } else {
+      sucessoEl.textContent = 'Conta criada! Verifique seu e-mail para confirmar o cadastro e depois entre.';
+      sucessoEl.classList.remove('hidden');
+      formCadastro.reset();
+    }
+  });
+
+  // se já estiver logado, manda direto pro painel
+  (async () => {
+    const user = await getCurrentUser();
+    if (user) window.location.href = 'dashboard.html';
+  })();
+</script>
+</body>
+</html>

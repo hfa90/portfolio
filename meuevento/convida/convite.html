@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Você foi convidado(a)! — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <div id="carregando" class="min-h-screen flex items-center justify-center">
+    <p class="text-ink/50">Carregando convite...</p>
+  </div>
+
+  <div id="nao-encontrado" class="hidden min-h-screen flex items-center justify-center px-6 text-center">
+    <div>
+      <p class="font-display text-2xl mb-2">Convite não encontrado</p>
+      <p class="text-ink/60">Verifique se o link está correto.</p>
+    </div>
+  </div>
+
+  <main id="conteudo" class="hidden">
+
+    <!-- HERO -->
+    <section id="hero" class="px-6 py-20 text-center text-paper confetti-bg">
+      <div class="rise-in max-w-xl mx-auto">
+        <p id="h-eyebrow" class="text-gold font-medium mb-3"></p>
+        <h1 id="h-title" class="font-display text-4xl md:text-5xl leading-tight"></h1>
+        <p id="h-honoree" class="text-paper/80 mt-3 text-lg"></p>
+        <div id="contagem" class="mt-8 flex justify-center gap-4"></div>
+      </div>
+    </section>
+
+    <div class="max-w-xl mx-auto px-6 -mt-8 relative z-10">
+      <div class="bg-white rounded-2xl shadow-lg border border-ink/10 p-6 space-y-4">
+        <div class="flex gap-3 items-start">
+          <span class="text-xl">📅</span>
+          <div><p class="font-medium" id="d-data"></p><p class="text-sm text-ink/60" id="d-hora"></p></div>
+        </div>
+        <div id="bloco-local" class="flex gap-3 items-start">
+          <span class="text-xl">📍</span>
+          <div>
+            <p class="font-medium" id="d-local"></p>
+            <p class="text-sm text-ink/60" id="d-endereco"></p>
+            <a id="d-maps" target="_blank" class="text-sm text-plum underline hidden">Ver no mapa</a>
+          </div>
+        </div>
+      </div>
+
+      <div id="bloco-mensagem" class="mt-6 text-center italic text-ink/70 hidden"></div>
+
+      <!-- campos extra do anfitrião (categoria) -->
+      <div id="bloco-info-extra" class="mt-6 grid gap-2"></div>
+
+      <!-- RSVP -->
+      <section class="mt-10 bg-white border border-ink/10 rounded-2xl p-6">
+        <h2 class="font-display text-2xl mb-1">Confirme sua presença</h2>
+        <p id="prazo-rsvp" class="text-sm text-ink/50 mb-5"></p>
+
+        <form id="form-rsvp" class="space-y-4">
+          <div>
+            <label class="text-sm font-medium block mb-1">Seu nome</label>
+            <input type="text" id="r-nome" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Telefone / WhatsApp</label>
+            <input type="tel" id="r-telefone" placeholder="(00) 00000-0000" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+
+          <div>
+            <label class="text-sm font-medium block mb-2">Você vai comparecer?</label>
+            <div class="flex gap-3">
+              <button type="button" data-status="confirmado" class="status-btn flex-1 py-3 rounded-lg border-2 border-ink/15 font-medium">Sim, vou! 🎉</button>
+              <button type="button" data-status="recusado" class="status-btn flex-1 py-3 rounded-lg border-2 border-ink/15 font-medium">Não vou poder</button>
+            </div>
+          </div>
+
+          <div id="campo-acompanhantes" class="hidden">
+            <label class="text-sm font-medium block mb-1">Quantos acompanhantes vão com você?</label>
+            <input type="number" id="r-acompanhantes" min="0" value="0" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+
+          <div id="campos-extra-convidado" class="space-y-4"></div>
+
+          <div>
+            <label class="text-sm font-medium block mb-1">Deixe uma mensagem (opcional)</label>
+            <textarea id="r-mensagem" rows="2" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none"></textarea>
+          </div>
+
+          <button type="submit" id="btn-confirmar-rsvp" class="w-full py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors" disabled>Escolha uma opção acima</button>
+        </form>
+
+        <div id="rsvp-sucesso" class="hidden text-center py-6">
+          <p class="text-4xl mb-3">✅</p>
+          <p class="font-display text-xl" id="rsvp-sucesso-texto"></p>
+        </div>
+      </section>
+
+      <!-- lista de presentes -->
+      <section id="bloco-presentes" class="hidden mt-8 bg-white border border-ink/10 rounded-2xl p-6">
+        <h2 class="font-display text-2xl mb-4">Lista de presentes</h2>
+        <div id="lista-presentes-publica" class="grid sm:grid-cols-2 gap-4"></div>
+      </section>
+
+      <!-- compartilhar -->
+      <section class="mt-8 mb-16 text-center">
+        <a id="btn-compartilhar" target="_blank" class="inline-block px-6 py-3 rounded-full bg-sage text-white font-medium">Compartilhar no WhatsApp</a>
+      </section>
+    </div>
+  </main>
+
+  <!-- modal reservar presente -->
+  <div id="modal-presente" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center px-6 z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+      <h2 class="font-display text-xl mb-4">Reservar presente</h2>
+      <form id="form-reservar" class="space-y-3">
+        <input id="res-nome" required placeholder="Seu nome" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <input id="res-telefone" placeholder="Telefone (opcional)" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="document.getElementById('modal-presente').classList.add('hidden')" class="px-4 py-2 rounded-full border border-ink/15 text-sm">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">Confirmar reserva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/categories.js"></script>
+<script>
+  let invite = null, statusEscolhido = null, presenteEscolhidoId = null;
+
+  (async () => {
+    const slug = getQueryParam('c');
+    const { data, error } = await supabase.from('invites').select('*').eq('slug', slug).eq('is_published', true).single();
+    document.getElementById('carregando').classList.add('hidden');
+    if (error || !data) { document.getElementById('nao-encontrado').classList.remove('hidden'); return; }
+    invite = data;
+    renderizar();
+    document.getElementById('conteudo').classList.remove('hidden');
+    if (invite.gift_list_enabled) carregarPresentes();
+  })();
+
+  function renderizar() {
+    const cat = getCategory(invite.category);
+    document.getElementById('hero').style.background = `linear-gradient(160deg, ${invite.theme_color}, #1B1523)`;
+    document.getElementById('h-eyebrow').textContent = `${cat.emoji} Você está convidado(a) para`;
+    document.getElementById('h-title').textContent = invite.title;
+    document.getElementById('h-honoree').textContent = invite.honoree_name || '';
+
+    document.getElementById('d-data').textContent = formatDatePtBR(invite.event_date);
+    document.getElementById('d-hora').textContent = invite.event_time ? `às ${invite.event_time}` : '';
+    document.getElementById('d-local').textContent = invite.location_name || 'Local a confirmar';
+    document.getElementById('d-endereco').textContent = invite.location_address || '';
+    if (invite.location_maps_url) {
+      const a = document.getElementById('d-maps');
+      a.href = invite.location_maps_url; a.classList.remove('hidden');
+    }
+
+    if (invite.message) {
+      document.getElementById('bloco-mensagem').textContent = `"${invite.message}"`;
+      document.getElementById('bloco-mensagem').classList.remove('hidden');
+    }
+
+    // campos extra do anfitrião
+    const extras = Object.entries(invite.dynamic_fields || {}).filter(([,v]) => v);
+    document.getElementById('bloco-info-extra').innerHTML = extras.map(([k,v]) => {
+      const campo = cat.hostFields.find(f => f.key === k);
+      return `<div class="bg-white border border-ink/10 rounded-xl px-4 py-3 text-sm"><span class="text-ink/50">${campo?.label || k}:</span> <strong>${v}</strong></div>`;
+    }).join('');
+
+    // campos do convidado (RSVP)
+    document.getElementById('campos-extra-convidado').innerHTML = cat.guestFields.map(f => renderCampoConvidado(f)).join('');
+
+    document.getElementById('campo-acompanhantes').classList.toggle('hidden', !invite.allow_companions);
+
+    if (invite.rsvp_deadline) {
+      document.getElementById('prazo-rsvp').textContent = `Por favor, responda até ${formatDatePtBR(invite.rsvp_deadline)}.`;
+    }
+
+    iniciarContagem();
+
+    const link = window.location.href;
+    const msg = `Olha que convite lindo: *${invite.title}*! 🎉\n${formatDatePtBR(invite.event_date)}${invite.event_time ? ' às ' + invite.event_time : ''}\n${link}`;
+    document.getElementById('btn-compartilhar').href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  }
+
+  function renderCampoConvidado(f) {
+    const id = `rc-${f.key}`;
+    if (f.type === 'select') {
+      return `<div><label class="text-sm font-medium block mb-1">${f.label}</label>
+        <select id="${id}" class="w-full border border-ink/15 rounded-lg px-3 py-2"><option value="">Selecione</option>${f.options.map(o=>`<option value="${o}">${o}</option>`).join('')}</select></div>`;
+    }
+    return `<div><label class="text-sm font-medium block mb-1">${f.label}</label>
+      <input type="${f.type}" id="${id}" class="w-full border border-ink/15 rounded-lg px-3 py-2"></div>`;
+  }
+
+  function iniciarContagem() {
+    const alvo = new Date(`${invite.event_date}T${invite.event_time || '00:00'}:00`);
+    const el = document.getElementById('contagem');
+    function bloco(valor, label) {
+      return `<div class="bg-white/10 rounded-xl px-4 py-3 text-paper text-center min-w-[64px]"><div class="font-display text-2xl">${valor}</div><div class="text-xs text-paper/70">${label}</div></div>`;
+    }
+    function atualizar() {
+      const diff = alvo - new Date();
+      if (diff <= 0) { el.innerHTML = `<div class="text-paper font-medium">É hoje! 🎉</div>`; clearInterval(timer); return; }
+      const dias = Math.floor(diff / 86400000);
+      const horas = Math.floor((diff % 86400000) / 3600000);
+      const min = Math.floor((diff % 3600000) / 60000);
+      el.innerHTML = bloco(dias,'dias') + bloco(horas,'horas') + bloco(min,'min');
+    }
+    atualizar();
+    const timer = setInterval(atualizar, 30000);
+  }
+
+  document.querySelectorAll('.status-btn').forEach(btn => btn.addEventListener('click', () => {
+    statusEscolhido = btn.dataset.status;
+    document.querySelectorAll('.status-btn').forEach(b => { b.classList.remove('border-sage','bg-sage/10','border-rose','bg-rose/10'); });
+    btn.classList.add(statusEscolhido === 'confirmado' ? 'border-sage' : 'border-rose', statusEscolhido === 'confirmado' ? 'bg-sage/10' : 'bg-rose/10');
+    const bc = document.getElementById('btn-confirmar-rsvp');
+    bc.disabled = false;
+    bc.textContent = statusEscolhido === 'confirmado' ? 'Confirmar presença' : 'Enviar resposta';
+  }));
+
+  document.getElementById('form-rsvp').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const cat = getCategory(invite.category);
+    const respostas = {};
+    cat.guestFields.forEach(f => {
+      const el = document.getElementById(`rc-${f.key}`);
+      if (el && el.value) respostas[f.key] = el.value;
+    });
+    const { error } = await supabase.from('guests').insert({
+      invite_id: invite.id,
+      name: document.getElementById('r-nome').value,
+      phone: document.getElementById('r-telefone').value,
+      status: statusEscolhido,
+      num_companions: Number(document.getElementById('r-acompanhantes').value || 0),
+      dynamic_answers: respostas,
+      guest_message: document.getElementById('r-mensagem').value,
+    });
+    if (error) { showToast('Erro ao enviar: ' + error.message, 'erro'); return; }
+    document.getElementById('form-rsvp').classList.add('hidden');
+    document.getElementById('rsvp-sucesso').classList.remove('hidden');
+    document.getElementById('rsvp-sucesso-texto').textContent = statusEscolhido === 'confirmado'
+      ? 'Presença confirmada! Estamos te esperando. 🎉'
+      : 'Que pena! Obrigado por avisar.';
+  });
+
+  // ---------- presentes (público) ----------
+  async function carregarPresentes() {
+    const { data } = await supabase.from('gifts').select('*').eq('invite_id', invite.id).order('created_at');
+    const lista = data || [];
+    if (lista.length === 0) return;
+    document.getElementById('bloco-presentes').classList.remove('hidden');
+    document.getElementById('lista-presentes-publica').innerHTML = lista.map(g => `
+      <div class="border border-ink/10 rounded-xl p-4">
+        ${g.image_url ? `<img src="${g.image_url}" class="w-full h-28 object-cover rounded-lg mb-2">` : ''}
+        <p class="font-medium text-sm">${g.name}</p>
+        ${g.price ? `<p class="text-xs text-ink/60">${formatCurrencyBRL(g.price)}</p>` : ''}
+        ${g.status === 'disponivel'
+          ? `<button onclick="abrirReserva('${g.id}')" class="mt-2 text-xs px-3 py-1.5 rounded-full bg-plum text-paper">Vou presentear com este</button>`
+          : `<span class="mt-2 inline-block text-xs px-3 py-1.5 rounded-full bg-black/5 text-ink/50">Já reservado</span>`}
+      </div>`).join('');
+  }
+
+  function abrirReserva(id) { presenteEscolhidoId = id; document.getElementById('modal-presente').classList.remove('hidden'); }
+
+  document.getElementById('form-reservar').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    await supabase.from('gifts').update({
+      status: 'reservado',
+      reserved_by_name: document.getElementById('res-nome').value,
+      reserved_by_phone: document.getElementById('res-telefone').value,
+    }).eq('id', presenteEscolhidoId);
+    document.getElementById('modal-presente').classList.add('hidden');
+    showToast('Presente reservado, obrigado! 💝');
+    carregarPresentes();
+  });
+</script>
+</body>
+</html>

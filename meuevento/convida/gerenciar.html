@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerenciar convite — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a href="dashboard.html" class="text-sm text-ink/60 hover:text-ink">← Meus convites</a>
+    </div>
+  </header>
+
+  <main id="conteudo" class="max-w-5xl mx-auto px-6 py-10 hidden">
+
+    <div id="banner" class="rounded-2xl p-7 text-paper mb-8">
+      <p id="b-cat" class="text-sm text-gold font-medium"></p>
+      <h1 id="b-title" class="font-display text-3xl mt-1"></h1>
+      <p id="b-date" class="text-paper/80 mt-2"></p>
+    </div>
+
+    <!-- link e compartilhamento -->
+    <section class="bg-white border border-ink/10 rounded-2xl p-6 mb-6">
+      <h2 class="font-display text-xl mb-3">Compartilhar convite</h2>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <input id="link-publico" readonly class="flex-1 border border-ink/15 rounded-lg px-3 py-2 bg-black/5 text-sm">
+        <button onclick="copiarLink()" class="px-5 py-2 rounded-full border border-ink/20 font-medium text-sm">Copiar link</button>
+        <a id="link-whatsapp" target="_blank" class="px-5 py-2 rounded-full bg-sage text-white font-medium text-sm text-center">Enviar pelo WhatsApp</a>
+      </div>
+      <p class="text-xs text-ink/50 mt-2">A mensagem do WhatsApp já vem personalizada com o nome e a data do seu evento.</p>
+    </section>
+
+    <!-- estatísticas -->
+    <section class="grid sm:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white border border-ink/10 rounded-2xl p-5">
+        <p class="text-3xl font-display" id="st-confirmados">0</p>
+        <p class="text-sm text-ink/60">Confirmados</p>
+      </div>
+      <div class="bg-white border border-ink/10 rounded-2xl p-5">
+        <p class="text-3xl font-display" id="st-pendentes">0</p>
+        <p class="text-sm text-ink/60">Pendentes</p>
+      </div>
+      <div class="bg-white border border-ink/10 rounded-2xl p-5">
+        <p class="text-3xl font-display" id="st-recusados">0</p>
+        <p class="text-sm text-ink/60">Recusaram</p>
+      </div>
+    </section>
+
+    <!-- atalhos -->
+    <section class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <a id="lnk-convidados" class="p-5 rounded-2xl border border-ink/10 bg-white hover:shadow-md transition-shadow">
+        <div class="text-2xl">👥</div>
+        <h3 class="font-display text-lg mt-2">Convidados</h3>
+        <p class="text-sm text-ink/60 mt-1">Gerencie a lista e as respostas</p>
+      </a>
+      <a id="lnk-presentes" class="p-5 rounded-2xl border border-ink/10 bg-white hover:shadow-md transition-shadow">
+        <div class="text-2xl">🎁</div>
+        <h3 class="font-display text-lg mt-2">Presentes</h3>
+        <p class="text-sm text-ink/60 mt-1">Lista de presentes do evento</p>
+      </a>
+      <a id="lnk-financeiro" class="p-5 rounded-2xl border border-ink/10 bg-white hover:shadow-md transition-shadow">
+        <div class="text-2xl">💰</div>
+        <h3 class="font-display text-lg mt-2">Financeiro</h3>
+        <p class="text-sm text-ink/60 mt-1">Meta, gastos e quanto falta</p>
+      </a>
+      <a id="lnk-jogos" class="p-5 rounded-2xl border border-ink/10 bg-white hover:shadow-md transition-shadow">
+        <div class="text-2xl">🎉</div>
+        <h3 class="font-display text-lg mt-2">Jogos da festa</h3>
+        <p class="text-sm text-ink/60 mt-1">Bingo, sorteio e perguntas</p>
+      </a>
+    </section>
+
+    <!-- editar / apagar -->
+    <section class="bg-white border border-ink/10 rounded-2xl p-6">
+      <button id="btn-toggle-edit" class="text-sm font-medium text-plum">Editar detalhes do convite</button>
+      <form id="form-editar" class="hidden mt-5 space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium block mb-1">Título</label>
+            <input id="e-title" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Homenageado(a)</label>
+            <input id="e-honoree" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          </div>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium block mb-1">Data</label>
+            <input type="date" id="e-date" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Horário</label>
+            <input type="time" id="e-time" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          </div>
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Local</label>
+          <input id="e-location" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        </div>
+        <div>
+          <label class="text-sm font-medium block mb-1">Recado</label>
+          <textarea id="e-message" rows="2" class="w-full border border-ink/15 rounded-lg px-3 py-2"></textarea>
+        </div>
+        <div class="flex gap-3">
+          <button type="submit" class="px-5 py-2 rounded-full bg-plum text-paper font-medium text-sm">Salvar alterações</button>
+          <button type="button" id="btn-apagar" class="px-5 py-2 rounded-full border border-red-300 text-red-600 font-medium text-sm">Apagar convite</button>
+        </div>
+      </form>
+    </section>
+
+  </main>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/categories.js"></script>
+<script>
+  let invite = null;
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    const slug = getQueryParam('slug');
+    const { data, error } = await supabase.from('invites').select('*').eq('slug', slug).single();
+    if (error || !data) { showToast('Convite não encontrado', 'erro'); return; }
+    if (data.owner_id !== user.id) { window.location.href = 'dashboard.html'; return; }
+    invite = data;
+    renderizar();
+    carregarEstatisticas();
+  })();
+
+  function renderizar() {
+    const cat = getCategory(invite.category);
+    document.getElementById('banner').style.background = `linear-gradient(160deg, ${invite.theme_color}, #1B1523)`;
+    document.getElementById('b-cat').textContent = `${cat.emoji} ${cat.label}`;
+    document.getElementById('b-title').textContent = invite.title;
+    document.getElementById('b-date').textContent = `${formatDatePtBR(invite.event_date)}${invite.event_time ? ' às ' + invite.event_time : ''}`;
+
+    const link = `${window.location.origin}${window.location.pathname.replace('gerenciar.html','convite.html')}?c=${invite.slug}`;
+    document.getElementById('link-publico').value = link;
+
+    const dataFmt = formatDatePtBR(invite.event_date);
+    const msg = `Você está convidado(a): *${invite.title}*! 🎉\nData: ${dataFmt}${invite.event_time ? ' às ' + invite.event_time : ''}\nConfirme sua presença aqui: ${link}`;
+    document.getElementById('link-whatsapp').href = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+
+    document.getElementById('lnk-convidados').href = `convidados.html?slug=${invite.slug}`;
+    document.getElementById('lnk-presentes').href = `presentes.html?slug=${invite.slug}`;
+    document.getElementById('lnk-financeiro').href = `financeiro.html?slug=${invite.slug}`;
+    document.getElementById('lnk-jogos').href = `jogos.html?slug=${invite.slug}`;
+
+    document.getElementById('e-title').value = invite.title || '';
+    document.getElementById('e-honoree').value = invite.honoree_name || '';
+    document.getElementById('e-date').value = invite.event_date || '';
+    document.getElementById('e-time').value = invite.event_time || '';
+    document.getElementById('e-location').value = invite.location_name || '';
+    document.getElementById('e-message').value = invite.message || '';
+
+    document.getElementById('conteudo').classList.remove('hidden');
+  }
+
+  async function carregarEstatisticas() {
+    const { data: guests } = await supabase.from('guests').select('status').eq('invite_id', invite.id);
+    const counts = { confirmado: 0, pendente: 0, recusado: 0 };
+    (guests || []).forEach(g => counts[g.status]++);
+    document.getElementById('st-confirmados').textContent = counts.confirmado;
+    document.getElementById('st-pendentes').textContent = counts.pendente;
+    document.getElementById('st-recusados').textContent = counts.recusado;
+  }
+
+  function copiarLink() {
+    const input = document.getElementById('link-publico');
+    input.select();
+    navigator.clipboard.writeText(input.value);
+    showToast('Link copiado!');
+  }
+
+  document.getElementById('btn-toggle-edit').addEventListener('click', () => {
+    document.getElementById('form-editar').classList.toggle('hidden');
+  });
+
+  document.getElementById('form-editar').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from('invites').update({
+      title: document.getElementById('e-title').value,
+      honoree_name: document.getElementById('e-honoree').value,
+      event_date: document.getElementById('e-date').value,
+      event_time: document.getElementById('e-time').value,
+      location_name: document.getElementById('e-location').value,
+      message: document.getElementById('e-message').value,
+      updated_at: new Date().toISOString(),
+    }).eq('id', invite.id);
+    if (error) { showToast('Erro ao salvar: ' + error.message, 'erro'); return; }
+    showToast('Convite atualizado!');
+    setTimeout(() => window.location.reload(), 800);
+  });
+
+  document.getElementById('btn-apagar').addEventListener('click', async () => {
+    if (!confirm('Tem certeza que deseja apagar este convite? Essa ação não pode ser desfeita.')) return;
+    const { error } = await supabase.from('invites').delete().eq('id', invite.id);
+    if (error) { showToast('Erro ao apagar: ' + error.message, 'erro'); return; }
+    window.location.href = 'dashboard.html';
+  });
+</script>
+</body>
+</html>

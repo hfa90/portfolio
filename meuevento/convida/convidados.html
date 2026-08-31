@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convidados — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a id="lnk-voltar" href="#" class="text-sm text-ink/60 hover:text-ink">← Voltar ao convite</a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-6 py-10">
+    <h1 class="font-display text-3xl font-medium mb-1">Controle de convidados</h1>
+    <p id="subtitulo" class="text-ink/60 mb-8"></p>
+
+    <!-- resumo -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="bg-white border border-ink/10 rounded-2xl p-4 text-center">
+        <p class="text-2xl font-display" id="st-confirmados">0</p>
+        <p class="text-xs text-ink/60">Confirmados</p>
+      </div>
+      <div class="bg-white border border-ink/10 rounded-2xl p-4 text-center">
+        <p class="text-2xl font-display" id="st-pendentes">0</p>
+        <p class="text-xs text-ink/60">Pendentes</p>
+      </div>
+      <div class="bg-white border border-ink/10 rounded-2xl p-4 text-center">
+        <p class="text-2xl font-display" id="st-recusados">0</p>
+        <p class="text-xs text-ink/60">Recusaram</p>
+      </div>
+    </div>
+
+    <!-- ações -->
+    <div class="flex flex-wrap gap-3 mb-6 items-center justify-between">
+      <div class="flex gap-2">
+        <button data-filtro="todos" class="filtro-btn px-4 py-2 rounded-full text-sm font-medium bg-ink text-paper">Todos</button>
+        <button data-filtro="confirmado" class="filtro-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">Confirmados</button>
+        <button data-filtro="pendente" class="filtro-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">Pendentes</button>
+        <button data-filtro="recusado" class="filtro-btn px-4 py-2 rounded-full text-sm font-medium border border-ink/15">Recusaram</button>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="exportarCSV()" class="px-4 py-2 rounded-full border border-ink/15 text-sm font-medium">Exportar CSV</button>
+        <button onclick="abrirModalAdicionar()" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">+ Adicionar convidado</button>
+      </div>
+    </div>
+
+    <div id="lista-convidados" class="space-y-3"></div>
+    <p id="lista-vazia" class="hidden text-center text-ink/50 py-16">Nenhum convidado nessa categoria ainda.</p>
+  </main>
+
+  <!-- modal adicionar convidado manualmente -->
+  <div id="modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center px-6 z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+      <h2 class="font-display text-xl mb-4">Adicionar convidado</h2>
+      <form id="form-add" class="space-y-3">
+        <input id="add-nome" required placeholder="Nome" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <input id="add-telefone" placeholder="Telefone / WhatsApp" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+        <select id="add-status" class="w-full border border-ink/15 rounded-lg px-3 py-2">
+          <option value="pendente">Pendente</option>
+          <option value="confirmado">Confirmado</option>
+          <option value="recusado">Recusado</option>
+        </select>
+        <div class="flex justify-end gap-3 pt-2">
+          <button type="button" onclick="fecharModal()" class="px-4 py-2 rounded-full border border-ink/15 text-sm">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-full bg-plum text-paper text-sm font-medium">Adicionar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/categories.js"></script>
+<script>
+  let invite = null, todosConvidados = [], filtroAtual = 'todos';
+
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    const slug = getQueryParam('slug');
+    const { data } = await supabase.from('invites').select('*').eq('slug', slug).single();
+    if (!data || data.owner_id !== user.id) { window.location.href = 'dashboard.html'; return; }
+    invite = data;
+    document.getElementById('subtitulo').textContent = invite.title;
+    document.getElementById('lnk-voltar').href = `gerenciar.html?slug=${slug}`;
+    await carregar();
+  })();
+
+  async function carregar() {
+    const { data } = await supabase.from('guests').select('*').eq('invite_id', invite.id).order('created_at', { ascending: false });
+    todosConvidados = data || [];
+    atualizarResumo();
+    renderizarLista();
+  }
+
+  function atualizarResumo() {
+    const c = { confirmado: 0, pendente: 0, recusado: 0 };
+    todosConvidados.forEach(g => c[g.status]++);
+    document.getElementById('st-confirmados').textContent = c.confirmado;
+    document.getElementById('st-pendentes').textContent = c.pendente;
+    document.getElementById('st-recusados').textContent = c.recusado;
+  }
+
+  function renderizarLista() {
+    const cat = getCategory(invite.category);
+    const lista = filtroAtual === 'todos' ? todosConvidados : todosConvidados.filter(g => g.status === filtroAtual);
+    const container = document.getElementById('lista-convidados');
+    document.getElementById('lista-vazia').classList.toggle('hidden', lista.length > 0);
+
+    const cores = { confirmado: 'bg-sage', pendente: 'bg-gold', recusado: 'bg-red-400' };
+    const labels = { confirmado: 'Confirmado', pendente: 'Pendente', recusado: 'Recusou' };
+
+    container.innerHTML = lista.map(g => {
+      const respostas = Object.entries(g.dynamic_answers || {}).filter(([,v]) => v).map(([k,v]) => {
+        const campo = cat.guestFields.find(f => f.key === k);
+        return `<span class="text-xs text-ink/60 block">${campo?.label || k}: <strong>${v}</strong></span>`;
+      }).join('');
+      return `
+      <div class="bg-white border border-ink/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div class="flex-1">
+          <div class="flex items-center gap-2">
+            <span class="status-dot ${cores[g.status]}"></span>
+            <span class="font-medium">${g.name}</span>
+            <span class="text-xs text-ink/50">${labels[g.status]}</span>
+          </div>
+          ${g.phone ? `<p class="text-xs text-ink/50 mt-1">${g.phone}</p>` : ''}
+          ${g.num_companions > 0 ? `<p class="text-xs text-ink/50">+${g.num_companions} acompanhante(s)</p>` : ''}
+          ${g.guest_message ? `<p class="text-xs text-ink/60 italic mt-1">"${g.guest_message}"</p>` : ''}
+          <div class="mt-1">${respostas}</div>
+        </div>
+        <div class="flex gap-2">
+          <select onchange="mudarStatus('${g.id}', this.value)" class="text-xs border border-ink/15 rounded-lg px-2 py-1">
+            <option value="pendente" ${g.status==='pendente'?'selected':''}>Pendente</option>
+            <option value="confirmado" ${g.status==='confirmado'?'selected':''}>Confirmado</option>
+            <option value="recusado" ${g.status==='recusado'?'selected':''}>Recusado</option>
+          </select>
+          <button onclick="apagarConvidado('${g.id}')" class="text-xs text-red-500 px-2">Remover</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  document.querySelectorAll('.filtro-btn').forEach(btn => btn.addEventListener('click', () => {
+    filtroAtual = btn.dataset.filtro;
+    document.querySelectorAll('.filtro-btn').forEach(b => { b.classList.remove('bg-ink','text-paper'); b.classList.add('border','border-ink/15'); });
+    btn.classList.add('bg-ink','text-paper'); btn.classList.remove('border','border-ink/15');
+    renderizarLista();
+  }));
+
+  async function mudarStatus(id, status) {
+    await supabase.from('guests').update({ status, responded_at: new Date().toISOString() }).eq('id', id);
+    await carregar();
+    showToast('Status atualizado');
+  }
+
+  async function apagarConvidado(id) {
+    if (!confirm('Remover este convidado da lista?')) return;
+    await supabase.from('guests').delete().eq('id', id);
+    await carregar();
+  }
+
+  function abrirModalAdicionar() { document.getElementById('modal').classList.remove('hidden'); }
+  function fecharModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('form-add').reset(); }
+
+  document.getElementById('form-add').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { error } = await supabase.from('guests').insert({
+      invite_id: invite.id,
+      name: document.getElementById('add-nome').value,
+      phone: document.getElementById('add-telefone').value,
+      status: document.getElementById('add-status').value,
+      added_by: 'anfitriao',
+    });
+    if (error) { showToast('Erro: ' + error.message, 'erro'); return; }
+    fecharModal();
+    await carregar();
+    showToast('Convidado adicionado');
+  });
+
+  function exportarCSV() {
+    const linhas = [['Nome','Telefone','Status','Acompanhantes','Mensagem']];
+    todosConvidados.forEach(g => linhas.push([g.name, g.phone||'', g.status, g.num_companions, (g.guest_message||'').replace(/\n/g,' ')]));
+    const csv = linhas.map(l => l.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `convidados-${invite.slug}.csv`; a.click();
+  }
+</script>
+</body>
+</html>

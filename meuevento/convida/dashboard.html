@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meus convites — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <div class="flex items-center gap-4">
+        <span id="user-name" class="text-sm text-ink/60 hidden sm:inline"></span>
+        <button onclick="logout()" class="text-sm font-medium px-4 py-2 rounded-full border border-ink/15 hover:border-ink/40 transition-colors">Sair</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-6 py-10">
+    <div class="flex flex-wrap items-end justify-between gap-4 mb-8">
+      <div>
+        <h1 class="font-display text-3xl font-medium">Meus convites</h1>
+        <p class="text-ink/60 mt-1">Gerencie seus eventos, convidados e detalhes por aqui.</p>
+      </div>
+      <a href="criar-convite.html" class="px-5 py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors">+ Criar novo convite</a>
+    </div>
+
+    <div id="lista-vazia" class="hidden text-center py-20 border border-dashed border-ink/20 rounded-2xl">
+      <p class="font-display text-xl mb-2">Você ainda não criou nenhum convite</p>
+      <p class="text-ink/60 mb-6">Comece agora e tenha um convite pronto em poucos minutos.</p>
+      <a href="criar-convite.html" class="px-5 py-3 rounded-full bg-plum text-paper font-medium">Criar meu primeiro convite</a>
+    </div>
+
+    <div id="lista-convites" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+  </main>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/categories.js"></script>
+<script>
+  (async () => {
+    const user = await requireAuth();
+    if (!user) return;
+    document.getElementById('user-name').textContent = user.user_metadata?.name ? `Olá, ${user.user_metadata.name}` : user.email;
+
+    const { data: invites, error } = await supabase
+      .from('invites')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) { showToast('Erro ao carregar convites: ' + error.message, 'erro'); return; }
+
+    const lista = document.getElementById('lista-convites');
+    if (!invites || invites.length === 0) {
+      document.getElementById('lista-vazia').classList.remove('hidden');
+      return;
+    }
+
+    // busca contagem de convidados confirmados por convite
+    const ids = invites.map(i => i.id);
+    const { data: guests } = await supabase.from('guests').select('invite_id, status').in('invite_id', ids);
+    const counts = {};
+    (guests || []).forEach(g => {
+      counts[g.invite_id] = counts[g.invite_id] || { confirmado: 0, pendente: 0, recusado: 0 };
+      counts[g.invite_id][g.status]++;
+    });
+
+    lista.innerHTML = invites.map(inv => {
+      const cat = getCategory(inv.category);
+      const c = counts[inv.id] || { confirmado: 0, pendente: 0, recusado: 0 };
+      return `
+      <a href="gerenciar.html?slug=${inv.slug}" class="category-card bg-white rounded-2xl p-5 border border-ink/10 hover:shadow-md transition-shadow block" style="--card-color:${inv.theme_color}">
+        <div class="flex items-start justify-between">
+          <div class="text-2xl">${cat.emoji}</div>
+          <span class="text-xs px-2 py-1 rounded-full bg-black/5">${cat.label}</span>
+        </div>
+        <h3 class="font-display text-xl mt-3">${inv.title}</h3>
+        <p class="text-sm text-ink/60 mt-1">${formatDatePtBR(inv.event_date)}${inv.event_time ? ' · ' + inv.event_time : ''}</p>
+        <div class="mt-4 flex gap-4 text-xs text-ink/60">
+          <span><span class="status-dot bg-sage mr-1"></span>${c.confirmado} confirmados</span>
+          <span><span class="status-dot bg-gold mr-1"></span>${c.pendente} pendentes</span>
+        </div>
+      </a>`;
+    }).join('');
+  })();
+</script>
+</body>
+</html>

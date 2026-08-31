@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Criar convite — Convida</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = { theme: { extend: { colors: { ink:'#1B1523', plum:'#4A2545', gold:'#C9974B', rose:'#D98A8E', paper:'#FAF6F0', sage:'#6F8F6B' },
+    fontFamily: { display: ['Fraunces','serif'], sans: ['Inter','sans-serif'] } } } }
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-paper text-ink min-h-screen">
+
+  <header class="border-b border-ink/10">
+    <div class="max-w-3xl mx-auto px-6 py-5 flex items-center justify-between">
+      <a href="dashboard.html" class="font-display text-2xl font-semibold">Convida</a>
+      <a href="dashboard.html" class="text-sm text-ink/60 hover:text-ink">Cancelar</a>
+    </div>
+  </header>
+
+  <main class="max-w-3xl mx-auto px-6 py-10">
+
+    <!-- indicador de passos -->
+    <div class="flex items-center gap-2 mb-10 text-sm font-medium text-ink/40">
+      <span id="ind-1" class="text-plum">1. Categoria</span>
+      <span>—</span>
+      <span id="ind-2">2. Detalhes</span>
+      <span>—</span>
+      <span id="ind-3">3. Revisar</span>
+    </div>
+
+    <!-- PASSO 1: categoria -->
+    <section id="passo-1">
+      <h1 class="font-display text-3xl font-medium mb-2">Que tipo de evento você está organizando?</h1>
+      <p class="text-ink/60 mb-8">Isso define quais perguntas o convite vai fazer aos seus convidados.</p>
+      <div id="grade-categorias" class="grid sm:grid-cols-2 gap-4"></div>
+    </section>
+
+    <!-- PASSO 2: detalhes -->
+    <section id="passo-2" class="hidden">
+      <h1 class="font-display text-3xl font-medium mb-2"><span id="categoria-emoji"></span> Detalhes do evento</h1>
+      <p class="text-ink/60 mb-8">Preencha as informações que vão aparecer no convite.</p>
+
+      <form id="form-detalhes" class="space-y-6">
+        <div>
+          <label class="text-sm font-medium block mb-1">Título do convite</label>
+          <input type="text" id="f-title" required placeholder="Ex: Aniversário de 15 anos da Helena" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label id="lbl-honoree" class="text-sm font-medium block mb-1">Nome do(a) homenageado(a)</label>
+            <input type="text" id="f-honoree" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Quem está organizando/convidando</label>
+            <input type="text" id="f-host" placeholder="Ex: Família Souza" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium block mb-1">Data do evento</label>
+            <input type="date" id="f-date" required class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Horário</label>
+            <input type="time" id="f-time" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium block mb-1">Local (nome)</label>
+          <input type="text" id="f-location-name" placeholder="Ex: Espaço Jardim das Palmeiras" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-sm font-medium block mb-1">Endereço</label>
+            <input type="text" id="f-location-address" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Link do Google Maps (opcional)</label>
+            <input type="url" id="f-location-maps" placeholder="https://maps.google.com/..." class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+        </div>
+
+        <div>
+          <label class="text-sm font-medium block mb-1">Imagem de capa (URL, opcional)</label>
+          <input type="url" id="f-cover" placeholder="https://..." class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+        </div>
+
+        <div>
+          <label class="text-sm font-medium block mb-1">Recado / mensagem do convite</label>
+          <textarea id="f-message" rows="3" placeholder="Escreva um recado carinhoso para seus convidados" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none"></textarea>
+        </div>
+
+        <!-- campos inteligentes da categoria -->
+        <div id="campos-categoria" class="space-y-4 border-t border-ink/10 pt-6"></div>
+
+        <div>
+          <label class="text-sm font-medium block mb-2">Cor do tema</label>
+          <div id="cores-tema" class="flex flex-wrap gap-3"></div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4 border-t border-ink/10 pt-6">
+          <div>
+            <label class="text-sm font-medium block mb-1">Prazo para confirmar presença</label>
+            <input type="date" id="f-deadline" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+          <div>
+            <label class="text-sm font-medium block mb-1">Máx. de acompanhantes por convidado</label>
+            <input type="number" id="f-max-companions" value="2" min="0" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          </div>
+        </div>
+
+        <div class="space-y-3">
+          <label class="flex items-center gap-3">
+            <input type="checkbox" id="f-gift-list" class="w-4 h-4">
+            <span class="text-sm">Ativar lista de presentes (opcional)</span>
+          </label>
+          <label class="flex items-center gap-3">
+            <input type="checkbox" id="f-financial" class="w-4 h-4">
+            <span class="text-sm">Ativar planejamento financeiro do evento</span>
+          </label>
+        </div>
+
+        <div class="flex justify-between pt-4">
+          <button type="button" onclick="irParaPasso(1)" class="px-5 py-3 rounded-full border border-ink/20 font-medium">Voltar</button>
+          <button type="submit" class="px-5 py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors">Revisar convite</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- PASSO 3: revisão -->
+    <section id="passo-3" class="hidden">
+      <h1 class="font-display text-3xl font-medium mb-2">Revisar e publicar</h1>
+      <p class="text-ink/60 mb-8">Confira as informações antes de publicar o convite.</p>
+      <div id="revisao" class="rounded-2xl p-6 text-paper" ></div>
+      <div class="flex justify-between pt-6">
+        <button type="button" onclick="irParaPasso(2)" class="px-5 py-3 rounded-full border border-ink/20 font-medium">Voltar e editar</button>
+        <button type="button" id="btn-publicar" class="px-5 py-3 rounded-full bg-plum text-paper font-medium hover:bg-ink transition-colors">Publicar convite</button>
+      </div>
+    </section>
+
+  </main>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/categories.js"></script>
+<script>
+  let categoriaEscolhida = null;
+  let corEscolhida = null;
+
+  (async () => { const user = await requireAuth(); if (!user) return; iniciar(); })();
+
+  function iniciar() {
+    const grade = document.getElementById('grade-categorias');
+    grade.innerHTML = Object.entries(CATEGORIES).map(([key, cat]) => `
+      <button type="button" data-key="${key}" class="cat-btn text-left p-5 rounded-2xl border-2 border-ink/10 hover:border-ink/30 transition-colors bg-white">
+        <div class="text-2xl">${cat.emoji}</div>
+        <div class="font-display text-lg mt-2">${cat.label}</div>
+      </button>`).join('');
+    grade.querySelectorAll('.cat-btn').forEach(btn => {
+      btn.addEventListener('click', () => escolherCategoria(btn.dataset.key));
+    });
+  }
+
+  function escolherCategoria(key) {
+    categoriaEscolhida = key;
+    const cat = getCategory(key);
+    corEscolhida = cat.color;
+    document.getElementById('categoria-emoji').textContent = cat.emoji;
+    document.getElementById('lbl-honoree').textContent = cat.honoreeLabel;
+
+    // campos inteligentes do anfitrião
+    const container = document.getElementById('campos-categoria');
+    container.innerHTML = `<p class="text-sm font-medium text-ink/50">Campos específicos de "${cat.label}"</p>` +
+      cat.hostFields.map(f => renderCampo(f, 'host')).join('');
+
+    // paleta de cores com destaque na cor padrão da categoria
+    const coresContainer = document.getElementById('cores-tema');
+    coresContainer.innerHTML = THEME_COLORS.map(c => `
+      <button type="button" data-color="${c}" class="cor-btn w-9 h-9 rounded-full border-2 ${c === corEscolhida ? 'border-ink' : 'border-transparent'}" style="background:${c}"></button>
+    `).join('');
+    coresContainer.querySelectorAll('.cor-btn').forEach(b => b.addEventListener('click', () => {
+      corEscolhida = b.dataset.color;
+      coresContainer.querySelectorAll('.cor-btn').forEach(x => x.classList.remove('border-ink'));
+      b.classList.add('border-ink'); b.classList.remove('border-transparent');
+    }));
+
+    irParaPasso(2);
+  }
+
+  function renderCampo(f, prefixo) {
+    const id = `hc-${prefixo}-${f.key}`;
+    if (f.type === 'textarea') {
+      return `<div><label class="text-sm font-medium block mb-1">${f.label}</label>
+        <textarea id="${id}" data-key="${f.key}" rows="2" placeholder="${f.placeholder || ''}" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none"></textarea></div>`;
+    }
+    if (f.type === 'select') {
+      return `<div><label class="text-sm font-medium block mb-1">${f.label}</label>
+        <select id="${id}" data-key="${f.key}" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none">
+          ${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}
+        </select></div>`;
+    }
+    return `<div><label class="text-sm font-medium block mb-1">${f.label}</label>
+      <input type="${f.type}" id="${id}" data-key="${f.key}" placeholder="${f.placeholder || ''}" class="w-full border border-ink/15 rounded-lg px-3 py-2 focus:border-plum outline-none"></div>`;
+  }
+
+  function irParaPasso(n) {
+    [1,2,3].forEach(i => document.getElementById(`passo-${i}`).classList.toggle('hidden', i !== n));
+    [1,2,3].forEach(i => document.getElementById(`ind-${i}`).classList.toggle('text-plum', i === n));
+    window.scrollTo({top:0, behavior:'smooth'});
+  }
+
+  function coletarCamposCategoria() {
+    const cat = getCategory(categoriaEscolhida);
+    const dados = {};
+    cat.hostFields.forEach(f => {
+      const el = document.getElementById(`hc-host-${f.key}`);
+      if (el) dados[f.key] = el.value;
+    });
+    return dados;
+  }
+
+  document.getElementById('form-detalhes').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const cat = getCategory(categoriaEscolhida);
+    const dados = {
+      title: document.getElementById('f-title').value,
+      honoree_name: document.getElementById('f-honoree').value,
+      host_names: document.getElementById('f-host').value,
+      event_date: document.getElementById('f-date').value,
+      event_time: document.getElementById('f-time').value,
+      location_name: document.getElementById('f-location-name').value,
+      location_address: document.getElementById('f-location-address').value,
+      location_maps_url: document.getElementById('f-location-maps').value,
+      cover_image_url: document.getElementById('f-cover').value,
+      message: document.getElementById('f-message').value,
+      rsvp_deadline: document.getElementById('f-deadline').value || null,
+      max_companions: Number(document.getElementById('f-max-companions').value || 0),
+      gift_list_enabled: document.getElementById('f-gift-list').checked,
+      financial_enabled: document.getElementById('f-financial').checked,
+      dynamic_fields: coletarCamposCategoria(),
+      theme_color: corEscolhida,
+    };
+    window._dadosConvite = dados;
+    mostrarRevisao(dados, cat);
+    irParaPasso(3);
+  });
+
+  function mostrarRevisao(d, cat) {
+    const div = document.getElementById('revisao');
+    div.style.background = `linear-gradient(160deg, ${d.theme_color}, #1B1523)`;
+    const camposExtra = Object.entries(d.dynamic_fields).filter(([,v]) => v).map(([k,v]) => {
+      const campo = cat.hostFields.find(f => f.key === k);
+      return `<p class="text-paper/80 text-sm mt-1"><span class="text-gold">${campo?.label || k}:</span> ${v}</p>`;
+    }).join('');
+    div.innerHTML = `
+      <p class="text-sm text-gold font-medium">${cat.emoji} ${cat.label}</p>
+      <h2 class="font-display text-3xl mt-2">${d.title || '(sem título)'}</h2>
+      ${d.honoree_name ? `<p class="text-paper/80 mt-1">${d.honoree_name}</p>` : ''}
+      <p class="text-paper/80 mt-3">${formatDatePtBR(d.event_date)}${d.event_time ? ' às ' + d.event_time : ''}</p>
+      ${d.location_name ? `<p class="text-paper/80">${d.location_name}</p>` : ''}
+      ${d.message ? `<p class="text-paper/70 mt-3 italic">"${d.message}"</p>` : ''}
+      ${camposExtra}
+      <div class="mt-4 flex gap-2 flex-wrap">
+        ${d.gift_list_enabled ? '<span class="px-3 py-1 rounded-full bg-white/10 text-paper text-xs">Lista de presentes ativada</span>' : ''}
+        ${d.financial_enabled ? '<span class="px-3 py-1 rounded-full bg-white/10 text-paper text-xs">Planejamento financeiro ativado</span>' : ''}
+      </div>
+    `;
+  }
+
+  document.getElementById('btn-publicar').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-publicar');
+    btn.disabled = true; btn.textContent = 'Publicando...';
+    const user = await getCurrentUser();
+    const d = window._dadosConvite;
+    const slug = slugify(d.title || categoriaEscolhida) + '-' + randomSlugSuffix();
+
+    const { data, error } = await supabase.from('invites').insert({
+      owner_id: user.id,
+      slug,
+      category: categoriaEscolhida,
+      ...d,
+    }).select().single();
+
+    if (error) {
+      showToast('Erro ao publicar: ' + error.message, 'erro');
+      btn.disabled = false; btn.textContent = 'Publicar convite';
+      return;
+    }
+
+    if (d.financial_enabled) {
+      await supabase.from('financial_goals').insert({ invite_id: data.id, goal_amount: 0 });
+    }
+
+    window.location.href = `gerenciar.html?slug=${slug}`;
+  });
+</script>
+</body>
+</html>
