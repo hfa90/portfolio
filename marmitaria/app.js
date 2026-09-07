@@ -315,6 +315,7 @@ function ticketHTML(p) {
     : `<span class="stamp stamp-danger">Pendente</span>`;
   const taxaTxt = Number(p.taxa_quinzena) > 0 ? ` <span style="color:var(--accent-dark)">+ ${BRL(p.taxa_quinzena)} taxa</span>` : '';
   const formaTxt = { imediato: 'Na hora', mais_tarde: 'Mais tarde', quinzena: 'Quinzena' }[p.forma_pagamento] || p.forma_pagamento;
+  const origemTxt = p.origem === 'loja' ? ' · <span title="Pedido feito pelo cliente na loja online">🌐 Online</span>' : '';
 
   const actionBtn = pago
     ? ''
@@ -330,7 +331,7 @@ function ticketHTML(p) {
     <div class="ticket-top">
       <div>
         <div class="ticket-cliente">${cliente}</div>
-        <div class="ticket-meta">${fmtData(p.data_pedido)} · ${formaTxt}</div>
+        <div class="ticket-meta">${fmtData(p.data_pedido)} · ${formaTxt}${origemTxt}</div>
       </div>
       ${stamp}
     </div>
