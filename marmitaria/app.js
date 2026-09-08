@@ -57,13 +57,62 @@ function hojeISO() {
 // =========================================================
 // INIT
 // =========================================================
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', boot);
 
-async function init() {
+async function boot() {
   if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('COLE_AQUI')) {
     document.getElementById('configWarning').classList.remove('hidden');
   }
 
+  setupLogin();
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (session) {
+    await mostrarApp();
+  } else {
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+
+  supabaseClient.auth.onAuthStateChange((_event, session) => {
+    if (session) {
+      mostrarApp();
+    } else {
+      document.getElementById('app').classList.add('hidden');
+      document.getElementById('loginScreen').classList.remove('hidden');
+    }
+  });
+}
+
+function setupLogin() {
+  document.getElementById('formLogin').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('loginEmail').value.trim();
+    const senha = document.getElementById('loginSenha').value;
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true;
+    btn.textContent = 'Entrando...';
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
+    btn.disabled = false;
+    btn.textContent = 'Entrar';
+    if (error) toast('Login inválido: verifique e-mail e senha', true);
+  });
+
+  document.getElementById('btnLogout').addEventListener('click', async () => {
+    await supabaseClient.auth.signOut();
+  });
+}
+
+// evita reinicializar listeners do painel toda vez que o Supabase reconfirma a sessão
+let appJaIniciado = false;
+async function mostrarApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  if (appJaIniciado) return;
+  appJaIniciado = true;
+  await init();
+}
+
+async function init() {
   updateClock();
   setInterval(updateClock, 60000);
 
@@ -877,8 +926,12 @@ function setupProdutosForm() {
     const nome = document.getElementById('prNome').value.trim();
     const custo = Number(document.getElementById('prCusto').value);
     const preco = Number(document.getElementById('prPreco').value);
+    const imagemUrl = document.getElementById('prImagem').value.trim();
+    const visivelLoja = document.getElementById('prVisivelLoja').checked;
     if (!nome || isNaN(custo) || isNaN(preco)) return;
-    const { data, error } = await supabaseClient.from('produtos').insert({ nome, custo, preco_venda: preco }).select().single();
+    const { data, error } = await supabaseClient.from('produtos')
+      .insert({ nome, custo, preco_venda: preco, imagem_url: imagemUrl || null, visivel_loja: visivelLoja })
+      .select().single();
     if (error) return toast('Erro: ' + error.message, true);
     state.produtos.push(data);
     document.getElementById('formNovoProduto').reset();
@@ -895,10 +948,12 @@ function setupProdutosForm() {
     const nome = document.getElementById('editPrNome').value.trim();
     const custo = Number(document.getElementById('editPrCusto').value);
     const preco = Number(document.getElementById('editPrPreco').value);
+    const imagemUrl = document.getElementById('editPrImagem').value.trim();
+    const visivelLoja = document.getElementById('editPrVisivelLoja').checked;
     if (!nome || isNaN(custo) || isNaN(preco)) return toast('Preencha todos os campos', true);
     try {
       const { error } = await supabaseClient.from('produtos')
-        .update({ nome, custo, preco_venda: preco })
+        .update({ nome, custo, preco_venda: preco, imagem_url: imagemUrl || null, visivel_loja: visivelLoja })
         .eq('id', state.editProdutoId);
       if (error) throw error;
       toast('Produto atualizado ✓');
@@ -920,19 +975,29 @@ function abrirEditProduto(id) {
   document.getElementById('editPrNome').value = p.nome || '';
   document.getElementById('editPrCusto').value = p.custo;
   document.getElementById('editPrPreco').value = p.preco_venda;
+  document.getElementById('editPrImagem').value = p.imagem_url || '';
+  document.getElementById('editPrVisivelLoja').checked = !!p.visivel_loja;
   openSheet('editProdutoOverlay');
 }
 
 function renderProdutosList() {
   document.getElementById('listaProdutos').innerHTML = state.produtos.map(p => {
     const margem = p.preco_venda > 0 ? ((p.preco_venda - p.custo) / p.preco_venda * 100) : 0;
+    const thumb = p.imagem_url
+      ? `<img class="produto-thumb" src="${p.imagem_url}" alt="">`
+      : `<div class="produto-thumb produto-thumb-placeholder">🍱</div>`;
+    const lojaBadge = p.visivel_loja
+      ? `<span class="stamp stamp-success" style="transform:none">🌐 Na loja</span>`
+      : `<span class="stamp" style="transform:none;color:var(--text-muted)">Oculto na loja</span>`;
     return `
     <div class="simple-item">
+      ${thumb}
       <div class="simple-item-main">
         <span class="simple-item-name">${p.nome}</span>
         <span class="simple-item-sub">custo ${BRL(p.custo)} · venda ${BRL(p.preco_venda)}</span>
       </div>
       <div class="simple-item-actions">
+        ${lojaBadge}
         <span class="margin-tag">margem ${margem.toFixed(0)}%</span>
         <button class="btn btn-edit btn-sm" data-edit-produto="${p.id}">Editar</button>
         <button class="btn btn-ghost btn-sm" data-del-produto="${p.id}">Excluir</button>

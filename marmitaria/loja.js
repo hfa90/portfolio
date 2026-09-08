@@ -28,6 +28,21 @@ function hojeISO() {
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
 }
 
+// Máscara progressiva de WhatsApp: (92) 99999-9999 (celular) ou (92) 9999-9999 (fixo)
+function maskWhatsapp(value) {
+  const d = value.replace(/\D/g, '').slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+}
+
+function whatsappValido(value) {
+  const d = (value || '').replace(/\D/g, '');
+  return d.length === 10 || d.length === 11;
+}
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -37,6 +52,11 @@ async function init() {
 
   document.getElementById('lojaData').value = hojeISO();
   document.getElementById('lojaData').min = hojeISO();
+
+  const whatsInput = document.getElementById('lojaWhats');
+  whatsInput.addEventListener('input', (e) => {
+    e.target.value = maskWhatsapp(e.target.value);
+  });
 
   document.querySelectorAll('.pay-opt').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -59,10 +79,12 @@ async function init() {
 async function loadProdutos() {
   // custo é buscado também (mesma permissão que o painel já usa) só para
   // preencher corretamente o custo_unitario do pedido — nunca é exibido aqui.
+  // Só entram no cardápio produtos "ativos" E marcados como "visíveis na loja".
   const { data, error } = await supabaseClient
     .from('produtos')
-    .select('id,nome,preco_venda,custo,ativo')
+    .select('id,nome,preco_venda,custo,imagem_url,ativo,visivel_loja')
     .eq('ativo', true)
+    .eq('visivel_loja', true)
     .order('nome');
   if (error) {
     toast('Erro ao carregar cardápio: ' + error.message, true);
@@ -84,8 +106,12 @@ function renderProdutos() {
 
   wrap.innerHTML = state.produtos.map(p => {
     const qtd = state.carrinho[p.id] || 0;
+    const imgTag = p.imagem_url
+      ? `<img class="produto-img" src="${p.imagem_url}" alt="${p.nome}" loading="lazy" data-produto-img="${p.id}">`
+      : `<div class="produto-img produto-img-placeholder">🍱</div>`;
     return `
     <div class="produto-card ${qtd > 0 ? 'active' : ''}" data-produto-card="${p.id}">
+      ${imgTag}
       <span class="produto-nome">${p.nome}</span>
       <span class="produto-preco mono">${BRL(p.preco_venda)}</span>
       <div class="qty-row">
@@ -95,6 +121,13 @@ function renderProdutos() {
       </div>
     </div>`;
   }).join('');
+
+  // se a imagem não carregar (link quebrado), cai no ícone de fallback
+  document.querySelectorAll('[data-produto-img]').forEach(img => {
+    img.addEventListener('error', () => {
+      img.outerHTML = '<div class="produto-img produto-img-placeholder">🍱</div>';
+    }, { once: true });
+  });
 
   document.querySelectorAll('[data-qty-mais]').forEach(btn => {
     btn.onclick = () => alterarQtd(btn.dataset.qtyMais, 1);
@@ -156,6 +189,7 @@ async function enviarPedido() {
   if (itens.length === 0) return toast('Escolha ao menos um item do cardápio', true);
   if (!nome) return toast('Preencha seu nome', true);
   if (!whats) return toast('Preencha seu WhatsApp', true);
+  if (!whatsappValido(whats)) return toast('WhatsApp inválido — use DDD + número, ex: (92) 99999-9999', true);
 
   const btn = document.getElementById('btnEnviarPedido');
   btn.disabled = true;
