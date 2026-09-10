@@ -69,6 +69,15 @@ async function init() {
   document.getElementById('btnEnviarPedido').addEventListener('click', enviarPedido);
   document.getElementById('btnNovoPedidoLoja').addEventListener('click', recomecar);
 
+  // avisa antes de fechar/sair da página se o cliente já montou o carrinho,
+  // pra evitar perder o pedido sem querer (voltar, fechar aba, etc.)
+  window.addEventListener('beforeunload', (e) => {
+    if (itensCarrinho() > 0) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
   await loadProdutos();
   renderProdutos();
 }
@@ -179,7 +188,12 @@ function atualizarCartBar() {
 // =========================================================
 // ENVIAR PEDIDO
 // =========================================================
+let enviandoPedido = false;
+
 async function enviarPedido() {
+  // trava contra duplo clique / duplo toque, que geraria pedido duplicado
+  if (enviandoPedido) return;
+
   const nome = document.getElementById('lojaNome').value.trim();
   const whats = document.getElementById('lojaWhats').value.trim();
   const dataPedido = document.getElementById('lojaData').value || hojeISO();
@@ -191,6 +205,7 @@ async function enviarPedido() {
   if (!whats) return toast('Preencha seu WhatsApp', true);
   if (!whatsappValido(whats)) return toast('WhatsApp inválido — use DDD + número, ex: (92) 99999-9999', true);
 
+  enviandoPedido = true;
   const btn = document.getElementById('btnEnviarPedido');
   btn.disabled = true;
   btn.textContent = 'Enviando...';
@@ -272,12 +287,14 @@ async function enviarPedido() {
     console.error('Erro ao enviar pedido:', err);
     toast('Erro ao enviar: ' + (err?.message || 'tente novamente'), true);
   } finally {
+    enviandoPedido = false;
     btn.disabled = false;
     btn.textContent = 'Enviar pedido';
   }
 }
 
 function mostrarSucesso(nome, itensPayload, total) {
+  state.carrinho = {}; // pedido já foi enviado, não precisa mais avisar ao saltar da página
   document.getElementById('telaPedido').classList.add('hidden');
   document.getElementById('lojaCartBar').classList.add('hidden');
   document.getElementById('telaSucesso').classList.remove('hidden');

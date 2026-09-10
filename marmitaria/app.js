@@ -124,6 +124,7 @@ async function init() {
   document.getElementById('buscaCobranca').addEventListener('input', renderCobranca);
   document.getElementById('buscaClientes').addEventListener('input', renderClientesList);
   document.getElementById('finPeriodo').addEventListener('change', renderFinanceiro);
+  document.getElementById('btnExportarCSV').addEventListener('click', exportarPedidosCSV);
 
   await refreshAll();
   switchView('dashboard');
@@ -323,7 +324,72 @@ function renderDashboard() {
   document.getElementById('dashUltimos').innerHTML =
     state.pedidos.slice(0, 5).map(ticketHTML).join('') || emptyMsg('Nenhum pedido registrado ainda');
 
+  renderClientesInativos();
   bindTicketActions();
+}
+
+// Clientes que compravam com uma certa frequência e pararam de aparecer —
+// sinal de alerta para o dono tentar recuperar antes que vire perda definitiva.
+const INATIVIDADE_DIAS = 14;
+function renderClientesInativos() {
+  const el = document.getElementById('dashInativos');
+  if (!el) return;
+
+  const hoje = new Date(hojeISO() + 'T00:00:00');
+  const porCliente = {};
+  state.pedidos.forEach(p => {
+    if (!p.cliente_id) return;
+    const atual = porCliente[p.cliente_id];
+    if (!atual || p.data_pedido > atual.ultimoPedido) {
+      porCliente[p.cliente_id] = {
+        cliente: p.clientes,
+        ultimoPedido: p.data_pedido,
+        totalPedidos: (atual?.totalPedidos || 0) + 1,
+      };
+    } else {
+      atual.totalPedidos += 1;
+    }
+  });
+
+  const candidatos = Object.values(porCliente)
+    // só entram clientes com pelo menos 2 pedidos no histórico — cliente novo de 1 pedido
+    // ainda não tem "frequência" pra dizer que sumiu
+    .filter(c => c.totalPedidos >= 2 && c.cliente)
+    .map(c => ({
+      ...c,
+      diasSemPedir: Math.floor((hoje - new Date(c.ultimoPedido + 'T00:00:00')) / 86400000),
+    }))
+    .filter(c => c.diasSemPedir >= INATIVIDADE_DIAS)
+    .sort((a, b) => b.diasSemPedir - a.diasSemPedir)
+    .slice(0, 5);
+
+  if (candidatos.length === 0) {
+    el.innerHTML = emptyMsg('Todo mundo ativo por aqui 🎉');
+    return;
+  }
+
+  el.innerHTML = candidatos.map(c => `
+    <div class="simple-item">
+      <div class="simple-item-main">
+        <span class="simple-item-name">${c.cliente.nome}</span>
+        <span class="simple-item-sub">último pedido há ${c.diasSemPedir} dias · ${c.totalPedidos} pedidos no histórico</span>
+      </div>
+      <div class="simple-item-actions">
+        ${c.cliente.whatsapp ? `<button class="btn btn-whats btn-sm" data-reativar-cliente="${c.cliente.id}">WhatsApp</button>` : ''}
+      </div>
+    </div>`
+  ).join('');
+
+  document.querySelectorAll('[data-reativar-cliente]').forEach(btn => {
+    btn.onclick = () => {
+      const c = state.clientes.find(x => x.id === btn.dataset.reativarCliente);
+      if (!c?.whatsapp) return;
+      const numero = c.whatsapp.replace(/\D/g, '');
+      const numeroFinal = numero.length <= 11 ? '55' + numero : numero;
+      const msg = `Olá, ${c.nome}! Notei que faz um tempinho que você não pede com a gente — tudo bem? Se quiser dar uma olhada no cardápio de hoje, é só me chamar por aqui 🍱`;
+      window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+  });
 }
 
 function renderSaudacao(totalHoje, qtdHoje, totalPendente, clientesDevendo) {
@@ -452,9 +518,9 @@ function setupNovoPedidoForm() {
   const sugestoes = document.getElementById('clienteSugestoes');
 
   busca.addEventListener('input', () => {
-    const q = busca.value.trim().toLowerCase();
+    const q = normalize(busca.value.trim());
     if (!q) { sugestoes.classList.add('hidden'); return; }
-    const matches = state.clientes.filter(c => c.nome.toLowerCase().includes(q));
+    const matches = state.clientes.filter(c => normalize(c.nome).includes(q));
     let html = matches.map(c =>
       `<div class="suggestion-item" data-cliente-id="${c.id}">${c.nome}${c.whatsapp ? ' <span style="color:var(--text-muted)">· ' + c.whatsapp + '</span>' : ''}</div>`
     ).join('');
@@ -1022,10 +1088,54 @@ function renderProdutosList() {
 }
 
 // =========================================================
+// EXPORTAR / BACKUP (CSV)
+// =========================================================
+function csvEscape(v) {
+  const s = (v === null || v === undefined) ? '' : String(v);
+  // aspas duplas, vírgula ou quebra de linha exigem "escapar" o campo
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function exportarPedidosCSV() {
+  const periodo = document.getElementById('finPeriodo').value;
+  const lista = filtrarPedidosPorPeriodo(periodo);
+
+  if (lista.length === 0) return toast('Nenhum pedido no período selecionado', true);
+
+  const cabecalho = ['Data', 'Cliente', 'WhatsApp', 'Itens', 'Forma de pagamento', 'Status', 'Valor total', 'Origem'];
+  const linhas = lista.map(p => {
+    const itensTxt = (p.itens_pedido || []).map(it => `${it.quantidade}x ${it.produtos?.nome || 'item'}`).join('; ');
+    const formaTxt = { imediato: 'Na hora', mais_tarde: 'Mais tarde', quinzena: 'Quinzena' }[p.forma_pagamento] || p.forma_pagamento;
+    return [
+      fmtData(p.data_pedido),
+      p.clientes?.nome || '',
+      p.clientes?.whatsapp || '',
+      itensTxt,
+      formaTxt,
+      p.status_pagamento === 'pago' ? 'Pago' : 'Pendente',
+      Number(p.valor_total).toFixed(2).replace('.', ','),
+      p.origem === 'loja' ? 'Loja online' : 'Painel',
+    ].map(csvEscape).join(',');
+  });
+
+  // BOM (\ufeff) garante que o Excel abra os acentos corretamente
+  const csv = '\ufeff' + [cabecalho.map(csvEscape).join(','), ...linhas].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pedidos_${periodo}_${hojeISO()}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${lista.length} pedido${lista.length === 1 ? '' : 's'} exportado${lista.length === 1 ? '' : 's'} ✓`);
+}
+
+// =========================================================
 // FINANCEIRO
 // =========================================================
-function renderFinanceiro() {
-  const periodo = document.getElementById('finPeriodo').value;
+function filtrarPedidosPorPeriodo(periodo) {
   const hoje = hojeISO();
   let lista = state.pedidos;
 
@@ -1038,6 +1148,12 @@ function renderFinanceiro() {
   } else if (periodo === 'mes') {
     lista = lista.filter(p => p.data_pedido.slice(0, 7) === hoje.slice(0, 7));
   }
+  return lista;
+}
+
+function renderFinanceiro() {
+  const periodo = document.getElementById('finPeriodo').value;
+  const lista = filtrarPedidosPorPeriodo(periodo);
 
   const faturamento = lista.reduce((s, p) => s + Number(p.valor_total), 0);
   const custo = lista.reduce((s, p) => s + custoPedido(p), 0);
