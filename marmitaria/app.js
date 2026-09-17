@@ -14,6 +14,7 @@ const state = {
   editClienteId: null,
   editProdutoId: null,
   quinzenaConfig: { ativa: false, dia1: 15, dia2: 30 }, // config de corte do fiado quinzenal (persistida no localStorage)
+  itensEditando: null, // id do pedido cujos itens estão sendo editados no popup de preços
 };
 
 function normalize(str) {
@@ -239,6 +240,7 @@ async function init() {
   setupFiltroPedidos();
   setupQuinzenaConfig();
   setupDevedoresPopup();
+  setupEditItensPopup();
   document.getElementById('buscaCobranca').addEventListener('input', renderCobranca);
   document.getElementById('buscaClientes').addEventListener('input', renderClientesList);
   document.getElementById('finPeriodo').addEventListener('change', renderFinanceiro);
@@ -560,6 +562,10 @@ function ticketHTML(p) {
     : '';
   const editBtn = `<button class="btn btn-edit btn-sm" data-edit-pedido="${p.id}">Editar</button>`;
   const delBtn = `<button class="btn btn-ghost btn-sm" data-del-pedido="${p.id}">Excluir</button>`;
+  const temItens = (p.itens_pedido || []).length > 0;
+  const editItensBtn = temItens
+    ? `<button type="button" class="btn-link-edit" data-editar-itens-pedido="${p.id}">✎ editar preços</button>`
+    : '';
 
   return `
   <div class="ticket">
@@ -570,7 +576,7 @@ function ticketHTML(p) {
       </div>
       ${stamp}
     </div>
-    <div class="ticket-itens">${itensTxt || 'sem itens'}</div>
+    <div class="ticket-itens">${itensTxt || 'sem itens'}${editItensBtn ? ' · ' + editItensBtn : ''}</div>
     <div class="ticket-foot">
       <span class="ticket-total">${BRL(p.valor_total)}${taxaTxt}</span>
       <div class="ticket-actions">${whatsBtn}${editBtn}${actionBtn}${delBtn}</div>
@@ -593,6 +599,9 @@ function bindTicketActions() {
   });
   document.querySelectorAll('[data-edit-pedido]').forEach(btn => {
     btn.onclick = () => editarPedido(btn.dataset.editPedido);
+  });
+  document.querySelectorAll('[data-editar-itens-pedido]').forEach(btn => {
+    btn.onclick = () => abrirEditarItens(btn.dataset.editarItensPedido);
   });
 }
 
@@ -630,6 +639,118 @@ function abrirWhatsapp(cliente, pedidosDoCliente, urgente = false) {
   const numero = cliente.whatsapp.replace(/\D/g, '');
   const numeroFinal = numero.length <= 11 ? '55' + numero : numero;
   window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(msg)}`, '_blank');
+}
+
+// =========================================================
+// EDITAR PREÇOS DE ITENS DE UM PEDIDO ESPECÍFICO
+// (não mexe no preço cadastrado do produto — só neste pedido)
+// =========================================================
+function abrirEditarItens(pedidoId) {
+  const p = state.pedidos.find(x => x.id === pedidoId);
+  if (!p || !(p.itens_pedido || []).length) return;
+
+  state.itensEditando = pedidoId;
+  document.getElementById('editItensCliente').textContent = p.clientes?.nome || '—';
+
+  document.getElementById('editItensLista').innerHTML = p.itens_pedido.map(it => `
+    <div class="edit-item-row">
+      <div class="edit-item-nome">${it.produtos?.nome || 'Item'} <span class="edit-item-qtd">x${it.quantidade}</span></div>
+      <div class="edit-item-preco-wrap">
+        <span>R$</span>
+        <input type="number" class="edit-item-preco" min="0" step="0.01" inputmode="decimal"
+          value="${Number(it.preco_unitario).toFixed(2)}" data-item-preco="${it.id}" data-item-qtd="${it.quantidade}">
+      </div>
+      <div class="edit-item-subtotal mono" data-item-subtotal="${it.id}">${BRL(Number(it.preco_unitario) * it.quantidade)}</div>
+    </div>
+  `).join('');
+
+  document.querySelectorAll('[data-item-preco]').forEach(inp => {
+    inp.addEventListener('input', () => atualizarPreviewEditItens(pedidoId));
+  });
+
+  atualizarPreviewEditItens(pedidoId);
+  openSheet('editItensOverlay');
+}
+
+function atualizarPreviewEditItens(pedidoId) {
+  const p = state.pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+  let totalProdutos = 0;
+  document.querySelectorAll('[data-item-preco]').forEach(inp => {
+    const preco = Math.max(0, Number(inp.value) || 0);
+    const qtd = Number(inp.dataset.itemQtd) || 0;
+    const subtotal = preco * qtd;
+    totalProdutos += subtotal;
+    const subtotalEl = document.querySelector(`[data-item-subtotal="${inp.dataset.itemPreco}"]`);
+    if (subtotalEl) subtotalEl.textContent = BRL(subtotal);
+  });
+  const taxa = Number(p.taxa_quinzena) || 0;
+  document.getElementById('editItensTotalProdutos').textContent = BRL(totalProdutos);
+  document.getElementById('editItensTotalGeral').textContent = BRL(totalProdutos + taxa);
+}
+
+async function salvarEditItens() {
+  const pedidoId = state.itensEditando;
+  const p = state.pedidos.find(x => x.id === pedidoId);
+  if (!p) return;
+
+  const btn = document.getElementById('editItensSalvar');
+  btn.disabled = true; btn.textContent = 'Salvando...';
+
+  try {
+    let valorProdutos = 0;
+    const updates = [];
+    document.querySelectorAll('[data-item-preco]').forEach(inp => {
+      const preco = Math.max(0, Number(inp.value) || 0);
+      const qtd = Number(inp.dataset.itemQtd) || 0;
+      const subtotal = preco * qtd;
+      valorProdutos += subtotal;
+      updates.push({ id: inp.dataset.itemPreco, preco_unitario: preco, subtotal });
+    });
+
+    // atualiza cada item do pedido individualmente — só a linha de itens_pedido,
+    // a tabela "produtos" nunca é tocada aqui
+    for (const u of updates) {
+      const { error } = await supabaseClient
+        .from('itens_pedido')
+        .update({ preco_unitario: u.preco_unitario, subtotal: u.subtotal })
+        .eq('id', u.id);
+      if (error) throw error;
+    }
+
+    const taxa = Number(p.taxa_quinzena) || 0;
+    const { error: errPedido } = await supabaseClient
+      .from('pedidos')
+      .update({ valor_produtos: valorProdutos, valor_total: valorProdutos + taxa })
+      .eq('id', pedidoId);
+    if (errPedido) throw errPedido;
+
+    toast('Preços deste pedido atualizados ✓');
+    closeSheet('editItensOverlay');
+    state.itensEditando = null;
+    await loadPedidos();
+    renderAllViews();
+  } catch (err) {
+    console.error('Erro ao editar preços do pedido:', err);
+    toast('Erro ao salvar: ' + (err?.message || 'tente novamente'), true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Salvar preços';
+  }
+}
+
+function setupEditItensPopup() {
+  document.getElementById('editItensSalvar').addEventListener('click', salvarEditItens);
+  document.getElementById('editItensCancelar').addEventListener('click', () => {
+    state.itensEditando = null;
+    closeSheet('editItensOverlay');
+  });
+  document.getElementById('editItensOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'editItensOverlay') {
+      state.itensEditando = null;
+      closeSheet('editItensOverlay');
+    }
+  });
 }
 
 // =========================================================
