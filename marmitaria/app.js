@@ -13,6 +13,7 @@ const state = {
   pedidoEditando: null,   // id do pedido em edição, ou null se for um novo pedido
   editClienteId: null,
   editProdutoId: null,
+  quinzenaConfig: { ativa: false, dia1: 15, dia2: 30 }, // config de corte do fiado quinzenal (persistida no localStorage)
 };
 
 function normalize(str) {
@@ -52,6 +53,119 @@ function hojeISO() {
   const d = new Date();
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+function isoFromDate(d) {
+  const off = d.getTimezoneOffset();
+  return new Date(d.getTime() - off * 60000).toISOString().slice(0, 10);
+}
+
+const DIAS_SEMANA_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
+function diaSemanaCurto(iso) {
+  return DIAS_SEMANA_CURTO[new Date(iso + 'T12:00:00').getDay()];
+}
+
+const MESES_NOME = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+function mesNome(d) {
+  return MESES_NOME[d.getMonth()];
+}
+
+// semana de segunda a domingo, "semanasAtras" semanas atrás da data de referência
+function semanaRange(refDate, semanasAtras) {
+  const d = new Date(refDate);
+  d.setDate(d.getDate() - semanasAtras * 7);
+  const diaSemana = d.getDay(); // 0 = domingo
+  const offsetSeg = diaSemana === 0 ? 6 : diaSemana - 1;
+  const inicio = new Date(d); inicio.setDate(d.getDate() - offsetSeg);
+  const fim = new Date(inicio); fim.setDate(inicio.getDate() + 6);
+  return { inicio: isoFromDate(inicio), fim: isoFromDate(fim) };
+}
+
+// =========================================================
+// FIADO POR QUINZENA — configuração e cálculo de vencimento
+// =========================================================
+function loadQuinzenaConfig() {
+  try {
+    const raw = localStorage.getItem('marmita_quinzena_config');
+    if (raw) return { ativa: false, dia1: 15, dia2: 30, ...JSON.parse(raw) };
+  } catch (e) { /* ignora e usa o padrão */ }
+  return { ativa: false, dia1: 15, dia2: 30 };
+}
+
+function salvarQuinzenaConfigLocal() {
+  try {
+    localStorage.setItem('marmita_quinzena_config', JSON.stringify(state.quinzenaConfig));
+  } catch (e) { /* localStorage indisponível — configuração não persiste, mas segue funcionando na sessão */ }
+}
+
+function ultimoDiaDoMes(ano, mes) {
+  return new Date(ano, mes, 0).getDate(); // mes 1-12
+}
+
+// Retorna a data (ISO) em que um pedido "na quinzena" feito em dataISO vence,
+// de acordo com os dias de corte configurados. Retorna null se a quinzena
+// estiver desativada.
+function quinzenaVencimento(dataISO) {
+  if (!state.quinzenaConfig.ativa) return null;
+  const [ano, mes, dia] = dataISO.split('-').map(Number);
+  const ultimoDia = ultimoDiaDoMes(ano, mes);
+  const corte1 = Math.min(state.quinzenaConfig.dia1, ultimoDia);
+  const corte2 = Math.min(state.quinzenaConfig.dia2, ultimoDia);
+  const pad = (n) => String(n).padStart(2, '0');
+
+  if (dia <= corte1) return `${ano}-${pad(mes)}-${pad(corte1)}`;
+  if (dia <= corte2) return `${ano}-${pad(mes)}-${pad(corte2)}`;
+
+  // comprou depois do 2º corte: vence no 1º corte do mês seguinte
+  let anoProx = ano, mesProx = mes + 1;
+  if (mesProx > 12) { mesProx = 1; anoProx++; }
+  const corte1Prox = Math.min(state.quinzenaConfig.dia1, ultimoDiaDoMes(anoProx, mesProx));
+  return `${anoProx}-${pad(mesProx)}-${pad(corte1Prox)}`;
+}
+
+// Um pedido está "vencido" quando: é fiado de quinzena, ainda está pendente,
+// a config está ativa, e a data de vencimento já passou.
+function isQuinzenaVencida(p) {
+  if (p.status_pagamento !== 'pendente' || p.forma_pagamento !== 'quinzena') return false;
+  const venc = quinzenaVencimento(p.data_pedido);
+  if (!venc) return false;
+  return venc < hojeISO();
+}
+
+function setupQuinzenaConfig() {
+  const toggle = document.getElementById('quinzenaAtivaToggle');
+  const dia1 = document.getElementById('quinzenaDia1');
+  const dia2 = document.getElementById('quinzenaDia2');
+  const camposWrap = document.getElementById('quinzenaCamposWrap');
+
+  toggle.checked = state.quinzenaConfig.ativa;
+  dia1.value = state.quinzenaConfig.dia1;
+  dia2.value = state.quinzenaConfig.dia2;
+  camposWrap.classList.toggle('hidden', !state.quinzenaConfig.ativa);
+
+  toggle.addEventListener('change', () => {
+    state.quinzenaConfig.ativa = toggle.checked;
+    camposWrap.classList.toggle('hidden', !toggle.checked);
+    salvarQuinzenaConfigLocal();
+    renderFinanceiro();
+    renderCobranca();
+    toast(toggle.checked ? 'Controle de fiado por quinzena ativado ✓' : 'Controle de fiado por quinzena desativado');
+  });
+
+  const aplicarDias = () => {
+    let v1 = Math.min(31, Math.max(1, Number(dia1.value) || 15));
+    let v2 = Math.min(31, Math.max(1, Number(dia2.value) || 30));
+    if (v2 <= v1) v2 = Math.min(31, v1 + 1);
+    dia1.value = v1; dia2.value = v2;
+    state.quinzenaConfig.dia1 = v1;
+    state.quinzenaConfig.dia2 = v2;
+    salvarQuinzenaConfigLocal();
+    renderFinanceiro();
+    renderCobranca();
+    toast('Dias de corte da quinzena atualizados ✓');
+  };
+  dia1.addEventListener('change', aplicarDias);
+  dia2.addEventListener('change', aplicarDias);
 }
 
 // =========================================================
@@ -116,11 +230,15 @@ async function init() {
   updateClock();
   setInterval(updateClock, 60000);
 
+  state.quinzenaConfig = loadQuinzenaConfig();
+
   setupNav();
   setupNovoPedidoForm();
   setupClientesForm();
   setupProdutosForm();
   setupFiltroPedidos();
+  setupQuinzenaConfig();
+  setupDevedoresPopup();
   document.getElementById('buscaCobranca').addEventListener('input', renderCobranca);
   document.getElementById('buscaClientes').addEventListener('input', renderClientesList);
   document.getElementById('finPeriodo').addEventListener('change', renderFinanceiro);
@@ -431,6 +549,8 @@ function ticketHTML(p) {
   const taxaTxt = Number(p.taxa_quinzena) > 0 ? ` <span style="color:var(--accent-dark)">+ ${BRL(p.taxa_quinzena)} taxa</span>` : '';
   const formaTxt = { imediato: 'Na hora', mais_tarde: 'Mais tarde', quinzena: 'Quinzena' }[p.forma_pagamento] || p.forma_pagamento;
   const origemTxt = p.origem === 'loja' ? ' · <span title="Pedido feito pelo cliente na loja online">🌐 Online</span>' : '';
+  const vencida = isQuinzenaVencida(p);
+  const vencidoTxt = vencida ? ` <span class="mini-tag mini-tag-danger">vencido ${fmtData(quinzenaVencimento(p.data_pedido))}</span>` : '';
 
   const actionBtn = pago
     ? ''
@@ -446,7 +566,7 @@ function ticketHTML(p) {
     <div class="ticket-top">
       <div>
         <div class="ticket-cliente">${cliente}</div>
-        <div class="ticket-meta">${fmtData(p.data_pedido)} · ${formaTxt}${origemTxt}</div>
+        <div class="ticket-meta">${fmtData(p.data_pedido)} · ${formaTxt}${origemTxt}${vencidoTxt}</div>
       </div>
       ${stamp}
     </div>
@@ -496,14 +616,17 @@ async function excluirPedido(pedidoId) {
   renderAllViews();
 }
 
-function abrirWhatsapp(cliente, pedidosDoCliente) {
+function abrirWhatsapp(cliente, pedidosDoCliente, urgente = false) {
   if (!cliente?.whatsapp) return toast('Este cliente não tem WhatsApp cadastrado', true);
   const total = pedidosDoCliente.reduce((s, p) => s + Number(p.valor_total), 0);
   const linhas = pedidosDoCliente.map(p => {
     const itens = (p.itens_pedido || []).map(it => `${it.quantidade}x ${it.produtos?.nome}`).join(', ');
     return `• ${fmtData(p.data_pedido)} — ${itens} — ${BRL(p.valor_total)}`;
   }).join('\n');
-  const msg = `Olá, ${cliente.nome}! Passando para lembrar da sua conta em aberto:\n\n${linhas}\n\n*Total: ${BRL(total)}*\n\nPode confirmar o pagamento? 🙏`;
+  const intro = urgente
+    ? `Olá, ${cliente.nome}! Notei que seu fiado da quinzena passada ainda está em aberto:`
+    : `Olá, ${cliente.nome}! Passando para lembrar da sua conta em aberto:`;
+  const msg = `${intro}\n\n${linhas}\n\n*Total: ${BRL(total)}*\n\nPode confirmar o pagamento? 🙏`;
   const numero = cliente.whatsapp.replace(/\D/g, '');
   const numeroFinal = numero.length <= 11 ? '55' + numero : numero;
   window.open(`https://wa.me/${numeroFinal}?text=${encodeURIComponent(msg)}`, '_blank');
@@ -847,17 +970,40 @@ function renderCobranca() {
     porCliente[cid].total += Number(p.valor_total);
   });
 
-  let grupos = Object.values(porCliente).sort((a, b) => b.total - a.total);
+  // marca grupos com fiado de quinzena vencido (da quinzena anterior, ainda não pago)
+  let grupos = Object.values(porCliente).map(g => {
+    const pedidosVencidos = g.pedidos.filter(isQuinzenaVencida);
+    return {
+      ...g,
+      vencido: pedidosVencidos.length > 0,
+      totalVencido: pedidosVencidos.reduce((s, p) => s + Number(p.valor_total), 0),
+    };
+  });
+
+  // quem está atrasado da quinzena anterior sobe pro topo, depois por valor
+  grupos.sort((a, b) => (b.vencido - a.vencido) || (b.total - a.total));
 
   const buscaEl = document.getElementById('buscaCobranca');
   const busca = normalize(buscaEl ? buscaEl.value.trim() : '');
   if (busca) grupos = grupos.filter(g => normalize(g.cliente?.nome).includes(busca));
 
+  const banner = document.getElementById('cobrancaAtrasoBanner');
+  if (banner) {
+    const vencidos = grupos.filter(g => g.vencido);
+    if (state.quinzenaConfig.ativa && vencidos.length > 0) {
+      const totalVencido = vencidos.reduce((s, g) => s + g.totalVencido, 0);
+      banner.classList.remove('hidden');
+      banner.innerHTML = `⚠️ <strong>${vencidos.length} cliente${vencidos.length === 1 ? '' : 's'}</strong> ainda deve fiado da <strong>quinzena anterior</strong> — total de <strong>${BRL(totalVencido)}</strong> atrasado.`;
+    } else {
+      banner.classList.add('hidden');
+    }
+  }
+
   document.getElementById('listaCobranca').innerHTML = grupos.map(g => `
-    <div class="cobranca-grupo">
+    <div class="cobranca-grupo ${g.vencido ? 'cobranca-grupo-vencido' : ''}">
       <div class="cobranca-grupo-head">
         <div>
-          <div class="ticket-cliente">${g.cliente?.nome || '—'}</div>
+          <div class="ticket-cliente">${g.cliente?.nome || '—'}${g.vencido ? ' <span class="mini-tag mini-tag-danger">quinzena vencida</span>' : ''}</div>
           <div class="ticket-meta">${g.pedidos.length} pedido${g.pedidos.length === 1 ? '' : 's'} em aberto ${g.cliente?.whatsapp ? '· ' + g.cliente.whatsapp : '· sem WhatsApp cadastrado'}</div>
         </div>
         <span class="ticket-total">${BRL(g.total)}</span>
@@ -876,7 +1022,7 @@ function renderCobranca() {
   document.querySelectorAll('[data-cobrar-cliente]').forEach(btn => {
     btn.onclick = () => {
       const g = grupos.find(x => x.cliente?.id === btn.dataset.cobrarCliente);
-      if (g) abrirWhatsapp(g.cliente, g.pedidos);
+      if (g) abrirWhatsapp(g.cliente, g.pedidos, g.vencido);
     };
   });
   document.querySelectorAll('[data-pagar-tudo]').forEach(btn => {
@@ -1133,6 +1279,156 @@ function exportarPedidosCSV() {
 }
 
 // =========================================================
+// DEVEDORES POR PERÍODO (cards clicáveis + popup no Financeiro)
+// =========================================================
+
+// devolve uma função que testa se um pedido pertence ao período pedido
+function filtroPeriodoDevedores(tipo, ref) {
+  if (tipo === 'dia') return (p) => p.data_pedido === ref;
+  if (tipo === 'semana') {
+    const [ini, fim] = ref.split('_');
+    return (p) => p.data_pedido >= ini && p.data_pedido <= fim;
+  }
+  if (tipo === 'mes') return (p) => p.data_pedido.slice(0, 7) === ref;
+  if (tipo === 'quinzena_atrasada') return (p) => isQuinzenaVencida(p);
+  return () => true;
+}
+
+// agrupa pedidos pendentes de um período por cliente, já somando totais
+function devedoresDoPeriodo(tipo, ref) {
+  const filtro = filtroPeriodoDevedores(tipo, ref);
+  const pendentes = state.pedidos.filter(p => p.status_pagamento === 'pendente' && filtro(p));
+  const porCliente = {};
+  pendentes.forEach(p => {
+    const cid = p.cliente_id;
+    if (!porCliente[cid]) porCliente[cid] = { cliente: p.clientes, pedidos: [], total: 0 };
+    porCliente[cid].pedidos.push(p);
+    porCliente[cid].total += Number(p.valor_total);
+  });
+  return Object.values(porCliente).sort((a, b) => b.total - a.total);
+}
+
+function gerarCardsPeriodo() {
+  const hoje = hojeISO();
+  const hojeDate = new Date(hoje + 'T12:00:00');
+
+  const dias = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(hojeDate); d.setDate(d.getDate() - i);
+    const iso = isoFromDate(d);
+    const label = i === 0 ? 'Hoje' : i === 1 ? 'Ontem' : fmtData(iso).slice(0, 5);
+    dias.push({ tipo: 'dia', ref: iso, label, sub: diaSemanaCurto(iso) });
+  }
+
+  const semanas = [];
+  for (let i = 0; i < 4; i++) {
+    const { inicio, fim } = semanaRange(hojeDate, i);
+    const label = i === 0 ? 'Esta semana' : `${fmtData(inicio).slice(0, 5)}–${fmtData(fim).slice(0, 5)}`;
+    semanas.push({ tipo: 'semana', ref: `${inicio}_${fim}`, label, sub: '' });
+  }
+
+  const meses = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(hojeDate.getFullYear(), hojeDate.getMonth() - i, 1);
+    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = i === 0 ? 'Este mês' : mesNome(d);
+    const sub = d.getFullYear() !== hojeDate.getFullYear() ? String(d.getFullYear()) : '';
+    meses.push({ tipo: 'mes', ref: ym, label, sub });
+  }
+
+  return { dias, semanas, meses };
+}
+
+function cardPeriodoHTML(item) {
+  const devedores = devedoresDoPeriodo(item.tipo, item.ref);
+  const total = devedores.reduce((s, d) => s + d.total, 0);
+  const qtd = devedores.length;
+  const vazio = qtd === 0;
+  const labelCompleto = `${item.label}${item.sub ? ' · ' + item.sub : ''}`;
+  return `
+  <button type="button" class="periodo-card ${vazio ? 'periodo-card-ok' : ''}"
+    data-periodo-tipo="${item.tipo}" data-periodo-ref="${item.ref}" data-periodo-label="${labelCompleto}">
+    <span class="periodo-card-label">${item.label}</span>
+    ${item.sub ? `<span class="periodo-card-sub">${item.sub}</span>` : ''}
+    <span class="periodo-card-valor mono">${vazio ? '—' : BRL(total)}</span>
+    <span class="periodo-card-count">${vazio ? 'tudo em dia' : qtd + (qtd === 1 ? ' devendo' : ' devendo')}</span>
+  </button>`;
+}
+
+function renderPeriodoCards() {
+  const { dias, semanas, meses } = gerarCardsPeriodo();
+
+  document.getElementById('periodoCardsDias').innerHTML = dias.map(cardPeriodoHTML).join('');
+  document.getElementById('periodoCardsSemanas').innerHTML = semanas.map(cardPeriodoHTML).join('');
+  document.getElementById('periodoCardsMeses').innerHTML = meses.map(cardPeriodoHTML).join('');
+
+  const atrasadoWrap = document.getElementById('quinzenaAtrasadaWrap');
+  if (state.quinzenaConfig.ativa) {
+    const devedores = devedoresDoPeriodo('quinzena_atrasada', '');
+    const total = devedores.reduce((s, d) => s + d.total, 0);
+    atrasadoWrap.classList.remove('hidden');
+    atrasadoWrap.innerHTML = devedores.length > 0 ? `
+      <button type="button" class="periodo-card periodo-card-alert"
+        data-periodo-tipo="quinzena_atrasada" data-periodo-ref="" data-periodo-label="Quinzena anterior (atrasado)">
+        <span class="periodo-card-label">🔴 Devendo da quinzena anterior</span>
+        <span class="periodo-card-valor mono">${BRL(total)}</span>
+        <span class="periodo-card-count">${devedores.length} cliente${devedores.length === 1 ? '' : 's'} atrasado${devedores.length === 1 ? '' : 's'} — toque para cobrar</span>
+      </button>` : `
+      <div class="periodo-card-ok-full">🎉 Ninguém atrasado da quinzena anterior</div>`;
+  } else {
+    atrasadoWrap.classList.add('hidden');
+    atrasadoWrap.innerHTML = '';
+  }
+
+  document.querySelectorAll('[data-periodo-tipo]').forEach(btn => {
+    btn.onclick = () => abrirDevedoresPopup(btn.dataset.periodoTipo, btn.dataset.periodoRef, btn.dataset.periodoLabel);
+  });
+}
+
+function abrirDevedoresPopup(tipo, ref, label) {
+  const devedores = devedoresDoPeriodo(tipo, ref);
+  const total = devedores.reduce((s, d) => s + d.total, 0);
+
+  document.getElementById('devedoresTitulo').textContent = label || 'Devedores';
+  document.getElementById('devedoresResumo').textContent = devedores.length > 0
+    ? `${devedores.length} cliente${devedores.length === 1 ? '' : 's'} devendo · total ${BRL(total)}`
+    : 'Ninguém devendo neste período 🎉';
+
+  document.getElementById('devedoresLista').innerHTML = devedores.map(d => {
+    const temVencido = d.pedidos.some(isQuinzenaVencida);
+    const vencidoTag = temVencido ? '<span class="mini-tag mini-tag-danger">vencido</span>' : '';
+    const semWhats = !d.cliente?.whatsapp;
+    const iniciais = (d.cliente?.nome || '?').trim().charAt(0).toUpperCase();
+    return `
+    <div class="devedor-row">
+      <div class="devedor-avatar">${iniciais}</div>
+      <div class="devedor-info">
+        <div class="devedor-nome">${d.cliente?.nome || '—'} ${vencidoTag}</div>
+        <div class="devedor-sub">${d.pedidos.length} pedido${d.pedidos.length === 1 ? '' : 's'}${semWhats ? ' · sem WhatsApp' : ''}</div>
+      </div>
+      <div class="devedor-valor mono">${BRL(d.total)}</div>
+      ${semWhats ? '' : `<button class="btn btn-whats btn-sm" data-devedor-whats="${d.cliente.id}">WhatsApp</button>`}
+    </div>`;
+  }).join('') || emptyMsg('Ninguém devendo neste período 🎉');
+
+  document.querySelectorAll('[data-devedor-whats]').forEach(btn => {
+    btn.onclick = () => {
+      const d = devedores.find(x => x.cliente?.id === btn.dataset.devedorWhats);
+      if (d) abrirWhatsapp(d.cliente, d.pedidos, d.pedidos.some(isQuinzenaVencida));
+    };
+  });
+
+  openSheet('devedoresOverlay');
+}
+
+function setupDevedoresPopup() {
+  document.getElementById('devedoresFechar').addEventListener('click', () => closeSheet('devedoresOverlay'));
+  document.getElementById('devedoresOverlay').addEventListener('click', (e) => {
+    if (e.target.id === 'devedoresOverlay') closeSheet('devedoresOverlay');
+  });
+}
+
+// =========================================================
 // FINANCEIRO
 // =========================================================
 function filtrarPedidosPorPeriodo(periodo) {
@@ -1152,6 +1448,8 @@ function filtrarPedidosPorPeriodo(periodo) {
 }
 
 function renderFinanceiro() {
+  renderPeriodoCards();
+
   const periodo = document.getElementById('finPeriodo').value;
   const lista = filtrarPedidosPorPeriodo(periodo);
 
