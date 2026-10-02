@@ -1579,6 +1579,23 @@
     .due.late { color: var(--red) }
     .due.soon { color: var(--amber) }
     .due.ok { color: var(--text3) }
+    /* fechamentos / lotes de cobrança */
+    .lote-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border); border-left: 3px solid var(--c); flex-wrap: wrap }
+    .lote-row:last-child { border-bottom: none }
+    .lote-main { flex: 1 1 220px; min-width: 0 }
+    .lote-main .t { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+    .lote-main .s { font-size: 11px; color: var(--text3); margin-top: 2px }
+    .lote-st { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; white-space: nowrap }
+    .lote-st.run { background: var(--blue-bg); color: var(--blue) }
+    .lote-st.nf { background: var(--purple-bg); color: var(--purple) }
+    .lote-st.warn { background: var(--amber-bg); color: var(--amber) }
+    .lote-st.wait { background: var(--cyan-bg); color: var(--cyan) }
+    .lote-st.late { background: var(--red-bg); color: var(--red) }
+    .lote-val { font-family: var(--mono); font-size: 13px; font-weight: 600; min-width: 96px; text-align: right }
+    .regra-box { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 14px; margin-bottom: 14px }
+    .regra-box .form-group { margin-bottom: 10px }
+    .lote-filtro { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; background: var(--accent); color: #fff; border-radius: 99px; padding: 2px 4px 2px 10px; margin-left: 8px; vertical-align: middle }
+    .lote-filtro button { background: rgba(0,0,0,.25); border: none; color: #fff; border-radius: 99px; width: 18px; height: 18px; cursor: pointer; font-size: 11px }
     .est { font-size: 9px; color: var(--text3); border: 1px dashed var(--border2); border-radius: 4px; padding: 0 4px; margin-left: 4px }
     .bulk-bar { display: none; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 16px; background: rgba(79, 142, 247, .08); border-bottom: 1px solid var(--border); font-size: 12px }
     .bulk-bar.show { display: flex }
@@ -1890,7 +1907,7 @@
     <div class="content">
       <div id="schema-banner" class="schema-banner" style="display:none">
         <span style="font-size:18px">🛠️</span>
-        <div><b>Atualização do banco pendente.</b> Execute a migração v3 no Supabase (SQL Editor) para liberar cores por empresa, horários na agenda e recebimentos parciais.</div>
+        <div><b>Atualização do banco pendente.</b> Execute a migração no Supabase (SQL Editor) para liberar cores por empresa, horários na agenda, recebimentos parciais e regras de pagamento por empresa.</div>
         <button class="btn btn-ghost btn-sm" onclick="copiarMigracao()">📋 Copiar SQL</button>
         <button class="btn btn-ghost btn-sm" onclick="recarregarSchema()">↻ Verificar de novo</button>
       </div>
@@ -1928,7 +1945,7 @@
             <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">🗄️ Banco de dados</h3>
             <div id="schema-status" style="font-size:12px;color:var(--text2);line-height:1.9"></div>
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-              <button class="btn btn-ghost btn-sm" onclick="copiarMigracao()">📋 Copiar SQL da migração v3</button>
+              <button class="btn btn-ghost btn-sm" onclick="copiarMigracao()">📋 Copiar SQL da migração</button>
               <button class="btn btn-ghost btn-sm" onclick="recarregarSchema()">↻ Verificar</button>
             </div>
           </div>
@@ -2071,6 +2088,14 @@
       <!-- ==================== FINANCEIRO ==================== -->
       <div class="page" id="page-financeiro">
         <div class="stats-grid fin-kpis" id="fin-kpis"></div>
+
+        <div class="table-card" id="fin-lotes-card" style="margin-bottom:16px">
+          <div class="table-header">
+            <h3>🗓️ Fechamentos por empresa</h3>
+            <span style="font-size:11px;color:var(--text3)">lotes semanais / mensais conforme a regra de cada empresa</span>
+          </div>
+          <div id="fin-lotes"></div>
+        </div>
 
         <div class="fin-two">
           <div class="table-card" style="margin:0">
@@ -2344,6 +2369,7 @@
                 <input type="date" class="form-control" id="chamado-previsao">
               </div>
             </div>
+            <div class="live-hint" id="regra-hint" style="margin-bottom:12px"></div>
             <div class="form-grid form-grid-2">
               <div class="form-group">
                 <label class="form-label">Data de Pagamento (quitação)</label>
@@ -2429,9 +2455,97 @@
             <input type="number" class="form-control" id="empresa-valor" step="0.01" min="0" placeholder="0,00">
           </div>
           <div class="form-group">
-            <label class="form-label">Prazo de pagamento (dias)</label>
-            <input type="number" class="form-control" id="empresa-prazo" min="0" placeholder="30">
+            <label class="form-label">Documento de cobrança</label>
+            <select class="form-control" id="rg-doc" onchange="atualizarPreviewRegra()">
+              <option value="nf">Nota fiscal (eu emito)</option>
+              <option value="recibo">Recibo fornecido pela empresa</option>
+              <option value="nenhum">Nenhum</option>
+            </select>
           </div>
+        </div>
+        <div class="regra-box">
+          <div class="form-group">
+            <label class="form-label">Como essa empresa paga?</label>
+            <div class="seg" id="rg-tipo" style="width:100%;display:flex">
+              <button type="button" data-t="dias" style="flex:1" onclick="setRegraTipo('dias')">Prazo em dias</button>
+              <button type="button" data-t="semanal" style="flex:1" onclick="setRegraTipo('semanal')">Semana fechada</button>
+              <button type="button" data-t="mensal" style="flex:1" onclick="setRegraTipo('mensal')">Mês fechado</button>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px">
+              <span style="font-size:11px;color:var(--text3)">Modelos:</span>
+              <button type="button" class="chip" onclick="aplicarPresetRegra('positivo')">Semanal tipo Positivo</button>
+              <button type="button" class="chip" onclick="aplicarPresetRegra('mensal10')">Mês fechado · dia 10 · recibo</button>
+              <button type="button" class="chip" onclick="aplicarPresetRegra('d30')">30 dias</button>
+              <button type="button" class="chip" onclick="aplicarPresetRegra('d45')">45 dias</button>
+            </div>
+          </div>
+          <div id="rg-box-dias" class="form-grid form-grid-2">
+            <div class="form-group">
+              <label class="form-label">Prazo (dias)</label>
+              <input type="number" class="form-control" id="empresa-prazo" min="0" placeholder="30" oninput="atualizarPreviewRegra()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Contados a partir</label>
+              <select class="form-control" id="rg-base" onchange="atualizarPreviewRegra()">
+                <option value="nf">da emissão da NF</option>
+                <option value="atendimento">do atendimento</option>
+              </select>
+            </div>
+          </div>
+          <div id="rg-box-semanal">
+            <div class="form-grid form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Emitir NF na</label>
+                <select class="form-control" id="rg-snf" onchange="atualizarPreviewRegra()">
+                  <option value="1">semana seguinte ao atendimento</option>
+                  <option value="2">2ª semana após o atendimento</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Prazo para emitir a NF (até)</label>
+                <select class="form-control" id="rg-nfate" onchange="atualizarPreviewRegra()">
+                  <option value="1">segunda</option><option value="2">terça</option><option value="3">quarta</option><option value="4">quinta</option><option value="5">sexta</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-grid form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Dinheiro cai na</label>
+                <select class="form-control" id="rg-spag" onchange="atualizarPreviewRegra()">
+                  <option value="1">semana seguinte</option>
+                  <option value="2">2ª semana após o atendimento</option>
+                  <option value="3">3ª semana após o atendimento</option>
+                  <option value="4">4ª semana após o atendimento</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">até</label>
+                <select class="form-control" id="rg-diapag" onchange="atualizarPreviewRegra()">
+                  <option value="1">segunda</option><option value="2">terça</option><option value="3">quarta</option><option value="4">quinta</option><option value="5">sexta</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="rg-box-mensal" class="form-grid form-grid-3">
+            <div class="form-group">
+              <label class="form-label">Fecha no dia</label>
+              <select class="form-control" id="rg-fecha" onchange="atualizarPreviewRegra()"></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Paga no dia</label>
+              <input type="number" class="form-control" id="rg-diames" min="1" max="31" placeholder="10" oninput="atualizarPreviewRegra()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">De qual mês</label>
+              <select class="form-control" id="rg-meses" onchange="atualizarPreviewRegra()">
+                <option value="1">mês seguinte</option><option value="2">2 meses depois</option><option value="3">3 meses depois</option>
+              </select>
+            </div>
+          </div>
+          <label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:10px">
+            <input type="checkbox" id="rg-util" onchange="atualizarPreviewRegra()"> Se cair em sábado/domingo, considerar a segunda-feira
+          </label>
+          <div class="live-hint ok" id="rg-preview" style="display:block"></div>
         </div>
         <div class="form-grid form-grid-2">
           <div class="form-group">
@@ -2726,24 +2840,27 @@
     const supabaseProxy = { from: (t) => db.from(t) };
 
     // ==================== SCHEMA (migração v3) ====================
-    const SCHEMA = { v3emp: false, v3cham: false, receb: false, checked: false };
+    const SCHEMA = { v3emp: false, v3cham: false, receb: false, v4: false, checked: false };
+    const EMP_V4 = ['regra_pagamento'];
     const EMP_V3 = ['cor', 'valor_padrao', 'prazo_pagamento_dias'];
     const CHAM_V3 = ['hora_inicio', 'hora_fim', 'local_atendimento', 'numero_chamado_cliente', 'valor_extra', 'data_prevista_pagamento', 'obs_financeiro'];
 
     async function detectSchema() {
-      const [a, b, r] = await Promise.all([
+      const [a, b, r, v4] = await Promise.all([
         db.from('empresas').select(EMP_V3.join(',')).limit(1),
         db.from('chamados').select(CHAM_V3.join(',')).limit(1),
         db.from('recebimentos').select('id').limit(1),
+        db.from('empresas').select(EMP_V4.join(',')).limit(1),
       ]);
-      SCHEMA.v3emp = !a.error; SCHEMA.v3cham = !b.error; SCHEMA.receb = !r.error; SCHEMA.checked = true;
-      const ok = SCHEMA.v3emp && SCHEMA.v3cham && SCHEMA.receb;
+      SCHEMA.v3emp = !a.error; SCHEMA.v3cham = !b.error; SCHEMA.receb = !r.error; SCHEMA.v4 = !v4.error; SCHEMA.checked = true;
+      const ok = SCHEMA.v3emp && SCHEMA.v3cham && SCHEMA.receb && SCHEMA.v4;
       document.getElementById('schema-banner').style.display = ok ? 'none' : 'flex';
       const st = document.getElementById('schema-status');
       if (st) st.innerHTML = [
         ['Cores / valor padrão / prazo das empresas', SCHEMA.v3emp],
         ['Horários, local, extras e previsão nos chamados', SCHEMA.v3cham],
         ['Tabela de recebimentos (pagamentos parciais)', SCHEMA.receb],
+        ['Regras de pagamento por empresa (semanal / mês fechado) — v4', SCHEMA.v4],
       ].map(([l, v]) => `${v ? '<span style="color:var(--green)">✔</span>' : '<span style="color:var(--amber)">✖</span>'} ${l}`).join('<br>');
     }
     async function recarregarSchema() {
@@ -2895,13 +3012,233 @@
     }
     function cobravel(c) { return c.status !== 'cancelado' && !['sem_cobranca', 'cancelado'].includes(c.status_financeiro) && totalChamado(c) > 0; }
     function saldo(c) { return cobravel(c) ? Math.max(0, +(totalChamado(c) - recebido(c)).toFixed(2)) : 0; }
+    // ==================== REGRAS DE PAGAMENTO POR EMPRESA ====================
+    // dias    → paga N dias após o atendimento ou após a emissão da NF (ex.: 30 / 45 dias)
+    // semanal → fecha a semana (seg–dom); emite NF na semana seguinte; dinheiro cai até o dia X da semana +N (ex.: Positivo)
+    // mensal  → fecha o mês (ou num dia fixo); paga no dia D do mês seguinte (ex.: Intercom, dia 10, recibo)
+    const DIAS_SEM = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+    const DOCS_COB = { nf: 'nota fiscal', recibo: 'recibo da empresa', nenhum: 'sem documento' };
+    const PRESETS_REGRA = {
+      positivo: { tipo: 'semanal', doc: 'nf', semanas_nf: 1, nf_ate: 5, semanas_pag: 2, dia_pag: 4, util: false },
+      mensal10: { tipo: 'mensal', doc: 'recibo', fecha_dia: 0, dia_pag: 10, meses: 1, util: false },
+      d30: { tipo: 'dias', doc: 'nf', dias: 30, base: 'nf', util: false },
+      d45: { tipo: 'dias', doc: 'nf', dias: 45, base: 'nf', util: false },
+    };
+    function regraEmpresa(empId) {
+      const e = empMap[empId] || {};
+      const r = e.regra_pagamento;
+      if (r && r.tipo) return { doc: 'nf', util: false, ...r };
+      return { tipo: 'dias', doc: 'nf', dias: e.prazo_pagamento_dias ?? 30, base: 'nf', util: false, legado: true };
+    }
+    const segundaDe = s => { const d = parseISO(s); return iso(addDays(d, -((d.getDay() + 6) % 7))); };
+    const offSeg = dow => ((+dow || 1) + 6) % 7; // dia da semana (1=seg..5=sex) → deslocamento a partir da segunda
+    function diaNoMes(y, m, dia) { const n = new Date(y, m, 1); const ult = new Date(n.getFullYear(), n.getMonth() + 1, 0).getDate(); return iso(new Date(n.getFullYear(), n.getMonth(), Math.min(Math.max(1, dia), ult))); }
+    function proxDiaUtil(s) { const w = parseISO(s).getDay(); return w === 6 ? addDaysISO(s, 2) : w === 0 ? addDaysISO(s, 1) : s; }
+    function refAtendimento(c) { return c.data_atendimento || c.data_conclusao || c.data_abertura || (c.created_at || '').slice(0, 10) || null; }
+    function nfPendente(c) { return ['sem_cobranca', 'aguardando_nf'].includes(c.status_financeiro || 'sem_cobranca') && !c.data_emissao_nf; }
+
+    // Lote (ciclo de cobrança) ao qual o chamado pertence — só existe nas regras semanal / mensal
+    function cicloDe(c, r = regraEmpresa(c.empresa_id)) {
+      const ref = refAtendimento(c);
+      if (!ref || r.tipo === 'dias') return null;
+      if (r.tipo === 'semanal') {
+        const ini = segundaDe(ref), fim = addDaysISO(ini, 6);
+        const sNf = Math.max(1, +r.semanas_nf || 1), sPag = Math.max(sNf, +r.semanas_pag || 2);
+        const nfIni = addDaysISO(ini, 7 * sNf), nfFim = addDaysISO(nfIni, offSeg(r.nf_ate || 5));
+        let semPag = addDaysISO(ini, 7 * sPag);
+        // se a NF sair depois da janela (ou ainda não saiu e a janela passou), o pagamento escorrega junto
+        if (r.doc === 'nf') {
+          const hoje = todayISO();
+          const emis = c.data_emissao_nf || (nfPendente(c) && hoje > nfFim ? hoje : null);
+          if (emis && emis > nfFim) semPag = addDaysISO(segundaDe(emis), 7 * (sPag - sNf));
+        }
+        let pag = addDaysISO(semPag, offSeg(r.dia_pag || 4));
+        if (r.util) pag = proxDiaUtil(pag);
+        return { chave: 'S' + ini, ini, fim, nfIni, nfFim, pag, label: `Semana ${fmtCurto(ini)} a ${fmtCurto(fim)}` };
+      }
+      const fd = Math.min(28, Math.max(0, +r.fecha_dia || 0)); // 0 = último dia do mês
+      let [y, m, d] = ref.split('-').map(Number); m -= 1;
+      if (fd && d > fd) { m += 1; if (m > 11) { m = 0; y++; } }
+      const ini = fd ? iso(new Date(y, m - 1, fd + 1)) : iso(new Date(y, m, 1));
+      const fim = fd ? iso(new Date(y, m, fd)) : iso(new Date(y, m + 1, 0));
+      const nfIni = addDaysISO(fim, 1), nfFim = addDaysISO(fim, 5);
+      let pag = diaNoMes(y, m + Math.max(1, +r.meses || 1), +r.dia_pag || 10);
+      if (r.util) pag = proxDiaUtil(pag);
+      return { chave: 'M' + fim, ini, fim, nfIni, nfFim, pag, label: fd ? `Período ${fmtCurto(ini)} a ${fmtCurto(fim)}` : `Mês de ${MESES[m]}/${y}` };
+    }
+    function calcPrevisaoRegra(c, r = regraEmpresa(c.empresa_id)) {
+      const ci = cicloDe(c, r);
+      if (ci) return { data: ci.pag, estimada: false, fonte: r.tipo === 'semanal' ? 'semana fechada' : 'mês fechado', ciclo: ci };
+      const base = r.base === 'atendimento' ? refAtendimento(c) : (c.data_emissao_nf || c.data_conclusao || refAtendimento(c));
+      if (!base) return { data: null, estimada: true };
+      let d = addDaysISO(base, +r.dias || 0);
+      if (r.util) d = proxDiaUtil(d);
+      return { data: d, estimada: !(r.base === 'atendimento' || c.data_emissao_nf), fonte: `estimada (+${+r.dias || 0}d)` };
+    }
     function previsao(c) {
       if (c.data_prevista_pagamento) return { data: c.data_prevista_pagamento, estimada: false, fonte: 'previsão' };
       if (c.data_vencimento) return { data: c.data_vencimento, estimada: false, fonte: 'vencimento' };
-      const base = c.data_emissao_nf || c.data_conclusao || c.data_atendimento || c.data_abertura || (c.created_at || '').slice(0, 10);
-      if (!base) return { data: null, estimada: true };
-      const prazo = empMap[c.empresa_id]?.prazo_pagamento_dias ?? 30;
-      return { data: addDaysISO(base, prazo || 0), estimada: true, fonte: `estimada (+${prazo}d)` };
+      return calcPrevisaoRegra(c);
+    }
+    function vencimentoParaNF(c, emissao) {
+      return calcPrevisaoRegra({ ...c, data_emissao_nf: emissao, status_financeiro: 'nf_emitida', data_vencimento: null, data_prevista_pagamento: null }).data;
+    }
+    function prazoEquivalente(r) {
+      if (r.tipo === 'dias') return Math.max(0, parseInt(r.dias) || 0);
+      const p = calcPrevisaoRegra({ data_atendimento: todayISO(), status_financeiro: 'nf_emitida', data_emissao_nf: null }, r).data;
+      return p ? Math.max(0, diffDays(p, todayISO())) : 30;
+    }
+    function descreverRegra(r, curto) {
+      const doc = DOCS_COB[r.doc] || 'nota fiscal';
+      if (r.tipo === 'semanal') {
+        const sNf = +r.semanas_nf || 1, sPag = +r.semanas_pag || 2, dp = DIAS_SEM[+r.dia_pag || 4];
+        if (curto) return `Semana fechada · cai ${dp.slice(0, 3)}. de ${sPag} sem. depois · ${doc}`;
+        return `Fecha a semana (seg–dom)${r.doc === 'nf' ? ` · NF na ${sNf === 1 ? 'semana seguinte' : sNf + 'ª semana'} até ${DIAS_SEM[+r.nf_ate || 5]}` : ''} · dinheiro cai até ${dp} da ${sPag}ª semana após o atendimento`;
+      }
+      if (r.tipo === 'mensal') {
+        const fd = +r.fecha_dia || 0, mm = +r.meses || 1;
+        const quando = mm === 1 ? 'do mês seguinte' : `${mm} meses depois`;
+        if (curto) return `Mês fechado${fd ? ` (dia ${fd})` : ''} · paga dia ${+r.dia_pag || 10} ${quando} · ${doc}`;
+        return `Fecha ${fd ? 'no dia ' + fd : 'no último dia do mês'} · paga no dia ${+r.dia_pag || 10} ${quando} · ${doc}`;
+      }
+      return `${+r.dias || 0} dias após ${r.base === 'atendimento' ? 'o atendimento' : 'a NF'}${curto ? '' : ''} · ${doc}`;
+    }
+    function exemploRegra(r, dataRef = todayISO()) {
+      const c = { data_atendimento: dataRef, status_financeiro: 'aguardando_nf' };
+      const p = calcPrevisaoRegra(c, r), ci = p.ciclo;
+      const dia = d => `${DIAS_SEM[parseISO(d).getDay()].slice(0, 3)} ${fmtCurto(d)}`;
+      if (!ci) return `Exemplo: atendido em ${fmtCurto(dataRef)}${r.doc === 'nf' && r.base !== 'atendimento' ? ' e NF emitida no mesmo dia' : ''} → cai em <b>${dia(p.data)}</b> (${diffDays(p.data, dataRef)} dias).`;
+      return `Exemplo: atendido em ${fmtCurto(dataRef)} → lote <b>${ci.label.toLowerCase()}</b>` +
+        (r.doc === 'nf' ? ` → emitir NF de ${dia(ci.nfIni)} a ${dia(ci.nfFim)}` : r.doc === 'recibo' ? ' → recibo da empresa' : '') +
+        ` → dinheiro cai até <b>${dia(ci.pag)}</b> (${diffDays(ci.pag, dataRef)} dias).`;
+    }
+
+    // ---------- formulário da regra (modal empresa) ----------
+    let regraTipoAtual = 'dias';
+    function setRegraTipo(t) {
+      regraTipoAtual = t;
+      document.querySelectorAll('#rg-tipo button').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+      F('rg-box-dias').style.display = t === 'dias' ? '' : 'none';
+      F('rg-box-semanal').style.display = t === 'semanal' ? '' : 'none';
+      F('rg-box-mensal').style.display = t === 'mensal' ? '' : 'none';
+      atualizarPreviewRegra();
+    }
+    function preencherRegraForm(r) {
+      if (!F('rg-fecha').options.length) F('rg-fecha').innerHTML = '<option value="0">último dia do mês</option>' + Array.from({ length: 28 }, (_, i) => `<option value="${i + 1}">dia ${i + 1}</option>`).join('');
+      F('rg-doc').value = r.doc || 'nf';
+      F('empresa-prazo').value = r.tipo === 'dias' ? (r.dias ?? 30) : '';
+      F('rg-base').value = r.base || 'nf';
+      F('rg-snf').value = String(r.semanas_nf || 1); F('rg-nfate').value = String(r.nf_ate || 5);
+      F('rg-spag').value = String(r.semanas_pag || 2); F('rg-diapag').value = String(r.dia_pag || 4);
+      F('rg-fecha').value = String(r.fecha_dia || 0); F('rg-diames').value = r.tipo === 'mensal' ? (r.dia_pag || 10) : 10; F('rg-meses').value = String(r.meses || 1);
+      F('rg-util').checked = !!r.util;
+      setRegraTipo(r.tipo || 'dias');
+    }
+    function aplicarPresetRegra(k) { preencherRegraForm(PRESETS_REGRA[k]); }
+    function lerRegraForm() {
+      const t = regraTipoAtual, base = { tipo: t, doc: F('rg-doc').value, util: F('rg-util').checked };
+      if (t === 'semanal') return { ...base, semanas_nf: +F('rg-snf').value, nf_ate: +F('rg-nfate').value, semanas_pag: Math.max(+F('rg-snf').value, +F('rg-spag').value), dia_pag: +F('rg-diapag').value };
+      if (t === 'mensal') return { ...base, fecha_dia: +F('rg-fecha').value, dia_pag: Math.min(31, Math.max(1, parseInt(F('rg-diames').value) || 10)), meses: +F('rg-meses').value };
+      return { ...base, dias: F('empresa-prazo').value === '' ? 30 : Math.max(0, parseInt(F('empresa-prazo').value) || 0), base: F('rg-base').value };
+    }
+    function atualizarPreviewRegra() {
+      const r = lerRegraForm();
+      F('rg-preview').innerHTML = `<b>${esc(descreverRegra(r))}</b><br>${exemploRegra(r)}`;
+    }
+
+    // ---------- dica no formulário do chamado ----------
+    function atualizarHintRegra() {
+      const el = F('regra-hint'); if (!el) return;
+      const emp = F('chamado-empresa').value;
+      if (!emp) { el.className = 'live-hint'; return; }
+      const r = regraEmpresa(emp);
+      const c = { empresa_id: emp, data_atendimento: F('chamado-atendimento').value || null, data_abertura: F('chamado-abertura').value || null, data_emissao_nf: F('chamado-emissao-nf').value || null, status_financeiro: F('chamado-status-fin').value };
+      const p = calcPrevisaoRegra(c, r), ci = p.ciclo;
+      let txt = `💡 <b>${esc(empMap[emp]?.nome || '')}</b>: ${esc(descreverRegra(r))}.`;
+      if (p.data) txt += `<br>${ci ? `Lote ${esc(ci.label.toLowerCase())}${r.doc === 'nf' ? ` · NF de ${fmtCurto(ci.nfIni)} a ${fmtCurto(ci.nfFim)}` : ''} · ` : ''}previsão automática: <b>${formatDate(p.data)}</b>`;
+      if (F('chamado-previsao').value || F('chamado-vencimento').value) txt += `<br><span style="opacity:.8">“Vencimento”/“Previsão de cair” preenchidos à mão têm prioridade sobre a regra.</span>`;
+      el.className = 'live-hint ok'; el.innerHTML = txt;
+    }
+
+    // ---------- fechamentos (lotes) ----------
+    let finLote = null;
+    function fechamentos() {
+      const hoje = todayISO(), map = {};
+      allChamados.forEach(c => {
+        if (c.status === 'cancelado' || c.status_financeiro === 'cancelado') return;
+        const r = regraEmpresa(c.empresa_id); if (r.tipo === 'dias') return;
+        const ci = cicloDe(c, r); if (!ci || ci.ini > hoje) return;
+        const k = c.empresa_id + '|' + ci.chave;
+        const g = map[k] ||= { k, emp: c.empresa_id, r, ci, chs: [], total: 0, saldo: 0, nfPend: 0, naoConcl: 0, pag: null };
+        g.chs.push(c);
+        if (cobravel(c)) { g.total += totalChamado(c); g.saldo += saldo(c); }
+        if (r.doc === 'nf' && c.status_financeiro === 'aguardando_nf') g.nfPend++;
+        if (['pendente', 'em_andamento'].includes(c.status)) g.naoConcl++;
+        if (saldo(c) > 0) { const p = previsao(c).data; if (p && (!g.pag || p > g.pag)) g.pag = p; }
+      });
+      return Object.values(map).map(g => {
+        g.pag ||= g.ci.pag;
+        const ci = g.ci;
+        if (hoje <= ci.fim) g.st = { cls: 'run', txt: `Em andamento · fecha ${DIAS_SEM[parseISO(ci.fim).getDay()].slice(0, 3)} ${fmtCurto(ci.fim)}`, ord: 3 };
+        else if (g.nfPend) g.st = hoje <= ci.nfFim ? { cls: 'nf', txt: `🧾 Emitir NF até ${DIAS_SEM[parseISO(ci.nfFim).getDay()].slice(0, 3)} ${fmtCurto(ci.nfFim)}`, ord: 1 } : { cls: 'late', txt: `🧾 NF atrasada (era até ${fmtCurto(ci.nfFim)})`, ord: 0 };
+        else if (g.naoConcl) g.st = { cls: 'warn', txt: `${g.naoConcl} chamado(s) não concluído(s)`, ord: 2 };
+        else if (g.saldo <= 0) g.st = null;
+        else if (hoje <= g.pag) g.st = { cls: 'wait', txt: `Aguardando · cai até ${fmtCurto(g.pag)}`, ord: 4 };
+        else g.st = { cls: 'late', txt: `Pagamento atrasado (era ${fmtCurto(g.pag)})`, ord: 0 };
+        return g;
+      }).filter(g => g.st).sort((a, b) => a.st.ord - b.st.ord || a.pag.localeCompare(b.pag));
+    }
+    function renderFechamentos() {
+      const temRegra = allEmpresas.some(e => regraEmpresa(e.id).tipo !== 'dias');
+      const box = F('fin-lotes'); if (!box) return;
+      if (!temRegra) { box.innerHTML = `<div class="side-empty">Nenhuma empresa com fechamento semanal ou mensal.<br>Edite a empresa (ex.: Positivo, Intercom) e escolha <b>Semana fechada</b> ou <b>Mês fechado</b>.</div>`; return; }
+      const gs = fechamentos();
+      if (!gs.length) { box.innerHTML = '<div class="side-empty">🎉 Nenhum lote pendente</div>'; return; }
+      box.innerHTML = gs.map(g => {
+        const nome = esc(empMap[g.emp]?.nome || 'Sem empresa');
+        const b = [];
+        if (g.nfPend && g.st.cls !== 'run') b.push(`<button class="btn btn-xs btn-purple" onclick="abrirNFLote('${g.k}')">🧾 NF do lote</button>`);
+        else if (g.nfPend && g.st.cls === 'run') b.push(`<button class="btn btn-xs btn-ghost" onclick="abrirNFLote('${g.k}')" title="A semana ainda não fechou">🧾 NF</button>`);
+        if (g.saldo > 0) b.push(`<button class="btn btn-xs btn-green" onclick="receberLote('${g.k}')">💰 Recebi</button>`);
+        b.push(`<button class="btn btn-xs btn-ghost" onclick="copiarRelacaoLote('${g.k}')" title="Copiar a lista de chamados do lote (para conferência / pedido de NF)">📋</button>`);
+        b.push(`<button class="btn btn-xs btn-ghost" onclick="verLote('${g.k}')">Ver</button>`);
+        return `<div class="lote-row" style="--c:${corEmpresa(g.emp)}">
+          <div class="lote-main"><div class="t">${nome} · ${esc(g.ci.label)}</div>
+            <div class="s">${g.chs.length} chamado(s)${g.nfPend ? ` · ${g.nfPend} sem NF` : ''} · cai até ${formatDate(g.pag)} · ${esc(descreverRegra(g.r, true))}</div></div>
+          <span class="lote-st ${g.st.cls}">${g.st.txt}</span>
+          <div class="lote-val" style="color:${g.saldo > 0 ? 'var(--amber)' : 'var(--text3)'}">${money(g.saldo)}</div>
+          <div class="row-actions">${b.join('')}</div></div>`;
+      }).join('');
+    }
+    function loteById(k) { return fechamentos().find(g => g.k === k); }
+    function verLote(k) {
+      const g = loteById(k); if (!g) return;
+      finLote = { k, ids: new Set(g.chs.map(c => c.id)), label: `${empMap[g.emp]?.nome || ''} · ${g.ci.label}` };
+      F('fin-empresa').value = ''; F('fin-periodo').value = ''; F('fin-busca').value = '';
+      finTab = 'todos'; finSel.clear(); renderFinanceiro();
+      F('fin-tabs').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function limparFiltroLote() { finLote = null; finTab = 'abertos'; renderFinanceiro(); }
+    function receberLote(k) {
+      const g = loteById(k); if (!g) return;
+      finSel.clear(); g.chs.filter(c => saldo(c) > 0).forEach(c => finSel.add(c.id));
+      abrirRecebimentoLote();
+      F('rc-obs').value = `${empMap[g.emp]?.nome || ''} · ${g.ci.label}`;
+    }
+    function copiarRelacaoLote(k) {
+      const g = loteById(k); if (!g) return;
+      const linhas = g.chs.filter(cobravel).sort((a, b) => (refAtendimento(a) || '').localeCompare(refAtendimento(b) || '')).map(c =>
+        [formatDate(refAtendimento(c)), c.numero_rat ? 'RAT ' + c.numero_rat : '', c.numero_chamado_cliente ? 'Chamado ' + c.numero_chamado_cliente : '', c.titulo, money(totalChamado(c))].filter(Boolean).join(' · '));
+      const txt = `${empMap[g.emp]?.nome || ''} — ${g.ci.label}\n\n${linhas.join('\n')}\n\nTotal: ${money(g.total)} (${linhas.length} chamado(s))`;
+      navigator.clipboard?.writeText(txt).then(() => toast('Relação do lote copiada!', 'success')).catch(() => prompt('Copie a relação:', txt));
+    }
+    function sideFechamentos() {
+      let gs = [];
+      try { gs = fechamentos().filter(g => ['nf', 'late'].includes(g.st.cls) || (g.st.cls === 'wait' && diffDays(g.pag, todayISO()) <= 7)); } catch { return ''; }
+      if (!gs.length) return '';
+      return `<div class="side-card"><h4>💸 Fechamentos <small>${gs.length}</small></h4>${gs.slice(0, 5).map(g => `<div class="side-item" onclick="navigate('financeiro')">
+        <span class="dot" style="--c:${corEmpresa(g.emp)}"></span><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(empMap[g.emp]?.nome || '')} · ${esc(g.ci.label)}</div>
+        <div style="font-size:11px;color:${g.st.cls === 'late' ? 'var(--red)' : 'var(--text3)'}">${g.st.txt} · ${money(g.saldo)}</div></div></div>`).join('')}</div>`;
     }
     function dueInfo(c) {
       const p = previsao(c);
@@ -3211,6 +3548,7 @@
         `<div class="mini-row" style="cursor:pointer" onclick="soEmpresa('${id}')" title="Ver só esta empresa"><span class="dot" style="--c:${corEmpresa(id)}"></span>${esc(empMap[id]?.nome || 'Sem empresa')}<span class="v">${x.n} · ${money(x.v)}</span></div>`).join('') +
         `<div class="mini-row" style="border-top:1px solid var(--border);font-weight:600">Total<span class="v" style="color:var(--green)">${per.length} · ${money(per.reduce((s, e) => s + totalChamado(e.c), 0))}</span></div>`
           : '<div class="side-empty">Sem agendamentos no período</div>'}</div>
+        ${sideFechamentos()}
         ${semData.length ? `<div class="side-card"><h4>⏳ Sem data agendada <small>${semData.length}</small></h4>${semData.slice(0, 6).map(c => `<div class="side-item" onclick="editarChamado('${c.id}')"><div class="tm">—</div><div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.titulo)}</div><div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px"><span class="dot" style="--c:${corEmpresa(c.empresa_id)}"></span>${esc(nomeEmpresa(c))}</div></div><span style="font-size:11px;color:var(--accent)">agendar</span></div>`).join('')}</div>` : ''}`;
     }
 
@@ -3398,6 +3736,7 @@
       if (!F('chamado-id').value && !F('chamado-valor').value && num(e.valor_padrao) > 0) F('chamado-valor').value = num(e.valor_padrao).toFixed(2);
       F('chamado-local').placeholder = e.endereco || 'Endereço do atendimento';
       if (SCHEMA.v3cham && !F('chamado-id').value && !F('chamado-local').value && e.endereco) F('chamado-local').value = e.endereco;
+      atualizarHintRegra();
     }
     function onHoraIniChange() {
       const hi = toMin(F('chamado-hora-ini').value), hf = toMin(F('chamado-hora-fim').value);
@@ -3411,6 +3750,7 @@
       atualizarHintConflito();
     }
     function atualizarHintConflito() {
+      atualizarHintRegra();
       const el = F('conflito-hint');
       const d = F('chamado-atendimento').value;
       if (!d) { el.className = 'live-hint'; return; }
@@ -3533,7 +3873,7 @@
       if (!p.hora_inicio) p.hora_fim = null;
       // automações
       if (p.status === 'concluido' && !p.data_conclusao) p.data_conclusao = p.data_atendimento && p.data_atendimento <= todayISO() ? p.data_atendimento : todayISO();
-      if (p.status === 'concluido' && p.status_financeiro === 'sem_cobranca' && (p.valor_servico + p.valor_extra) > 0 && (!editOriginal || editOriginal.status !== 'concluido')) p.status_financeiro = 'aguardando_nf';
+      if (p.status === 'concluido' && p.status_financeiro === 'sem_cobranca' && (p.valor_servico + p.valor_extra) > 0 && (!editOriginal || editOriginal.status !== 'concluido')) p.status_financeiro = regraEmpresa(p.empresa_id).doc === 'nf' ? 'aguardando_nf' : 'aguardando_pagamento';
       if (p.numero_nf && p.status_financeiro === 'aguardando_nf') { p.status_financeiro = 'nf_emitida'; p.data_emissao_nf ||= todayISO(); }
       if (p.status_financeiro === 'pago' && !p.data_pagamento) p.data_pagamento = todayISO();
       if (p.status === 'cancelado' && FIN_ABERTO.includes(p.status_financeiro)) p.status_financeiro = 'cancelado';
@@ -3798,6 +4138,7 @@
     function finFiltrar(tab) {
       const q = (F('fin-busca').value || '').toLowerCase(), fe = F('fin-empresa').value, per = F('fin-periodo').value;
       return allChamados.filter(c => {
+        if (finLote && !finLote.ids.has(c.id)) return false;
         if (fe && c.empresa_id !== fe) return false;
         if (q && ![c.titulo, c.numero_rat, c.numero_nf, c.numero_chamado_cliente, nomeEmpresa(c)].join(' ').toLowerCase().includes(q)) return false;
         if (per) {
@@ -3843,7 +4184,7 @@
         kpi('Recebido no mês', money(rm.total), `${rm.n} recebimento(s)`, 'var(--green)', '✅', 'pago') +
         kpi('NFs a emitir', nfs.length, money(soma(nfs, totalChamado)) + ' sem nota', 'var(--purple)', '🧾', 'aguardando_nf');
 
-      renderFinEmpresas(); renderFinPrevisao(); renderFinFluxo();
+      renderFechamentos(); renderFinEmpresas(); renderFinPrevisao(); renderFinFluxo();
       F('fin-tabs').innerHTML = FIN_TABS.map(([k, l]) => {
         const n = finFiltrar(k).length;
         return `<button class="tab-btn ${finTab === k ? 'active' : ''}" onclick="setFinTab('${k}')">${l} <span style="font-family:var(--mono);font-size:10px;opacity:.7">${n}</span></button>`;
@@ -3912,7 +4253,7 @@
     function renderFinTabela() {
       const list = finFiltrar(finTab);
       const titles = Object.fromEntries(FIN_TABS);
-      F('fin-tab-title').textContent = (titles[finTab] || '').replace(/^\S+\s/, '');
+      F('fin-tab-title').innerHTML = esc((titles[finTab] || '').replace(/^\S+\s/, '')) + (finLote ? `<span class="lote-filtro">${esc(finLote.label)}<button onclick="limparFiltroLote()" title="Remover filtro">✕</button></span>` : '');
       [...finSel].forEach(id => { if (!list.some(c => c.id === id)) finSel.delete(id); });
       const tot = list.reduce((s, c) => s + totalChamado(c), 0), rec = list.reduce((s, c) => s + Math.min(recebido(c), totalChamado(c)), 0), sd = list.reduce((s, c) => s + saldo(c), 0);
       F('fin-rodape').innerHTML = `<span style="color:var(--text3)">${list.length} chamado(s)</span><span>Total ${money(tot)}</span><span style="color:var(--green)">Recebido ${money(rec)}</span><span style="color:var(--amber)">Falta ${money(sd)}</span>`;
@@ -3982,10 +4323,9 @@
       if (numero === null) return;
       for (const id of ids) {
         const c = allChamados.find(x => x.id === id);
-        const prazo = empMap[c.empresa_id]?.prazo_pagamento_dias ?? 30;
         const patch = { status_financeiro: 'nf_emitida', data_emissao_nf: c.data_emissao_nf || todayISO() };
         if (numero) patch.numero_nf = numero;
-        if (!c.data_vencimento) patch.data_vencimento = addDaysISO(patch.data_emissao_nf, prazo);
+        if (!c.data_vencimento) patch.data_vencimento = vencimentoParaNF(c, patch.data_emissao_nf);
         await db.from('chamados').eq('id', id).update(patch);
       }
       toast('NF registrada nos chamados selecionados', 'success'); finSel.clear(); await reloadAndRefresh();
@@ -4087,27 +4427,42 @@
     }
 
     // ---------- NF rápida ----------
-    let nfCtx = null;
+    let nfCtx = null; // array de ids
     function abrirNFRapida(id) {
       const c = allChamados.find(x => x.id === id); if (!c) return;
-      nfCtx = id;
+      nfCtx = [id];
       F('nf-sub').textContent = `${nomeEmpresa(c)} · ${c.titulo} · ${money(totalChamado(c))}`;
       F('nfq-numero').value = c.numero_nf || '';
       F('nfq-emissao').value = c.data_emissao_nf || todayISO();
       nfqRecalcVenc(c.data_vencimento);
       closeModal('modal-detalhe'); openModal('modal-nf'); setTimeout(() => F('nfq-numero').focus(), 50);
     }
+    function abrirNFLote(k) {
+      const g = loteById(k); if (!g) return;
+      const alvo = g.chs.filter(c => c.status_financeiro === 'aguardando_nf');
+      if (!alvo.length) { toast('Nenhum chamado aguardando NF neste lote', 'info'); return; }
+      nfCtx = alvo.map(c => c.id);
+      const tot = alvo.reduce((s, c) => s + totalChamado(c), 0);
+      F('nf-sub').textContent = `${empMap[g.emp]?.nome || ''} · ${g.ci.label} · ${alvo.length} chamado(s) · ${money(tot)}` + (g.naoConcl ? ` · atenção: ${g.naoConcl} ainda não concluído(s)` : '');
+      F('nfq-numero').value = '';
+      F('nfq-emissao').value = todayISO();
+      nfqRecalcVenc();
+      openModal('modal-nf'); setTimeout(() => F('nfq-numero').focus(), 50);
+    }
     function nfqRecalcVenc(fixo) {
-      const c = allChamados.find(x => x.id === nfCtx); if (!c) return;
-      const prazo = empMap[c.empresa_id]?.prazo_pagamento_dias ?? 30;
-      F('nfq-venc').value = (typeof fixo === 'string' && fixo) || addDaysISO(F('nfq-emissao').value || todayISO(), prazo);
-      F('nfq-hint').textContent = `Prazo de pagamento da empresa: ${prazo} dias (altere no cadastro da empresa).`;
+      const c = allChamados.find(x => x.id === (nfCtx || [])[0]); if (!c) return;
+      const r = regraEmpresa(c.empresa_id);
+      F('nfq-venc').value = (typeof fixo === 'string' && fixo) || vencimentoParaNF(c, F('nfq-emissao').value || todayISO()) || '';
+      F('nfq-hint').textContent = `Regra da empresa: ${descreverRegra(r)} (altere no cadastro da empresa).`;
     }
     async function salvarNFRapida() {
+      const ids = nfCtx || []; if (!ids.length) return;
       const patch = { numero_nf: F('nfq-numero').value || null, data_emissao_nf: F('nfq-emissao').value || todayISO(), data_vencimento: F('nfq-venc').value || null, status_financeiro: 'nf_emitida' };
-      const { error } = await db.from('chamados').eq('id', nfCtx).update(patch);
-      if (error) { toast('Erro: ' + error.message, 'error'); return; }
-      toast('NF registrada — previsão de pagamento ' + formatDate(patch.data_vencimento), 'success');
+      for (const id of ids) {
+        const { error } = await db.from('chamados').eq('id', id).update(patch);
+        if (error) { toast('Erro: ' + error.message, 'error'); return; }
+      }
+      toast((ids.length > 1 ? `NF registrada em ${ids.length} chamados` : 'NF registrada') + (patch.data_vencimento ? ' — previsão de pagamento ' + formatDate(patch.data_vencimento) : ''), 'success');
       closeModal('modal-nf'); await reloadAndRefresh();
     }
 
@@ -4126,7 +4481,7 @@
           <div style="display:flex;align-items:flex-start;justify-content:space-between">
             <div style="flex:1;min-width:0"><h3 style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:7px"><span class="dot" style="--c:${corEmpresa(e.id)}"></span>${esc(e.nome)}</h3>
               <p>${esc(e.cnpj || 'CNPJ não informado')}</p>${e.contato ? `<p style="margin-top:2px">👤 ${esc(e.contato)}</p>` : ''}
-              ${num(e.valor_padrao) || e.prazo_pagamento_dias ? `<p style="margin-top:2px">💲 ${num(e.valor_padrao) ? money(e.valor_padrao) + '/chamado' : ''}${e.prazo_pagamento_dias ? ` · paga em ${e.prazo_pagamento_dias}d` : ''}</p>` : ''}</div>
+              ${num(e.valor_padrao) ? `<p style="margin-top:2px">💲 ${num(e.valor_padrao) ? money(e.valor_padrao) + '/chamado' : ''}</p>` : ''}<p style="margin-top:2px">🗓️ ${esc(descreverRegra(regraEmpresa(e.id), true))}</p></div>
             <div style="display:flex;gap:4px;flex-shrink:0;margin-left:8px">
               <button class="btn btn-ghost btn-sm btn-icon" title="Agendar" onclick="event.stopPropagation();novoChamado({empresa_id:'${e.id}',data:todayISO()})">＋</button>
               <button class="btn btn-ghost btn-sm btn-icon" title="Editar" onclick="event.stopPropagation();editarEmpresa('${e.id}')">✎</button>
@@ -4155,6 +4510,7 @@
     function novaEmpresa() {
       F('empresa-id').value = ''; F('modal-empresa-title').textContent = 'Nova Empresa';
       ['nome', 'cnpj', 'telefone', 'contato', 'email', 'endereco', 'valor', 'prazo'].forEach(f => F('empresa-' + f).value = '');
+      preencherRegraForm(PRESETS_REGRA.d30);
       const usadas = new Set(allEmpresas.map(e => corEmpresa(e.id)));
       renderSwatches(PALETA.find(c => !usadas.has(c)) || PALETA[allEmpresas.length % PALETA.length]);
       F('btn-excluir-empresa').style.display = 'none';
@@ -4164,7 +4520,8 @@
       const e = empMap[id]; if (!e) return;
       F('empresa-id').value = e.id; F('modal-empresa-title').textContent = 'Editar Empresa';
       ['nome', 'cnpj', 'telefone', 'contato', 'email', 'endereco'].forEach(f => F('empresa-' + f).value = e[f] || '');
-      F('empresa-valor').value = e.valor_padrao || ''; F('empresa-prazo').value = e.prazo_pagamento_dias ?? '';
+      F('empresa-valor').value = e.valor_padrao || '';
+      preencherRegraForm(regraEmpresa(e.id));
       renderSwatches(corEmpresa(e.id));
       F('btn-excluir-empresa').style.display = '';
       openModal('modal-empresa');
@@ -4182,11 +4539,14 @@
       const payload = stripCols({
         nome, cnpj: F('empresa-cnpj').value || null, telefone: F('empresa-telefone').value || null, contato: F('empresa-contato').value || null,
         email: F('empresa-email').value || null, endereco: F('empresa-endereco').value || null,
-        cor: F('empresa-cor').value || null, valor_padrao: num(F('empresa-valor').value), prazo_pagamento_dias: F('empresa-prazo').value === '' ? 30 : parseInt(F('empresa-prazo').value)
+        cor: F('empresa-cor').value || null, valor_padrao: num(F('empresa-valor').value), prazo_pagamento_dias: prazoEquivalente(lerRegraForm()),
+        regra_pagamento: lerRegraForm()
       }, EMP_V3, SCHEMA.v3emp);
+      if (!SCHEMA.v4) delete payload.regra_pagamento;
       const { error } = id ? await db.from('empresas').eq('id', id).update(payload) : await db.from('empresas').insert([payload]);
       if (error) { toast('Erro: ' + error.message, 'error'); return; }
       if (!SCHEMA.v3emp) toast('Cor/valor/prazo não salvos: execute a migração v3', 'info');
+      else if (!SCHEMA.v4 && lerRegraForm().tipo !== 'dias') toast('Regra semanal/mensal não salva: execute a migração v4 (Configurações → Copiar SQL)', 'info');
       toast(id ? 'Empresa atualizada!' : 'Empresa cadastrada!', 'success');
       closeModal('modal-empresa'); await reloadAndRefresh();
     }
@@ -4474,6 +4834,9 @@ drop policy if exists anexos_dono on storage.objects;
 create policy anexos_dono on storage.objects for all to authenticated
   using (bucket_id = 'chamados-anexos' and public.is_autorizado())
   with check (bucket_id = 'chamados-anexos' and public.is_autorizado());
+
+-- ---------- v4: regra de pagamento por empresa (semanal / mês fechado / dias) ----------
+alter table public.empresas add column if not exists regra_pagamento jsonb;
 
 -- Atualiza o cache do PostgREST para as novas colunas aparecerem na API na hora
 notify pgrst, 'reload schema';
