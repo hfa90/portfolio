@@ -1942,6 +1942,29 @@
             <button class="btn btn-ghost" onclick="sair()">Sair</button>
           </div>
           <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">
+            <h3 style="font-size:13px;font-weight:600;margin-bottom:6px">🔔 Lembretes no celular</h3>
+            <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Notificação na véspera e no dia de cada chamado agendado (pendente / em andamento), mesmo com o app fechado.</div>
+            <div id="push-status" class="live-hint" style="display:block;margin-bottom:12px;background:var(--surface2);color:var(--text2);border:1px solid var(--border)">Verificando…</div>
+            <div class="form-grid form-grid-2">
+              <div class="form-group">
+                <label class="form-label">Véspera — avisar a partir de</label>
+                <input type="time" class="form-control" id="push-hora-vespera" value="19:00" onchange="salvarPushConfig()">
+              </div>
+              <div class="form-group">
+                <label class="form-label">No dia — avisar a partir de</label>
+                <input type="time" class="form-control" id="push-hora-dia" value="06:30" onchange="salvarPushConfig()">
+              </div>
+            </div>
+            <label style="display:flex;gap:8px;align-items:center;font-size:12px;color:var(--text2);cursor:pointer;margin-bottom:12px">
+              <input type="checkbox" id="push-ativo" checked onchange="salvarPushConfig()"> Lembretes ligados
+            </label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary btn-sm" id="btn-push-ativar" onclick="ativarPush()">🔔 Ativar neste aparelho</button>
+              <button class="btn btn-ghost btn-sm" onclick="testarPush()">Enviar teste</button>
+              <button class="btn btn-ghost btn-sm" id="btn-push-desativar" onclick="desativarPush()" style="display:none">Desativar neste aparelho</button>
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:16px">
             <h3 style="font-size:13px;font-weight:600;margin-bottom:10px">🗄️ Banco de dados</h3>
             <div id="schema-status" style="font-size:12px;color:var(--text2);line-height:1.9"></div>
             <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
@@ -3283,7 +3306,7 @@
       document.getElementById('page-title').textContent = info.title;
       document.getElementById('page-sub').textContent = info.sub();
       document.getElementById('topbar-actions').innerHTML = info.actions;
-      if (page === 'config') { document.getElementById('cfg-url').value = SUPABASE_URL; document.getElementById('cfg-key').value = SUPABASE_KEY; document.getElementById('pref-ini').value = PREFS.ini; document.getElementById('pref-fim').value = PREFS.fim; document.getElementById('pref-dur').value = PREFS.dur; }
+      if (page === 'config') { document.getElementById('cfg-url').value = SUPABASE_URL; document.getElementById('cfg-key').value = SUPABASE_KEY; document.getElementById('pref-ini').value = PREFS.ini; document.getElementById('pref-fim').value = PREFS.fim; document.getElementById('pref-dur').value = PREFS.dur; atualizarPushUI(); }
       refreshCurrent();
     }
     function refreshCurrent() {
@@ -4706,13 +4729,100 @@
       });
     })();
 
+    // ==================== LEMBRETES (Web Push) ====================
+    const PUSH_OK = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && location.protocol !== 'file:';
+    const ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const ehStandalone = () => window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch(e => console.warn('SW', e));
+      navigator.serviceWorker.addEventListener('message', e => { if (e.data?.tipo === 'abrir') { history.replaceState(null, '', e.data.url); abrirDeLink(); } });
+    }
+    function b64urlToUint8(b) { const p = '='.repeat((4 - b.length % 4) % 4); const raw = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
+    async function pushSubAtual() { if (!PUSH_OK) return null; const reg = await navigator.serviceWorker.ready; return reg.pushManager.getSubscription(); }
+    async function atualizarPushUI() {
+      const el = F('push-status'); if (!el || !supabase) return;
+      const { data: cfg, error } = await db.from('push_config').select('ativo,hora_vespera,hora_dia,vapid_public').eq('id', 1);
+      if (error) { el.innerHTML = '⚠ Lembretes ainda não configurados no banco (falta a migração v5 / função <b>lembretes</b>).'; return; }
+      const c = (cfg || [])[0] || {};
+      F('push-hora-vespera').value = hhmm(c.hora_vespera) || '19:00'; F('push-hora-dia').value = hhmm(c.hora_dia) || '06:30'; F('push-ativo').checked = c.ativo !== false;
+      const { data: subs } = await db.from('push_subscriptions').select('id,endpoint');
+      const n = (subs || []).length;
+      let estado;
+      if (!PUSH_OK) estado = ehIOS && !ehStandalone() ? '📱 No iPhone, abra o TI Control pelo ícone da <b>Tela de Início</b> (PWA instalado) para ativar.' : '⚠ Este navegador não suporta notificações push.';
+      else if (Notification.permission === 'denied') estado = '🚫 Notificações bloqueadas para este app. Libere nos ajustes do celular (Notificações → TI Control) e tente de novo.';
+      else {
+        const sub = await pushSubAtual();
+        const aqui = sub && (subs || []).some(x => x.endpoint === sub.endpoint);
+        estado = aqui ? '✅ <b>Ativo neste aparelho.</b>' : '○ Ainda não ativado neste aparelho.';
+        F('btn-push-desativar').style.display = sub ? '' : 'none';
+        F('btn-push-ativar').textContent = aqui ? '↻ Reativar' : '🔔 Ativar neste aparelho';
+      }
+      el.innerHTML = `${estado}<br><span style="font-size:11px;color:var(--text3)">${n} aparelho(s) recebendo · véspera a partir de ${F('push-hora-vespera').value} · no dia a partir de ${F('push-hora-dia').value}${c.ativo === false ? ' · <b style="color:var(--amber)">desligado</b>' : ''}</span>`;
+    }
+    async function ativarPush() {
+      if (!PUSH_OK) { atualizarPushUI(); toast(ehIOS && !ehStandalone() ? 'Abra pelo ícone do app na Tela de Início' : 'Navegador sem suporte a push', 'error'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast('Permissão de notificação negada', 'error'); atualizarPushUI(); return; }
+      const { data: cfg, error } = await db.from('push_config').select('vapid_public').eq('id', 1);
+      let key = cfg?.[0]?.vapid_public;
+      if (error) { toast('Lembretes não configurados no banco', 'error'); return; }
+      if (!key) { // primeira vez: a função gera as chaves
+        try { const r = await fetch(`${SUPABASE_URL}/functions/v1/lembretes?acao=chave`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: 'Bearer ' + AUTH.token() }, body: '{}' }); key = (await r.json()).vapid_public; } catch { }
+        if (!key) { toast('Função "lembretes" não respondeu', 'error'); return; }
+      }
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        let sub = await reg.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe().catch(() => { });
+        sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToUint8(key) });
+        const j = sub.toJSON();
+        await db.from('push_subscriptions').eq('endpoint', j.endpoint).delete();
+        const { error: e2 } = await db.from('push_subscriptions').insert([{ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth, user_agent: navigator.userAgent.slice(0, 200) }]);
+        if (e2) throw new Error(e2.message);
+        toast('Lembretes ativados neste aparelho!', 'success');
+        await testarPush(true);
+      } catch (e) { toast('Erro ao ativar: ' + e.message, 'error'); }
+      atualizarPushUI();
+    }
+    async function desativarPush() {
+      try {
+        const sub = await pushSubAtual();
+        if (sub) { await db.from('push_subscriptions').eq('endpoint', sub.endpoint).delete(); await sub.unsubscribe(); }
+        toast('Lembretes desativados neste aparelho', 'info');
+      } catch (e) { toast('Erro: ' + e.message, 'error'); }
+      atualizarPushUI();
+    }
+    async function testarPush(silencioso) {
+      await AUTH.ensureFresh();
+      try {
+        const r = await fetch(`${SUPABASE_URL}/functions/v1/lembretes`, { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY, Authorization: 'Bearer ' + AUTH.token() }, body: JSON.stringify({ acao: 'teste' }) });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(d.error || 'HTTP ' + r.status);
+        if (!silencioso || !d.ok) toast(d.ok ? `Teste enviado para ${d.ok} aparelho(s)` : 'Nenhum aparelho ativado ainda', d.ok ? 'success' : 'info');
+      } catch (e) { toast('Falha no teste: ' + e.message, 'error'); }
+    }
+    async function salvarPushConfig() {
+      const { error } = await db.from('push_config').eq('id', 1).update({ hora_vespera: F('push-hora-vespera').value || '19:00', hora_dia: F('push-hora-dia').value || '06:30', ativo: F('push-ativo').checked });
+      toast(error ? 'Erro: ' + error.message : 'Horários dos lembretes salvos', error ? 'error' : 'success');
+      atualizarPushUI();
+    }
+    // abre o chamado / dia vindo do toque na notificação
+    function abrirDeLink() {
+      const q = new URLSearchParams(location.search);
+      const id = q.get('chamado'), dia = q.get('dia');
+      if (!id && !dia) return;
+      history.replaceState(null, '', location.pathname);
+      if (id && allChamados.some(c => c.id === id)) { navigate('agenda'); verDetalhe(id); }
+      else if (dia) { navigate('agenda'); calIrDia(dia); }
+    }
+
     // ==================== INIT ====================
     document.addEventListener('DOMContentLoaded', async () => {
       F('cfg-url').value = SUPABASE_URL; F('cfg-key').value = SUPABASE_KEY;
       F('cal-body').innerHTML = '<div class="loading"><div class="spinner"></div> Carregando agenda...</div>';
       await AUTH.ensureFresh();
       const ok = await conectar(SUPABASE_URL, SUPABASE_KEY, true);
-      if (ok) { atualizarUsuario(); navigate('agenda'); }
+      if (ok) { atualizarUsuario(); navigate('agenda'); abrirDeLink(); }
       else if (AUTH.session) { navigate('config'); toast('Não foi possível conectar ao banco. Confira as credenciais.', 'error'); }
     });
   </script>
