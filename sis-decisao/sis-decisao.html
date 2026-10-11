@@ -1,0 +1,863 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Receita da Decisão</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* Layout: uma "bula" de duas colunas (Atual x Proposta) em seções numeradas como etapas da decisão; balança viva no topo resume tudo */
+:root{
+  --paper:#eef4f1; --card:#ffffff; --ink:#13241f; --muted:#56695f; --line:#d3dfd9;
+  --a:#3d5fa3; --a-soft:#e3e9f6; --b:#0c7a5c; --b-soft:#dcf1e8;
+  --accent:#c9771a; --accent-soft:#fbeedc; --bad:#b8413a; --good:#0c7a5c;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0c1613; --card:#13201c; --ink:#e4efea; --muted:#93a89f; --line:#253731;
+  --a:#86a5ea; --a-soft:#1b2640; --b:#3ccb9c; --b-soft:#123227;
+  --accent:#f0a647; --accent-soft:#3a2a14; --bad:#ef7d74; --good:#3ccb9c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0c1613; --card:#13201c; --ink:#e4efea; --muted:#93a89f; --line:#253731;
+  --a:#86a5ea; --a-soft:#1b2640; --b:#3ccb9c; --b-soft:#123227;
+  --accent:#f0a647; --accent-soft:#3a2a14; --bad:#ef7d74; --good:#3ccb9c; color-scheme:dark}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 calc(64px + env(safe-area-inset-bottom,0px));overflow-x:hidden}
+button,select,input,textarea{-webkit-appearance:none;appearance:none;border-radius:0;touch-action:manipulation;color:var(--ink)}
+input,select,textarea{font-size:16px!important}/* 16px evita o zoom automático do iOS ao tocar no campo */
+option,optgroup{background:var(--card);color:var(--ink)}
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield}
+/* sliders próprios: o nativo do iOS é branco e ignora o tema */
+input[type=range]{height:32px;background:transparent;padding:0;margin:0;--thumb:var(--accent)}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--line)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:var(--thumb);border:3px solid var(--card);box-shadow:0 0 0 1px var(--line),0 1px 4px rgba(0,0,0,.25);margin-top:-10px}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--line)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--thumb);border:3px solid var(--card)}
+/* checkbox próprio */
+input[type=checkbox]{width:24px;height:24px;flex:none;border:2px solid var(--b);border-radius:6px;background:var(--card);display:grid;place-items:center;margin:0}
+input[type=checkbox]::after{content:"";width:6px;height:12px;border:solid var(--card);border-width:0 3px 3px 0;transform:rotate(45deg) translate(-1px,-1px);opacity:0}
+input[type=checkbox]:checked{background:var(--b)}
+input[type=checkbox]:checked::after{opacity:1}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.1}
+.wrap{max-width:1080px;margin-inline:auto}
+.num,input[type=number],.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+
+/* topo */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--paper) 88%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px))}
+.top .wrap{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.brand{font-family:var(--display);font-weight:800;font-size:18px;display:flex;align-items:center;gap:8px}
+.cross{width:22px;height:22px;flex:none}
+.steps{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.steps a{white-space:nowrap;text-decoration:none;color:var(--muted);font-size:13px;padding:6px 10px;border-radius:999px;border:1px solid var(--line)}
+.steps a:hover{color:var(--ink);border-color:var(--ink)}
+.steps b{font-family:var(--mono);color:var(--accent);margin-right:4px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:28px;align-items:center;padding-block:36px 20px}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+.hero h1{font-size:clamp(38px,6vw,64px);font-weight:800;letter-spacing:-.02em;margin-block:8px 12px}
+.hero p.lede{color:var(--muted);max-width:52ch;margin:0 0 18px}
+.verdict{border:2px solid var(--ink);border-radius:14px;padding:16px 18px;background:var(--card)}
+.verdict .tag{display:inline-block;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.verdict h2{font-size:26px;margin-block:8px 6px}
+.verdict p{margin:0;color:var(--muted)}
+.scale-box{position:relative}
+#scale{width:100%;max-width:440px;display:block;margin-inline:auto}
+#beam,.pan{transition:transform .9s cubic-bezier(.3,1.4,.5,1)}
+@media (prefers-reduced-motion:reduce){#beam,.pan{transition:none}}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.kpi{border-top:2px solid var(--line);padding-top:8px}
+.kpi small{display:block;color:var(--muted);font-size:12px}
+.kpi strong{font-family:var(--mono);font-size:18px}
+
+/* seções */
+section.block{padding-block:40px 8px;border-top:1px dashed var(--line);margin-top:28px;scroll-margin-top:70px}
+.sec-head{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;margin-bottom:18px}
+.sec-n{font-family:var(--mono);font-size:14px;color:var(--paper);background:var(--ink);border-radius:6px;padding:2px 8px}
+.sec-head h2{font-size:clamp(26px,3.6vw,36px);font-weight:700}
+.sec-head .bula{font-style:italic;color:var(--muted);font-size:14px;flex-basis:100%}
+.intro{max-width:68ch;color:var(--muted);margin:-6px 0 18px}
+
+/* tabela comparativa de entrada */
+.cmp{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr) minmax(0,1fr);gap:10px;align-items:center;padding:9px 14px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.head{background:var(--paper);font-weight:700;position:sticky;top:0}
+.row.group{background:var(--paper);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:700;grid-template-columns:1fr;padding-block:7px}
+.lbl{min-width:0}
+.lbl span{display:block;font-size:12.5px;color:var(--muted);line-height:1.35}
+.colA{color:var(--a)} .colB{color:var(--b)}
+.field{display:flex;align-items:center;border:1px solid var(--line);border-radius:8px;background:var(--paper);min-width:0}
+.field:focus-within{border-color:var(--ink)}
+.field i{font-style:normal;font-size:12px;color:var(--muted);padding-inline:8px 0;white-space:nowrap}
+.field input,.field select{border:0;background:transparent;color:var(--ink);padding:10px 8px;width:100%;min-width:0;min-height:44px;font-size:16px}
+.field.sel{position:relative}
+.field.sel select{padding-right:30px;cursor:pointer}
+.field.sel::after{content:"";position:absolute;right:12px;top:50%;width:8px;height:8px;border:solid var(--muted);border-width:0 2px 2px 0;transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.field input:focus,.field select:focus{outline:none}
+.field.a{box-shadow:inset 3px 0 0 var(--a)} .field.b{box-shadow:inset 3px 0 0 var(--b)}
+.name-in{font-family:var(--display);font-weight:700}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.btn{border:1px solid var(--ink);background:transparent;color:var(--ink);border-radius:999px;padding:10px 16px;min-height:44px;font-size:15px}
+.btn.solid{background:var(--ink);color:var(--paper)}
+@media (hover:hover){.btn:hover{background:var(--ink);color:var(--paper)}}
+.btn:active{background:var(--ink);color:var(--paper)}
+.note{font-size:13px;color:var(--muted)}
+.example-flag{display:inline-block;font-size:12px;background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:6px;font-weight:700}
+
+/* resultados */
+.results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:20px}
+.res{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.res h3{font-size:18px;margin-bottom:10px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.res.A h3{color:var(--a)} .res.B h3{color:var(--b)}
+.lines{display:grid;gap:4px;font-size:14.5px}
+.ln{display:flex;justify-content:space-between;gap:10px}
+.ln span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.ln.minus span:last-child{color:var(--bad)}
+.ln.total{border-top:1px solid var(--line);padding-top:6px;margin-top:4px;font-weight:700}
+.ln.big{font-size:17px}
+.ln.big span:last-child{color:var(--good)}
+.chart-card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:16px;min-width:0}
+.chart-card h3{font-size:18px;margin-bottom:4px}
+.chart-card p{margin:0 0 10px;color:var(--muted);font-size:14px}
+.cbox{position:relative;height:280px}
+.cbox.short{height:200px}
+.duo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.tblwrap{overflow-x:auto}
+table.period{width:100%;border-collapse:collapse;font-size:14.5px;min-width:440px}
+table.period th,table.period td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+table.period td{font-family:var(--mono)}
+table.period th:first-child,table.period td:first-child{text-align:left;font-family:var(--body)}
+table.period thead th{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+/* vertical x horizontal */
+.vh{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.meter{position:relative;height:56px;border-radius:12px;overflow:hidden;display:flex;border:1px solid var(--line)}
+.meter div{display:flex;align-items:flex-end;padding:6px 8px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.mz1{background:var(--a-soft);color:var(--a)} .mz2{background:var(--accent-soft);color:var(--accent)} .mz3{background:var(--b-soft);color:var(--b)}
+.needle{position:absolute;top:-4px;bottom:-4px;width:4px;background:var(--ink);border-radius:2px;transition:left .8s cubic-bezier(.3,1.3,.5,1)}
+.needle::after{content:attr(data-v);position:absolute;top:2px;left:8px;font-family:var(--mono);font-size:13px;background:var(--ink);color:var(--paper);padding:1px 6px;border-radius:4px;white-space:nowrap}
+.vh-out h3{font-size:24px;margin-block:12px 6px}
+.slider-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:14px}
+input[type=range]{accent-color:var(--accent);width:100%;max-width:260px}
+.checks{display:grid;gap:8px;margin-top:6px}
+.checks label{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;cursor:pointer}
+.checks input{margin-top:4px;accent-color:var(--b)}
+
+/* fatores humanos */
+.hum{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.hrow{display:grid;grid-template-columns:minmax(0,1.2fr) auto minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.hrow:first-child{border-top:0}
+.hrow.head{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.dots{display:flex;gap:3px}
+.dots{gap:2px}
+.dots button{width:30px;height:36px;border:0;background:transparent;padding:0;display:grid;place-items:center}
+.dots button::before{content:"";width:18px;height:18px;border-radius:50%;border:2px solid var(--accent);background:var(--card)}
+.dots button.on::before{background:var(--accent)}
+.sl{display:flex;align-items:center;gap:8px;min-width:0}
+.sl input{flex:1;min-width:0}
+.sl output{font-family:var(--mono);width:22px;text-align:right;font-weight:600}
+.sl.a input{--thumb:var(--a)} .sl.b input{--thumb:var(--b)}
+
+/* psicologia */
+.quiz{display:grid;gap:10px}
+.q{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.likert{display:flex;gap:4px}
+.likert button{width:44px;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--paper);color:var(--muted);font-family:var(--mono);font-size:13px}
+.likert button.on{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.scale-hint{display:flex;justify-content:flex-end;gap:10px;font-size:12px;color:var(--muted)}
+.diag{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:18px}
+.dcard{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.dcard .lvl{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-block:8px 10px}
+.dcard .lvl i{display:block;height:100%;background:var(--accent);transition:width .6s}
+.dcard h3{font-size:19px}
+.dcard p{margin:0 0 8px;font-size:14.5px}
+.dcard .fix{font-size:14px;background:var(--paper);border-radius:8px;padding:8px 10px}
+.dcard .src{font-size:12px;color:var(--muted);margin-top:8px}
+.tools{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:22px}
+.tool{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.tool h3{font-size:18px}
+.tool p{margin:0;font-size:14px;color:var(--muted)}
+.tool textarea{width:100%;min-height:62px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);padding:8px;font:inherit;font-size:14px;resize:vertical}
+.coin{width:96px;height:96px;margin:4px auto;border-radius:50%;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:15px;text-align:center;line-height:1.1;background:var(--accent);color:var(--paper);border:4px double var(--paper);box-shadow:0 0 0 2px var(--accent)}
+.coin.spin{animation:flip 1.1s ease-out}
+@keyframes flip{0%{transform:rotateY(0)}100%{transform:rotateY(1800deg)}}
+@media (prefers-reduced-motion:reduce){.coin.spin{animation:none}}
+.gut{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.gut-out{font-size:14px;background:var(--paper);border-radius:8px;padding:8px 10px}
+
+/* veredito */
+.final{background:var(--ink);color:var(--paper);border-radius:18px;padding:24px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px}
+.final h3{font-size:30px;margin-block:6px 10px;color:var(--paper)}
+.final .eyebrow{color:var(--accent)}
+.final ul{margin:0;padding-left:18px;display:grid;gap:6px}
+.final li{font-size:15px}
+.final .slider-line{color:var(--paper)}
+.scorebars{display:grid;gap:12px}
+.sb label{font-size:13px;display:flex;justify-content:space-between;opacity:.85}
+.sb .track{height:12px;background:color-mix(in srgb,var(--paper) 18%,transparent);border-radius:6px;position:relative;overflow:hidden}
+.sb .track::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--paper);opacity:.5}
+.sb .fill{position:absolute;top:0;bottom:0;transition:all .7s}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+.fact{border-left:3px solid var(--accent);background:var(--card);padding:10px 14px;border-radius:0 10px 10px 0;font-size:14.5px}
+.fact b{display:block;font-family:var(--display);font-size:16px}
+footer{margin-top:36px;font-size:13px;color:var(--muted);max-width:75ch}
+
+@media (max-width:820px){
+  .hero,.vh,.final,.duo,.results{grid-template-columns:1fr}
+  .diag,.tools{grid-template-columns:1fr}
+  .facts{grid-template-columns:1fr}
+  .hrow{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}
+  .hrow .sl{grid-column:span 1}
+  .hrow.head{display:none}
+  .hrow .sl::before{content:attr(data-who);font-size:11px;color:var(--muted);width:52px}
+}
+@media (max-width:520px){
+  body{font-size:16px}
+  .hero{padding-block:22px 8px;gap:18px}
+  .hero h1{font-size:40px}
+  .verdict h2{font-size:22px}
+  .brand{font-size:16px}
+  .top .wrap{gap:8px}
+  .steps{width:100%;margin-inline:-4px}
+  .steps a{padding:8px 12px}
+  section.block{padding-block:28px 4px;margin-top:18px;scroll-margin-top:110px}
+  .row{grid-template-columns:minmax(0,1fr) minmax(0,1fr);row-gap:6px;padding:12px}
+  .row .lbl{grid-column:1/-1}
+  .row.head{display:none}
+  .field.a,.field.b{position:relative;margin-top:14px}
+  .field.a::before,.field.b::before{position:absolute;top:-17px;left:2px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .field.a::before{content:var(--nameA,"Atual");color:var(--a)}
+  .field.b::before{content:var(--nameB,"Proposta");color:var(--b)}
+  .q{grid-template-columns:1fr}
+  .likert{justify-content:space-between}
+  .likert button{flex:1;max-width:58px}
+  .kpis{grid-template-columns:1fr 1fr}
+  .kpis .kpi:last-child{grid-column:1/-1}
+  .cbox{height:240px}
+  .final{padding:18px}
+  .final h3{font-size:24px}
+  .res,.chart-card,.tool,.dcard{padding:14px}
+  .hrow{padding:12px}
+  .hrow .sl::before{width:64px}
+  #scale{max-width:340px}
+}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <svg class="cross" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8v6h6v8h-6v6H8v-6H2V8h6z" fill="var(--b)"/></svg>
+      Receita da Decisão
+    </div>
+    <nav class="steps" aria-label="Etapas">
+      <a href="#composicao"><b>1</b>Salário</a>
+      <a href="#posologia"><b>2</b>Trajeto</a>
+      <a href="#tipo"><b>3</b>Vertical ou horizontal</a>
+      <a href="#humano"><b>4</b>Fatores humanos</a>
+      <a href="#mente"><b>5</b>Mente</a>
+      <a href="#prescricao"><b>6</b>Veredito</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <div class="eyebrow">Ficar ou mudar de emprego?</div>
+      <h1>Receita da Decisão</h1>
+      <p class="lede">Uma bula para quem está entre dois empregos. Preencha as duas colunas: emprego <b class="colA">atual</b> e <b class="colB">proposta</b>. A balança se move sozinha com cada número, cada fator humano e cada resposta sobre você.</p>
+      <div class="verdict" aria-live="polite">
+        <span class="tag" id="vTag">Calculando</span>
+        <h2 id="vTitle">…</h2>
+        <p id="vText"></p>
+      </div>
+    </div>
+    <div class="scale-box">
+      <svg id="scale" viewBox="0 0 400 290" role="img" aria-label="Balança comparando ficar e mudar">
+        <rect x="150" y="262" width="100" height="12" rx="6" fill="var(--ink)"/>
+        <path d="M200 262 L188 262 L196 92 L204 92 L212 262 Z" fill="var(--ink)"/>
+        <g id="beam" style="transform-origin:200px 90px">
+          <rect x="52" y="85" width="296" height="10" rx="5" fill="var(--ink)"/>
+          <circle cx="200" cy="90" r="11" fill="var(--accent)"/>
+        </g>
+        <g class="pan" id="panL">
+          <line x1="0" y1="0" x2="-44" y2="96" stroke="var(--muted)" stroke-width="2"/>
+          <line x1="0" y1="0" x2="44" y2="96" stroke="var(--muted)" stroke-width="2"/>
+          <path d="M-56 96 Q0 136 56 96 Z" fill="var(--a)"/>
+          <text x="0" y="152" text-anchor="middle" font-family="var(--display)" font-weight="700" font-size="16" fill="var(--a)">FICAR</text>
+        </g>
+        <g class="pan" id="panR">
+          <line x1="0" y1="0" x2="-44" y2="96" stroke="var(--muted)" stroke-width="2"/>
+          <line x1="0" y1="0" x2="44" y2="96" stroke="var(--muted)" stroke-width="2"/>
+          <path d="M-56 96 Q0 136 56 96 Z" fill="var(--b)"/>
+          <text x="0" y="152" text-anchor="middle" font-family="var(--display)" font-weight="700" font-size="16" fill="var(--b)">MUDAR</text>
+        </g>
+      </svg>
+      <div class="kpis">
+        <div class="kpi"><small>Sobra a mais por mês</small><strong id="kDiff">–</strong></div>
+        <div class="kpi"><small>Valor da hora real</small><strong id="kHour">–</strong></div>
+        <div class="kpi"><small>Trânsito por mês</small><strong id="kTraffic">–</strong></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1 -->
+  <section class="block" id="composicao">
+    <div class="sec-head"><span class="sec-n">01</span><h2>Composição do salário</h2><span class="bula">Na bula: o que entra, o que sai e o que realmente sobra.</span></div>
+    <p class="intro">INSS e Imposto de Renda são calculados automaticamente pelas tabelas de 2026. Os outros descontos você informa à mão. <span class="example-flag">Valores de exemplo, troque pelos do seu amigo</span></p>
+    <div class="cmp" id="formMoney"></div>
+    <div class="toolbar">
+      <button class="btn" id="btnExample">Restaurar exemplo</button>
+      <button class="btn" id="btnClear">Zerar tudo</button>
+    </div>
+    <div class="results">
+      <div class="res A"><h3><span id="rNameA">Atual</span><span class="note">por mês</span></h3><div class="lines" id="rA"></div></div>
+      <div class="res B"><h3><span id="rNameB">Proposta</span><span class="note">por mês</span></h3><div class="lines" id="rB"></div></div>
+    </div>
+    <div class="chart-card">
+      <h3>Para onde vai cada real do bruto</h3>
+      <p>O que é seu de verdade (verde e azul) contra o que vai para impostos, descontos e trajeto.</p>
+      <div class="cbox short"><canvas id="chFlow"></canvas></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="block" id="posologia">
+    <div class="sec-head"><span class="sec-n">02</span><h2>Posologia do trajeto</h2><span class="bula">Na bula: dose diária de quilômetros, combustível e tempo.</span></div>
+    <p class="intro">Informe a distância de <b>ida</b> (casa até o trabalho). Para medir, abra o <a href="https://www.google.com/maps/dir/" target="_blank" rel="noopener">Google Maps em rotas</a>, coloque casa e trabalho e copie os km e minutos no horário de pico.</p>
+    <div class="cmp" id="formTrip"></div>
+    <div class="chart-card">
+      <h3>Custo do trajeto, ida e volta</h3>
+      <p>Valores que saem do bolso, já descontando o que a empresa cobre.</p>
+      <div class="tblwrap"><table class="period" id="tblTrip"></table></div>
+    </div>
+    <div class="duo">
+      <div class="chart-card">
+        <h3>Horas de vida por mês</h3>
+        <p>Tempo trabalhando mais tempo no trânsito.</p>
+        <div class="cbox"><canvas id="chHours"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Diferença acumulada em 24 meses</h3>
+        <p>Quanto a proposta põe a mais (ou a menos) no seu bolso, mês a mês.</p>
+        <div class="cbox"><canvas id="chAccum"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="block" id="tipo">
+    <div class="sec-head"><span class="sec-n">03</span><h2>Proposta vertical ou horizontal?</h2><span class="bula">Subir de nível ou só trocar de endereço.</span></div>
+    <p class="intro"><b>Vertical</b>: a proposta multiplica salário e benefícios e costuma vir com mais responsabilidade. <b>Horizontal</b>: é praticamente o mesmo pacote em outro lugar. Entre as duas fica a zona <b>intermediária</b>, onde o dinheiro sozinho não decide e os fatores humanos pesam mais.</p>
+    <div class="vh">
+      <div class="chart-card" style="margin-top:0">
+        <h3>Medidor do pacote</h3>
+        <p>Pacote = bruto + adicionais + benefícios − custo do trajeto. Razão proposta ÷ atual.</p>
+        <div class="meter" id="meter">
+          <div class="mz1" id="mz1">Horizontal</div><div class="mz2" id="mz2">Intermediária</div><div class="mz3" id="mz3">Vertical</div>
+          <span class="needle" id="needle" data-v="1,0x"></span>
+        </div>
+        <div class="slider-line">
+          <label for="thVert">Vertical a partir de</label>
+          <input type="range" id="thVert" min="1.2" max="5" step="0.1" value="4">
+          <b class="mono" id="thVertOut">4,0x</b>
+        </div>
+        <div class="slider-line">
+          <label for="thHor">Horizontal até</label>
+          <input type="range" id="thHor" min="1.0" max="1.5" step="0.05" value="1.15">
+          <b class="mono" id="thHorOut">1,15x</b>
+        </div>
+        <p class="note">O critério de 4x é o seu. Recrutadores costumam tratar algo entre 20% e 30% a mais como o ganho mínimo para valer a troca. Ajuste os cortes e veja a agulha mudar de zona.</p>
+      </div>
+      <div class="vh-out">
+        <div class="eyebrow">Classificação</div>
+        <h3 id="vhTitle">–</h3>
+        <p id="vhText" class="note" style="font-size:15px"></p>
+        <div class="checks" id="vhChecks">
+          <label><input type="checkbox" id="ckCargo"> O cargo da proposta é acima do atual (ex.: de farmacêutico para gerente, RT de rede, coordenação)</label>
+          <label><input type="checkbox" id="ckSkill"> Vou aprender algo novo que valoriza meu currículo (clínica, hospitalar, indústria, gestão)</label>
+          <label><input type="checkbox" id="ckPlano"> A empresa nova tem plano de carreira escrito ou histórico de promoções</label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="block" id="humano">
+    <div class="sec-head"><span class="sec-n">04</span><h2>Indicações: fatores humanos</h2><span class="bula">Dinheiro não mede tudo. Dê nota de 0 a 10 para cada emprego e diga o quanto cada item importa para você.</span></div>
+    <div class="duo" style="grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:start">
+      <div class="hum" id="humRows"></div>
+      <div class="chart-card" style="margin-top:0">
+        <h3>Mapa dos fatores</h3>
+        <p>Quanto maior a área, melhor o emprego nas coisas que não aparecem no holerite.</p>
+        <div class="cbox" style="height:330px"><canvas id="chRadar"></canvas></div>
+        <p id="humSummary" class="note" style="margin-top:10px"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="block" id="mente">
+    <div class="sec-head"><span class="sec-n">05</span><h2>Interações: por que é tão difícil decidir?</h2><span class="bula">Responda com sinceridade. 1 = discordo totalmente, 5 = concordo totalmente.</span></div>
+    <p class="intro">Indecisão quase nunca é falta de inteligência. Costuma ser um viés conhecido da psicologia agindo em silêncio. Identificar qual deles está pesando já tira metade da força dele.</p>
+    <div class="scale-hint"><span>1 discordo</span><span>5 concordo</span></div>
+    <div class="quiz" id="quiz"></div>
+    <div class="diag" id="diag"></div>
+
+    <div class="tools">
+      <div class="tool">
+        <h3>Teste da moeda</h3>
+        <p>Cara = fico. Coroa = mudo. O resultado não importa: o que importa é o que você sente no segundo em que a moeda cai.</p>
+        <div class="coin" id="coin">Jogar</div>
+        <button class="btn solid" id="btnCoin">Jogar a moeda</button>
+        <div id="gutBox" hidden>
+          <p style="margin-bottom:8px;text-align:center">Quando viu o resultado, você sentiu…</p>
+          <div class="gut"><button class="btn" data-gut="alivio">Alívio</button><button class="btn" data-gut="decepcao">Decepção</button></div>
+        </div>
+        <div class="gut-out" id="gutOut" hidden></div>
+      </div>
+      <div class="tool">
+        <h3>Regra 10/10/10</h3>
+        <p>Como você vai se sentir com a decisão daqui a 10 minutos, 10 meses e 10 anos? Medo de curto prazo costuma sumir na terceira resposta.</p>
+        <textarea id="t10a" placeholder="Daqui a 10 minutos…"></textarea>
+        <textarea id="t10b" placeholder="Daqui a 10 meses…"></textarea>
+        <textarea id="t10c" placeholder="Daqui a 10 anos…"></textarea>
+      </div>
+      <div class="tool">
+        <h3>Pré-mortem</h3>
+        <p>Imagine que já se passou 1 ano e a escolha deu errado. Escreva o motivo. Agora você tem uma lista do que perguntar ou negociar antes de assinar.</p>
+        <textarea id="pmA" placeholder="Fiquei e deu errado porque…"></textarea>
+        <textarea id="pmB" placeholder="Mudei e deu errado porque…"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="block" id="prescricao">
+    <div class="sec-head"><span class="sec-n">06</span><h2>Prescrição final</h2><span class="bula">Junta dinheiro, tempo, pessoas e mente numa recomendação.</span></div>
+    <div class="final">
+      <div>
+        <div class="eyebrow">Recomendação</div>
+        <h3 id="fTitle">–</h3>
+        <ul id="fReasons"></ul>
+      </div>
+      <div>
+        <div class="scorebars">
+          <div class="sb"><label><span>Financeiro (inclui tempo de trajeto)</span><span id="sFinT"></span></label><div class="track"><span class="fill" id="sFin"></span></div></div>
+          <div class="sb"><label><span>Fatores humanos</span><span id="sHumT"></span></label><div class="track"><span class="fill" id="sHum"></span></div></div>
+          <div class="sb"><label><span>Resultado ponderado</span><span id="sTotT"></span></label><div class="track"><span class="fill" id="sTot"></span></div></div>
+          <p style="margin:0;font-size:13px;opacity:.75">Centro = empate. Barra para a direita favorece a proposta; para a esquerda, ficar.</p>
+          <div class="slider-line">
+            <label for="wMoney">Peso do dinheiro</label>
+            <input type="range" id="wMoney" min="0" max="100" step="5" value="50">
+            <b class="mono" id="wMoneyOut">50%</b>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="font-size:22px;margin-top:28px">Antes de assinar: fatos que pesam na troca</h3>
+    <div class="facts">
+      <div class="fact"><b>Pedido de demissão</b>Quem pede para sair não saca o FGTS, não recebe a multa de 40% e não tem seguro-desemprego. Recebe saldo de salário, férias vencidas e proporcionais com 1/3 e 13º proporcional.</div>
+      <div class="fact"><b>Aviso prévio de 30 dias</b>Se não cumprir, a empresa pode descontar. Negocie a dispensa do aviso com o RH atual, e a data de início com a nova empresa.</div>
+      <div class="fact"><b>Contrato de experiência</b>Pode durar até 90 dias. Nesse período a demissão é mais simples para os dois lados. Considere esse risco se a vaga atual é estável.</div>
+      <div class="fact"><b>Responsabilidade técnica no CRF</b>Se ele é RT, precisa dar baixa na responsabilidade técnica atual e assumir a nova junto ao Conselho Regional. Confirme quem cobre o horário enquanto isso.</div>
+      <div class="fact"><b>Carência do plano de saúde</b>Plano empresarial novo pode ter carência. Pergunte se a nova empresa aproveita a carência já cumprida (portabilidade).</div>
+      <div class="fact"><b>Peça tudo por escrito</b>Salário, escala, benefícios e adicionais em uma proposta formal. Promessa verbal não entra no cálculo acima.</div>
+    </div>
+
+    <footer>
+      Cálculos: INSS 2026 progressivo (faixas até R$ 1.621,00 a 7,5%; R$ 2.902,84 a 9%; R$ 4.354,27 a 12%; teto R$ 8.475,55 a 14%). IRRF 2026 com isenção para rendimentos até R$ 5.000 e redução parcial até R$ 7.350, dedução por dependente R$ 189,59 ou desconto simplificado de R$ 607,20 (usa o mais vantajoso). Vale-transporte: desconto de até 6% do salário-base. Mês = 4,33 semanas. É uma ferramenta de apoio: confira o holerite real e, se a ansiedade com a decisão estiver pesada demais, conversar com um psicólogo ajuda muito. Os dados ficam salvos só neste navegador.
+    </footer>
+  </section>
+</main>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const brl=v=>(isFinite(v)?v:0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const n1=v=>(isFinite(v)?v:0).toLocaleString('pt-BR',{maximumFractionDigits:1,minimumFractionDigits:1});
+const WEEKS=4.33;
+
+/* ---------- schema ---------- */
+const MONEY=[
+ {g:'Identificação'},
+ {k:'nome',l:'Nome do emprego',t:'text'},
+ {g:'Ganhos'},
+ {k:'bruto',l:'Salário bruto',h:'Valor da carteira',u:'R$'},
+ {k:'adic',l:'Adicionais fixos',h:'Insalubridade, gratificação de RT, comissão média',u:'R$'},
+ {k:'dep',l:'Dependentes no IR',h:'Filhos, cônjuge sem renda',u:'nº',step:1},
+ {k:'va',l:'Vale-alimentação / refeição recebido',h:'Valor creditado no cartão',u:'R$'},
+ {k:'benef',l:'Outros benefícios em dinheiro',h:'Plano de saúde pago pela empresa (valor de mercado), bônus médio, PLR ÷ 12',u:'R$'},
+ {g:'Descontos manuais'},
+ {k:'dPlano',l:'Plano de saúde / odontológico',h:'Parte descontada em folha',u:'R$'},
+ {k:'dConsig',l:'Empréstimo consignado',h:'Parcela mensal',u:'R$'},
+ {k:'dVA',l:'Desconto do VA/VR',h:'Coparticipação, se houver',u:'R$'},
+ {k:'dComb',l:'Gasolina / convênio posto',h:'Se a empresa desconta em folha',u:'R$'},
+ {k:'dOutros',l:'Outros descontos',h:'Sindicato, farmácia, faltas',u:'R$'},
+];
+const TRIP=[
+ {g:'Como vai'},
+ {k:'modo',l:'Meio de transporte',t:'select',opts:[['carro','Carro'],['moto','Moto'],['onibus','Ônibus'],['app','Aplicativo'],['pe','A pé / bicicleta']]},
+ {k:'vt',l:'Recebe vale-transporte?',h:'Empresa paga a passagem e desconta até 6%',t:'select',opts:[['nao','Não'],['sim','Sim']]},
+ {g:'Distância e combustível'},
+ {k:'km',l:'Distância de ida',h:'Casa → trabalho',u:'km'},
+ {k:'cons',l:'Consumo do veículo',h:'Carro ~10–13, moto ~30–40',u:'km/l'},
+ {k:'preco',l:'Preço do combustível',h:'Litro no posto que ele usa',u:'R$/l',step:0.01},
+ {k:'desg',l:'Desgaste do veículo',h:'Pneu, óleo, revisão. Use 0 para ignorar',u:'R$/km',step:0.01},
+ {k:'pass',l:'Passagem ou corrida',h:'Valor de um trecho (ônibus/app)',u:'R$',step:0.01},
+ {k:'extra',l:'Extras por dia',h:'Estacionamento, pedágio, café na rua',u:'R$',step:0.5},
+ {k:'aux',l:'Auxílio combustível da empresa',h:'Reembolso mensal',u:'R$'},
+ {g:'Tempo'},
+ {k:'min',l:'Tempo de ida',h:'No horário real que ele sai',u:'min',step:1},
+ {k:'dias',l:'Dias trabalhados por semana',h:'6x1 = 6, 5x2 = 5, 12x36 ≈ 3,5',u:'dias',step:0.5},
+ {k:'jorn',l:'Horas de trabalho por dia',h:'44h em 6 dias = 7,33',u:'h',step:0.01},
+];
+const HUMAN=[
+ ['estab','Estabilidade e segurança'],['equipe','Ambiente e equipe'],['chefia','Chefia e liderança'],
+ ['cresc','Crescimento e carreira'],['escala','Horário, escala e folgas'],['saude','Saúde mental (10 = pouco estresse)'],
+ ['proposito','Gosto pelo que faz'],['reconh','Reconhecimento']
+];
+const QUIZ=[
+ ['perda','Mesmo com os problemas daqui, sair me parece arriscado demais.'],
+ ['statusquo','Me sinto confortável onde estou; mudar dá preguiça só de pensar.'],
+ ['afundado','Já investi muito tempo e esforço aqui. Sair seria jogar isso fora.'],
+ ['arrep','Tenho medo de me arrepender se a nova empresa não for o que prometeram.'],
+ ['info','Não sei direito como é o dia a dia na empresa nova.'],
+ ['maxim','Fico buscando a opção perfeita e sinto que nenhuma é.'],
+ ['culpa','Me sentiria culpado(a) com a equipe ou o chefe atual se saísse.'],
+ ['pressao','Família e amigos têm opiniões diferentes sobre o que devo fazer.'],
+ ['esgot','Estou cansado(a) ou esgotado(a) no emprego atual.'],
+ ['novo','A ideia de um recomeço e novos desafios me anima.'],
+];
+const BIAS={
+ perda:{t:'Aversão à perda',q:['perda'],d:'Perder algo dói cerca de duas vezes mais do que ganhar algo de mesmo valor dá prazer. Por isso o que ele tem hoje parece maior do que é.',f:'Escreva o que ele perde ficando, não só o que perde saindo. Ficar também é uma escolha com custo.',s:'Kahneman & Tversky, Teoria da Perspectiva (1979)'},
+ statusquo:{t:'Viés do status quo',q:['statusquo'],d:'A opção "não fazer nada" ganha vantagem só por ser o padrão. O cérebro economiza energia evitando mudanças.',f:'Inverta a pergunta: se ele já trabalhasse na empresa nova, aceitaria uma proposta para voltar à atual com essas condições?',s:'Samuelson & Zeckhauser (1988)'},
+ afundado:{t:'Custo afundado',q:['afundado'],d:'O tempo já investido não volta, fique ou saia. Ele não deve entrar na conta do futuro.',f:'Considere só o que vem daqui para frente. A experiência acumulada vai junto com ele para qualquer lugar.',s:'Arkes & Blumer (1985)'},
+ arrep:{t:'Medo do arrependimento',q:['arrep'],d:'Antecipar o arrependimento de agir costuma pesar mais que o de não agir. A longo prazo, porém, as pessoas se arrependem mais do que deixaram de fazer.',f:'Use o pré-mortem abaixo e transforme o medo em perguntas concretas para o RH da nova empresa.',s:'Gilovich & Medvec (1995)'},
+ info:{t:'Incerteza por falta de informação',q:['info'],d:'Quando um lado é conhecido e o outro é nebuloso, o cérebro prefere o conhecido. Não é medo da proposta, é falta de dados.',f:'Peça para conversar com alguém da equipe nova, visite a loja ou hospital no horário de trabalho e peça a proposta por escrito.',s:'Ellsberg, aversão à ambiguidade (1961)'},
+ maxim:{t:'Perfeccionismo de escolha',q:['maxim'],d:'Quem busca a opção perfeita tende a ficar menos satisfeito e mais travado. Não existe emprego sem defeito.',f:'Defina 3 critérios mínimos ("bom o suficiente"). A opção que cumprir os três está aprovada.',s:'Barry Schwartz, O Paradoxo da Escolha (2004)'},
+ culpa:{t:'Lealdade e culpa',q:['culpa'],d:'Gostar das pessoas é ótimo, mas o vínculo é profissional. Empresas substituem funcionários; ele também pode escolher.',f:'Sair bem (aviso cumprido, passagem de turno organizada) preserva a relação e as portas abertas.',s:'Pesquisas de comprometimento organizacional (Meyer & Allen, 1991)'},
+ pressao:{t:'Pressão de opiniões',q:['pressao'],d:'Muitas vozes diferentes geram ruído. Cada pessoa projeta o próprio medo ou desejo na decisão dele.',f:'Ouça no máximo duas pessoas de confiança, depois decida sozinho com os números desta página.',s:'Conformidade social (Asch, 1951)'},
+};
+
+const EXAMPLE={
+ a:{nome:'Farmácia atual',bruto:4800,adic:0,dep:1,va:400,benef:0,dPlano:180,dConsig:0,dVA:0,dComb:0,dOutros:0,
+    modo:'carro',vt:'nao',km:18,cons:11,preco:6.89,desg:0.2,pass:0,extra:0,aux:0,min:40,dias:6,jorn:7.33},
+ b:{nome:'Nova proposta',bruto:5600,adic:0,dep:1,va:700,benef:250,dPlano:0,dConsig:0,dVA:0,dComb:0,dOutros:0,
+    modo:'carro',vt:'nao',km:6,cons:11,preco:6.89,desg:0.2,pass:0,extra:0,aux:0,min:15,dias:5,jorn:8.8},
+ hum:{estab:[8,6,4],equipe:[7,6,3],chefia:[5,6,3],cresc:[4,7,4],escala:[4,7,4],saude:[4,6,5],proposito:[6,6,3],reconh:[4,6,3]},
+ quiz:{perda:4,statusquo:3,afundado:3,arrep:4,info:4,maxim:2,culpa:3,pressao:2,esgot:3,novo:4},
+ w:50,thV:4,thH:1.15,ck:{ckCargo:false,ckSkill:false,ckPlano:false},notes:{}
+};
+let S;
+const KEY='receita-decisao-v1';
+try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+if(!S||!S.a||!S.hum) S=structuredClone(EXAMPLE);
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+
+/* ---------- forms ---------- */
+function buildForm(el,schema){
+  let h=`<div class="row head"><div class="lbl"></div><div class="colA" id="hA">Atual</div><div class="colB" id="hB">Proposta</div></div>`;
+  for(const f of schema){
+    if(f.g){h+=`<div class="row group">${f.g}</div>`;continue}
+    h+=`<div class="row"><div class="lbl"><label for="a_${f.k}">${f.l}</label>${f.h?`<span>${f.h}</span>`:''}</div>`;
+    for(const j of ['a','b']){
+      const id=`${j}_${f.k}`;
+      if(f.t==='select') h+=`<div class="field sel ${j}"><select id="${id}" data-j="${j}" data-k="${f.k}" aria-label="${f.l} (${j==='a'?'atual':'proposta'})">${f.opts.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select></div>`;
+      else if(f.t==='text') h+=`<div class="field ${j}"><input class="name-in" type="text" id="${id}" data-j="${j}" data-k="${f.k}" aria-label="${f.l} (${j==='a'?'atual':'proposta'})"></div>`;
+      else h+=`<div class="field ${j}">${f.u==='R$'||f.u==='R$/l'||f.u==='R$/km'?`<i>${f.u}</i>`:''}<input type="number" inputmode="decimal" min="0" step="${f.step||1}" id="${id}" data-j="${j}" data-k="${f.k}" aria-label="${f.l} (${j==='a'?'atual':'proposta'})">${!f.u.startsWith('R$')?`<i style="padding:0 8px">${f.u}</i>`:''}</div>`;
+    }
+    h+=`</div>`;
+  }
+  el.innerHTML=h;
+}
+buildForm($('#formMoney'),MONEY);buildForm($('#formTrip'),TRIP);
+document.querySelectorAll('#formTrip .row.head').forEach(r=>{r.querySelector('#hA').id='hA2';r.querySelector('#hB').id='hB2'});
+function fillForms(){
+  document.querySelectorAll('[data-j][data-k]').forEach(el=>{const v=S[el.dataset.j][el.dataset.k];el.value=v??''});
+}
+document.addEventListener('input',e=>{
+  const el=e.target;
+  if(el.dataset&&el.dataset.j&&el.dataset.k){
+    S[el.dataset.j][el.dataset.k]=(el.type==='number')?(el.value===''?0:parseFloat(el.value)):el.value;
+    save();update();
+  }
+});
+document.addEventListener('change',e=>{const el=e.target;if(el.tagName==='SELECT'&&el.dataset.j){S[el.dataset.j][el.dataset.k]=el.value;save();update()}});
+
+/* ---------- tax ---------- */
+const INSS=[[1621.00,.075],[2902.84,.09],[4354.27,.12],[8475.55,.14]];
+function inss(b){let t=0,prev=0;for(const[lim,r] of INSS){if(b>prev)t+=(Math.min(b,lim)-prev)*r;prev=lim}return t}
+function irrf(bt,ins,dep){
+  const ded=Math.max(ins+dep*189.59,607.20);const base=Math.max(0,bt-ded);let tax;
+  if(base<=2428.80)tax=0;else if(base<=2826.65)tax=base*.075-182.16;else if(base<=3751.05)tax=base*.15-394.16;
+  else if(base<=4664.68)tax=base*.225-675.49;else tax=base*.275-908.73;
+  tax=Math.max(0,tax);
+  let red=0;if(bt<=5000)red=tax;else if(bt<=7350)red=Math.max(0,978.62-0.133145*bt);
+  return Math.max(0,tax-Math.min(tax,red));
+}
+
+/* ---------- per-job calc ---------- */
+function calc(J){
+  const v=k=>+J[k]||0;
+  const bt=v('bruto')+v('adic');
+  const ins=inss(bt), ir=irrf(bt,ins,v('dep'));
+  let day=0,fuelDay=0;
+  const veh=J.modo==='carro'||J.modo==='moto';
+  if(veh){fuelDay=v('cons')>0?(v('km')*2/v('cons'))*v('preco'):0;day=fuelDay+v('km')*2*v('desg')+v('extra')}
+  else if(J.modo==='onibus'||J.modo==='app'){day=v('pass')*2+v('extra')}
+  else day=v('extra');
+  const dias=v('dias');
+  const tripMonthGross=day*dias*WEEKS;
+  let vtDesc=0,tripMonth;
+  if(J.vt==='sim'){vtDesc=Math.min(0.06*v('bruto'),tripMonthGross);tripMonth=Math.max(0,v('extra')*dias*WEEKS-v('aux'))}
+  else tripMonth=Math.max(0,tripMonthGross-v('aux'));
+  const manual=v('dPlano')+v('dConsig')+v('dVA')+v('dComb')+v('dOutros');
+  const liq=bt-ins-ir-vtDesc-manual;
+  const benef=v('va')+v('benef');
+  const real=liq+benef-tripMonth;
+  const trafficH=(v('min')*2/60)*dias*WEEKS;
+  const workH=v('jorn')*dias*WEEKS;
+  const hours=trafficH+workH;
+  const hourly=hours>0?real/hours:0;
+  const anual=real*12+liq+bt/3*0.85;
+  const fgts=0.08*bt*(13+1/3);
+  const pacote=bt+benef-tripMonth;
+  return {bt,ins,ir,vtDesc,manual,liq,benef,tripMonth,tripDay:tripMonth/(dias*WEEKS||1),tripWeek:tripMonth/WEEKS,real,trafficH,workH,hours,hourly,anual,fgts,pacote,dias,fuelDay};
+}
+
+/* ---------- charts ---------- */
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let charts={};
+function chartDefaults(){
+  if(!window.Chart)return;
+  Chart.defaults.font.family=css('--body')||'sans-serif';
+  Chart.defaults.color=css('--muted');
+  Chart.defaults.borderColor=css('--line');
+}
+function makeCharts(){
+  if(!window.Chart)return;
+  chartDefaults();
+  Object.values(charts).forEach(c=>c.destroy());charts={};
+  const money={callbacks:{label:c=>`${c.dataset.label}: ${brl(c.raw)}`}};
+  charts.flow=new Chart($('#chFlow'),{type:'bar',data:{labels:['Atual','Proposta'],datasets:[]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{tooltip:money,legend:{position:'bottom',labels:{boxWidth:12}}},
+    scales:{x:{stacked:true,ticks:{callback:v=>'R$ '+(v/1000).toLocaleString('pt-BR')+' mil'}},y:{stacked:true,grid:{display:false}}}}});
+  charts.hours=new Chart($('#chHours'),{type:'bar',data:{labels:['Atual','Proposta'],datasets:[]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12}},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${n1(c.raw)} h`}}},
+    scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:'horas por mês'}}}}});
+  charts.acc=new Chart($('#chAccum'),{type:'line',data:{labels:[],datasets:[]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>`Mês ${c[0].label}`,label:c=>brl(c.raw)}}},
+    scales:{x:{title:{display:true,text:'meses'},grid:{display:false}},y:{ticks:{callback:v=>'R$ '+(v/1000).toLocaleString('pt-BR')+' mil'}}}}});
+  charts.radar=new Chart($('#chRadar'),{type:'radar',data:{labels:HUMAN.map(h=>h[1].replace(/ \(.*\)/,'')),datasets:[]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:12}}},
+    scales:{r:{min:0,max:10,ticks:{stepSize:2,backdropColor:'transparent'},pointLabels:{font:{size:11}},grid:{color:css('--line')},angleLines:{color:css('--line')}}}}});
+}
+function updateCharts(A,B){
+  if(!window.Chart)return;
+  const a=css('--a'),b=css('--b'),bad=css('--bad'),acc=css('--accent'),mut=css('--muted'),line=css('--line');
+  charts.flow.data.datasets=[
+    {label:'Fica no bolso',data:[Math.max(0,A.real-A.benef),Math.max(0,B.real-B.benef)],backgroundColor:[a,b]},
+    {label:'INSS',data:[A.ins,B.ins],backgroundColor:mut},
+    {label:'Imposto de Renda',data:[A.ir,B.ir],backgroundColor:bad},
+    {label:'Outros descontos',data:[A.manual+A.vtDesc,B.manual+B.vtDesc],backgroundColor:line},
+    {label:'Trajeto',data:[A.tripMonth,B.tripMonth],backgroundColor:acc},
+  ];charts.flow.update();
+  charts.hours.data.datasets=[
+    {label:'Trabalhando',data:[A.workH,B.workH],backgroundColor:[a,b]},
+    {label:'No trânsito',data:[A.trafficH,B.trafficH],backgroundColor:acc}
+  ];charts.hours.update();
+  const diff=B.real-A.real;const pts=[];for(let m=0;m<=24;m++){let v=diff*m;if(m>=12)v+=(B.liq-A.liq)+((B.bt-A.bt)/3*0.85);pts.push(Math.round(v))}
+  const col=diff>=0?b:bad;
+  charts.acc.data.labels=pts.map((_,i)=>i);
+  charts.acc.data.datasets=[{data:pts,borderColor:col,backgroundColor:col+'26',fill:true,tension:.25,pointRadius:pts.map((_,i)=>i===24||i===12?4:0),pointBackgroundColor:col}];
+  charts.acc.update();
+  charts.radar.data.datasets=[
+    {label:S.a.nome||'Atual',data:HUMAN.map(h=>S.hum[h[0]][0]),borderColor:a,backgroundColor:a+'30',pointBackgroundColor:a},
+    {label:S.b.nome||'Proposta',data:HUMAN.map(h=>S.hum[h[0]][1]),borderColor:b,backgroundColor:b+'30',pointBackgroundColor:b}
+  ];charts.radar.update();
+}
+const mq=window.matchMedia('(prefers-color-scheme: dark)');
+const rebuild=()=>{makeCharts();update()};
+mq.addEventListener&&mq.addEventListener('change',rebuild);
+new MutationObserver(rebuild).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- human ---------- */
+function buildHuman(){
+  let h=`<div class="hrow head"><div>Fator</div><div>Importância</div><div class="colA">Atual</div><div class="colB">Proposta</div></div>`;
+  for(const[k,l] of HUMAN){
+    const [va,vb,w]=S.hum[k];
+    h+=`<div class="hrow" data-h="${k}"><div>${l}</div>
+      <div class="dots" role="group" aria-label="Importância de ${l}">${[1,2,3,4,5].map(i=>`<button aria-label="${i}" data-w="${i}" class="${i<=w?'on':''}"></button>`).join('')}</div>
+      <div class="sl a" data-who="Atual"><input type="range" min="0" max="10" value="${va}" data-side="0" aria-label="${l} atual" id="h_${k}_a"><output>${va}</output></div>
+      <div class="sl b" data-who="Proposta"><input type="range" min="0" max="10" value="${vb}" data-side="1" aria-label="${l} proposta" id="h_${k}_b"><output>${vb}</output></div></div>`;
+  }
+  $('#humRows').innerHTML=h;
+}
+$('#humRows').addEventListener('input',e=>{
+  const r=e.target.closest('[data-h]');if(!r||e.target.type!=='range')return;
+  S.hum[r.dataset.h][+e.target.dataset.side]=+e.target.value;e.target.nextElementSibling.textContent=e.target.value;save();update();
+});
+$('#humRows').addEventListener('click',e=>{
+  const bt=e.target.closest('[data-w]');if(!bt)return;const r=bt.closest('[data-h]');
+  S.hum[r.dataset.h][2]=+bt.dataset.w;r.querySelectorAll('[data-w]').forEach(x=>x.classList.toggle('on',+x.dataset.w<=+bt.dataset.w));save();update();
+});
+function humanScore(){
+  let sw=0,sa=0,sb=0,diffs=[];
+  for(const[k,l] of HUMAN){const[a,b,w]=S.hum[k];sw+=w;sa+=a*w;sb+=b*w;diffs.push([l.replace(/ \(.*\)/,''),b-a,w])}
+  return {a:sa/(sw||1),b:sb/(sw||1),diffs};
+}
+
+/* ---------- quiz ---------- */
+function buildQuiz(){
+  $('#quiz').innerHTML=QUIZ.map(([k,t])=>`<div class="q" data-q="${k}"><div>${t}</div><div class="likert" role="group" aria-label="${t}">${[1,2,3,4,5].map(i=>`<button data-v="${i}" class="${S.quiz[k]===i?'on':''}">${i}</button>`).join('')}</div></div>`).join('');
+}
+$('#quiz').addEventListener('click',e=>{
+  const b=e.target.closest('[data-v]');if(!b)return;const q=b.closest('[data-q]');
+  S.quiz[q.dataset.q]=+b.dataset.v;q.querySelectorAll('[data-v]').forEach(x=>x.classList.toggle('on',x===b));save();update();
+});
+function renderDiag(){
+  const list=Object.entries(BIAS).map(([k,b])=>[k,b,(S.quiz[b.q[0]]||1)]).sort((x,y)=>y[2]-x[2]).slice(0,3);
+  $('#diag').innerHTML=list.map(([k,b,v])=>`<div class="dcard"><div class="eyebrow">${v>=4?'Pesando muito':v===3?'Pesando um pouco':'Pesando pouco'}</div><h3>${b.t}</h3><div class="lvl"><i style="width:${v*20}%"></i></div><p>${b.d}</p><div class="fix"><b>Como destravar:</b> ${b.f}</div><div class="src">${b.s}</div></div>`).join('');
+}
+
+/* ---------- tools ---------- */
+let coinRes=null;
+$('#btnCoin').addEventListener('click',()=>{
+  const c=$('#coin');c.classList.remove('spin');void c.offsetWidth;c.classList.add('spin');
+  coinRes=Math.random()<.5?'fico':'mudo';c.textContent='…';$('#gutBox').hidden=true;$('#gutOut').hidden=true;
+  setTimeout(()=>{c.textContent=coinRes==='fico'?'Cara: FICO':'Coroa: MUDO';$('#gutBox').hidden=false},1100);
+});
+$('#gutBox').addEventListener('click',e=>{
+  const g=e.target.dataset.gut;if(!g)return;
+  const want=(g==='alivio')===(coinRes==='mudo')?'mudar':'ficar';
+  $('#gutOut').hidden=false;
+  $('#gutOut').innerHTML=`Sua reação indica que, no fundo, você quer <b>${want}</b>. Compare com o veredito dos números. Se coincidirem, a decisão está madura. Se não, volte aos fatores humanos: algum peso pode estar errado.`;
+});
+['t10a','t10b','t10c','pmA','pmB'].forEach(id=>{const el=$('#'+id);el.value=(S.notes||{})[id]||'';el.addEventListener('input',()=>{S.notes=S.notes||{};S.notes[id]=el.value;save()})});
+
+/* ---------- controls ---------- */
+const pct=(v)=>v.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:2});
+['thVert','thHor','wMoney'].forEach(id=>$('#'+id).addEventListener('input',e=>{
+  if(id==='thVert')S.thV=+e.target.value;if(id==='thHor')S.thH=+e.target.value;if(id==='wMoney')S.w=+e.target.value;save();update();
+}));
+['ckCargo','ckSkill','ckPlano'].forEach(id=>$('#'+id).addEventListener('change',e=>{S.ck[id]=e.target.checked;save();update()}));
+$('#btnExample').addEventListener('click',()=>{S=structuredClone(EXAMPLE);init()});
+$('#btnClear').addEventListener('click',()=>{
+  for(const j of['a','b'])for(const k in S[j]){if(typeof S[j][k]==='number')S[j][k]=0}
+  S.a.nome='Emprego atual';S.b.nome='Proposta';save();init();
+});
+
+/* ---------- render ---------- */
+function lines(R){
+  const L=(t,v,c='')=>`<div class="ln ${c}"><span>${t}</span><span>${v}</span></div>`;
+  return L('Bruto + adicionais',brl(R.bt))+L('INSS',`− ${brl(R.ins)}`,'minus')+L('Imposto de Renda',`− ${brl(R.ir)}`,'minus')+
+   (R.vtDesc?L('Vale-transporte (6%)',`− ${brl(R.vtDesc)}`,'minus'):'')+(R.manual?L('Descontos manuais',`− ${brl(R.manual)}`,'minus'):'')+
+   L('Líquido no holerite',brl(R.liq),'total')+L('Benefícios (VA, plano etc.)',`+ ${brl(R.benef)}`)+L('Trajeto do mês',`− ${brl(R.tripMonth)}`,'minus')+
+   L('Sobra real no mês',brl(R.real),'total big')+L('Valor da sua hora (com trânsito)',brl(R.hourly))+
+   L('Ganho anual estimado (13º e férias)',brl(R.anual))+L('FGTS depositado no ano',brl(R.fgts));
+}
+function setFill(el,v){ // v in [-1,1]
+  const w=Math.abs(v)*50;el.style.width=w+'%';el.style.left=v>=0?'50%':(50-w)+'%';el.style.background=v>=0?css('--b'):css('--a');
+}
+function update(){
+  const A=calc(S.a),B=calc(S.b);
+  const nA=S.a.nome||'Atual',nB=S.b.nome||'Proposta';
+  ['#hA','#hA2','#rNameA'].forEach(s=>$(s).textContent=nA);['#hB','#hB2','#rNameB'].forEach(s=>$(s).textContent=nB);
+  const q=s=>JSON.stringify(String(s).slice(0,28));
+  document.documentElement.style.setProperty('--nameA',q(nA));document.documentElement.style.setProperty('--nameB',q(nB));
+  $('#rA').innerHTML=lines(A);$('#rB').innerHTML=lines(B);
+
+  // trip table
+  const T=(t,a,b,f=brl)=>`<tr><td>${t}</td><td>${f(a)}</td><td>${f(b)}</td><td style="color:${b-a<=0?'var(--good)':'var(--bad)'}">${(b-a>0?'+ ':'')}${f(b-a)}</td></tr>`;
+  $('#tblTrip').innerHTML=`<thead><tr><th>Período</th><th class="colA">${nA}</th><th class="colB">${nB}</th><th>Diferença</th></tr></thead><tbody>`+
+    T('Por dia',A.tripDay,B.tripDay)+T('Por semana',A.tripWeek,B.tripWeek)+T('Por mês',A.tripMonth,B.tripMonth)+T('Por ano',A.tripMonth*12,B.tripMonth*12)+
+    T('Horas no trânsito / mês',A.trafficH,B.trafficH,v=>n1(v)+' h')+T('Dias inteiros no trânsito / ano',A.trafficH*12/24,B.trafficH*12/24,v=>n1(v)+' dias')+`</tbody>`;
+
+  // KPIs
+  const diff=B.real-A.real;
+  $('#kDiff').textContent=(diff>=0?'+':'')+brl(diff);$('#kDiff').style.color=diff>=0?'var(--good)':'var(--bad)';
+  $('#kHour').textContent=`${brl(A.hourly)} → ${brl(B.hourly)}`;$('#kHour').style.fontSize='15px';
+  $('#kTraffic').textContent=`${n1(A.trafficH)}h → ${n1(B.trafficH)}h`;$('#kTraffic').style.fontSize='15px';
+
+  // vertical/horizontal
+  const ratio=A.pacote>0?B.pacote/A.pacote:0;
+  const thV=S.thV,thH=S.thH;
+  $('#thVert').value=thV;$('#thHor').value=thH;$('#thVertOut').textContent=pct(thV)+'x';$('#thHorOut').textContent=pct(thH)+'x';
+  const maxR=Math.max(thV*1.25,ratio*1.05,1.5),minR=Math.min(0.6,ratio*.95);
+  const pos=v=>Math.min(100,Math.max(0,(v-minR)/(maxR-minR)*100));
+  $('#mz1').style.width=pos(thH)+'%';$('#mz2').style.width=(pos(thV)-pos(thH))+'%';$('#mz3').style.width=(100-pos(thV))+'%';
+  $('#needle').style.left=`calc(${pos(ratio)}% - 2px)`;$('#needle').dataset.v=pct(ratio)+'x';
+  const career=['ckCargo','ckSkill','ckPlano'].filter(k=>S.ck[k]).length;
+  ['ckCargo','ckSkill','ckPlano'].forEach(k=>$('#'+k).checked=!!S.ck[k]);
+  let vh,vht;const gain=(ratio-1)*100;
+  if(ratio>=thV){vh='Proposta vertical';vht=`O pacote da proposta é ${pct(ratio)} vezes o atual. É um salto de nível: financeiramente, recusar exige um motivo humano muito forte.`}
+  else if(ratio<thH){vh=career>=2&&ratio>=1?'Horizontal no dinheiro, vertical na carreira':'Proposta horizontal';
+    vht=ratio<1?`A proposta paga ${pct(Math.abs(gain))}% menos que o atual, já contando o trajeto. Só faz sentido se os fatores humanos ou a carreira compensarem.`:
+    `Ganho de só ${pct(gain)}% no pacote. É basicamente trocar de endereço. ${career>=2?'Mas você marcou ganhos claros de carreira, e isso pode valer mais que o salário no médio prazo.':'Para valer a troca, a proposta precisa ganhar nos fatores humanos.'}`}
+  else {vh=career>=2?'Intermediária com cara de vertical':'Proposta intermediária';vht=`Ganho de ${pct(gain)}% no pacote. É um avanço real, mas não um salto. Aqui quem decide são os fatores humanos e a carreira.`}
+  $('#vhTitle').textContent=vh;$('#vhText').textContent=vht;
+
+  // human
+  const H=humanScore();
+  const top=[...H.diffs].sort((x,y)=>Math.abs(y[1]*y[2])-Math.abs(x[1]*x[2])).filter(d=>d[1]!==0).slice(0,3);
+  $('#humSummary').innerHTML=`Média ponderada: <b class="colA">${n1(H.a)}</b> no atual e <b class="colB">${n1(H.b)}</b> na proposta. `+
+    (top.length?'O que mais pesa: '+top.map(d=>`${d[0]} (${d[1]>0?'proposta +':'atual +'}${Math.abs(d[1])})`).join(', ')+'.':'Os dois empatam nos fatores humanos.');
+
+  // scores
+  const finRatio=A.hourly>0?B.hourly/A.hourly-1:0;
+  let fin=Math.tanh(finRatio*4);
+  fin=Math.max(-1,Math.min(1,fin+career*0.05*(ratio>=1?1:0)));
+  const hum=Math.tanh((H.b-H.a)/2.5);
+  const w=S.w/100;$('#wMoney').value=S.w;$('#wMoneyOut').textContent=S.w+'%';
+  // psych push factors
+  const push=((S.quiz.esgot||3)-3)*0.04+((S.quiz.novo||3)-3)*0.03;
+  const tot=Math.max(-1,Math.min(1,w*fin+(1-w)*hum+push));
+  setFill($('#sFin'),fin);setFill($('#sHum'),hum);setFill($('#sTot'),tot);
+  const lab=v=>(v>0.05?'proposta ':v<-0.05?'atual ':'empate ')+(v>0?'+':'')+Math.round(v*100);
+  $('#sFinT').textContent=lab(fin);$('#sHumT').textContent=lab(hum);$('#sTotT').textContent=lab(tot);
+
+  // balança
+  const ang=tot*16, rad=ang*Math.PI/180;
+  $('#beam').style.transform=`rotate(${ang}deg)`;
+  const L={x:200-140*Math.cos(rad),y:90-140*Math.sin(rad)},R={x:200+140*Math.cos(rad),y:90+140*Math.sin(rad)};
+  $('#panL').style.transform=`translate(${L.x}px,${L.y}px)`;$('#panR').style.transform=`translate(${R.x}px,${R.y}px)`;
+
+  // verdict
+  let tag,title,text;
+  if(tot>0.3){tag='Indicação forte';title=`Mudar para ${nB}`;text='Os números e os fatores humanos apontam para a proposta. O que falta é coragem, não informação.'}
+  else if(tot>0.1){tag='Inclinação';title=`Tende a valer a pena ir para ${nB}`;text='A proposta está à frente, mas sem folga. Negocie os pontos fracos antes de assinar.'}
+  else if(tot>=-0.1){tag='Empate técnico';title='Os dois lados se equilibram';text='Nenhum lado ganha com clareza. Use o teste da moeda e o pré-mortem: o desempate é emocional.'}
+  else if(tot>=-0.3){tag='Inclinação';title=`Tende a valer ficar em ${nA}`;text='O emprego atual ainda entrega mais. Use a proposta como argumento para negociar onde está.'}
+  else {tag='Indicação forte';title=`Ficar em ${nA}`;text='A proposta não compensa o que ele já tem. Recusar com educação mantém a porta aberta.'}
+  $('#vTag').textContent=tag;$('#vTitle').textContent=title;$('#vText').textContent=text;
+  $('#fTitle').textContent=title;
+
+  const reasons=[];
+  reasons.push(diff>=0?`Na proposta sobram ${brl(diff)} a mais por mês depois de impostos, descontos e trajeto (${brl(diff*12)} por ano).`
+                      :`Na proposta sobram ${brl(-diff)} a menos por mês depois de impostos, descontos e trajeto.`);
+  const dh=A.trafficH-B.trafficH;
+  if(Math.abs(dh)>=1)reasons.push(dh>0?`Ele ganha ${n1(dh)} horas por mês fora do trânsito, ${n1(dh*12/24)} dias inteiros por ano.`:`Ele perde ${n1(-dh)} horas a mais por mês no trânsito.`);
+  reasons.push(`Cada hora da vida dele dedicada ao trabalho vale ${brl(A.hourly)} hoje e valeria ${brl(B.hourly)} na proposta.`);
+  reasons.push(`Classificação: ${vh.toLowerCase()} (pacote ${pct(ratio)}x).`);
+  if(top.length)reasons.push(`Fatores humanos mais decisivos: ${top.map(d=>d[0].toLowerCase()).join(', ')}.`);
+  const topBias=Object.values(BIAS).map(b=>[b.t,S.quiz[b.q[0]]||1]).sort((x,y)=>y[1]-x[1])[0];
+  if(topBias[1]>=4)reasons.push(`Atenção ao viés "${topBias[0].toLowerCase()}": ele pode estar inflando o medo de mudar.`);
+  if((S.quiz.esgot||0)>=4)reasons.push('Ele relatou esgotamento no emprego atual. Isso tende a piorar com o tempo se nada mudar.');
+  $('#fReasons').innerHTML=reasons.map(r=>`<li>${r}</li>`).join('');
+
+  renderDiag();updateCharts(A,B);
+}
+function init(){fillForms();buildHuman();buildQuiz();['t10a','t10b','t10c','pmA','pmB'].forEach(id=>$('#'+id).value=(S.notes||{})[id]||'');save();update()}
+makeCharts();init();
+})();
+</script>
+
+</body></html>
