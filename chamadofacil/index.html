@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Chamado Fácil · CD-AM</title>
+  <meta name="theme-color" content="#0B2E2A">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="assets/icon-64.png">
+  <link rel="apple-touch-icon" href="assets/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <section class="login-hero">
+      <img class="logo" src="assets/logo-rd-escuro.png" alt="RD Saúde">
+      <div>
+        <h1>Chamados e coletores do CD&#8209;AM em <em>um só lugar</em>.</h1>
+        <p>Abra chamados de senha em segundos e saiba sempre com quem está cada coletor — retirada e devolução com um bipe.</p>
+        <div class="hero-feats">
+          <div class="hero-feat"><b>Chamados</b><span>Teams e WMS prontos</span></div>
+          <div class="hero-feat"><b>Coletores</b><span>QR code e rastreio</span></div>
+          <div class="hero-feat"><b>Histórico</b><span>Dia, semana e mês</span></div>
+        </div>
+      </div>
+      <small>Uso interno · Centro de Distribuição Manaus</small>
+      <img class="hero-mark" src="assets/marca.png" alt="">
+    </section>
+
+    <section class="login-panel">
+      <form class="login-card" id="form" autocomplete="on" novalidate>
+        <div class="brand-mini">
+          <img src="assets/marca.png" alt="">
+          <div><b>Chamado Fácil</b><span>CD-AM · Supervisão</span></div>
+        </div>
+        <h2>Entrar</h2>
+        <p class="sub">Acesso exclusivo de supervisores e coordenadores.</p>
+
+        <div class="form-stack">
+          <div class="field">
+            <label for="mat">Matrícula</label>
+            <input class="input" id="mat" name="username" inputmode="numeric" autocomplete="username" placeholder="Ex.: 9053668" required autofocus>
+          </div>
+          <div class="field">
+            <label for="cpf">Senha</label>
+            <div class="pass-wrap">
+              <input class="input" id="cpf" name="password" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Seu CPF, só números" required>
+              <button type="button" id="ver" aria-label="Mostrar senha"></button>
+            </div>
+          </div>
+          <div class="login-err hidden" id="err"></div>
+          <button class="btn btn-primary btn-block" id="go" type="submit" style="min-height:48px">Entrar</button>
+        </div>
+
+        <div class="login-help">
+          <b>Primeiro acesso?</b> Usuário é sua <b>matrícula</b> e a senha é seu <b>CPF</b> (sem pontos e traço). Depois de entrar você pode trocar a senha em “Minha conta”.
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+    (async () => {
+      const $ = (s) => document.querySelector(s);
+      $('#ver').innerHTML = CF.icon('eye');
+      $('#ver').onclick = () => { const i = $('#cpf'); i.type = i.type === 'password' ? 'text' : 'password'; };
+      const destino = new URLSearchParams(location.search).get('ir') === 'terminal' ? 'terminal.html' : 'app.html';
+
+      if (await CF.meuPerfil()) { location.replace(destino); return; }
+
+      $('#form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const mat = CF.soDigitos($('#mat').value), cpf = $('#cpf').value.trim();
+        const err = $('#err');
+        err.classList.add('hidden');
+        if (!mat || !cpf) { err.textContent = 'Informe matrícula e senha.'; err.classList.remove('hidden'); return; }
+        $('#go').disabled = true; $('#go').textContent = 'Entrando…';
+        try {
+          await CF.entrar(mat, cpf);
+          const p = await CF.meuPerfil();
+          if (!p) { await CF.sb.auth.signOut(); throw new Error('perfil'); }
+          location.replace(destino);
+        } catch (ex) {
+          err.textContent = ex.message === 'perfil'
+            ? 'Seu usuário não tem perfil de supervisor/coordenador.'
+            : /fetch|network/i.test(ex.message) ? 'Sem conexão com o servidor. Verifique a internet.' : 'Matrícula ou senha incorreta.';
+          err.classList.remove('hidden');
+          $('#go').disabled = false; $('#go').textContent = 'Entrar';
+        }
+      });
+    })();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  </script>
+</body>
+</html>

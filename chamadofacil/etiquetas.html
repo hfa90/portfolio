@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Etiquetas QR · Chamado Fácil</title>
+  <link rel="icon" href="assets/icon-64.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Sora:wght@700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="labels-page">
+  <div class="labels-bar">
+    <img src="assets/marca.png" alt="" style="width:28px">
+    <b id="titulo">Etiquetas</b>
+    <div class="seg" id="tipo"><button data-t="coletor">Coletores</button><button data-t="cracha">Crachás (matrícula)</button></div>
+    <select class="input" id="equipe" style="width:auto"><option value="">Todas as equipes</option></select>
+    <input class="input mono" id="faixa" placeholder="Faixa: 1-20 ou 3,5,8" style="width:190px">
+    <span class="muted" id="qtd"></span>
+    <span style="flex:1"></span>
+    <button class="btn btn-primary" onclick="print()">Imprimir</button>
+  </div>
+  <div class="labels" id="labels"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/common.js"></script>
+  <script>
+  (async () => {
+    const { sb, esc, qrSvg, codigoColetor, primeiroNome } = CF;
+    const $ = (s) => document.querySelector(s);
+    await CF.exigirLogin();
+    const qs = new URLSearchParams(location.search);
+    let tipo = qs.get('tipo') === 'cracha' ? 'cracha' : 'coletor';
+    if (qs.get('n')) $('#faixa').value = qs.get('n');
+    else if (qs.get('de')) $('#faixa').value = `${qs.get('de')}-${qs.get('ate') || qs.get('de')}`;
+
+    const [{ data: cols }, colabs] = await Promise.all([
+      sb.from('coletores').select('*').order('numero'),
+      CF.buscarTudo(() => sb.from('colaboradores').select('matricula,nome,equipe,ativo').eq('ativo', true).order('nome')),
+    ]);
+    const equipes = [...new Set(colabs.map((c) => c.equipe).filter(Boolean))].sort();
+    $('#equipe').innerHTML += equipes.map((e) => `<option>${esc(e)}</option>`).join('');
+    if (qs.get('equipe')) $('#equipe').value = qs.get('equipe');
+
+    function faixa() {
+      const t = $('#faixa').value.trim(); if (!t) return null;
+      const set = new Set();
+      t.split(/[,;\s]+/).forEach((p) => {
+        const m = p.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (m) for (let i = +m[1]; i <= +m[2] && i - +m[1] < 2000; i++) set.add(i);
+        else if (/^\d+$/.test(p)) set.add(+p);
+      });
+      return set;
+    }
+
+    function render() {
+      document.querySelectorAll('#tipo button').forEach((b) => b.classList.toggle('on', b.dataset.t === tipo));
+      $('#faixa').classList.toggle('hidden', tipo !== 'coletor');
+      const eq = $('#equipe').value;
+      let html = '', n = 0;
+      if (tipo === 'coletor') {
+        const f = faixa();
+        const lista = (cols || []).filter((c) => (!eq || c.equipe === eq) && (!f || f.has(c.numero)));
+        n = lista.length;
+        html = lista.map((c) => `<div class="label">
+          <div class="qr">${qrSvg(c.codigo, 0)}</div>
+          <div class="info"><div class="lt"><img src="assets/marca.png" alt="">Coletor · CD-AM</div>
+          <div class="num">${esc(c.codigo)}</div>
+          <div class="eq">${esc(c.equipe || '')}</div>
+          <div class="pr">${c.propriedade === 'CD' ? 'PATRIMÔNIO CD' : 'ALUGADO' + (c.locadora ? ' · ' + esc(c.locadora).toUpperCase() : '')}</div></div></div>`).join('');
+        $('#titulo').textContent = 'Etiquetas de coletores';
+      } else {
+        const lista = colabs.filter((c) => !eq || c.equipe === eq);
+        n = lista.length;
+        html = lista.map((c) => `<div class="label cracha">
+          <div class="qr">${qrSvg(c.matricula, 0)}</div>
+          <div class="info"><div class="lt"><img src="assets/marca.png" alt="">Matrícula · CD-AM</div>
+          <div class="num" style="font-size:6mm">${esc(c.matricula)}</div>
+          <div class="eq" style="font-size:2.9mm;color:#000">${esc(primeiroNome(c.nome))}</div>
+          <div class="eq">${esc(c.equipe || '')}</div></div></div>`).join('');
+        $('#titulo').textContent = 'QR de matrícula (crachá)';
+      }
+      $('#labels').innerHTML = html || '<div class="empty" style="grid-column:1/-1">Nada para imprimir com esses filtros.</div>';
+      $('#qtd').textContent = `${n} etiqueta${n === 1 ? '' : 's'}`;
+    }
+    document.querySelectorAll('#tipo button').forEach((b) => b.onclick = () => { tipo = b.dataset.t; render(); });
+    $('#equipe').onchange = render;
+    $('#faixa').oninput = render;
+    render();
+  })();
+  </script>
+</body>
+</html>
