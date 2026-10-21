@@ -313,7 +313,7 @@
         : `<div class="col-holder free">${c.status === 'DISPONIVEL' ? 'No armário · pronto para uso' : esc(c.observacao || STATUS_TXT[c.status])}</div>`;
       return `<article class="col-card st-card-${c.status} ${late ? 'atrasado' : ''}" data-id="${c.id}">
         <div class="col-top">
-          <div class="col-qr" data-zoom title="Ampliar QR">${CF.qrSvg(c.codigo, 0)}</div>
+          <div class="col-qr" data-zoom title="Ampliar QR e código de barras">${CF.qrSvg(c.codigo, 0)}</div>
           <div style="min-width:0;flex:1">
             <div class="col-num">${esc(c.codigo)}</div>
             <div class="col-model">${esc([c.modelo, c.serie && 'S/N ' + c.serie].filter(Boolean).join(' · ') || 'Modelo não informado')}</div>
@@ -378,8 +378,9 @@
   function zoomQR(c) {
     modal({
       titulo: esc(c.codigo),
-      corpo: `<div style="display:grid;place-items:center;gap:12px"><div style="width:min(320px,80vw)">${CF.qrSvg(c.codigo, 1)}</div>
-        <div class="col-num" style="font-size:2.4rem">${esc(c.codigo)}</div><p class="muted" style="margin:0">Aponte o leitor do terminal para este código.</p></div>`,
+      corpo: `<div style="display:grid;place-items:center;gap:12px"><div style="width:min(260px,70vw)">${CF.qrSvg(c.codigo, 1)}</div>
+        <div style="width:min(340px,80vw)">${CF.barrasSvg(c.codigo, { altura: 60 }).replace('class="barcode"', 'class="barcode" style="width:100%;height:80px;display:block"')}</div>
+        <div class="col-num" style="font-size:2.4rem">${esc(c.codigo)}</div><p class="muted" style="margin:0">Aponte o leitor para o QR ou para o código de barras.</p></div>`,
     });
   }
 

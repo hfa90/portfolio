@@ -130,7 +130,7 @@ create trigger trg_colab_upd before update on public.colaboradores
 -- Normaliza o que foi bipado: "COL-007", "col7", "7", "007" -> numero 7
 create or replace function public.numero_coletor(p_txt text)
 returns integer language sql immutable as $$
-  select ((regexp_match(upper(trim(coalesce(p_txt,''))), '^(?:COL)?[-\s]*0*(\d{1,6})$'))[1])::integer;
+  select ((regexp_match(upper(trim(coalesce(p_txt,''))), '^(?:COL)?[^0-9A-Z]{0,2}0*(\d{1,6})$'))[1])::integer;
 $$;
 
 -- ---------------------------------------------------------------------

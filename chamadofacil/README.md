@@ -38,11 +38,11 @@ Pronto. O login é **matrícula** como usuário e **CPF (só números)** como se
 
 ## Como usar no dia a dia
 
-**Cadastrar coletores:** *Coletores → Em lote* (ex.: 1 a 40), escolha modelo, se é do CD ou alugado, equipe e supervisor. No fim o sistema oferece imprimir as etiquetas (70 × 35 mm, cabem em etiqueta adesiva ou papel comum). Cole a etiqueta atrás de cada aparelho.
+**Cadastrar coletores:** *Coletores → Em lote* (ex.: 1 a 40), escolha modelo, se é do CD ou alugado, equipe e supervisor. No fim o sistema oferece imprimir as etiquetas (70 mm de largura) com **QR code + código de barras Code 128** — escolha também "só código de barras" ou "só QR" na tela de etiquetas. Cole a etiqueta atrás de cada aparelho.
 
 **Terminal:** em um PC/tablet com leitor de código de barras USB ou Bluetooth (modo teclado), um supervisor faz login e abre *Terminal de bipagem*. O terminal continua logado. O leitor envia o código e um Enter. Sem leitor dá para digitar ou usar a câmera (botão *Usar câmera*).
 - Crachá: matrícula em código de barras/QR, ou digitada. Em *Equipe → Crachás QR* dá para imprimir um QR de matrícula para cada colaborador.
-- Coletor: QR da etiqueta (`COL-012`). Digitar só `12` também funciona.
+- Coletor: QR **ou código de barras** da etiqueta (`COL-012`). Digitar só `12` também funciona. Leitores 1D (que não leem QR) usam o código de barras.
 
 **Notificações:** com o painel aberto (aba do navegador ou app instalado), cada retirada ou devolução dos coletores da sua equipe aparece na hora com aviso e som. Clique no sino → *Ativar alertas* para receber a notificação do sistema mesmo com a aba em segundo plano. Coordenadores recebem de todas as equipes.
 

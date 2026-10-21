@@ -67,7 +67,7 @@
   function classificar(raw) {
     const v = String(raw || '').trim().toUpperCase();
     if (!v) return null;
-    let m = v.match(/^COL[-\s]?0*(\d{1,6})$/);
+    let m = v.match(/^COL[^0-9A-Z]{0,2}0*(\d{1,6})$/);
     if (m) return { tipo: 'col', val: +m[1] };
     m = v.match(/^(?:MAT[:\-\s]?)(\d+)$/);
     if (m) return { tipo: 'mat', val: m[1] };
@@ -179,7 +179,11 @@
     cam = new Html5Qrcode('cam');
     let ultimo = '', quando = 0;
     try {
-      await cam.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, (txt) => {
+      await cam.start({ facingMode: 'environment' }, {
+        fps: 12,
+        qrbox: (w, h) => ({ width: Math.floor(Math.min(w * 0.9, 380)), height: Math.floor(Math.min(h * 0.6, 220)) }),
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      }, (txt) => {
         if (txt === ultimo && Date.now() - quando < 2500) return;
         ultimo = txt; quando = Date.now();
         ler(txt);

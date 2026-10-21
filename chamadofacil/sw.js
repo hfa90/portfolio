@@ -1,5 +1,5 @@
 /* Chamado Fácil — service worker (rede primeiro; cache só como reserva offline) */
-const CACHE = 'chamadofacil-v1';
+const CACHE = 'chamadofacil-v2';
 const BASE = ['./', 'index.html', 'app.html', 'terminal.html', 'etiquetas.html', 'css/style.css',
   'js/config.js', 'js/common.js', 'js/app.js', 'js/terminal.js', 'assets/marca.png', 'assets/logo-rd-escuro.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(BASE)).catch(() => {})); self.skipWaiting(); });
