@@ -23,7 +23,11 @@ window.CF_CONFIG = {
     { id: 'T3', inicio: '22:40', fim: '06:00' },
   ],
   FUSO: 'America/Manaus',
+  OFFSET: '-04:00',          // Manaus não tem horário de verão
 
-  // Coletor em uso há mais de X horas aparece como "não devolvido"
+  // Tolerância depois do fim do turno para considerar "não devolvido"
+  TOLERANCIA_MIN: 30,
+
+  // Reserva: sem turno conhecido, em uso há mais de X horas = "não devolvido"
   HORAS_ALERTA: 9,
 };

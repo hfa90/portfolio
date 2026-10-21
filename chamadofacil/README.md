@@ -19,10 +19,19 @@ chamadofacil/
 ├── js/config.js      URL e chave do Supabase, links do ServiceNow, turnos
 ├── js/common.js · js/app.js · js/terminal.js
 ├── sql/01_schema.sql tabelas, segurança (RLS), funções e tempo real
+├── sql/04_supervisao.sql turno: presença, passagens, ocorrências, atrasos
 └── sql/privado/      ⚠️ NÃO vai para o GitHub (dados de funcionários e CPFs)
     ├── 02_colaboradores.sql          carga da listagem WorkArea
     └── 03_acessos_supervisores.sql   cria o login dos supervisores
 ```
+
+## Supervisão de turno (aba **Turno**)
+
+- **Presença da escala:** quem tem turno fixo (T1/T2/T3) cadastrado aparece na escala do turno. Quem bipou coletor fica como *Bipou ✓* automaticamente; para os demais o supervisor marca Presente, Atraso, Falta, Folga, Atestado, Férias ou Afastado. Colaboradores sem turno definido aparecem logo abaixo para definir com um toque.
+- **Encerrar turno:** monta o resumo do turno (retiradas, devoluções, coletores fora do armário, ocorrências, manutenção, presença e faltas) com um recado para o próximo supervisor. Dá para copiar, mandar no WhatsApp e **registrar a passagem de turno**.
+- **Passagem de turno:** o próximo supervisor é avisado na hora, vê o resumo e o recado e dá o **ciente**, que fica registrado com nome e horário.
+- **Cobrança de não devolvidos:** coletor que passou do fim do turno (+ `TOLERANCIA_MIN`, padrão 30 min) gera alerta para o supervisor, aparece em vermelho e tem o botão **Cobrar**, que gera a mensagem pronta para o WhatsApp. No terminal, quem bipa o crachá com coletor atrasado vê um aviso vermelho para devolver. O ranking "Quem mais atrasa a devolução" mostra o mês.
+- **Ocorrência na devolução:** depois de cada devolução o terminal pergunta se o coletor tem problema (Bateria, Tela, Não liga, Leitor/gatilho, Teclado, Outro), pelo toque ou pelas teclas 1–6 (Enter = tudo certo; sem resposta em 9 s = tudo certo). Com problema, o coletor vai para **manutenção** (não pode ser retirado) e o supervisor é notificado. Ao voltar o coletor para "disponível", as ocorrências abertas são encerradas. Também dá para registrar pelo menu do cartão do coletor.
 
 ## Instalação (uma vez)
 
@@ -30,7 +39,8 @@ No Supabase do projeto, abra **SQL Editor** e rode, nesta ordem:
 
 1. `sql/01_schema.sql`
 2. `sql/privado/02_colaboradores.sql` (carga dos 107 colaboradores do CD-AM)
-3. `sql/privado/03_acessos_supervisores.sql`: **preencha antes o CPF de cada supervisor/coordenador** no lugar de `CPF_AQUI` (a planilha WorkArea não traz CPF).
+3. `sql/04_supervisao.sql` (turno, presença, passagens e ocorrências)
+4. `sql/privado/03_acessos_supervisores.sql`: **preencha antes o CPF de cada supervisor/coordenador** no lugar de `CPF_AQUI` (a planilha WorkArea não traz CPF).
 
 Pronto. O login é **matrícula** como usuário e **CPF (só números)** como senha. Cada supervisor pode trocar a senha em *Minha conta*. Para voltar a senha de alguém ao CPF, rode de novo a linha dele no arquivo 03.
 

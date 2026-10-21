@@ -32,7 +32,7 @@
   atualizaTurno(); setInterval(atualizaTurno, 60000);
 
   /* ---------------- navegação ---------------- */
-  const TITULOS = { chamados: 'Chamados', coletores: 'Coletores de dados', historico: 'Movimentações', equipe: 'Equipe' };
+  const TITULOS = { chamados: 'Chamados', coletores: 'Coletores de dados', turno: 'Turno', historico: 'Movimentações', equipe: 'Equipe' };
   function ir(v) {
     if (!TITULOS[v]) v = 'chamados';
     S.view = v;
@@ -42,6 +42,7 @@
     $('#crumb').textContent = `Olá, ${primeiroNome(me.nome).split(' ')[0]} · CD-AM`;
     history.replaceState(null, '', '#' + v);
     if (v === 'historico') carregarHistorico();
+    if (v === 'turno') carregarTurno();
     if (v === 'equipe') renderEquipe();
     if (v === 'chamados') carregarChamados();
     window.scrollTo(0, 0);
@@ -260,7 +261,7 @@
   /* =========================================================
      2. COLETORES
      ========================================================= */
-  const atrasado = (c) => c.status === 'EM_USO' && c.retirado_em && (Date.now() - new Date(c.retirado_em)) > C.HORAS_ALERTA * 3600e3;
+  const atrasado = (c) => CF.estaAtrasado(c);
   const ehMeu = (c) => c.supervisor_matricula === me.matricula || (!!me.equipe && c.equipe === me.equipe);
   const STATUS_TXT = { DISPONIVEL: 'Disponível', EM_USO: 'Em uso', MANUTENCAO: 'Manutenção', INATIVO: 'Inativo' };
 
@@ -283,6 +284,7 @@
 
   function renderColetores() {
     renderKpis();
+    renderBannerAtraso();
     const q = $('#col-busca').value.trim().toLowerCase(), eq = $('#col-equipe').value, pr = $('#col-prop').value;
     const lista = S.coletores.filter((c) => {
       if (S.meus === 'meus' && !ehMeu(c)) return false;
@@ -309,7 +311,7 @@
       const holder = c.status === 'EM_USO'
         ? `<div class="col-holder"><b>${esc(c.portador_nome || '')}</b>
             <div class="meta">Mat. ${esc(c.portador_matricula || '')} · ${esc(c.turno_retirada || '')} · desde ${fmtHora(c.retirado_em)}</div>
-            <div class="meta ${late ? 'late' : ''}" data-tempo="${c.retirado_em}">${late ? 'Não devolvido · ' : 'Com a pessoa há '}${fmtDuracao(Date.now() - new Date(c.retirado_em))}</div></div>`
+            <div class="meta ${late ? 'late' : ''}" data-tempo="${c.retirado_em}">${late ? `Não devolvido · turno acabou ${fmtHora(CF.fimTurno(c.retirado_em, c.turno_retirada))}` : 'Com a pessoa há ' + fmtDuracao(Date.now() - new Date(c.retirado_em))}</div></div>`
         : `<div class="col-holder free">${c.status === 'DISPONIVEL' ? 'No armário · pronto para uso' : esc(c.observacao || STATUS_TXT[c.status])}</div>`;
       return `<article class="col-card st-card-${c.status} ${late ? 'atrasado' : ''}" data-id="${c.id}">
         <div class="col-top">
@@ -363,6 +365,7 @@
       c.status === 'EM_USO' ? ['down', 'Registrar devolução', () => movManual(c, 'DEVOLUCAO')] : null,
       c.status === 'DISPONIVEL' ? ['up', 'Registrar retirada', () => movManual(c, 'RETIRADA')] : null,
       c.status !== 'EM_USO' ? [c.status === 'MANUTENCAO' ? 'check' : 'wrench', c.status === 'MANUTENCAO' ? 'Voltar a disponível' : 'Enviar p/ manutenção', () => trocarStatus(c, c.status === 'MANUTENCAO' ? 'DISPONIVEL' : 'MANUTENCAO')] : null,
+      ['alert', 'Registrar ocorrência', () => formOcorrencia(c)],
       ['print', 'Imprimir etiqueta', () => window.open(`etiquetas.html?n=${c.numero}`, '_blank')],
       ['trash', 'Excluir', () => excluirColetor(c), true],
     ].filter(Boolean);
@@ -545,11 +548,43 @@
 
   async function historicoColetor(c) {
     const m = modal({ titulo: `Histórico · ${esc(c.codigo)}`, corpo: '<div class="empty">Carregando…</div>', largo: true });
-    const { data } = await sb.from('movimentos').select('*').eq('coletor_id', c.id).order('criado_em', { ascending: false }).limit(200);
-    m.$('.modal-body').innerHTML = data?.length ? `<div class="table-wrap"><table class="table"><thead><tr><th>Quando</th><th>Tipo</th><th>Colaborador</th><th>Turno</th><th class="hide-sm">Obs.</th></tr></thead><tbody>
+    const [{ data }, { data: ocs }] = await Promise.all([
+      sb.from('movimentos').select('*').eq('coletor_id', c.id).order('criado_em', { ascending: false }).limit(200),
+      sb.from('ocorrencias').select('*').eq('coletor_id', c.id).order('criado_em', { ascending: false }).limit(50),
+    ]);
+    const blocoOc = ocs?.length ? `<h4 style="margin:0 0 8px">Ocorrências</h4><div class="stat-list" style="margin-bottom:18px">${ocs.map((o) => `
+      <div class="oc-row"><span class="chip ${o.status === 'ABERTA' ? 'st-MANUTENCAO' : 'st-DISPONIVEL'}">${o.status === 'ABERTA' ? 'Aberta' : 'Resolvida'}</span>
+      <div><b>${esc(OC_TXT[o.tipo] || o.tipo)}</b>${o.descricao ? ' · ' + esc(o.descricao) : ''}<div class="muted" style="font-size:.8rem">${fmtDataHora(o.criado_em)}${o.nome ? ' · ' + esc(primeiroNome(o.nome)) : ''}${o.resolvido_em ? ' · resolvida ' + fmtDataHora(o.resolvido_em) : ''}</div></div></div>`).join('')}</div>` : '';
+    m.$('.modal-body').innerHTML = blocoOc + (data?.length ? `<h4 style="margin:0 0 8px">Movimentações</h4><div class="table-wrap"><table class="table"><thead><tr><th>Quando</th><th>Tipo</th><th>Colaborador</th><th>Turno</th><th class="hide-sm">Obs.</th></tr></thead><tbody>
       ${data.map((r) => `<tr><td>${fmtDataHora(r.criado_em)}</td><td><span class="chip tp-${r.tipo}">${r.tipo === 'RETIRADA' ? 'Retirada' : 'Devolução'}</span></td>
       <td><b>${esc(r.nome)}</b><div class="muted mono" style="font-size:.8rem">${esc(r.matricula)}</div></td><td>${esc(r.turno || '')}</td><td class="hide-sm muted">${esc(r.observacao || (r.origem === 'MANUAL' ? 'Manual' : ''))}</td></tr>`).join('')}
-      </tbody></table></div>` : '<div class="empty">Ainda sem movimentações.</div>';
+      </tbody></table></div>` : '<div class="empty">Ainda sem movimentações.</div>');
+  }
+
+  const OC_TXT = { BATERIA: 'Bateria', TELA: 'Tela', NAO_LIGA: 'Não liga', LEITOR: 'Leitor/gatilho', TECLADO: 'Teclado', OUTRO: 'Outro' };
+  function formOcorrencia(c) {
+    let tipo = 'BATERIA';
+    const emUso = c.status === 'EM_USO';
+    const m = modal({
+      titulo: `Ocorrência · ${esc(c.codigo)}`,
+      corpo: `<div class="form-stack">
+        <div class="field"><label>Problema</label><div class="seg" data-tipos>${Object.entries(OC_TXT).map(([k, v], i) => `<button type="button" data-t="${k}" class="${i ? '' : 'on'}">${v}</button>`).join('')}</div></div>
+        <div class="field"><label>Descrição (opcional)</label><input class="input" data-desc placeholder="Ex.: descarrega em 2 horas"></div>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:700"><input type="checkbox" data-manut ${emUso ? 'disabled' : 'checked'}> Enviar para manutenção (bloqueia retirada)</label>
+        ${emUso ? `<p class="muted" style="margin:0;font-size:.85rem">O coletor está em uso com ${esc(primeiroNome(c.portador_nome))}. A ocorrência fica registrada; envie para manutenção depois da devolução.</p>` : ''}
+      </div>`,
+      rodape: `<button class="btn btn-ghost" data-close>Cancelar</button><button class="btn btn-primary" data-ok>Registrar</button>`,
+    });
+    m.$$('[data-t]').forEach((b) => b.onclick = () => { tipo = b.dataset.t; m.$$('[data-t]').forEach((x) => x.classList.toggle('on', x === b)); });
+    m.$('[data-ok]').onclick = async () => {
+      const { data, error } = await sb.rpc('registrar_ocorrencia', {
+        p_coletor: c.codigo, p_tipo: tipo, p_matricula: c.portador_matricula || null,
+        p_descricao: m.$('[data-desc]').value.trim() || null, p_origem: 'MANUAL', p_manutencao: m.$('[data-manut]').checked,
+      });
+      if (error || !data?.ok) return toast('Não registrado', error?.message || data?.mensagem, 'err');
+      m.close(); toast('Ocorrência registrada', `${c.codigo} · ${OC_TXT[tipo]}`);
+      carregarColetores();
+    };
   }
 
   /* =========================================================
@@ -790,21 +825,363 @@
   }
 
   /* =========================================================
+     5. TURNO — presença, pendências, passagem e fechamento
+     ========================================================= */
+  const PRES_TXT = { PRESENTE: 'Presente', ATRASO: 'Atraso', FALTA: 'Falta', FOLGA: 'Folga', ATESTADO: 'Atestado', FERIAS: 'Férias', AFASTADO: 'Afastado' };
+  const T = { data: null, turno: null, equipe: ehCoord ? '' : (me.equipe || ''), dados: null };
+  {
+    const ti = CF.turnoInfo();
+    T.data = ti.data; T.turno = ti.id;
+  }
+
+  async function dadosTurno(data, turno, eq) {
+    const j = CF.janelaTurno(data, turno);
+    const de = new Date(j.inicio.getTime() - 60 * 60000), ate = new Date(j.fim.getTime() + 60 * 60000);
+    const [movs, { data: pres }, { data: ocs }, { data: pass }] = await Promise.all([
+      buscarTudo(() => sb.from('movimentos').select('*').gte('criado_em', de.toISOString()).lt('criado_em', ate.toISOString()).order('criado_em')),
+      sb.from('presencas').select('*').eq('data', data).eq('turno', turno),
+      sb.from('ocorrencias').select('*').gte('criado_em', de.toISOString()).lt('criado_em', ate.toISOString()).order('criado_em', { ascending: false }),
+      sb.from('passagens').select('*').order('criado_em', { ascending: false }).limit(30),
+    ]);
+    const colPorId = new Map(S.coletores.map((c) => [c.id, c]));
+    const filtroEq = (x) => !eq || x.equipe === eq || colPorId.get(x.coletor_id)?.equipe === eq;
+    const mv = movs.filter(filtroEq);
+    const presMap = new Map((pres || []).map((p) => [p.matricula, p]));
+    // escala: quem tem esse turno fixo na equipe
+    const escala = [...S.colabs.values()].filter((c) => c.ativo && c.perfil === 'colaborador' && c.turno === turno && (!eq || c.equipe === eq));
+    const bipou = new Map();
+    mv.filter((m) => m.tipo === 'RETIRADA' && new Date(m.criado_em) >= de && new Date(m.criado_em) < j.fim).forEach((m) => { if (!bipou.has(m.matricula)) bipou.set(m.matricula, m); });
+    const extras = [...bipou.keys()].filter((mat) => !escala.some((e) => e.matricula === mat)).map((mat) => S.colabs.get(mat) || { matricula: mat, nome: bipou.get(mat).nome });
+    const semTurno = [...S.colabs.values()].filter((c) => c.ativo && c.perfil === 'colaborador' && !c.turno && (!eq || c.equipe === eq));
+    const linhas = [...escala, ...extras].map((c) => {
+      const p = presMap.get(c.matricula), b = bipou.get(c.matricula);
+      const status = p?.status || (b ? 'PRESENTE' : null);
+      return { c, p, b, status, auto: !p && !!b, extra: !escala.includes(c) };
+    }).sort((a, b) => (a.status ? 1 : 0) - (b.status ? 1 : 0) || a.c.nome.localeCompare(b.c.nome));
+    const pendentes = S.coletores.filter((c) => c.status === 'EM_USO' && (!eq || c.equipe === eq));
+    const manut = S.coletores.filter((c) => c.status === 'MANUTENCAO' && (!eq || c.equipe === eq));
+    const passagens = (pass || []).filter((x) => !eq || !x.equipe || x.equipe === eq);
+    return {
+      j, mv, ocs: (ocs || []).filter((o) => !eq || o.equipe === eq), linhas, extras, semTurno, pendentes, manut, passagens,
+      ret: mv.filter((m) => m.tipo === 'RETIRADA' && new Date(m.criado_em) >= de && new Date(m.criado_em) < j.fim).length,
+      dev: mv.filter((m) => m.tipo === 'DEVOLUCAO' && new Date(m.criado_em) >= j.inicio && new Date(m.criado_em) < ate).length,
+    };
+  }
+
+  function contaPresenca(linhas) {
+    const n = (st) => linhas.filter((l) => l.status === st).length;
+    return { esperados: linhas.filter((l) => !l.extra).length, presentes: n('PRESENTE') + n('ATRASO'), atrasos: n('ATRASO'), faltas: n('FALTA'),
+      justificados: n('FOLGA') + n('ATESTADO') + n('FERIAS') + n('AFASTADO'), semRegistro: linhas.filter((l) => !l.status).length };
+  }
+
+  // ----- tela -----
+  $('#t-data').value = T.data;
+  $('#t-data').onchange = () => { T.data = $('#t-data').value || T.data; carregarTurno(); };
+  $$('#t-turno button').forEach((b) => b.addEventListener('click', () => { T.turno = b.dataset.t; carregarTurno(); }));
+  $('#t-agora').onclick = () => { const ti = CF.turnoInfo(); T.data = ti.data; T.turno = ti.id; $('#t-data').value = T.data; carregarTurno(); };
+  $('#t-equipe').onchange = () => { T.equipe = $('#t-equipe').value; carregarTurno(); };
+  $('#t-fechar').onclick = () => abrirFechamento();
+  $('#btn-fechar-turno').onclick = () => abrirFechamento();
+
+  async function carregarTurno() {
+    $$('#t-turno button').forEach((b) => b.classList.toggle('on', b.dataset.t === T.turno));
+    const sel = $('#t-equipe');
+    if (!sel.options.length || sel.dataset.pronto !== '1') {
+      sel.innerHTML = `<option value="">Todas as equipes</option>` + equipesLista().map((e) => `<option>${esc(e)}</option>`).join('');
+      sel.dataset.pronto = '1';
+    }
+    sel.value = T.equipe;
+    $('#t-grid').style.opacity = '.55';
+    try { T.dados = await dadosTurno(T.data, T.turno, T.equipe); } catch (e) { toast('Erro ao carregar o turno', e.message, 'err'); return; }
+    $('#t-grid').style.opacity = '';
+    renderTurno();
+    renderAlertasTurno();
+  }
+
+  function renderTurno() {
+    const d = T.dados, k = contaPresenca(d.linhas);
+    const agora = CF.turnoInfo();
+    const ehAtual = agora.data === T.data && agora.id === T.turno;
+    $('#t-titulo').innerHTML = `${esc(T.turno)} · ${fmtData(d.j.inicio)} <span class="muted" style="font-weight:600;font-size:.9rem">${fmtHora(d.j.inicio)}–${fmtHora(d.j.fim)}${ehAtual ? ' · em andamento' : ''}</span>`;
+    $('#t-kpis').innerHTML = [
+      ['Esperados', k.esperados, 'var(--rd-900)'], ['Presentes', k.presentes, 'var(--ok)'], ['Faltas', k.faltas, 'var(--danger)'],
+      ['Folga/atestado', k.justificados, 'var(--alug)'], ['Sem registro', k.semRegistro, 'var(--uso)'],
+      ['Retiradas', d.ret, 'var(--uso)'], ['Não devolvidos', d.pendentes.filter(atrasado).length, 'var(--danger)'],
+    ].map(([l, n, c]) => `<div class="kpi" style="cursor:default"><span><i style="background:${c}"></i>${l}</span><b>${n}</b></div>`).join('');
+
+    // presença
+    const pres = $('#t-presenca');
+    if (!d.linhas.length) {
+      pres.innerHTML = `<div class="empty">${icon('users')}<div>Ninguém na escala do ${esc(T.turno)}${T.equipe ? ' da equipe ' + esc(T.equipe) : ''}.</div>
+        <p style="margin:6px 0 0;font-size:.86rem">Defina o turno de cada colaborador logo abaixo (ou na aba Equipe) — depois disso a presença aparece aqui automaticamente.</p></div>`;
+    } else {
+      pres.innerHTML = `<table class="table"><thead><tr><th>Colaborador</th><th>Coletor no turno</th><th style="width:170px">Presença</th></tr></thead><tbody>` +
+        d.linhas.map((l) => `<tr data-m="${esc(l.c.matricula)}">
+          <td><b>${esc(l.c.nome)}</b><div class="muted mono" style="font-size:.78rem">${esc(l.c.matricula)}${l.extra ? ' · <span style="color:var(--alug);font-family:var(--font)">fora da escala</span>' : ''}</div></td>
+          <td>${l.b ? `<span class="chip tp-RETIRADA">${esc(l.b.coletor_codigo)}</span> <span class="muted" style="font-size:.82rem">${fmtHora(l.b.criado_em)}</span>` : '<span class="muted">—</span>'}</td>
+          <td><select class="input pres-sel ${l.status ? 'ps-' + l.status : ''}" data-pres>
+            <option value="">${l.auto ? 'Bipou ✓' : 'Sem registro'}</option>
+            ${Object.entries(PRES_TXT).map(([kk, v]) => `<option value="${kk}" ${l.p?.status === kk ? 'selected' : ''}>${v}</option>`).join('')}
+          </select></td></tr>`).join('') + '</tbody></table>';
+      $$('tr[data-m]', pres).forEach((tr) => {
+        $('[data-pres]', tr).onchange = async (e) => {
+          const st = e.target.value, mat = tr.dataset.m;
+          const r = st
+            ? await sb.from('presencas').upsert({ data: T.data, turno: T.turno, matricula: mat, status: st, marcado_por: me.matricula, atualizado_em: new Date().toISOString() }, { onConflict: 'data,turno,matricula' })
+            : await sb.from('presencas').delete().eq('data', T.data).eq('turno', T.turno).eq('matricula', mat);
+          if (r.error) return toast('Erro ao marcar presença', r.error.message, 'err');
+          carregarTurno();
+        };
+      });
+    }
+    // sem turno definido
+    const st = $('#t-semturno');
+    st.innerHTML = d.semTurno.length ? `<details><summary><b>${d.semTurno.length}</b> colaborador${d.semTurno.length > 1 ? 'es' : ''}${T.equipe ? ' da ' + esc(T.equipe) : ''} sem turno definido — defina para entrarem na escala</summary>
+      <div class="stat-list" style="margin-top:10px">${d.semTurno.slice(0, 80).map((c) => `<div class="semturno-row" data-m="${esc(c.matricula)}"><span>${esc(c.nome)} <span class="muted mono" style="font-size:.78rem">${esc(c.matricula)}</span></span>
+        <div class="seg">${C.TURNOS.map((t) => `<button type="button" data-set="${t.id}">${t.id}</button>`).join('')}</div></div>`).join('')}</div></details>` : '';
+    $$('.semturno-row [data-set]', st).forEach((b) => b.onclick = async () => {
+      const mat = b.closest('[data-m]').dataset.m;
+      const { error } = await sb.from('colaboradores').update({ turno: b.dataset.set }).eq('matricula', mat);
+      if (error) return toast('Erro', error.message, 'err');
+      S.colabs.get(mat).turno = b.dataset.set;
+      carregarTurno();
+    });
+
+    // pendências
+    $('#t-pend').innerHTML = `
+      ${d.pendentes.length ? d.pendentes.map((c) => `<div class="pend-row ${atrasado(c) ? 'late' : ''}"><b class="mono">${esc(c.codigo)}</b>
+        <span>${esc(primeiroNome(c.portador_nome))}<small>${esc(c.turno_retirada || '')} · desde ${fmtData(c.retirado_em)} ${fmtHora(c.retirado_em)}</small></span>
+        <em>${atrasado(c) ? 'Não devolvido' : fmtDuracao(Date.now() - new Date(c.retirado_em))}</em></div>`).join('') : '<div class="muted" style="padding:6px 0">Nenhum coletor fora do armário ✔</div>'}
+      ${d.manut.length ? `<div class="mini-title">Em manutenção</div>${d.manut.map((c) => `<div class="pend-row"><b class="mono">${esc(c.codigo)}</b><span>${esc(c.observacao || 'Manutenção')}</span><em></em></div>`).join('')}` : ''}
+      ${d.ocs.length ? `<div class="mini-title">Ocorrências neste turno</div>${d.ocs.map((o) => `<div class="pend-row"><b class="mono">${esc(o.coletor_codigo)}</b><span>${esc(OC_TXT[o.tipo])}${o.descricao ? ' · ' + esc(o.descricao) : ''}<small>${o.nome ? esc(primeiroNome(o.nome)) + ' · ' : ''}${fmtHora(o.criado_em)}</small></span><em class="${o.status === 'ABERTA' ? '' : 'ok'}">${o.status === 'ABERTA' ? 'Aberta' : 'Resolvida'}</em></div>`).join('')}` : ''}`;
+    $('#t-cobrar').classList.toggle('hidden', !d.pendentes.filter(atrasado).length);
+
+    // passagens
+    $('#t-passagens').innerHTML = d.passagens.length ? d.passagens.slice(0, 8).map((x) => `<div class="pass-row" data-id="${x.id}">
+      <div><b>${esc(x.turno)} · ${fmtData(x.data + 'T12:00:00' + C.OFFSET)}</b>${x.equipe ? ` <span class="chip nodot pr-CD">${esc(x.equipe)}</span>` : ''}
+        <small>por ${esc(primeiroNome(x.autor_nome))} · ${fmtHora(x.criado_em)}</small></div>
+      ${x.ciente_em ? `<span class="chip st-DISPONIVEL" title="${esc(x.ciente_nome || '')}">Ciente · ${esc(primeiroNome(x.ciente_nome || '').split(' ')[0])}</span>` : '<span class="chip st-EM_USO">Aguardando ciente</span>'}
+    </div>`).join('') : '<div class="muted">Nenhuma passagem registrada ainda.</div>';
+    $$('#t-passagens .pass-row').forEach((el) => el.onclick = () => verPassagem(d.passagens.find((x) => String(x.id) === el.dataset.id)));
+
+    carregarRanking();
+  }
+
+  async function carregarRanking() {
+    const inicioMes = new Date(`${CF.ymdLocal().slice(0, 8)}01T00:00:00${C.OFFSET}`);
+    const { data, error } = await sb.from('v_emprestimos').select('matricula,nome,equipe,atrasou').gte('retirado_em', inicioMes.toISOString());
+    const box = $('#t-ranking');
+    if (error) { box.innerHTML = `<span class="muted">${esc(error.message)}</span>`; return; }
+    const tot = {}, atr = {};
+    (data || []).filter((r) => !T.equipe || r.equipe === T.equipe).forEach((r) => {
+      tot[r.matricula] = (tot[r.matricula] || 0) + 1;
+      if (r.atrasou) atr[r.matricula] = { n: (atr[r.matricula]?.n || 0) + 1, nome: r.nome };
+    });
+    const top = Object.entries(atr).sort((a, b) => b[1].n - a[1].n).slice(0, 8);
+    box.innerHTML = top.length ? top.map(([mat, v]) => `<div class="bar-row"><span>${esc(primeiroNome(v.nome))} <span class="muted" style="font-size:.78rem">${v.n} de ${tot[mat]}</span></span><b>${v.n}</b>
+      <div class="bar"><i style="width:${v.n / top[0][1].n * 100}%;background:var(--danger)"></i></div></div>`).join('')
+      : '<span class="muted">Ninguém atrasou devolução este mês 👏</span>';
+  }
+
+  function renderAlertasTurno() {
+    const box = $('#t-alertas');
+    const pend = passagensPendentes();
+    box.innerHTML = pend.map((x) => `<div class="banner info" data-id="${x.id}">${icon('swap')}<div><b>Passagem de turno do ${esc(x.turno)} (${esc(primeiroNome(x.autor_nome))})</b><span>Leia e dê o ciente.</span></div><button class="btn btn-dark btn-sm">Abrir</button></div>`).join('');
+    $$('.banner[data-id]', box).forEach((el) => el.querySelector('button').onclick = () => verPassagem(S.passagens.find((x) => String(x.id) === el.dataset.id)));
+  }
+
+  // ----- passagens pendentes de ciente (para o supervisor que entra) -----
+  S.passagens = [];
+  async function carregarPassagensPendentes() {
+    const desde = new Date(Date.now() - 20 * 3600e3).toISOString();
+    const { data } = await sb.from('passagens').select('*').is('ciente_em', null).gte('criado_em', desde).order('criado_em', { ascending: false });
+    S.passagens = data || [];
+    renderAlertasTurno();
+    const n = passagensPendentes().length;
+    $('#nav-turno').textContent = n ? `${n} p/ ciente` : '';
+  }
+  const passagensPendentes = () => S.passagens.filter((x) => !x.ciente_em && x.autor_matricula !== me.matricula && (ehCoord || !x.equipe || !me.equipe || x.equipe === me.equipe));
+
+  function verPassagem(x) {
+    if (!x) return;
+    const pode = !x.ciente_em && x.autor_matricula !== me.matricula;
+    const m = modal({
+      titulo: `Passagem de turno · ${esc(x.turno)} ${fmtData(x.data + 'T12:00:00' + C.OFFSET)}`,
+      largo: true,
+      corpo: `<div class="form-stack">
+        <div class="selected-person"><div class="avatar">${esc(iniciais(x.autor_nome))}</div><div><b>${esc(x.autor_nome || '')}</b><span>${x.equipe ? 'Equipe ' + esc(x.equipe) + ' · ' : ''}registrado ${fmtDataHora(x.criado_em)}</span></div></div>
+        ${x.anotacoes ? `<div class="field"><label>Recado do supervisor</label><div class="recado">${esc(x.anotacoes)}</div></div>` : ''}
+        <div class="field"><label>Resumo do turno</label><div class="preview-text">${esc(x.resumo || '')}</div></div>
+        ${x.ciente_em ? `<div class="banner ok">${icon('check')}<div><b>Ciente de ${esc(x.ciente_nome)}</b><span>${fmtDataHora(x.ciente_em)}</span></div></div>` : ''}
+      </div>`,
+      rodape: `<button class="btn btn-ghost" data-close>Fechar</button>${pode ? `<button class="btn btn-primary" data-ciente>${icon('check')}Dar ciente</button>` : ''}`,
+    });
+    const b = m.$('[data-ciente]');
+    if (b) b.onclick = async () => {
+      const { error } = await sb.from('passagens').update({ ciente_matricula: me.matricula, ciente_nome: me.nome, ciente_em: new Date().toISOString() }).eq('id', x.id).is('ciente_em', null);
+      if (error) return toast('Erro', error.message, 'err');
+      m.close(); toast('Ciente registrado', `Passagem do ${x.turno}`);
+      await carregarPassagensPendentes();
+      if (S.view === 'turno') carregarTurno();
+    };
+  }
+
+  // ----- fechamento de turno -----
+  function textoFechamento(d, eq, anot) {
+    const k = contaPresenca(d.linhas);
+    const atr = d.pendentes.filter(atrasado);
+    const L = [];
+    L.push(`*Fechamento de turno ${T.turno} – ${fmtData(d.j.inicio)}${eq ? ' – Equipe ' + eq : ''}*`);
+    L.push(`Supervisor: ${me.nome}`);
+    L.push(`Coletores: ${d.ret} retiradas · ${d.dev} devoluções`);
+    if (d.pendentes.length) {
+      L.push(`⚠️ Fora do armário (${d.pendentes.length}):`);
+      d.pendentes.forEach((c) => L.push(`• ${c.codigo} – ${c.portador_nome} (mat. ${c.portador_matricula}) desde ${fmtHora(c.retirado_em)}${atrasado(c) ? ' – NÃO DEVOLVIDO' : ''}`));
+    } else L.push('✅ Todos os coletores devolvidos');
+    if (d.ocs.length) {
+      L.push(`🔧 Ocorrências (${d.ocs.length}):`);
+      d.ocs.forEach((o) => L.push(`• ${o.coletor_codigo} – ${OC_TXT[o.tipo]}${o.descricao ? ': ' + o.descricao : ''}${o.nome ? ' (' + primeiroNome(o.nome) + ')' : ''}`));
+    }
+    if (d.manut.length) L.push(`🛠️ Em manutenção: ${d.manut.map((c) => c.codigo).join(', ')}`);
+    if (k.esperados || k.presentes) {
+      L.push(`👥 Presença: ${k.presentes}/${k.esperados}${k.atrasos ? ` · ${k.atrasos} atraso(s)` : ''}`);
+      const grupo = (st) => d.linhas.filter((l) => l.status === st).map((l) => primeiroNome(l.c.nome));
+      ['FALTA', 'ATESTADO', 'FOLGA', 'FERIAS', 'AFASTADO'].forEach((st) => { const g = grupo(st); if (g.length) L.push(`   ${PRES_TXT[st]}: ${g.join(', ')}`); });
+      if (k.semRegistro) L.push(`   Sem registro: ${d.linhas.filter((l) => !l.status).map((l) => primeiroNome(l.c.nome)).join(', ')}`);
+    }
+    if (anot) L.push(`📝 ${anot}`);
+    if (atr.length) L.push('', 'Favor devolver os coletores pendentes no armário.');
+    return L.join('\n');
+  }
+
+  async function abrirFechamento() {
+    const ti = CF.turnoInfo();
+    // padrão: turno que está acabando (atual). Se a tela Turno estiver aberta, usa o selecionado.
+    if (S.view !== 'turno') { T.data = ti.data; T.turno = ti.id; }
+    const eq = S.view === 'turno' ? T.equipe : (ehCoord ? '' : me.equipe || '');
+    const m = modal({ titulo: `Encerrar turno ${esc(T.turno)}`, corpo: '<div class="empty">Montando o resumo…</div>', largo: true });
+    let d;
+    try { d = await dadosTurno(T.data, T.turno, eq); } catch (e) { m.$('.modal-body').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    const k = contaPresenca(d.linhas);
+    m.$('.modal-body').innerHTML = `<div class="form-stack">
+      <div class="kpis" style="grid-template-columns:repeat(4,1fr);margin:0">
+        <div class="kpi"><span>Retiradas</span><b>${d.ret}</b></div>
+        <div class="kpi"><span>Devoluções</span><b>${d.dev}</b></div>
+        <div class="kpi ${d.pendentes.length ? 'alert' : ''}"><span>Fora do armário</span><b>${d.pendentes.length}</b></div>
+        <div class="kpi"><span>Presença</span><b>${k.presentes}/${k.esperados}</b></div>
+      </div>
+      ${k.semRegistro ? `<div class="banner warn">${icon('alert')}<div><b>${k.semRegistro} pessoa(s) da escala sem registro</b><span>Marque falta/folga/atestado na tela Turno antes de encerrar, se for o caso.</span></div></div>` : ''}
+      <div class="field"><label>Recado para o próximo supervisor</label><textarea class="input" data-anot placeholder="Ex.: doca 3 com pallet pendente; COL-007 aguardando técnico; Fulano saiu mais cedo (consulta)"></textarea></div>
+      <div class="field"><label>Resumo (vai copiado)</label><div class="preview-text" data-prev></div></div>
+    </div>`;
+    const foot = document.createElement('div');
+    foot.className = 'modal-foot';
+    foot.innerHTML = `<button class="btn btn-ghost" data-copiar>${icon('copy')}Copiar</button>
+      <a class="btn btn-ghost" data-wpp target="_blank" rel="noopener">${icon('ext')}WhatsApp</a>
+      <button class="btn btn-primary" data-salvar>${icon('swap')}Registrar passagem de turno</button>`;
+    m.$('.modal').appendChild(foot);
+    const texto = () => textoFechamento(d, eq, m.$('[data-anot]').value.trim());
+    const atualiza = () => { m.$('[data-prev]').textContent = texto(); m.$('[data-wpp]').href = 'https://wa.me/?text=' + encodeURIComponent(texto()); };
+    m.$('[data-anot]').addEventListener('input', atualiza); atualiza();
+    m.$('[data-copiar]').onclick = async () => { try { await navigator.clipboard.writeText(texto()); toast('Resumo copiado'); } catch (e) { toast('Não foi possível copiar', '', 'err'); } };
+    m.$('[data-salvar]').onclick = async () => {
+      const txt = texto();
+      const { error } = await sb.from('passagens').insert({
+        data: T.data, turno: T.turno, equipe: eq || null, autor_matricula: me.matricula, autor_nome: me.nome,
+        resumo: txt, anotacoes: m.$('[data-anot]').value.trim() || null,
+        pendencias: {
+          fora_do_armario: d.pendentes.map((c) => ({ codigo: c.codigo, nome: c.portador_nome, matricula: c.portador_matricula, desde: c.retirado_em, atrasado: atrasado(c) })),
+          ocorrencias: d.ocs.map((o) => ({ codigo: o.coletor_codigo, tipo: o.tipo, descricao: o.descricao })),
+          manutencao: d.manut.map((c) => c.codigo),
+          presenca: k,
+        },
+      });
+      if (error) return toast('Não foi possível registrar', error.message, 'err');
+      try { await navigator.clipboard.writeText(txt); } catch (e) { /* */ }
+      m.close();
+      toast('Passagem de turno registrada', 'Resumo copiado — o próximo supervisor será avisado para dar ciente.');
+      if (S.view === 'turno') carregarTurno();
+    };
+  }
+
+  /* =========================================================
+     6. COBRANÇA DE NÃO DEVOLVIDOS
+     ========================================================= */
+  const meusOuTodos = (c) => ehCoord || ehMeu(c);
+  function textoCobranca(lista) {
+    return [`*Coletores não devolvidos – ${fmtDataHora(new Date())}*`,
+      ...lista.map((c) => `• ${c.codigo} – ${c.portador_nome} (mat. ${c.portador_matricula}) – retirado ${fmtData(c.retirado_em)} ${fmtHora(c.retirado_em)} no ${c.turno_retirada || 'turno'}`),
+      '', 'Favor devolver no armário e bipar no terminal. Obrigado!'].join('\n');
+  }
+  function cobrar(lista = S.coletores.filter((c) => atrasado(c) && meusOuTodos(c))) {
+    const txt = textoCobranca(lista);
+    const m = modal({
+      titulo: `Cobrar ${lista.length} coletor${lista.length > 1 ? 'es' : ''} não devolvido${lista.length > 1 ? 's' : ''}`,
+      corpo: `<div class="preview-text">${esc(txt)}</div>`,
+      rodape: `<button class="btn btn-ghost" data-copiar>${icon('copy')}Copiar</button><a class="btn btn-primary" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(txt)}">${icon('ext')}Enviar no WhatsApp</a>`,
+    });
+    m.$('[data-copiar]').onclick = async () => { try { await navigator.clipboard.writeText(txt); toast('Copiado'); } catch (e) { /* */ } };
+  }
+  $('#t-cobrar').onclick = () => cobrar();
+
+  function renderBannerAtraso() {
+    const lista = S.coletores.filter((c) => atrasado(c) && meusOuTodos(c));
+    const box = $('#col-alerta');
+    box.innerHTML = lista.length ? `<div class="banner warn">${icon('alert')}<div><b>${lista.length} coletor${lista.length > 1 ? 'es' : ''} não devolvido${lista.length > 1 ? 's' : ''} após o fim do turno</b>
+      <span>${lista.slice(0, 4).map((c) => `${c.codigo} · ${esc(primeiroNome(c.portador_nome))}`).join(' — ')}${lista.length > 4 ? ' …' : ''}</span></div>
+      <button class="btn btn-ghost btn-sm" data-ver>Ver</button><button class="btn btn-dark btn-sm" data-cobrar>Cobrar</button></div>` : '';
+    const v = $('[data-ver]', box), c = $('[data-cobrar]', box);
+    if (v) v.onclick = () => { S.filtroKpi = 'ATRASADO'; ir('coletores'); renderColetores(); };
+    if (c) c.onclick = () => cobrar(lista);
+  }
+
+  function verificarAtrasos() {
+    renderBannerAtraso();
+    let avisados;
+    try { avisados = new Set(JSON.parse(localStorage.getItem('cf-cobrados') || '[]')); } catch (e) { avisados = new Set(); }
+    const novos = S.coletores.filter((c) => atrasado(c) && meusOuTodos(c) && !avisados.has(c.id + '|' + c.retirado_em));
+    if (!novos.length) return;
+    novos.forEach((c) => {
+      avisados.add(c.id + '|' + c.retirado_em);
+      pushNotif({ kind: 'atraso', id: 'a' + c.id + c.retirado_em, titulo: `${c.codigo} não devolvido`, texto: `${primeiroNome(c.portador_nome)} · retirado ${fmtHora(c.retirado_em)} (${c.turno_retirada || '–'})`, em: new Date().toISOString() });
+    });
+    try { localStorage.setItem('cf-cobrados', JSON.stringify([...avisados].slice(-300))); } catch (e) { /* */ }
+    const t = novos.length === 1 ? `${novos[0].codigo} não foi devolvido` : `${novos.length} coletores não devolvidos`;
+    const sub = novos.slice(0, 3).map((c) => `${c.codigo} · ${primeiroNome(c.portador_nome)}`).join(', ');
+    toast(t, sub + ' — o turno já acabou.', 'err', 9000);
+    beep('err');
+    sistema(t, `${sub}. O turno terminou e o coletor não voltou ao armário.`, 'atraso');
+  }
+  setInterval(verificarAtrasos, 60000);
+
+  /* =========================================================
      NOTIFICAÇÕES EM TEMPO REAL
      ========================================================= */
   function carregarNotifs() { try { return JSON.parse(localStorage.getItem('cf-notifs') || '[]'); } catch (e) { return []; } }
-  function salvarNotifs() { try { localStorage.setItem('cf-notifs', JSON.stringify(S.notifs.slice(0, 60))); } catch (e) { /* */ } }
+  function salvarNotifs() { try { localStorage.setItem('cf-notifs', JSON.stringify(S.notifs.slice(0, 80))); } catch (e) { /* */ } }
   const relevante = (mv) => ehCoord || mv.supervisor_matricula === me.matricula || (!!me.equipe && mv.equipe === me.equipe) ||
     S.coletores.some((c) => c.id === mv.coletor_id && ehMeu(c));
+  const NOTIF_ICON = { RETIRADA: ['up', 'tp-RETIRADA'], DEVOLUCAO: ['down', 'tp-DEVOLUCAO'], oc: ['wrench', 'st-MANUTENCAO'], atraso: ['alert', 'st-MANUTENCAO'], passagem: ['swap', 'pr-CD'] };
 
+  function pushNotif(n) { S.notifs.unshift({ lida: false, ...n }); salvarNotifs(); renderNotifs(); }
+  function sistema(titulo, corpo, tag) {
+    if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
+      try { new Notification(titulo, { body: corpo, icon: 'assets/icon-192.png', tag }); } catch (e) { /* */ }
+    }
+  }
   function renderNotifs() {
     const nao = S.notifs.filter((n) => !n.lida).length;
     $('#bell-dot').textContent = nao > 9 ? '9+' : nao;
     $('#bell-dot').classList.toggle('hidden', !nao);
-    $('#notif-lista').innerHTML = S.notifs.length ? S.notifs.map((n) => `<div class="notif ${n.lida ? '' : 'new'}">
-      <div class="ni chip nodot tp-${n.tipo}" style="padding:0">${icon(n.tipo === 'RETIRADA' ? 'up' : 'down')}</div>
-      <div><b>${esc(primeiroNome(n.nome))}</b> ${n.tipo === 'RETIRADA' ? 'retirou' : 'devolveu'} o <b class="mono">${esc(n.coletor)}</b><time>${fmtDataHora(n.em)} · ${esc(n.turno || '')}</time></div></div>`).join('')
-      : `<div class="empty">Sem notificações ainda.<br>Você será avisado a cada retirada ou devolução dos seus coletores.</div>`;
+    $('#notif-lista').innerHTML = S.notifs.length ? S.notifs.map((n) => {
+      const kind = n.kind || n.tipo;
+      const [ic, cls] = NOTIF_ICON[kind] || ['bell', 'pr-CD'];
+      const corpo = n.titulo ? `<b>${esc(n.titulo)}</b>${n.texto ? ' · ' + esc(n.texto) : ''}`
+        : `<b>${esc(primeiroNome(n.nome))}</b> ${n.tipo === 'RETIRADA' ? 'retirou' : 'devolveu'} o <b class="mono">${esc(n.coletor)}</b>`;
+      return `<div class="notif ${n.lida ? '' : 'new'}"><div class="ni chip nodot ${cls}" style="padding:0">${icon(ic)}</div>
+        <div>${corpo}<time>${fmtDataHora(n.em)}${n.turno ? ' · ' + esc(n.turno) : ''}</time></div></div>`;
+    }).join('')
+      : `<div class="empty">Sem notificações ainda.<br>Você será avisado a cada retirada, devolução, problema ou atraso dos seus coletores.</div>`;
     const perm = $('#notif-perm');
     perm.classList.toggle('hidden', !('Notification' in window) || Notification.permission === 'granted');
   }
@@ -818,34 +1195,52 @@
   $('#notif-perm').onclick = async () => { await Notification.requestPermission(); renderNotifs(); };
 
   function notificar(mv) {
-    const n = { id: mv.id, tipo: mv.tipo, nome: mv.nome, coletor: mv.coletor_codigo, turno: mv.turno, em: mv.criado_em, lida: false };
-    S.notifs.unshift(n); salvarNotifs(); renderNotifs();
+    pushNotif({ kind: mv.tipo, tipo: mv.tipo, nome: mv.nome, coletor: mv.coletor_codigo, turno: mv.turno, em: mv.criado_em, id: mv.id,
+      titulo: `${primeiroNome(mv.nome)} ${mv.tipo === 'RETIRADA' ? 'retirou' : 'devolveu'} o ${mv.coletor_codigo}`, texto: `mat. ${mv.matricula}` });
     const verbo = mv.tipo === 'RETIRADA' ? 'retirou' : 'devolveu';
     toast(`${primeiroNome(mv.nome)} ${verbo} o ${mv.coletor_codigo}`, `Mat. ${mv.matricula} · ${mv.turno || ''} · ${fmtHora(mv.criado_em)}`, mv.tipo === 'RETIRADA' ? 'ret' : 'ok', 7000);
     beep('notif');
-    if ('Notification' in window && Notification.permission === 'granted' && document.visibilityState !== 'visible') {
-      try {
-        new Notification(`${mv.coletor_codigo} ${mv.tipo === 'RETIRADA' ? 'retirado' : 'devolvido'}`, {
-          body: `${mv.nome} (mat. ${mv.matricula}) ${verbo} o coletor ${mv.coletor_codigo} · ${mv.turno || ''}`,
-          icon: 'assets/icon-192.png', tag: 'mov-' + mv.id,
-        });
-      } catch (e) { /* */ }
-    }
+    sistema(`${mv.coletor_codigo} ${mv.tipo === 'RETIRADA' ? 'retirado' : 'devolvido'}`, `${mv.nome} (mat. ${mv.matricula}) ${verbo} o coletor ${mv.coletor_codigo} · ${mv.turno || ''}`, 'mov-' + mv.id);
+  }
+  function notificarOcorrencia(o) {
+    if (!(ehCoord || o.supervisor_matricula === me.matricula || (!!me.equipe && o.equipe === me.equipe))) return;
+    const t = `${o.coletor_codigo} com problema: ${OC_TXT[o.tipo] || o.tipo}`;
+    const sub = `${o.nome ? primeiroNome(o.nome) + ' · ' : ''}${o.descricao || 'relatado ' + (o.origem === 'TERMINAL' ? 'no terminal' : 'no painel')}`;
+    pushNotif({ kind: 'oc', id: 'o' + o.id, titulo: t, texto: sub, em: o.criado_em });
+    toast(t, sub, 'err', 8000); beep('notif');
+    sistema(t, sub + ' — enviado para manutenção.', 'oc-' + o.id);
+  }
+  function notificarPassagem(x) {
+    if (x.autor_matricula === me.matricula) return;
+    if (!(ehCoord || !x.equipe || !me.equipe || x.equipe === me.equipe)) return;
+    const t = `Passagem de turno do ${x.turno}`;
+    pushNotif({ kind: 'passagem', id: 'p' + x.id, titulo: t, texto: `por ${primeiroNome(x.autor_nome)} — dê o ciente`, em: x.criado_em });
+    toast(t, `${primeiroNome(x.autor_nome)} registrou. Abra a aba Turno para dar ciente.`, 'info', 8000); beep('notif');
+    sistema(t, `${x.autor_nome} registrou a passagem de turno. Dê o ciente.`, 'pa-' + x.id);
   }
 
-  const recarregarColetores = debounce(carregarColetores, 400);
+  const recarregarColetores = debounce(async () => { await carregarColetores(); verificarAtrasos(); if (S.view === 'turno') carregarTurno(); }, 400);
   sb.channel('cf-realtime')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'movimentos' }, ({ new: mv }) => {
       if (relevante(mv)) notificar(mv);
       if (S.view === 'historico') carregarHistorico();
     })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'coletores' }, recarregarColetores)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'ocorrencias' }, ({ new: o }) => notificarOcorrencia(o))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'passagens' }, ({ new: x, eventType }) => {
+      if (eventType === 'INSERT' && x) notificarPassagem(x);
+      carregarPassagensPendentes();
+      if (S.view === 'turno') carregarTurno();
+    })
     .subscribe();
 
   /* ---------------- início ---------------- */
   await carregarColabs();
   await carregarColetores();
   renderNotifs();
+  verificarAtrasos();
+  carregarPassagensPendentes();
   ir((location.hash || '#chamados').slice(1));
+  window.addEventListener('hashchange', () => ir((location.hash || '#chamados').slice(1)));
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 })();

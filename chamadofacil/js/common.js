@@ -40,6 +40,7 @@
     camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3.5"/>',
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     swap: '<path d="M7 16V4M3 8l4-4 4 4M17 8v12M21 16l-4 4-4-4"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     wrench: '<path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-3-3 8-8-1.3-1.3a4 4 0 0 0-5-5L13 5z"/>',
   };
   function icon(name, cls = '') {
@@ -82,6 +83,40 @@
       if (a < b ? now >= a && now < b : now >= a || now < b) return t;
     }
     return C.TURNOS[0];
+  }
+
+  /* ---------- janelas de turno (data do turno = dia em que ele começa) ---------- */
+  const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  const ymdLocal = (d = new Date()) => new Date(d).toLocaleDateString('en-CA', { timeZone: tz });
+  const somaDias = (ymd, n) => new Date(new Date(`${ymd}T12:00:00${C.OFFSET}`).getTime() + n * 864e5).toLocaleDateString('en-CA', { timeZone: tz });
+  const turnoPorId = (id) => C.TURNOS.find((t) => t.id === id) || C.TURNOS[0];
+  function janelaTurno(data, id) {
+    const t = turnoPorId(id);
+    const inicio = new Date(`${data}T${t.inicio}:00${C.OFFSET}`);
+    let fim = new Date(`${data}T${t.fim}:00${C.OFFSET}`);
+    if (fim <= inicio) fim = new Date(fim.getTime() + 864e5);
+    return { id: t.id, data, inicio, fim };
+  }
+  function turnoInfo(d = new Date()) {
+    const t = turnoAtual(d);
+    let data = ymdLocal(d);
+    if (toMin(t.inicio) > toMin(t.fim) && horaLocal(d) < toMin(t.fim)) data = somaDias(data, -1);
+    return janelaTurno(data, t.id);
+  }
+  // Próximo fim do turno "id" depois do instante ts (igual a fim_turno() no SQL)
+  function fimTurno(ts, id) {
+    const d = new Date(ts);
+    const t = id ? turnoPorId(id) : turnoAtual(d);
+    let fim = new Date(`${ymdLocal(d)}T${t.fim}:00${C.OFFSET}`);
+    if (fim <= d) fim = new Date(fim.getTime() + 864e5);
+    return fim;
+  }
+  // Coletor em uso que passou do fim do turno + tolerância
+  function estaAtrasado(c, agora = Date.now()) {
+    if (c.status !== 'EM_USO' || !c.retirado_em) return false;
+    const lim = c.turno_retirada ? fimTurno(c.retirado_em, c.turno_retirada).getTime() + C.TOLERANCIA_MIN * 60000
+      : new Date(c.retirado_em).getTime() + C.HORAS_ALERTA * 3600e3;
+    return agora > lim;
   }
 
   // Normaliza equipe a partir do "Setor" da WorkArea
@@ -237,7 +272,7 @@
 
   window.CF = {
     sb, C, icon, esc, fmtHora, fmtData, fmtDataHora, fmtDuracao, relTempo, iniciais, primeiroNome,
-    codigoColetor, soDigitos, turnoAtual, equipeDoSetor, perfilDoCargo, qrSvg, barrasSvg, toast, beep, modal,
+    codigoColetor, soDigitos, turnoAtual, turnoInfo, janelaTurno, fimTurno, estaAtrasado, ymdLocal, somaDias, equipeDoSetor, perfilDoCargo, qrSvg, barrasSvg, toast, beep, modal,
     confirmar, entrar, meuPerfil, exigirLogin, sair, debounce, baixarCSV, buscarTudo,
   };
 })();

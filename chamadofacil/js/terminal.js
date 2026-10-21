@@ -26,14 +26,14 @@
   async function carregarBase() {
     const rows = await CF.buscarTudo(() => sb.from('colaboradores').select('matricula,nome,equipe,ativo'));
     colabs = new Map(rows.map((r) => [r.matricula.replace(/^0+/, ''), r]));
-    const { data } = await sb.from('coletores').select('numero,codigo,status,portador_nome,portador_matricula');
+    const { data } = await sb.from('coletores').select('numero,codigo,status,portador_nome,portador_matricula,retirado_em,turno_retirada');
     coletores = new Map((data || []).map((c) => [c.numero, c]));
   }
   await carregarBase();
   const pessoaDe = (mat) => colabs.get(String(mat).replace(/^0+/, ''));
 
   /* ---------- estado da leitura ---------- */
-  const st = { mat: null, col: null, ocupado: false, timer: null, pendTransfer: null };
+  const st = { mat: null, col: null, ocupado: false, timer: null, pendTransfer: null, pergunta: null };
   const inp = $('#scan');
 
   function pintar() {
@@ -55,7 +55,7 @@
 
   function mostrarResultado(tipo, titulo, texto, extra = '', ms = 4000) {
     const r = $('#result');
-    const ic = { RETIRADA: 'up', DEVOLUCAO: 'down', ERRO: 'alert', AVISO: 'swap', INFO: 'scanner' }[tipo];
+    const ic = { RETIRADA: 'up', DEVOLUCAO: 'down', ERRO: 'alert', AVISO: 'swap', INFO: 'scanner', OCORRENCIA: 'wrench' }[tipo];
     r.className = `term-result show ${tipo === 'INFO' ? 'AVISO' : tipo}`;
     r.innerHTML = `<div class="ri">${icon(ic)}</div><div style="flex:1;min-width:200px"><h2>${titulo}</h2><p>${texto}</p></div>${extra}`;
     clearTimeout(r._t);
@@ -82,6 +82,13 @@
 
   async function ler(raw) {
     if (st.ocupado) return;
+    // respondendo "o coletor tem problema?" pelo teclado/leitor: 0 ou Enter = tudo certo, 1-6 = problema
+    if (st.pergunta) {
+      const v = String(raw || '').trim();
+      if (v === '' || v === '0') { inp.value = ''; return responderOcorrencia(null); }
+      if (/^[1-6]$/.test(v)) { inp.value = ''; return responderOcorrencia(OPCOES[+v - 1][0]); }
+      responderOcorrencia(null, true); // bipou outra coisa: segue sem problema
+    }
     const c = classificar(raw);
     inp.value = '';
     if (!c) return;
@@ -100,8 +107,13 @@
       if (!pes) { beep('err'); mostrarResultado('ERRO', 'Matrícula não encontrada', `${esc(c.val)} não está no cadastro do CD-AM. Procure seu supervisor.`); return; }
       st.mat = c.val; beep('ok');
       const tem = [...coletores.values()].filter((x) => x.status === 'EM_USO' && String(x.portador_matricula).replace(/^0+/, '') === String(c.val).replace(/^0+/, ''));
-      if (!st.col) mostrarResultado('INFO', `Olá, ${esc(primeiroNome(pes.nome))}!`,
-        tem.length ? `Você está com <b>${tem.map((x) => x.codigo).join(', ')}</b>. Bipe o coletor para devolver ou retirar outro.` : 'Agora bipe o QR do coletor.', '', 0);
+      const atr = tem.filter((x) => CF.estaAtrasado(x));
+      if (!st.col && atr.length) {
+        beep('err');
+        mostrarResultado('ERRO', `${esc(primeiroNome(pes.nome))}, devolva ${atr.length > 1 ? 'os coletores' : 'o ' + esc(atr[0].codigo)}!`,
+          `Você está com ${atr.map((x) => `<b>${esc(x.codigo)}</b> desde ${CF.fmtData(x.retirado_em)} ${fmtHora(x.retirado_em)}`).join(', ')} e o turno já acabou. Bipe o coletor agora para devolver.`, '', 0);
+      } else if (!st.col) mostrarResultado('INFO', `Olá, ${esc(primeiroNome(pes.nome))}!`,
+        tem.length ? `Você está com <b>${tem.map((x) => x.codigo).join(', ')}</b>. Bipe o coletor para devolver ou retirar outro.` : 'Agora bipe o coletor.', '', 0);
     } else {
       st.col = c.val; beep('ok');
       const col = coletores.get(c.val);
@@ -127,7 +139,9 @@
           data.tipo === 'RETIRADA' ? `Retirada · ${esc(data.coletor)}` : `Devolução · ${esc(data.coletor)}`,
           data.tipo === 'RETIRADA'
             ? `${esc(pn)} está com o coletor. Bom trabalho! <span style="opacity:.75">(${esc(data.turno)} · ${fmtHora(data.criado_em)})</span>${data.transferido_de ? `<br>Recebido de ${esc(primeiroNome(data.transferido_de))}.` : ''}`
-            : `Obrigado, ${esc(pn)}! Coletor devolvido às ${fmtHora(data.criado_em)}.`, '', 4500);
+            : `Obrigado, ${esc(pn)}! Coletor devolvido às ${fmtHora(data.criado_em)}.`,
+          data.tipo === 'DEVOLUCAO' ? perguntaHtml() : '', data.tipo === 'DEVOLUCAO' ? 0 : 4500);
+        if (data.tipo === 'DEVOLUCAO') abrirPergunta(data.coletor, data.matricula);
         limpar();
         carregarBase();
       } else if (data.erro === 'EM_USO_OUTRO') {
@@ -152,6 +166,39 @@
       st.ocupado = false; inp.disabled = false; foco();
     }
   }
+  /* ---------- ocorrência na devolução ---------- */
+  const OPCOES = [['BATERIA', 'Bateria'], ['TELA', 'Tela'], ['NAO_LIGA', 'Não liga'], ['LEITOR', 'Leitor/gatilho'], ['TECLADO', 'Teclado'], ['OUTRO', 'Outro problema']];
+  const SEG_PERGUNTA = 9;
+  function perguntaHtml() {
+    return `<div class="oc-ask"><span>O coletor está com algum problema?</span>
+      <div class="opts"><button class="okb" data-oc="">${icon('check')}Tudo certo <kbd>Enter</kbd></button>
+      ${OPCOES.map(([k, l], i) => `<button data-oc="${k}">${l} <kbd>${i + 1}</kbd></button>`).join('')}</div>
+      <div class="oc-bar"><i style="animation-duration:${SEG_PERGUNTA}s"></i></div></div>`;
+  }
+  function abrirPergunta(coletor, matricula) {
+    clearTimeout(st.pergunta?.timer);
+    st.pergunta = { coletor, matricula, timer: setTimeout(() => responderOcorrencia(null), SEG_PERGUNTA * 1000) };
+    document.querySelectorAll('#result [data-oc]').forEach((b) => b.onclick = () => responderOcorrencia(b.dataset.oc || null));
+  }
+  async function responderOcorrencia(tipo, silencioso = false) {
+    const p = st.pergunta;
+    if (!p) return;
+    clearTimeout(p.timer);
+    st.pergunta = null;
+    if (!tipo) { if (!silencioso) esconderResultado(); foco(); return; }
+    st.ocupado = true;
+    try {
+      const { data, error } = await sb.rpc('registrar_ocorrencia', { p_coletor: p.coletor, p_tipo: tipo, p_matricula: p.matricula, p_descricao: null, p_origem: 'TERMINAL', p_manutencao: true });
+      if (error || !data?.ok) throw new Error(error?.message || data?.mensagem);
+      beep('dev');
+      mostrarResultado('OCORRENCIA', `${esc(p.coletor)} foi para manutenção`, `Problema: <b>${esc(data.tipo)}</b>. Obrigado por avisar — o supervisor já foi notificado. Pegue outro coletor.`, '', 6000);
+      carregarBase();
+    } catch (e) {
+      beep('err');
+      mostrarResultado('ERRO', 'Não consegui registrar o problema', 'Avise o supervisor. ' + esc(e.message || ''), '', 6000);
+    } finally { st.ocupado = false; foco(); }
+  }
+
   async function transferir() {
     if (!st.pendTransfer) return;
     st.pendTransfer = null;
@@ -162,7 +209,7 @@
   $('#form').addEventListener('submit', (e) => { e.preventDefault(); ler(inp.value); });
   // alguns leitores enviam TAB no fim em vez de Enter
   inp.addEventListener('keydown', (e) => { if (e.key === 'Tab' && inp.value) { e.preventDefault(); ler(inp.value); } });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { esconderResultado(); limpar(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if (st.pergunta) responderOcorrencia(null); esconderResultado(); limpar(); } });
   $('#btn-limpar').onclick = () => { esconderResultado(); limpar(); };
   const foco = () => { if (!document.querySelector('.modal-back') && document.activeElement !== inp && !st.camOn) inp.focus({ preventScroll: true }); };
   setInterval(foco, 1500);
