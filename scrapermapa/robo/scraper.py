@@ -14,14 +14,15 @@ from __future__ import annotations
 
 import asyncio
 import re
+import sys
 from typing import Awaitable, Callable
 from urllib.parse import parse_qs, quote, urlparse
 
 import httpx
 from playwright.async_api import Browser, Page, async_playwright
 
-from . import parser
-from .enrich import HEADERS, enriquecer_site
+import dados as parser
+from enrich import HEADERS, enriquecer_site
 
 LogFn = Callable[[str], None]
 
@@ -144,7 +145,11 @@ class GoogleMapsScraper:
     # ------------------------------------------------------------------ navegador
     async def _abrir_navegador(self, pw) -> Browser:
         args = ["--disable-blink-features=AutomationControlled", "--lang=pt-BR"]
-        tentativas = [{}, {"channel": "msedge"}, {"channel": "chrome"}]
+        # No .exe (PyInstaller) não há Chromium embutido: usa o Edge/Chrome já instalados no Windows.
+        if getattr(sys, "frozen", False):
+            tentativas = [{"channel": "msedge"}, {"channel": "chrome"}, {}]
+        else:
+            tentativas = [{}, {"channel": "msedge"}, {"channel": "chrome"}]
         ultimo_erro = None
         for extra in tentativas:
             try:
@@ -155,7 +160,7 @@ class GoogleMapsScraper:
             except Exception as e:  # Chromium do Playwright não instalado, tenta Edge/Chrome
                 ultimo_erro = e
         raise RuntimeError(
-            "Não foi possível abrir o navegador. Rode 'python -m playwright install chromium'. "
+            "Não foi possível abrir o navegador. Instale o Microsoft Edge ou o Google Chrome (ou rode 'python -m playwright install chromium'). "
             f"Detalhe: {ultimo_erro}"
         )
 
