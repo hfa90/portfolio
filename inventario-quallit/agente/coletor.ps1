@@ -7,15 +7,17 @@
     powershell -ExecutionPolicy Bypass -File coletor.ps1              # coleta e envia
     powershell -ExecutionPolicy Bypass -File coletor.ps1 -SoMostrar   # so mostra o JSON, nao envia
     powershell -ExecutionPolicy Bypass -File coletor.ps1 -Ativo PAT123
+    powershell -ExecutionPolicy Bypass -File coletor.ps1 -Pausa       # mostra o resultado (botao Executar da pagina)
 #>
 param(
   [string]$ConfigPath = (Join-Path $PSScriptRoot 'config.json'),
   [string]$Ativo,
-  [switch]$SoMostrar
+  [switch]$SoMostrar,
+  [switch]$Pausa
 )
 
 $ErrorActionPreference = 'Stop'
-$AgenteVersao = '1.0.0'
+$AgenteVersao = '1.1.0'
 $LogPath = Join-Path $PSScriptRoot 'coletor.log'
 try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
 
@@ -28,13 +30,32 @@ function Write-Log([string]$msg) {
   } catch {}
 }
 
+function Fim([int]$codigo) {
+  if ($Pausa) {
+    if ($codigo -eq 0) {
+      Write-Host ''
+      Write-Host '  PRONTO! Os dados deste computador foram enviados ao inventario.' -ForegroundColor Green
+      Write-Host '  Esta janela fecha sozinha.' -ForegroundColor DarkGray
+      Start-Sleep -Seconds 6
+    } else {
+      Write-Host ''
+      Write-Host "  Nao foi possivel enviar (codigo $codigo). Avise o tecnico de TI." -ForegroundColor Yellow
+      Read-Host '  Pressione Enter para fechar' | Out-Null
+    }
+  }
+  exit $codigo
+}
+
+trap { Write-Log ("ERRO inesperado: {0}" -f $_); Fim 4 }
+
 function Get-Safe([scriptblock]$sb) { try { & $sb } catch { $null } }
 function Clean([object]$v) { if ($null -eq $v) { return $null }; $s = "$v".Trim(); if ($s -eq '') { $null } else { $s } }
 function To-Iso($d) { if ($d) { ([datetime]$d).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null } }
 
 # ------------------------------------------------------------------ config
-if (-not (Test-Path $ConfigPath)) { Write-Log "ERRO: config.json nao encontrado em $ConfigPath"; exit 2 }
-$cfg = Get-Content $ConfigPath -Raw | ConvertFrom-Json
+if (-not (Test-Path $ConfigPath)) { Write-Log "ERRO: config.json nao encontrado em $ConfigPath"; Fim 2 }
+$cfg = Get-Content $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+if ($Pausa) { Write-Host ''; Write-Host '  Inventario Quallit - coletando dados deste computador...' -ForegroundColor Cyan; Write-Host '' }
 
 # ------------------------------------------------------------------ coleta
 $cs   = Get-CimInstance Win32_ComputerSystem
@@ -64,7 +85,8 @@ if ($fabricante -match 'LENOVO' -and (Clean $csp.Version) -and $csp.Version -not
 $serie = Clean $bios.SerialNumber
 if (-not $serie -or $serie -match '(?i)o\.?e\.?m|default|system serial|^0+$') { $serie = Clean $csp.IdentifyingNumber }
 
-# --- patrimonio (ativo): parametro > registro > etiqueta da BIOS
+# --- patrimonio (ativo): parametro > config (link do tecnico) > registro > etiqueta da BIOS
+if (-not $Ativo -and $cfg.ativo) { $Ativo = $cfg.ativo }
 if (-not $Ativo) { $Ativo = Get-Safe { (Get-ItemProperty 'HKLM:\SOFTWARE\InventarioQuallit' -Name Ativo).Ativo } }
 if (-not $Ativo) { $Ativo = Clean $enc.SMBIOSAssetTag }
 
@@ -186,6 +208,10 @@ $dados = [ordered]@{
   dominio                = Clean $cs.Domain
   usuario_logado         = $usuario
   agente_versao          = $AgenteVersao
+  setor                  = Clean $cfg.setor
+  localizacao            = Clean $cfg.localizacao
+  responsavel            = Clean $cfg.responsavel
+  codigo_instalacao      = Clean $cfg.codigo_instalacao
 }
 
 if ($SoMostrar) { $dados | ConvertTo-Json -Depth 6; exit 0 }
@@ -206,12 +232,12 @@ for ($t = 1; $t -le 3; $t++) {
   try {
     $r = Invoke-RestMethod @params
     Write-Log ("OK  {0}  RAM={1}GB  Disco={2}GB  {3} {4}  novo={5}" -f $dados.hostname, $dados.memoria_gb, $dados.armazenamento_total_gb, $soNome, $displayVersion, $r.novo)
-    exit 0
+    Fim 0
   } catch {
     $det = $_.ErrorDetails.Message
     Write-Log ("FALHA tentativa {0}: {1} {2}" -f $t, $_.Exception.Message, $det)
-    if ($det -match 'token') { exit 3 }
+    if ($det -match 'token') { Fim 3 }
     Start-Sleep -Seconds (10 * $t)
   }
 }
-exit 1
+Fim 1

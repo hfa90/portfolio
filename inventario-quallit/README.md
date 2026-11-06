@@ -21,6 +21,11 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 - **Conferência física**: bipe as etiquetas com o leitor de código de barras USB (ou câmera do celular). Mostra em tempo real o que foi encontrado, o que **falta** e o que **não está cadastrado**. Várias pessoas podem bipar a mesma conferência ao mesmo tempo.
 - **Link de instalação para o colaborador**: o técnico gera um link no painel e manda por WhatsApp/e-mail. O colaborador abre no computador, clica em **Baixar**, abre o arquivo e a página mostra a máquina reconhecida ao vivo. Funciona sem ser administrador.
 - **Botão "Executar coleta agora"**: depois de instalado, a mesma página dispara a coleta na hora (protocolo `inventario-quallit://`).
+- **Alerta de peça removida**: se a memória ou o disco de uma máquina diminuir (ex.: 16 GB → 8 GB), ela ganha um alerta vermelho até o técnico marcar como verificado.
+- **Etiquetas com QR code e código de barras**: selecione máquinas na lista e imprima em rolo térmico (50×30, 60×40, 100×50 mm) ou folha A4 (24 ou 14 por folha). O QR code abre a ficha da máquina pela câmera do celular e é lido na conferência.
+- **Empréstimo de notebooks**: retirada com assinatura na tela, acessórios, devolução prevista, termo de responsabilidade para imprimir, aviso de atraso e histórico por máquina.
+- **Compra e garantia**: data de compra, fornecedor, nota fiscal, valor e fim da garantia, com importação por planilha CSV, alerta de garantia vencendo em 30 dias e de máquinas com mais de 5 anos.
+- **Conferência sem internet + app no celular**: o painel pode ser instalado como app; sem sinal, as leituras ficam salvas no aparelho e são enviadas sozinhas quando a internet volta.
 - **Tempo real**: a lista atualiza sozinha quando uma máquina reporta.
 
 ## Estrutura
@@ -28,9 +33,11 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 ```
 sql/01_schema.sql        → banco (tabelas, RLS, histórico, função do agente)
 sql/02_link_instalacao.sql → link do colaborador + reconhecimento ao vivo
+sql/03_garantia_emprestimos.sql → compra/garantia, empréstimos, alerta de peça removida
 web/                     → painel (HTML/CSS/JS puro + supabase-js)
 web/instalar.html        → página pública que o colaborador abre
 web/agente/              → coletor + modelo do instalador usados pela página
+web/sw.js, manifest.webmanifest, icons/ → app instalável e funcionamento offline
 agente/coletor.ps1       → coleta e envia os dados
 agente/instalar-agente.ps1 / INSTALAR.bat → instala com tarefa agendada
 agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
@@ -39,7 +46,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql` (sempre nessa ordem; se rodar o 01 de novo, rode o 02 em seguida).
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql` e `sql/03_garantia_emprestimos.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -70,3 +77,20 @@ O agente identifica a máquina pelo **nº de série** (depois patrimônio, depoi
 - Sem login, nada é lido (RLS). A chave `anon` é pública por design.
 - O agente **só** consegue chamar a função `agente_reportar` e precisa de um token válido. Tokens podem ser gerados/revogados na tela **Agente coletor**.
 - `agente/config.json` está no `.gitignore` — não suba o token para o GitHub público.
+
+## Uso no dia a dia
+
+### Etiquetas
+*Máquinas* → marque as máquinas (ou filtre) → **Etiquetas** → escolha o modelo → **Imprimir**. Na janela de impressão use escala **100% / tamanho real** e **sem margens**. Em folha A4 já usada, informe em "Começar na posição" a primeira etiqueta livre.
+
+### Empréstimos
+*Empréstimos* → **Novo empréstimo** → bipe a etiqueta (ou use a câmera), preencha o colaborador, marque os acessórios, peça a assinatura na tela. O termo abre pronto para imprimir. Na volta: **Devolução** → condição (com avaria vai para Manutenção automaticamente).
+
+### Conferência sem internet (celular)
+1. Abra o painel no celular **com internet** e entre com seu usuário. No Chrome: menu ⋮ → **Instalar app / Adicionar à tela inicial**.
+2. Abra a conferência desejada uma vez com internet (ela fica guardada no aparelho).
+3. No galpão, mesmo sem sinal, continue bipando: aparece "📴 salva no aparelho". Quando a internet voltar, as leituras são enviadas sozinhas.
+- A câmera lê código de barras e QR code no Android; no iPhone lê QR code.
+
+### Compras e garantias em lote
+*Máquinas* → **Importar compras** → **Baixar planilha modelo**, preencha no Excel, salve como CSV e importe. As máquinas são encontradas pelo patrimônio, hostname ou nº de série.

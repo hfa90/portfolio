@@ -2,6 +2,7 @@
 --  INVENTÁRIO QUALLIT — Schema Supabase
 --  Rode este arquivo inteiro no Supabase: Dashboard > SQL Editor > New query
 --  Pode rodar mais de uma vez (é idempotente nas partes principais).
+--  IMPORTANTE: depois deste, rode também o 02_link_instalacao.sql.
 -- =====================================================================
 
 create extension if not exists pgcrypto with schema extensions;
