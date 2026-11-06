@@ -29,6 +29,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# registro de tudo o que aparece na tela, para diagnostico mesmo se a janela fechar
+$LogInstalacao = Join-Path $env:TEMP 'InventarioQuallit-instalacao.log'
+try { Start-Transcript -Path $LogInstalacao -Force | Out-Null } catch {}
 $InstaladorVersao = '2.0.1'
 $SupabaseUrl      = 'https://wrmlmtxkukjxkivtsuex.supabase.co'
 $AnonKey          = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndybWxtdHhrdWtqeGtpdnRzdWV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MDA2NTMsImV4cCI6MjEwOTQ3NjY1M30.Eg_FluPEIzlXE8-8FZ8D5KbhMO8HtwNrLjuqZt4iibo'      # chave publica (anon) do Supabase; sozinha nao grava nada
@@ -39,6 +42,7 @@ try { $Host.UI.RawUI.WindowTitle = 'Inventario Quallit - Instalacao' } catch {}
 
 function Linha([string]$t, [string]$c = 'Gray') { Write-Host ('  ' + $t) -ForegroundColor $c }
 function Fim([int]$codigo) {
+  try { Stop-Transcript | Out-Null } catch {}
   if (-not $Silencioso) {
     if ($codigo -eq 0) { Linha 'Esta janela fecha sozinha.' DarkGray; Start-Sleep -Seconds 8 }
     else { Read-Host '  Pressione Enter para fechar' | Out-Null }
@@ -635,5 +639,6 @@ try {
   Write-Host ''
   Linha ('ERRO: ' + $_.Exception.Message) Red
   Linha 'Tire um print desta tela e envie para o tecnico de TI.' Yellow
+  Linha ('Registro completo: ' + $LogInstalacao) DarkGray
   Fim 1
 }
