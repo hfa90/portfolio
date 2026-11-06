@@ -26,6 +26,8 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 - **Empréstimo de notebooks**: retirada com assinatura na tela, acessórios, devolução prevista, termo de responsabilidade para imprimir, aviso de atraso e histórico por máquina.
 - **Compra e garantia**: data de compra, fornecedor, nota fiscal, valor e fim da garantia, com importação por planilha CSV, alerta de garantia vencendo em 30 dias e de máquinas com mais de 5 anos.
 - **Conferência sem internet + app no celular**: o painel pode ser instalado como app; sem sinal, as leituras ficam salvas no aparelho e são enviadas sozinhas quando a internet volta.
+- **Vários CDs e níveis de acesso**: **Administrador** vê todos os CDs, cria e gerencia usuários (criar, editar, trocar senha, desativar, excluir), cadastra CDs, edita/reabre/exclui inventários e tem relatórios gerais e por CD. **Field** trabalha só no próprio CD. A separação é garantida no banco (RLS), não só na tela.
+- **Relatórios**: parque por CD (máquinas, online, Windows sem suporte, peças removidas, garantia, empréstimos…), inventários com filtros por CD, status, período e responsável, e relatórios individuais de CD e de inventário prontos para imprimir ou salvar em PDF. Tudo exporta em CSV.
 - **Tempo real**: a lista atualiza sozinha quando uma máquina reporta.
 
 ## Estrutura
@@ -34,6 +36,8 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 sql/01_schema.sql        → banco (tabelas, RLS, histórico, função do agente)
 sql/02_link_instalacao.sql → link do colaborador + reconhecimento ao vivo
 sql/03_garantia_emprestimos.sql → compra/garantia, empréstimos, alerta de peça removida
+sql/04_multicd_usuarios.sql → CDs, perfis (Administrador / Field) e regras de acesso
+supabase/functions/admin-usuarios/ → função do servidor que cria e gerencia logins
 web/                     → painel (HTML/CSS/JS puro + supabase-js)
 web/instalar.html        → página pública que o colaborador abre
 web/agente/              → coletor + modelo do instalador usados pela página
@@ -46,7 +50,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql` e `sql/03_garantia_emprestimos.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida).
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql` e `sql/04_multicd_usuarios.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -94,3 +98,23 @@ O agente identifica a máquina pelo **nº de série** (depois patrimônio, depoi
 
 ### Compras e garantias em lote
 *Máquinas* → **Importar compras** → **Baixar planilha modelo**, preencha no Excel, salve como CSV e importe. As máquinas são encontradas pelo patrimônio, hostname ou nº de série.
+
+## Níveis de acesso (Administrador e Field)
+
+### Publicar a função de usuários (uma vez)
+Criar logins e trocar senhas exige a chave mestra do Supabase, que nunca pode ficar no navegador. Por isso existe uma função no servidor:
+1. Supabase → **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Nome: `admin-usuarios`. Apague o código de exemplo, cole o conteúdo de `supabase/functions/admin-usuarios/index.ts` e clique em **Deploy**.
+3. Pronto: a tela *Usuários e CDs* passa a criar, editar, trocar senha e excluir. (A função só aceita chamadas de administradores ativos.)
+
+Com a CLI do Supabase, alternativa: `supabase functions deploy admin-usuarios`.
+
+### Rotina do administrador
+- **CDs**: *Usuários e CDs → CDs → Novo CD* (código, nome, cidade/UF). CD com máquinas não pode ser excluído, só desativado.
+- **Usuários**: *Novo usuário* → escolha **Field** (e o CD) ou **Administrador**. A senha inicial é gerada e aparece para você enviar (WhatsApp/copiar). Depois: *Editar* (nome, e-mail, perfil, CD, ativo), *Senha* (gera nova) e *Excluir*.
+- **Trocar de CD**: no seletor do menu lateral, escolha um CD ou *Todos os CDs*. Painel, máquinas, empréstimos, inventários, etiquetas e relatórios seguem a escolha.
+- **Inventários**: abrir qualquer um, **Editar** (nome, setor, CD), **Reabrir** um finalizado e **Excluir** (pede para digitar EXCLUIR).
+- **Links de instalação**: escolha o CD no modal do link — a máquina instalada por ele entra direto naquele CD.
+
+### O que o Field pode fazer
+Ver e editar máquinas do seu CD, criar e bipar inventários, finalizar (depois só o admin reabre), registrar empréstimos, imprimir etiquetas, gerar link de instalação do seu CD e ver os relatórios do seu CD. Não exclui máquinas nem inventários e não vê outros CDs nem usuários.
