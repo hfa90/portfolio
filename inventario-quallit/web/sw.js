@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do painel para abrir e conferir sem internet.
 // Os dados (Supabase) não passam por aqui: o app guarda no IndexedDB e sincroniza sozinho.
-const VERSAO = 'iq-v4';
+const VERSAO = 'iq-v5';
 const ESSENCIAIS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css',
@@ -16,7 +16,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((ks) => Promise.all(ks.filter((k) => k !== VERSAO).map((k) => caches.delete(k))))
+      .then((ks) => Promise.all(ks.filter((k) => k.startsWith('iq-') && k !== VERSAO).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });

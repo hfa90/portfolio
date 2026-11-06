@@ -42,6 +42,7 @@ web/                     → painel (HTML/CSS/JS puro + supabase-js)
 web/instalar.html        → página pública que o colaborador abre
 web/agente/              → coletor + modelo do instalador usados pela página
 web/sw.js, manifest.webmanifest, icons/ → app instalável e funcionamento offline
+web/campo/               → app de conferência para celular (PWA próprio, uso do Field)
 agente/coletor.ps1       → coleta e envia os dados
 agente/instalar-agente.ps1 / INSTALAR.bat → instala com tarefa agendada
 agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
@@ -118,3 +119,17 @@ Com a CLI do Supabase, alternativa: `supabase functions deploy admin-usuarios`.
 
 ### O que o Field pode fazer
 Ver e editar máquinas do seu CD, criar e bipar inventários, finalizar (depois só o admin reabre), registrar empréstimos, imprimir etiquetas, gerar link de instalação do seu CD e ver os relatórios do seu CD. Não exclui máquinas nem inventários e não vê outros CDs nem usuários.
+
+## App de conferência no celular (Field)
+
+Endereço: `https://haydenfernandes.com.br/inventario-quallit/web/campo/` (ou, no painel, **Inventários → 📱 App do celular** para ver o QR code).
+
+1. O Field abre o link no celular e entra com o mesmo login do painel.
+2. **Instalar**: Android/Chrome → menu ⋮ do app → *Instalar o app* (ou o aviso do navegador). iPhone/Safari → *Compartilhar* → *Adicionar à Tela de Início*. O ícone se chama **Conferência**.
+3. Escolhe um inventário aberto (ou cria um) e confere:
+   - bipa com leitor Bluetooth/USB, digita o patrimônio, ou usa **Ler etiquetas com a câmera** (a câmera fica aberta e lê uma etiqueta atrás da outra; tem lanterna nos aparelhos compatíveis);
+   - na aba **Faltando**, toca na máquina para **marcar manualmente** quando a etiqueta não puder ser lida;
+   - errou? **Desfazer** no próprio resultado ou tocando na leitura.
+4. **Finalizar inventário** → mostra o resumo → **Confirmar e sincronizar**: as leituras vão para o sistema e o inventário é encerrado com o resultado congelado (o mesmo que aparece nos relatórios do painel).
+
+Funciona sem internet: as leituras ficam salvas no celular (mesmo fechando o app). Se finalizar sem sinal, o inventário fica **na fila** e é sincronizado sozinho quando a conexão voltar. Para criar um inventário novo é preciso internet. A tela fica ligada durante a conferência e os campos não dão zoom ao tocar.

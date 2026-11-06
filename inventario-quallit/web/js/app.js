@@ -933,7 +933,7 @@ async function renderConferencias() {
   el.innerHTML = `
     <div class="view-head">
       <div><h1>Inventários</h1><p>Contagem física com leitor ou câmera: bipe as etiquetas e veja na hora o que foi encontrado, o que falta e o que não está cadastrado.${ehAdmin() ? ' Como administrador, você vê os inventários de todos os CDs e pode editar, reabrir e excluir.' : ''}</p></div>
-      <div class="actions">${ehAdmin() ? '<a class="btn" href="#relatorios/inventarios">Relatório de inventários</a>' : ''}<button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
+      <div class="actions"><button class="btn" id="btn-app-campo">📱 App do celular</button>${ehAdmin() ? '<a class="btn" href="#relatorios/inventarios">Relatório de inventários</a>' : ''}<button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
     </div>
     <div class="card" style="margin-bottom:14px"><div class="toolbar">
       <div class="search"><input id="cf-q" type="search" placeholder="Buscar inventário, setor, responsável…" value="${esc(f.q)}"></div>
@@ -960,7 +960,27 @@ async function renderConferencias() {
   $('#cf-q').oninput = debounce((e) => { f.q = e.target.value; desenhar(); }, 120);
   $('#cf-status').onchange = (e) => { f.status = e.target.value; desenhar(); };
   $('#btn-nova-conf').onclick = () => modalConf();
+  $('#btn-app-campo').onclick = modalAppCampo;
   desenhar();
+}
+
+// QR code para abrir/instalar o app de conferência no celular
+function modalAppCampo() {
+  const url = baseIndex() + 'campo/';
+  let qr = '';
+  if (window.qrcode) { const q = window.qrcode(0, 'M'); q.addData(url); q.make(); qr = q.createSvgTag({ cellSize: 5, margin: 2, scalable: true }); }
+  const texto = `App de conferência do inventário (abra no celular e instale): ${url}`;
+  modal(`
+    <div class="modal-head"><h2>App de conferência no celular</h2>
+      <p class="muted" style="margin:4px 0 0">Aponte a câmera do celular para o QR code. Depois de entrar, toque em <b>⋮ → Instalar o app</b> (Android) ou <b>Compartilhar → Adicionar à Tela de Início</b> (iPhone).</p></div>
+    <div class="modal-body" style="justify-items:center;text-align:center">
+      <div class="qr-box">${qr}</div>
+      <code style="word-break:break-all;font-size:12.5px">${esc(url)}</code>
+      <p class="muted" style="margin:0;font-size:13px">Funciona sem internet depois de aberto uma vez: as leituras ficam no celular e são enviadas ao finalizar o inventário.</p>
+    </div>
+    <div class="modal-foot"><a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(texto)}">WhatsApp</a>
+      <button class="btn" id="campo-copiar">Copiar link</button><a class="btn btn--primary" href="${esc(url)}" target="_blank" rel="noopener">Abrir</a></div>`,
+  () => { $('#campo-copiar').onclick = () => navigator.clipboard.writeText(url).then(() => toast('Link copiado')); });
 }
 
 // números de um inventário (usa o resultado congelado quando finalizado)
