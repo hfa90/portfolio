@@ -19,13 +19,18 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 - **Detalhe da máquina**: todos os dados técnicos, edição do controle de inventário e **histórico automático** de alterações (ex.: "Memória 8 GB → 16 GB", "Windows 10 → 11", troca de status).
 - **Alertas automáticos**: Windows sem suporte, disco cheio, HDD, RAM < 8 GB, sem contato há 30 dias, **máquina de estoque que foi ligada**, hostname duplicado, sem patrimônio.
 - **Conferência física**: bipe as etiquetas com o leitor de código de barras USB (ou câmera do celular). Mostra em tempo real o que foi encontrado, o que **falta** e o que **não está cadastrado**. Várias pessoas podem bipar a mesma conferência ao mesmo tempo.
+- **Link de instalação para o colaborador**: o técnico gera um link no painel e manda por WhatsApp/e-mail. O colaborador abre no computador, clica em **Baixar**, abre o arquivo e a página mostra a máquina reconhecida ao vivo. Funciona sem ser administrador.
+- **Botão "Executar coleta agora"**: depois de instalado, a mesma página dispara a coleta na hora (protocolo `inventario-quallit://`).
 - **Tempo real**: a lista atualiza sozinha quando uma máquina reporta.
 
 ## Estrutura
 
 ```
 sql/01_schema.sql        → banco (tabelas, RLS, histórico, função do agente)
+sql/02_link_instalacao.sql → link do colaborador + reconhecimento ao vivo
 web/                     → painel (HTML/CSS/JS puro + supabase-js)
+web/instalar.html        → página pública que o colaborador abre
+web/agente/              → coletor + modelo do instalador usados pela página
 agente/coletor.ps1       → coleta e envia os dados
 agente/instalar-agente.ps1 / INSTALAR.bat → instala com tarefa agendada
 agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
@@ -34,7 +39,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**.
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql` (sempre nessa ordem; se rodar o 01 de novo, rode o 02 em seguida).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -45,6 +50,11 @@ Por usar módulos ES, abra via servidor HTTP (não funciona com duplo clique em 
 - Publique a pasta `web/` no **GitHub Pages**, Netlify ou Vercel (é só estático).
 
 ### 3. Agente nas máquinas
+- **Link para o colaborador (mais fácil)**: Painel → *Agente coletor* → **Gerar link de instalação** (ou *Máquinas* → *Link de instalação*). Patrimônio/setor são opcionais. O colaborador abre o link **no computador**, clica em **Baixar instalador** e abre o arquivo `.cmd`:
+  - como usuário comum: instala em `C:\Users\<usuário>\AppData\Local\InventarioQuallit`, coleta ao entrar no Windows e de hora em hora;
+  - como administrador: instala em `C:\InventarioQuallit` (protegida), coleta ao ligar, ao entrar e de hora em hora (tarefa SYSTEM).
+  - A página `instalar.html` precisa estar publicada (ex.: `https://haydenfernandes.com.br/inventario-quallit/web/instalar.html`) — configure `URL_PUBLICA` em `web/js/config.js`.
+  - Para invalidar todos os links já enviados: no modal do link, **Invalidar links antigos**.
 - **Manual**: copie a pasta `agente` → botão direito em `INSTALAR.bat` → *Executar como administrador* → informe o patrimônio.
 - **Em massa (GPO/SCCM/Intune/PDQ)**:
   ```
