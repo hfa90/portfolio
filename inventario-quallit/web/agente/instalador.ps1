@@ -50,7 +50,7 @@ try {
       $acao = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $ps + '"')
       $t1 = New-ScheduledTaskTrigger -AtStartup; $t1.Delay = 'PT2M'
       $t2 = New-ScheduledTaskTrigger -AtLogOn;   $t2.Delay = 'PT1M'
-      $t3 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 1)
+      $t3 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
       $pr = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
     } else {
       if (Test-Path $wscript) {
@@ -62,7 +62,7 @@ try {
       }
       # ao entrar no Windows (nao precisa de administrador)
       Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'InventarioQuallit' -Value $run
-      $t1 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 1)
+      $t1 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
       $t2 = $null; $t3 = $null
       $pr = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
     }
@@ -71,16 +71,17 @@ try {
     $gatilhos = @($t1, $t2, $t3) | Where-Object { $_ }
     Register-ScheduledTask -TaskName $tarefa -Action $acao -Trigger $gatilhos -Principal $pr -Settings $cfgT `
       -Description 'Inventario Quallit - coleta de hardware' -Force | Out-Null
-    if ($admin) { Linha '[3/4] Coleta automatica: ao ligar, ao entrar e a cada 1 hora' Green }
-    else        { Linha '[3/4] Coleta automatica: ao entrar no Windows e a cada 1 hora' Green }
+    if ($admin) { Linha '[3/4] Agente ativo: sinal a cada 5 min e coleta completa a cada 1 hora' Green }
+    else        { Linha '[3/4] Agente ativo: sinal a cada 5 min e coleta completa a cada 1 hora' Green }
   } catch {
-    Linha ('[3/4] Aviso: agendamento de hora em hora nao foi criado (' + $_.Exception.Message + ')') Yellow
+    Linha ('[3/4] Aviso: agendamento a cada 5 minutos nao foi criado (' + $_.Exception.Message + ')') Yellow
     if (-not $admin) { Linha '      A coleta continua acontecendo sempre que entrar no Windows.' Yellow }
   }
 
   Linha '[4/4] Enviando os dados deste computador...' Cyan
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ps | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw ('a coleta falhou (codigo ' + $LASTEXITCODE + '). Detalhes em ' + $destino + '\coletor.log') }
+  if ($LASTEXITCODE -eq 5) { Linha 'Sem internet agora: a coleta ficou guardada e sera enviada quando a conexao voltar.' Yellow }
+  elseif ($LASTEXITCODE -ne 0) { throw ('a coleta falhou (codigo ' + $LASTEXITCODE + '). Detalhes em ' + $destino + '\coletor.log') }
 
   Write-Host ''
   Linha 'PRONTO! Computador registrado no inventario.' Green

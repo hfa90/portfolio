@@ -4,7 +4,7 @@
   Instala o agente na maquina:
    - copia para C:\ProgramData\InventarioQuallit
    - grava o patrimonio (opcional) no registro
-   - cria a tarefa agendada "InventarioQuallit" (SYSTEM): ao ligar, no logon e a cada 1 hora
+   - cria a tarefa agendada "InventarioQuallit" (SYSTEM): ao ligar, no logon e a cada 5 minutos (sinal; coleta completa de hora em hora)
    - executa a primeira coleta
 
   Uso:  powershell -ExecutionPolicy Bypass -File instalar-agente.ps1 [-Ativo PAT123]
@@ -35,7 +35,7 @@ $tBoot = New-ScheduledTaskTrigger -AtStartup
 $tBoot.Delay = 'PT2M'
 $tLogon = New-ScheduledTaskTrigger -AtLogOn
 $tLogon.Delay = 'PT1M'
-$tHora = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Hours 1)
+$tHora = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
 
 $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
 $config = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `

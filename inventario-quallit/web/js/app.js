@@ -30,6 +30,7 @@ const ALERTAS = {
   emprestimo_atrasado:{ l: 'Devolução atrasada', d: 'Empréstimo com data de devolução vencida', grave: true },
   so_sem_suporte:     { l: 'Windows sem suporte', d: 'Windows 10 ou anterior — fim do suporte Microsoft em 14/10/2025', grave: true },
   estoque_online:     { l: 'Estoque ligada', d: 'Marcada como estoque/descartada/extraviada, mas reportou nos últimos 3 dias', grave: true },
+  fora_do_cd:         { l: 'Fora do CD', d: 'Apareceu na rede de outro CD (pela faixa de IP cadastrada em Agente → Redes)', grave: true },
   hostname_duplicado: { l: 'Hostname duplicado', d: 'Mais de uma máquina ativa com o mesmo nome', grave: true },
   disco_cheio:        { l: 'Disco cheio', d: 'Menos de 15 GB ou 10% livre', grave: true },
   ram_baixa:          { l: 'RAM < 8 GB', d: 'Memória abaixo de 8 GB', grave: false },
@@ -321,7 +322,7 @@ function navegar() {
   if (state.view === 'painel') renderPainel();
   if (state.view === 'maquinas') renderMaquinas();
   if (state.view === 'conferencia') arg === 'agendados' ? renderAgendados() : arg ? abrirConferencia(arg) : renderConferencias();
-  if (state.view === 'agente') renderAgente();
+  if (state.view === 'agente') renderAgente(arg || 'instalacao');
   if (state.view === 'emprestimos') carregarEmprestimos().then(() => renderEmprestimos(true));
   if (state.view === 'etiquetas') renderEtiquetas();
   if (state.view === 'relatorios') renderRelatorios(arg || 'parque');
@@ -959,6 +960,47 @@ const campo = (nome, label, valor, tipo = 'text', extra = '') =>
   `<label>${label}<input name="${nome}" type="${tipo}" value="${esc(valor ?? '')}" ${extra}></label>`;
 const sel = (nome, label, mapa, valor) => `<label>${label}<select name="${nome}">${opts(Object.entries(mapa), valor)}</select></label>`;
 
+/* ---- agente 2.0: "Coletar agora" e rede ---- */
+const vNum = (v) => String(v || '0').split('.').map((n) => parseInt(n, 10) || 0);
+function cmpVer(a, b) { const x = vNum(a), y = vNum(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; }
+const agenteV2 = (m) => cmpVer(m.agente_versao, '2.0.0') >= 0;
+function comandoPendente(m) {
+  const c = m.ultimo_comando;
+  return c && !c.concluido_em && Date.now() - new Date(c.criado_em).getTime() < 2 * 864e5 ? c : null;
+}
+function faixaAgente(m) {
+  const c = m.ultimo_comando, pend = comandoPendente(m), v2 = agenteV2(m);
+  let txt;
+  if (pend) txt = pend.entregue_em ? '<b>🔄 A máquina recebeu o pedido</b> e está coletando agora…'
+    : `<b>⏳ Pedido enviado ${esc(rel(pend.criado_em))}</b> · a máquina responde no próximo sinal (até 5 min)`;
+  else if (c?.concluido_em && Date.now() - new Date(c.concluido_em).getTime() < 864e5) txt = `✅ Coleta pedida concluída ${esc(rel(c.concluido_em))}`;
+  else if (v2) txt = 'Agente 2.0 · sinal a cada 5 min, coleta completa de hora em hora';
+  else txt = `Agente ${esc(m.agente_versao || 'antigo')} · reinstale pelo link <b>uma vez</b> para ativar “Coletar agora” e a atualização automática`;
+  return `<div class="agente-faixa ${pend ? 'pend' : ''}">
+    <span class="af-txt">${txt}</span>
+    ${m.rede ? `<span class="af-rede" title="${esc(m.rede.descricao || 'Rede cadastrada')}">🌐 ${esc(m.rede.cidr)}${m.rede.setor ? ' · ' + esc(m.rede.setor) : ''}</span>` : ''}
+    <button class="btn btn--sm" id="d-coletar" ${!v2 || pend ? 'disabled' : ''} title="${v2 ? 'Pede uma coleta completa na próxima vez que a máquina der sinal' : 'Disponível a partir do agente 2.0'}">⟳ Coletar agora</button>
+  </div>`;
+}
+function ligarFaixaAgente(m) {
+  clearTimeout(state.cmdTimer);
+  $('#d-coletar')?.addEventListener('click', async () => {
+    $('#d-coletar').disabled = true;
+    const { error } = await sb.from('agente_comandos').insert({ maquina_id: m.id });
+    if (error) { $('#d-coletar').disabled = false; return toast(/agente_comandos|schema cache/i.test(error.message) ? 'Rode o sql/06_agente_v2.sql no Supabase para liberar o “Coletar agora”' : erroMsg(error), true); }
+    toast('Pedido enviado. A máquina responde em até 5 minutos.');
+    await recarregarMaquina(m.id);
+    if (state.drawerId === m.id && !state.drawerDirty) abrirMaquina(m.id, true);
+  });
+  // enquanto houver pedido pendente, confere a cada 15 s (a coleta concluída também chega pelo tempo real)
+  if (comandoPendente(m)) {
+    state.cmdTimer = setTimeout(async () => {
+      if (state.drawerId !== m.id || state.drawerDirty || !$('#drawer').classList.contains('open')) return;
+      await recarregarMaquina(m.id); abrirMaquina(m.id, true);
+    }, 15000);
+  }
+}
+
 async function abrirMaquina(id, silencioso = false) {
   let m = state.maquinas.find((x) => x.id === id);
   if (!m) m = await recarregarMaquina(id);
@@ -978,8 +1020,12 @@ async function abrirMaquina(id, silencioso = false) {
         Último contato: <strong style="color:var(--ink)">${rel(m.ultimo_online)}</strong>
         ${m.origem === 'agente' ? `· via agente ${esc(m.agente_versao || '')}` : '· cadastro manual'}</div>
       ${(m.alertas || []).length ? `<div>${tags(m, 9)}</div>` : ''}
+      ${m.origem === 'agente' ? faixaAgente(m) : ''}
     </div>
     <div class="drawer-body">
+      ${(m.alertas || []).includes('fora_do_cd') && m.rede ? `<div class="banner banner--bad"><div><strong>🌐 Na rede de outro CD</strong>
+          <span>O IP ${esc(m.ip || '')} pertence à faixa ${esc(m.rede.cidr)} do <b>${esc(cdCod(m.rede.cd_id))}</b>${m.rede.setor ? ' · ' + esc(m.rede.setor) : ''}, mas a máquina está cadastrada no <b>${esc(cdCod(m.cd_id))}</b>. Foi transferida?</span></div>
+          ${ehAdmin() ? `<button class="btn btn--sm btn--primary" id="d-mover-cd">Mover para ${esc(cdCod(m.rede.cd_id))}</button>` : ''}</div>` : ''}
       ${m.hw_reducao ? (() => { const h = m.hw_reducao; const nome = h.campo === 'memoria_gb' ? 'A memória' : 'O armazenamento';
         return `<div class="banner banner--bad"><div><strong>⚠ ${nome} diminuiu de ${gb(h.de)} para ${gb(h.para)}</strong>
           <span>Detectado em ${dataHora(h.em)}. Pode ser um pente/disco com defeito ou uma peça retirada da máquina. Confira fisicamente.</span></div>
@@ -1083,6 +1129,13 @@ async function abrirMaquina(id, silencioso = false) {
 
   if (!silencioso) { d.classList.add('open'); $('#drawer-bg').hidden = false; }
   $('#d-fechar').onclick = $('#d-cancelar').onclick = fecharDrawer;
+  ligarFaixaAgente(m);
+  $('#d-mover-cd')?.addEventListener('click', async () => {
+    const { error } = await sb.from('maquinas').update({ cd_id: m.rede.cd_id }).eq('id', id);
+    if (error) return toast(erroMsg(error), true);
+    await sb.rpc('aplicar_redes').then(() => {}, () => {});
+    await recarregarMaquina(id); toast(`${m.hostname} movida para ${cdCod(m.rede.cd_id)}`); abrirMaquina(id, true); rerender();
+  });
   const form = $('#d-form');
   form.oninput = () => { state.drawerDirty = true; $('#d-salvar').disabled = false; };
   form.onsubmit = (e) => { e.preventDefault(); salvar(); };
@@ -2432,8 +2485,14 @@ async function modalLinkInstalacao(pre = {}) {
 /* =====================================================================
    AGENTE
    ===================================================================== */
-async function renderAgente() {
+const ABAS_AGENTE = [['instalacao', 'Instalação'], ['redes', 'Redes e setores'], ['versoes', 'Atualizações', true]];
+async function renderAgente(aba = 'instalacao') {
+  if (aba === 'versoes' && !ehAdmin()) aba = 'instalacao';
+  if (!ABAS_AGENTE.some(([k]) => k === aba)) aba = 'instalacao';
   const el = $('#view-agente');
+  const abas = `<div class="tabs tabs--page">${ABAS_AGENTE.filter(([, , adm]) => !adm || ehAdmin()).map(([k, l]) => `<a class="tab ${aba === k ? 'active' : ''}" href="#agente/${k}">${l}</a>`).join('')}</div>`;
+  if (aba === 'redes') return renderRedes(el, abas);
+  if (aba === 'versoes') return renderVersoes(el, abas);
   const { data: tokens } = ehAdmin() ? await sb.from('agente_tokens').select('id, descricao, ativo, criado_em, ultimo_uso, cd_id').order('criado_em') : { data: [] };
   state.tokens = tokens || [];
   const versoes = contar(MQ().filter((m) => m.origem === 'agente'), (m) => m.agente_versao || '?');
@@ -2441,7 +2500,8 @@ async function renderAgente() {
 
   el.innerHTML = `
     <div class="view-head"><div><h1>Agente coletor</h1>
-      <p>Script PowerShell que roda em cada máquina e envia RAM, discos, SO, versão, série, usuário e IP. Executa ao ligar, no logon e a cada 1 hora — é isso que mantém o "último contato" sempre correto.</p></div></div>
+      <p>Script PowerShell que roda em cada máquina: dá sinal a cada 5 minutos (online, pedidos do painel, atualização) e envia RAM, discos, SO, série, usuário e IP de hora em hora, ao ligar ou quando o IP muda. Sem internet, guarda a coleta e envia depois.</p></div></div>
+    ${abas}
     <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
       <div style="flex:1 1 320px"><h2>Mais fácil: envie um link para o colaborador</h2>
         <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e abre o arquivo. O instalador já vem configurado (patrimônio e setor opcionais), funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
@@ -2453,7 +2513,7 @@ async function renderAgente() {
         <ol class="steps">
           <li><div><strong>Copie a pasta <code>agente</code></strong><p>Para um pendrive ou uma pasta compartilhada da rede. Ela já contém o <code>config.json</code> com a URL e o token.</p></div></li>
           <li><div><strong>Execute <code>INSTALAR.bat</code> como administrador</strong><p>Informe o nº de patrimônio quando pedir (opcional — pode preencher depois no painel).</p></div></li>
-          <li><div><strong>Pronto</strong><p>A máquina aparece aqui em segundos. O agente fica em <code>C:\\ProgramData\\InventarioQuallit</code> e roda como SYSTEM pela tarefa agendada <code>InventarioQuallit</code>.</p></div></li>
+          <li><div><strong>Pronto</strong><p>A máquina aparece aqui em segundos. O agente fica em <code>C:\\ProgramData\\InventarioQuallit</code> e roda como SYSTEM pela tarefa agendada <code>InventarioQuallit</code> (a cada 5 min). Depois disso ele se atualiza sozinho.</p></div></li>
         </ol>
         <h3 style="margin:20px 0 8px">Instalar em massa (GPO / SCCM / Intune / PDQ)</h3>
         <pre class="code">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "\\\\SERVIDOR\\Compartilhamento\\agente\\instalar-agente.ps1"</pre>
@@ -2487,7 +2547,7 @@ async function renderAgente() {
     if (ativo && !confirm('Revogar este token? Agentes usando ele param de reportar.')) return;
     const { error } = await sb.from('agente_tokens').update({ ativo: !ativo }).eq('id', b.dataset.tok);
     if (error) return toast(erroMsg(error), true);
-    renderAgente();
+    renderAgente('instalacao');
   }));
   $('#btn-token')?.addEventListener('click', async () => {
     const desc = prompt('Descrição do token (ex.: "Implantação GPO 2026")');
@@ -2499,8 +2559,210 @@ async function renderAgente() {
       <div class="token-box" id="tok">${esc(tok)}</div></div>
       <div class="modal-foot"><button class="btn" id="tok-copiar">Copiar</button><button class="btn btn--primary" data-close>Fechei, já copiei</button></div>`,
     () => { $('#tok-copiar').onclick = () => navigator.clipboard.writeText(tok).then(() => toast('Copiado')); });
-    renderAgente();
+    renderAgente('instalacao');
   });
+}
+
+/* ---- Redes e setores: faixa de IP → CD/setor ---- */
+const ipNum = (ip) => { const p = String(ip || '').split('.').map(Number); return p.length === 4 && p.every((n) => Number.isInteger(n) && n >= 0 && n <= 255) ? ((p[0] << 24) >>> 0) + (p[1] << 16) + (p[2] << 8) + p[3] : null; };
+function cidrOk(c) {
+  const m = String(c || '').trim().match(/^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/);
+  if (!m || ipNum(m[1]) == null || +m[2] < 8 || +m[2] > 32) return null;
+  const bits = +m[2], mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  const base = (ipNum(m[1]) & mask) >>> 0;
+  return { bits, base, mask, txt: `${[24, 16, 8, 0].map((s) => (base >>> s) & 255).join('.')}/${bits}` };
+}
+const ipNaRede = (ip, c) => { const n = ipNum(ip), r = cidrOk(c); return n != null && r && ((n & r.mask) >>> 0) === r.base; };
+
+async function renderRedes(el, abas) {
+  el.innerHTML = `<div class="view-head"><div><h1>Agente coletor</h1>
+      <p>Cadastre as faixas de IP de cada CD e setor. A máquina que aparece numa faixa recebe o setor automaticamente, e o painel avisa quando ela surge na rede de outro CD.</p></div>
+      <div class="actions">${ehAdmin() ? '<button class="btn" id="rd-aplicar" title="Reaplica as faixas usando o último IP de cada máquina">Aplicar agora</button><button class="btn btn--primary" id="rd-nova">+ Nova rede</button>' : ''}</div></div>
+    ${abas}<div id="rd-corpo"><div class="skeleton">Carregando…</div></div>`;
+  const { data: redes, error } = await sb.from('redes').select('*').order('cidr');
+  const corpo = $('#rd-corpo');
+  if (error) {
+    corpo.innerHTML = /redes|does not exist|schema cache/i.test(error.message)
+      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/06_agente_v2.sql</code> no SQL Editor do Supabase para liberar redes, “Coletar agora” e a atualização automática.</p></div>'
+      : `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`;
+    return;
+  }
+  state.redes = redes || [];
+  const lista = state.redes.filter((r) => !state.cdAtual || r.cd_id === state.cdAtual);
+  const maqs = MQ();
+  const naRede = (r) => maqs.filter((m) => m.rede?.id === r.id || (!m.rede && ipNaRede(m.ip, r.cidr)));
+  // sugestões: IPs de máquinas sem faixa, agrupados por /24
+  const sem = maqs.filter((m) => m.ip && ipNum(m.ip) != null && !state.redes.some((r) => ipNaRede(m.ip, r.cidr)));
+  const grupos = {};
+  for (const m of sem) { const k = m.ip.split('.').slice(0, 3).join('.') + '.0/24'; (grupos[k] ||= []).push(m); }
+  const moda = (arr) => { const c = {}; arr.filter(Boolean).forEach((x) => (c[x] = (c[x] || 0) + 1)); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || ''; };
+  const sugestoes = Object.entries(grupos).map(([cidr, ms]) => ({ cidr, ms, setor: moda(ms.map((m) => m.setor)), cd: moda(ms.map((m) => m.cd_id)) }))
+    .sort((a, b) => b.ms.length - a.ms.length).slice(0, 8);
+
+  corpo.innerHTML = `
+    <div class="card"><div class="table-wrap" style="max-height:none"><table class="mini-table tab-redes">
+      <thead><tr>${mostrarColCD() ? '<th>CD</th>' : ''}<th>Faixa de IP</th><th>Setor</th><th>Localização</th><th>Automático</th><th class="num">Máquinas</th>${ehAdmin() ? '<th></th>' : ''}</tr></thead>
+      <tbody>${lista.length ? lista.map((r) => { const n = naRede(r); const fora = n.filter((m) => m.cd_id !== r.cd_id).length; return `<tr>
+        ${mostrarColCD() ? `<td><span class="pill pill--cd">${esc(cdCod(r.cd_id))}</span></td>` : ''}
+        <td><code>${esc(r.cidr)}</code>${r.descricao ? `<div class="muted" style="font-size:12px">${esc(r.descricao)}</div>` : ''}</td>
+        <td>${esc(r.setor || '—')}</td><td>${esc(r.localizacao || '—')}</td>
+        <td>${r.aplicar_setor ? pill('grava setor', 'ok') : pill('só identifica')}</td>
+        <td class="num"><a href="#" data-ver-rede="${r.id}">${n.length}</a>${fora ? ` <span class="tag tag--bad" title="Máquinas de outro CD nesta faixa">${fora} de outro CD</span>` : ''}</td>
+        ${ehAdmin() ? `<td class="acoes-linha"><button class="btn btn--sm btn--ghost" data-ed-rede="${r.id}">Editar</button><button class="btn btn--sm btn--ghost btn--danger-txt" data-del-rede="${r.id}">Excluir</button></td>` : ''}
+      </tr>`; }).join('') : `<tr><td colspan="7" class="vazio-linha">Nenhuma rede cadastrada${state.cdAtual ? ' neste CD' : ''}. ${ehAdmin() ? 'Use as sugestões abaixo ou “+ Nova rede”.' : 'Peça ao administrador para cadastrar.'}</td></tr>`}</tbody>
+    </table></div></div>
+    ${sugestoes.length ? `<h3 class="sec-rel">Redes encontradas sem cadastro <span class="muted">agrupadas pelo IP que as máquinas informaram</span></h3>
+    <div class="rede-sugs">${sugestoes.map((g) => `<div class="card rede-sug">
+      <div><code>${esc(g.cidr)}</code><strong>${g.ms.length} máquina(s)</strong>
+        <span class="muted">${esc([cdCod(g.cd), g.setor && 'maioria em ' + g.setor].filter(Boolean).join(' · '))}</span></div>
+      ${ehAdmin() ? `<button class="btn btn--sm" data-sug="${esc(g.cidr)}" data-sug-cd="${esc(g.cd)}" data-sug-setor="${esc(g.setor)}">Cadastrar</button>` : ''}
+    </div>`).join('')}</div>` : ''}
+    <p class="muted dica-redes">Dica: a faixa mais específica vence (um /24 do setor tem prioridade sobre o /16 do CD inteiro). Notebooks emprestados não têm o setor alterado. Ao salvar, as faixas são aplicadas na hora com o último IP conhecido; o agente confirma na próxima coleta.</p>`;
+
+  $$('[data-ver-rede]', corpo).forEach((a) => (a.onclick = (e) => { e.preventDefault(); const r = state.redes.find((x) => x.id === a.dataset.verRede); state.f = { ...F_PADRAO, q: r.cidr.split('/')[0].split('.').slice(0, Math.max(1, Math.floor(cidrOk(r.cidr).bits / 8))).join('.') + '.' }; location.hash = '#maquinas'; }));
+  $$('[data-ed-rede]', corpo).forEach((b) => (b.onclick = () => modalRede(state.redes.find((r) => r.id === b.dataset.edRede))));
+  $$('[data-del-rede]', corpo).forEach((b) => (b.onclick = async () => {
+    const r = state.redes.find((x) => x.id === b.dataset.delRede);
+    if (!confirm(`Excluir a rede ${r.cidr}? As máquinas mantêm o setor atual.`)) return;
+    const { error: er } = await sb.from('redes').delete().eq('id', r.id);
+    if (er) return toast(erroMsg(er), true);
+    await sb.rpc('aplicar_redes'); await carregarMaquinas(); toast('Rede excluída'); renderAgente('redes');
+  }));
+  $$('[data-sug]', corpo).forEach((b) => (b.onclick = () => modalRede(null, { cidr: b.dataset.sug, cd_id: b.dataset.sugCd, setor: b.dataset.sugSetor })));
+  $('#rd-nova')?.addEventListener('click', () => modalRede());
+  $('#rd-aplicar')?.addEventListener('click', async () => {
+    const { data: n, error: er } = await sb.rpc('aplicar_redes');
+    if (er) return toast(erroMsg(er), true);
+    await carregarMaquinas(); toast(n ? `${n} máquina(s) atualizada(s)` : 'Tudo já estava de acordo com as redes'); renderAgente('redes');
+  });
+}
+
+function modalRede(r = null, pre = {}) {
+  const v = { cidr: '', cd_id: state.cdAtual || cdsAtivos()[0]?.id, setor: '', localizacao: '', descricao: '', aplicar_setor: true, ...pre, ...(r || {}) };
+  if (!v.cd_id) v.cd_id = state.cdAtual || cdsAtivos()[0]?.id;
+  const setores = [...new Set(state.maquinas.map((m) => m.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  modal(`<form id="rd-form">
+    <div class="modal-head"><h2>${r ? 'Editar rede' : 'Nova rede'}</h2><p class="muted" style="margin:4px 0 0">Ex.: <code>10.12.5.0/24</code> para um setor ou <code>10.12.0.0/16</code> para o CD inteiro.</p></div>
+    <div class="modal-body"><div class="form-grid">
+      <label>Faixa de IP (CIDR) *<input name="cidr" class="mono" required value="${esc(v.cidr)}" placeholder="10.12.5.0/24" autocomplete="off"></label>
+      <label>CD *<select name="cd_id" required>${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), v.cd_id)}</select></label>
+      <label>Setor<input name="setor" list="dl-rd-set" value="${esc(v.setor || '')}" placeholder="Vazio = só identifica o CD"></label>
+      <label>Localização<input name="localizacao" value="${esc(v.localizacao || '')}" placeholder="Ex.: Doca 2"></label>
+      <label class="full">Descrição<input name="descricao" value="${esc(v.descricao || '')}" placeholder="Ex.: Wi-Fi da expedição, VLAN 20"></label>
+      <label class="check full"><input type="checkbox" name="aplicar_setor" ${v.aplicar_setor ? 'checked' : ''}> Gravar setor e localização automaticamente nas máquinas desta rede</label>
+      <datalist id="dl-rd-set">${setores.map((x) => `<option value="${esc(x)}">`).join('')}</datalist>
+    </div>
+    <div class="ag-previa" id="rd-previa"></div><p class="erro" id="rd-erro"></p></div>
+    <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="rd-salvar">Salvar</button></div>
+  </form>`, (dlg) => {
+    const f = $('#rd-form');
+    const previa = () => {
+      const c = cidrOk(f.cidr.value);
+      if (!c) { $('#rd-previa').innerHTML = '<span class="muted">Digite a faixa no formato <code>IP/prefixo</code>.</span>'; return; }
+      const ms = MQ().filter((m) => ipNaRede(m.ip, c.txt));
+      const total = 2 ** (32 - c.bits);
+      $('#rd-previa').innerHTML = `<strong>${esc(c.txt)}</strong> · ${total.toLocaleString('pt-BR')} endereços<br><span class="muted">${ms.length ? `${ms.length} máquina(s) do inventário estão nesta faixa agora${f.aplicar_setor.checked && f.setor.value.trim() ? ` e passam para o setor <b>${esc(f.setor.value.trim())}</b>` : ''}.` : 'Nenhuma máquina do inventário está nesta faixa agora.'}</span>`;
+    };
+    f.oninput = previa; previa();
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const c = cidrOk(f.cidr.value);
+      if (!c) { $('#rd-erro').textContent = 'Faixa inválida. Use o formato 10.12.5.0/24 (prefixo entre 8 e 32).'; return; }
+      const row = { cidr: c.txt, cd_id: f.cd_id.value, setor: f.setor.value.trim() || null, localizacao: f.localizacao.value.trim() || null, descricao: f.descricao.value.trim() || null, aplicar_setor: f.aplicar_setor.checked };
+      $('#rd-salvar').disabled = true;
+      const { error } = r ? await sb.from('redes').update(row).eq('id', r.id) : await sb.from('redes').insert(row);
+      $('#rd-salvar').disabled = false;
+      if (error) { $('#rd-erro').textContent = /redes_cidr_uk|duplicate/i.test(error.message) ? 'Essa faixa já está cadastrada.' : erroMsg(error); return; }
+      const { data: n } = await sb.rpc('aplicar_redes');
+      dlg.close(); await carregarMaquinas();
+      toast(`Rede salva${n ? ` · ${n} máquina(s) atualizada(s)` : ''}`);
+      renderAgente('redes');
+    };
+  });
+}
+
+/* ---- Atualização automática do agente (admin) ---- */
+async function renderVersoes(el, abas) {
+  el.innerHTML = `<div class="view-head"><div><h1>Agente coletor</h1>
+      <p>Publique uma versão nova e todas as máquinas com agente 2.0 se atualizam sozinhas em até 5 minutos, sem reinstalar.</p></div></div>
+    ${abas}<div id="vs-corpo"><div class="skeleton">Carregando…</div></div>`;
+  const [rv, site] = await Promise.all([
+    sb.from('agente_versoes').select('versao, ativa, sha256, notas, publicado_por, publicado_em').order('publicado_em', { ascending: false }),
+    fetch(`agente/coletor.ps1?v=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null),
+  ]);
+  const corpo = $('#vs-corpo');
+  if (rv.error) {
+    corpo.innerHTML = /agente_versoes|does not exist|schema cache/i.test(rv.error.message)
+      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/06_agente_v2.sql</code> no SQL Editor do Supabase.</p></div>'
+      : `<div class="card card-pad erro">${esc(erroMsg(rv.error))}</div>`;
+    return;
+  }
+  const versoes = rv.data || [];
+  const ativa = versoes.find((v) => v.ativa);
+  const vSite = site?.match(/\$AgenteVersao\s*=\s*'(\d+\.\d+\.\d+)'/)?.[1] || null;
+  const podePublicar = vSite && (!ativa || cmpVer(vSite, ativa.versao) > 0);
+  const ms = MQ().filter((m) => m.origem === 'agente' && m.status !== 'descartado');
+  const alvo = ativa?.versao || vSite;
+  const emDia = ms.filter((m) => alvo && cmpVer(m.agente_versao, alvo) >= 0);
+  const v2 = ms.filter((m) => agenteV2(m) && !emDia.includes(m));
+  const v1 = ms.filter((m) => !agenteV2(m));
+  const pct = (n) => (ms.length ? Math.round((100 * n) / ms.length) : 0);
+
+  corpo.innerHTML = `
+    <div class="vs-topo">
+      <div class="card card-pad vs-atual">
+        <span class="hs-titulo">Versão publicada</span>
+        <strong class="vs-num">${ativa ? 'v' + esc(ativa.versao) : '—'}</strong>
+        <span class="muted">${ativa ? `por ${esc(ativa.publicado_por || '—')} · ${esc(dataHora(ativa.publicado_em))}` : 'Atualização automática ainda não ativada'}</span>
+        ${ativa ? '<button class="btn btn--sm btn--ghost" id="vs-pausar">Pausar atualizações</button>' : ''}
+      </div>
+      <div class="card card-pad vs-site ${podePublicar ? 'destaque' : ''}">
+        <span class="hs-titulo">Versão no site</span>
+        <strong class="vs-num">${vSite ? 'v' + esc(vSite) : '?'}</strong>
+        <span class="muted">${!vSite ? 'Não encontrei <code>agente/coletor.ps1</code> no site' : podePublicar ? 'Pronta para enviar às máquinas' : cmpVer(vSite, ativa.versao) === 0 ? 'Igual à publicada — nada a fazer' : 'A publicada é mais nova que a do site'}</span>
+        ${podePublicar ? `<button class="btn btn--primary" id="vs-publicar">Publicar v${esc(vSite)} para todas as máquinas</button>` : ''}
+      </div>
+    </div>
+    <h3 class="sec-rel">Andamento nas máquinas <span class="muted">${ms.length} com agente</span></h3>
+    <div class="card card-pad">
+      <div class="pilha-barra" style="margin-top:0">
+        <span style="width:${pct(emDia.length)}%;background:var(--ok)" title="Em dia"></span>
+        <span style="width:${pct(v2.length)}%;background:var(--accent)" title="Atualizando"></span>
+        <span style="width:${pct(v1.length)}%;background:var(--warn)" title="Agente 1.x"></span>
+      </div>
+      <div class="vs-legenda">
+        <div><i style="background:var(--ok)"></i><span><b>${emDia.length}</b> em dia${alvo ? ` (v${esc(alvo)})` : ''}</span></div>
+        <div><i style="background:var(--accent)"></i><span><b>${v2.length}</b> com agente 2.x antigo — atualizam sozinhas no próximo sinal (as desligadas, quando ligarem)</span></div>
+        <div><i style="background:var(--warn)"></i><span><b>${v1.length}</b> com agente 1.x — precisam reinstalar <b>uma vez</b> pelo link de instalação</span></div>
+      </div>
+      ${v1.length ? `<details class="vs-v1"><summary>Ver as ${v1.length} máquina(s) com agente 1.x</summary><div class="vs-v1-lista">${v1.slice(0, 60).map((m) => `<button class="chip" data-abrir="${m.id}">${esc(m.hostname)} <span class="muted">v${esc(m.agente_versao || '?')}</span></button>`).join('')}${v1.length > 60 ? `<span class="muted">e mais ${v1.length - 60}…</span>` : ''}</div></details>` : ''}
+    </div>
+    ${versoes.length ? `<h3 class="sec-rel">Histórico</h3><div class="card"><table class="mini-table"><thead><tr><th>Versão</th><th>Publicada</th><th>Por</th><th>SHA-256</th><th></th></tr></thead><tbody>
+      ${versoes.map((v) => `<tr><td><b>v${esc(v.versao)}</b></td><td>${esc(dataHora(v.publicado_em))}</td><td>${esc(v.publicado_por || '—')}</td><td><code class="sha">${esc((v.sha256 || '').slice(0, 16))}…</code></td><td>${v.ativa ? pill('ativa', 'ok') : ''}</td></tr>`).join('')}
+    </tbody></table></div>` : ''}
+    <p class="muted dica-redes">🔒 Só administradores publicam. Antes de trocar o arquivo, o agente confere o SHA-256 e a sintaxe do script, testa a nova versão e volta sozinho para a anterior se ela falhar (e não tenta a mesma versão de novo). Para desfazer uma versão, publique uma com número maior.</p>`;
+
+  $$('[data-abrir]', corpo).forEach((b) => (b.onclick = () => abrirMaquina(b.dataset.abrir)));
+  $('#vs-pausar')?.addEventListener('click', async () => {
+    if (!confirm('Pausar as atualizações automáticas? As máquinas continuam na versão que estão.')) return;
+    const { error } = await sb.from('agente_versoes').update({ ativa: false }).eq('versao', ativa.versao);
+    if (error) return toast(erroMsg(error), true);
+    toast('Atualizações pausadas'); renderAgente('versoes');
+  });
+  $('#vs-publicar')?.addEventListener('click', () => modal(`
+    <div class="modal-head"><h2>Publicar agente v${esc(vSite)}</h2></div>
+    <div class="modal-body">
+      <p style="margin:0">Todas as máquinas com agente 2.0 ou mais novo vão baixar e instalar esta versão no próximo sinal (até 5 minutos). Elas rodam como <b>SYSTEM</b>, então publique apenas o arquivo oficial do repositório.</p>
+      <label>Notas da versão (opcional)<textarea id="vs-notas" placeholder="O que mudou"></textarea></label>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="vs-ok">Publicar</button></div>`, (dlg) => {
+    $('#vs-ok').onclick = async () => {
+      $('#vs-ok').disabled = true;
+      const { error } = await sb.from('agente_versoes').upsert({ versao: vSite, script: site, notas: $('#vs-notas').value.trim() || null, ativa: true }, { onConflict: 'versao' });
+      if (error) { $('#vs-ok').disabled = false; return toast(erroMsg(error), true); }
+      dlg.close(); toast(`Agente v${vSite} publicado`); renderAgente('versoes');
+    };
+  }));
 }
 
 /* =====================================================================

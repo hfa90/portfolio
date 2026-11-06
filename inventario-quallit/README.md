@@ -9,7 +9,7 @@ Sistema web de inventário de computadores e notebooks do CD, com coleta **autom
 | Armazenamento: discos (SSD/HDD/NVMe, saúde) e volumes (livre/usado) | Agente |
 | Sistema operacional, versão (23H2/24H2), build, arquitetura, data de instalação | Agente |
 | IP, MAC, domínio, usuário logado, último boot | Agente |
-| **Último contato (última vez online)** | Atualizado a cada execução do agente (boot, logon e de hora em hora) |
+| **Último contato (última vez online)** | Sinal do agente a cada 5 min; coleta completa ao ligar, ao entrar, de hora em hora ou quando o IP muda |
 | Patrimônio (ativo), status, setor, localização, responsável | Painel (ou etiqueta da BIOS / instalador) |
 
 ## Funcionalidades
@@ -37,6 +37,8 @@ sql/01_schema.sql        → banco (tabelas, RLS, histórico, função do agente
 sql/02_link_instalacao.sql → link do colaborador + reconhecimento ao vivo
 sql/03_garantia_emprestimos.sql → compra/garantia, empréstimos, alerta de peça removida
 sql/04_multicd_usuarios.sql → CDs, perfis (Administrador / Field) e regras de acesso
+sql/05_agendamentos.sql     → inventários programados (único, diário, semanal, mensal) com prazo
+sql/06_agente_v2.sql        → agente 2.0: sinal, "Coletar agora", atualização automática e redes
 supabase/functions/admin-usuarios/ → função do servidor que cria e gerencia logins
 web/                     → painel (HTML/CSS/JS puro + supabase-js)
 web/instalar.html        → página pública que o colaborador abre
@@ -51,7 +53,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql` e `sql/04_multicd_usuarios.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql`, `sql/04_multicd_usuarios.sql`, `sql/05_agendamentos.sql` e `sql/06_agente_v2.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -63,8 +65,8 @@ Por usar módulos ES, abra via servidor HTTP (não funciona com duplo clique em 
 
 ### 3. Agente nas máquinas
 - **Link para o colaborador (mais fácil)**: Painel → *Agente coletor* → **Gerar link de instalação** (ou *Máquinas* → *Link de instalação*). Patrimônio/setor são opcionais. O colaborador abre o link **no computador**, clica em **Baixar instalador** e abre o arquivo `.cmd`:
-  - como usuário comum: instala em `C:\Users\<usuário>\AppData\Local\InventarioQuallit`, coleta ao entrar no Windows e de hora em hora;
-  - como administrador: instala em `C:\InventarioQuallit` (protegida), coleta ao ligar, ao entrar e de hora em hora (tarefa SYSTEM).
+  - como usuário comum: instala em `C:\Users\<usuário>\AppData\Local\InventarioQuallit`, sinal a cada 5 min e coleta completa ao entrar no Windows e de hora em hora;
+  - como administrador: instala em `C:\InventarioQuallit` (protegida), sinal a cada 5 min e coleta completa ao ligar, ao entrar e de hora em hora (tarefa SYSTEM).
   - A página `instalar.html` precisa estar publicada (ex.: `https://haydenfernandes.com.br/inventario-quallit/web/instalar.html`) — configure `URL_PUBLICA` em `web/js/config.js`.
   - Para invalidar todos os links já enviados: no modal do link, **Invalidar links antigos**.
 - **Manual**: copie a pasta `agente` → botão direito em `INSTALAR.bat` → *Executar como administrador* → informe o patrimônio.
@@ -133,3 +135,74 @@ Endereço: `https://haydenfernandes.com.br/inventario-quallit/web/campo/` (ou, n
 4. **Finalizar inventário** → mostra o resumo → **Confirmar e sincronizar**: as leituras vão para o sistema e o inventário é encerrado com o resultado congelado (o mesmo que aparece nos relatórios do painel).
 
 Funciona sem internet: as leituras ficam salvas no celular (mesmo fechando o app). Se finalizar sem sinal, o inventário fica **na fila** e é sincronizado sozinho quando a conexão voltar. Para criar um inventário novo é preciso internet. A tela fica ligada durante a conferência e os campos não dão zoom ao tocar.
+
+## Painel, modos de visualização e relatórios
+
+- **Painel**: nota de saúde do parque (% de máquinas sem problemas importantes), 4 números principais, a lista *O que resolver agora* (ordenada por gravidade, um clique abre as máquinas filtradas), os inventários abertos com o relógio do prazo e a composição do parque em abas.
+- **Máquinas** tem 4 modos, e o sistema lembra o último que você usou:
+  - **Tabela**: o modo clássico.
+  - **Cartões**: RAM, disco e sistema de cada máquina num relance.
+  - **Quadro**: colunas por status, setor ou CD. **Arraste um cartão** para outra coluna e a mudança é gravada na hora, com botão *Desfazer*. Empréstimos não se arrastam: use a tela de Empréstimos.
+  - **Mosaico**: cada quadradinho é uma máquina, colorido por contato, sistema, RAM, disco ou idade. Passe o mouse para ver os detalhes e clique numa cor da legenda para destacar só aquele grupo.
+- **Relatórios → Parque**: cartão de saúde por CD com os 5 principais problemas, mapa de calor comparando os CDs (cor mais forte = maior proporção) e a tabela completa recolhida no fim. Todo número abre a lista de máquinas correspondente.
+
+## Inventários programados e prazo
+
+1. Rode `sql/05_agendamentos.sql` (passo 1 da instalação).
+2. Como administrador, abra **Inventários → Agendados → Programar inventário** e preencha:
+   - **CD**: um CD ou *Todos os CDs*, que cria um inventário em cada CD.
+   - **Setor**: opcional.
+   - **Frequência**: única, diária, semanal (escolha os dias) ou mensal (dia do mês ou último dia).
+   - **Horário** e **prazo**: 2h, 4h, 8h, 1 dia, 7 dias ou um número de horas à sua escolha.
+
+   A prévia mostra as próximas execuções antes de salvar.
+3. No horário marcado, o inventário aparece aberto para o Field (no painel e no app do celular) com um **relógio que esvazia**:
+   - 🟢 tempo de sobra
+   - ⏳ fique de olho (passou da metade)
+   - 🔥 reta final (últimos 20%)
+   - ⏰ vencido
+
+   Na tela da conferência, duas barras comparam *tempo usado × conferido* e avisam se o ritmo está bom, com uma previsão de término. Ao finalizar, o inventário fica marcado como 🏁 *no prazo* ou 🐢 *com atraso*. A pontualidade aparece em *Relatórios → Inventários*.
+
+**Geração automática:** o arquivo 05 tenta agendar a função a cada 5 minutos com **pg_cron**. Para isso, ative *Integrations → Cron* no Supabase antes de rodar o 05; se já rodou, ative e rode o 05 de novo. Sem o pg_cron, o inventário é criado na primeira vez que alguém abre o painel ou o app depois do horário. A criação nunca duplica.
+
+## Agente 2.0
+
+A tarefa agendada roda **a cada 5 minutos**. Em cada execução, o agente:
+
+1. Envia as coletas que ficaram **guardadas sem internet** (pasta `fila`, até 10).
+2. Manda um **sinal leve**, que mantém o status online e traz pedidos do painel.
+3. Faz a **coleta completa** em 6 situações: passou 1 hora, o PC reiniciou, o IP mudou, alguém clicou em **⟳ Coletar agora**, é a primeira execução ou o agente acabou de ser atualizado.
+4. Se houver versão nova publicada, **atualiza a si mesmo**.
+
+O log fica em `coletor.log` (512 KB + 1 arquivo anterior). O estado fica em `estado.json`, na mesma pasta do agente.
+
+**Primeiro passo:**
+- Rode `sql/06_agente_v2.sql`.
+- Máquinas com agente **1.x precisam reinstalar uma vez** pelo link de instalação. A lista delas aparece em *Agente coletor → Atualizações*.
+- Máquinas que já têm o 2.0 recebem as próximas versões sozinhas. Quando o 2.0 roda pela primeira vez, ele também ajusta a tarefa agendada de 1 hora para 5 minutos.
+
+### Coletar agora
+Abra a máquina e clique em **⟳ Coletar agora**. O pedido aparece como "⏳ enviado", depois "🔄 recebido", e os dados chegam ao painel em até 5 minutos. Field e administrador podem pedir, cada um no seu CD.
+
+### Redes e setores
+Em *Agente coletor → Redes e setores*, cadastre as faixas de IP (ex.: `10.12.5.0/24` = Expedição do CD01). O painel sugere as faixas que encontrou nos IPs das máquinas: é só clicar em **Cadastrar**.
+- A faixa mais específica vence: um /24 de um setor ganha do /16 do CD inteiro.
+- Com "gravar setor automaticamente" ligado, a máquina recebe o setor e a localização da rede. A troca fica no histórico.
+- Notebooks emprestados não têm o setor alterado.
+- Máquina que aparece na rede de **outro CD** ganha o alerta **Fora do CD**, e o administrador pode movê-la com um clique.
+- Ao salvar uma rede, ela é aplicada na hora usando o último IP conhecido de cada máquina.
+
+### Atualização automática
+1. Atualize o `web/agente/coletor.ps1` no site, com o número em `$AgenteVersao` aumentado.
+2. Em *Agente coletor → Atualizações*, clique em **Publicar**.
+
+Em cada máquina, o agente então:
+- baixa a versão nova com o token;
+- confere o **SHA-256** e a **sintaxe** do script;
+- roda a versão nova uma vez como teste;
+- **volta sozinho para a anterior** se o teste falhar e não tenta aquela versão de novo.
+
+Para desfazer uma versão, publique outra com número maior. **Pausar atualizações** congela as máquinas na versão atual.
+
+> 🔒 O agente roda como SYSTEM, então quem publica uma versão executa código em todas as máquinas. Só administradores podem publicar (garantido no banco). Use senhas fortes nas contas de administrador e publique apenas o arquivo do repositório.
