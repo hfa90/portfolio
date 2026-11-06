@@ -26,7 +26,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AgenteVersao = '2.0.0'
+$AgenteVersao = '2.0.1'
 $Pasta       = $PSScriptRoot
 $LogPath     = Join-Path $Pasta 'coletor.log'
 $EstadoPath  = Join-Path $Pasta 'estado.json'
@@ -147,13 +147,16 @@ function Enviar-Fila {
 function Ajustar-Tarefa {
   try {
     $t = Get-ScheduledTask -TaskName 'InventarioQuallit' -ErrorAction Stop
+    # como SYSTEM nao aparece janela: 5 min. Como usuario comum a janela pode piscar: 15 min.
+    $alvo = 'PT15M'
+    if ($t.Principal.UserId -match '^(SYSTEM|NT AUTHORITY\\SYSTEM|S-1-5-18)$') { $alvo = 'PT5M' }
     $mudou = $false
     foreach ($tr in $t.Triggers) {
-      if ($tr.Repetition -and $tr.Repetition.Interval -and $tr.Repetition.Interval -ne 'PT5M') {
-        $tr.Repetition.Interval = 'PT5M'; $mudou = $true
+      if ($tr.Repetition -and $tr.Repetition.Interval -and $tr.Repetition.Interval -ne $alvo) {
+        $tr.Repetition.Interval = $alvo; $mudou = $true
       }
     }
-    if ($mudou) { Set-ScheduledTask -TaskName 'InventarioQuallit' -Trigger $t.Triggers | Out-Null; Write-Log 'Tarefa agendada ajustada para rodar a cada 5 minutos' }
+    if ($mudou) { Set-ScheduledTask -TaskName 'InventarioQuallit' -Trigger $t.Triggers | Out-Null; Write-Log ("Tarefa agendada ajustada para repetir a cada {0}" -f $alvo) }
     return $true
   } catch { return $false }
 }
@@ -179,6 +182,15 @@ function Atualizar-Agente($info) {
     if ([string]$pac.script -notmatch ("\`$AgenteVersao\s*=\s*'" + [regex]::Escape([string]$pac.versao) + "'")) { & $recusar 'ATUALIZACAO recusada: versao do script nao confere'; return }
 
     [IO.File]::WriteAllText($novo, [string]$pac.script, (New-Object Text.UTF8Encoding $true))
+    # agente assinado so aceita versao nova assinada pelo MESMO certificado
+    $assAtual = Get-Safe { Get-AuthenticodeSignature -FilePath $alvo }
+    if ($assAtual -and $assAtual.Status -eq 'Valid') {
+      $assNova = Get-Safe { Get-AuthenticodeSignature -FilePath $novo }
+      if (-not $assNova -or $assNova.Status -ne 'Valid' -or $assNova.SignerCertificate.Thumbprint -ne $assAtual.SignerCertificate.Thumbprint) {
+        Remove-Item $novo -Force -ErrorAction SilentlyContinue
+        & $recusar ("ATUALIZACAO recusada: a versao {0} nao esta assinada pelo mesmo certificado do agente instalado" -f $pac.versao); return
+      }
+    }
     Copy-Item $alvo $bak -Force
     Move-Item $novo $alvo -Force
     Write-Log ("ATUALIZADO {0} -> {1}. Testando a nova versao..." -f $AgenteVersao, $pac.versao)
@@ -379,7 +391,7 @@ function Coletar-Dados {
 if ($SoMostrar) { Coletar-Dados | ConvertTo-Json -Depth 6; exit 0 }
 
 $estado = Ler-Estado
-if (-not $estado.tarefa_5min -and -not $Pausa) { if (Ajustar-Tarefa) { $estado.tarefa_5min = $true } }
+if ($estado.tarefa_5min -ne 'v2' -and -not $Pausa) { if (Ajustar-Tarefa) { $estado.tarefa_5min = 'v2' } }   # v2: 5 min como SYSTEM, 15 min como usuario
 
 # 1) coletas guardadas sem internet
 $online = Enviar-Fila

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  INVENTARIO QUALLIT - pacote MSI do agente coletor (WiX v3 / wixl)
+  Gere com ferramentas/empacotar.ps1 (usa wixl no Linux ou candle+light do WiX v3 no Windows).
+
+  Instalacao silenciosa (Intune, SCCM/MECM, PDQ, GPO por script):
+    msiexec /i InventarioQuallit.msi /qn TOKEN=<token do agente> [ATIVO=PAT123] [SETOR=Expedicao]
+            [LOCALIZACAO=Doca 2] [RESPONSAVEL=Fulano] [PROXY=http://proxy:8080]
+  Remocao:  msiexec /x InventarioQuallit.msi /qn
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*" Name="Inventario Quallit - Agente coletor" Language="1046" Codepage="1252"
+           Version="$(var.Versao)" Manufacturer="TI - Drogasil CD" UpgradeCode="BEAB95FE-0E55-4632-A3D8-58EADB8AD868">
+    <Package InstallerVersion="500" Compressed="yes" InstallScope="perMachine" SummaryCodepage="1252"
+             Description="Agente coletor de hardware do Inventario Quallit" Comments="Envia memoria, discos, Windows, serie e rede para o inventario de TI." />
+    <MajorUpgrade DowngradeErrorMessage="Uma versao mais nova do agente ja esta instalada." />
+    <Media Id="1" Cabinet="agente.cab" EmbedCab="yes" />
+
+    <!-- propriedades informadas no msiexec (TOKEN nao aparece no log do instalador) -->
+    <Property Id="TOKEN" Secure="yes" />
+    <Property Id="MsiHiddenProperties" Value="TOKEN" />
+    <Property Id="ATIVO" Secure="yes" />
+    <Property Id="SETOR" Secure="yes" />
+    <Property Id="LOCALIZACAO" Secure="yes" />
+    <Property Id="RESPONSAVEL" Secure="yes" />
+    <Property Id="PROXY" Secure="yes" />
+    <Property Id="ARPCOMMENTS" Value="Agente coletor do Inventario Quallit (TI)" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Inventario Quallit">
+          <Component Id="cColetor" Guid="D6EF3BBA-2FC0-435D-9F76-AB01CC182A6B" Win64="yes">
+            <File Id="fColetor" Name="coletor.ps1" Source="arquivos/coletor.ps1" KeyPath="yes" />
+          </Component>
+          <Component Id="cConfigurar" Guid="089CD33E-2A5C-47BF-BDF2-A71B455607C6" Win64="yes">
+            <File Id="fConfigurar" Name="configurar.ps1" Source="arquivos/configurar.ps1" KeyPath="yes" />
+          </Component>
+          <Component Id="cRemover" Guid="5C2D1F67-D546-4E51-9AF4-C2FD69DA34F5" Win64="yes">
+            <File Id="fRemover" Name="remover.ps1" Source="arquivos/remover.ps1" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Agente" Title="Agente coletor" Level="1">
+      <ComponentRef Id="cColetor" />
+      <ComponentRef Id="cConfigurar" />
+      <ComponentRef Id="cRemover" />
+    </Feature>
+
+    <!-- caminho do Windows PowerShell 5.1 (64 bits) -->
+    <CustomAction Id="DefinirPowerShell" Property="POWERSHELLEXE" Value="[System64Folder]WindowsPowerShell\v1.0\powershell.exe" />
+    <!-- roda como SYSTEM depois de copiar os arquivos -->
+    <CustomAction Id="Configurar" Property="POWERSHELLEXE" Execute="deferred" Impersonate="no" Return="check"
+      ExeCommand="-NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]configurar.ps1&quot; -Token &quot;[TOKEN]&quot; -Ativo &quot;[ATIVO]&quot; -Setor &quot;[SETOR]&quot; -Localizacao &quot;[LOCALIZACAO]&quot; -Responsavel &quot;[RESPONSAVEL]&quot; -Proxy &quot;[PROXY]&quot;" />
+    <CustomAction Id="Remover" Property="POWERSHELLEXE" Execute="deferred" Impersonate="no" Return="ignore"
+      ExeCommand="-NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[INSTALLFOLDER]remover.ps1&quot;" />
+
+    <InstallExecuteSequence>
+      <Custom Action="DefinirPowerShell" After="CostFinalize" />
+      <Custom Action="Configurar" After="InstallFiles">NOT REMOVE="ALL"</Custom>
+      <Custom Action="Remover" After="UnpublishFeatures">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
+    </InstallExecuteSequence>
+  </Product>
+</Wix>

@@ -39,6 +39,9 @@ sql/03_garantia_emprestimos.sql → compra/garantia, empréstimos, alerta de pe�
 sql/04_multicd_usuarios.sql → CDs, perfis (Administrador / Field) e regras de acesso
 sql/05_agendamentos.sql     → inventários programados (único, diário, semanal, mensal) com prazo
 sql/06_agente_v2.sql        → agente 2.0: sinal, "Coletar agora", atualização automática e redes
+sql/07_instalador_ps1.sql   → convites com código curto para o instalador .ps1 fixo (sem .cmd)
+msi/                        → pacote MSI do agente (WiX) para Intune / SCCM / PDQ / GPO
+ferramentas/empacotar.ps1   → assina e gera o instalador .ps1, o MSI e os hashes SHA-256
 supabase/functions/admin-usuarios/ → função do servidor que cria e gerencia logins
 web/                     → painel (HTML/CSS/JS puro + supabase-js)
 web/instalar.html        → página pública que o colaborador abre
@@ -53,7 +56,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql`, `sql/04_multicd_usuarios.sql`, `sql/05_agendamentos.sql` e `sql/06_agente_v2.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql`, `sql/04_multicd_usuarios.sql`, `sql/05_agendamentos.sql`, `sql/06_agente_v2.sql` e `sql/07_instalador_ps1.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -206,3 +209,53 @@ Em cada máquina, o agente então:
 Para desfazer uma versão, publique outra com número maior. **Pausar atualizações** congela as máquinas na versão atual.
 
 > 🔒 O agente roda como SYSTEM, então quem publica uma versão executa código em todas as máquinas. Só administradores podem publicar (garantido no banco). Use senhas fortes nas contas de administrador e publique apenas o arquivo do repositório.
+
+## Instalação em ambiente com antivírus/EDR (CrowdStrike)
+
+O antigo instalador `.cmd` (um arquivo de lote com o script em base64) foi **removido**. Esse formato é o mesmo de muitos malwares, por isso o CrowdStrike o bloqueia. Agora existem duas formas de instalar, e as duas usam formatos que o EDR trata como software corporativo:
+
+| | Instalador `.ps1` (página do colaborador) | Pacote `.msi` (Intune / SCCM / PDQ / GPO) |
+|---|---|---|
+| Para quem | Self-service: o colaborador recebe o link | Instalação em massa pela TI |
+| Arquivo | `web/agente/Instalar-InventarioQuallit.ps1`: **fixo, legível, igual para todos** | `web/agente/InventarioQuallit.msi` |
+| Configuração | Código curto no nome do arquivo (`…-ABCD234567.ps1`), trocado no servidor pela config do link | Propriedades do `msiexec` (`TOKEN=…`) |
+| Roda como | O próprio usuário (15 min) ou administrador/SYSTEM (5 min) | SYSTEM (5 min), sem janela |
+| Assinatura | `Set-AuthenticodeSignature` (CA interna) | `signtool` |
+
+### Instalador .ps1
+1. Rode `sql/07_instalador_ps1.sql`.
+2. O colaborador abre o link, clica em **Baixar instalador** e, na pasta Downloads, usa **botão direito → Executar com o PowerShell**. Se o arquivo for renomeado, o instalador pede o código mostrado na página.
+3. O instalador:
+   - busca a configuração pelo código (válido por 7 dias);
+   - grava o coletor, conferindo o SHA-256;
+   - registra a tarefa agendada e faz a primeira coleta.
+
+   Não usa `.vbs`, `.bat`, base64 nem download de código.
+
+### MSI
+```
+msiexec /i InventarioQuallit.msi /qn TOKEN=<token do agente> [ATIVO=PAT123] [SETOR="Expedição"] [LOCALIZACAO="Doca 2"] [RESPONSAVEL="Nome"] [PROXY=http://proxy:8080]
+msiexec /x InventarioQuallit.msi /qn
+```
+- O MSI instala em `C:\Program Files\Inventario Quallit` e cria a tarefa `InventarioQuallit` (SYSTEM, a cada 5 minutos, ao ligar e ao entrar). Ele também cria a tarefa `InventarioQuallit-Coletar`, usada pelo botão "Executar coleta agora" da página.
+- O `config.json` com o token só pode ser lido pelo SYSTEM e pelos administradores. O token não aparece no log do msiexec (`MsiHiddenProperties`).
+- Numa atualização ou reparo sem `TOKEN`, o `config.json` atual é mantido.
+- **Intune**: configure como app Win32 (ou linha de negócio), com contexto **Sistema** e detecção pelo código do produto MSI.
+- **GPO**: use um script de inicialização com o comando `msiexec` acima (*Software Installation* não passa propriedades).
+
+### Gerar e assinar (`ferramentas/empacotar.ps1`)
+Rode sempre que mudar o `agente/coletor.ps1`:
+```
+.\ferramentas\empacotar.ps1 -Certificado <thumbprint do certificado de code signing>
+```
+O script faz, em ordem:
+1. assina o `coletor.ps1`;
+2. gera e assina o `Instalar-InventarioQuallit.ps1`, com o coletor assinado dentro;
+3. gera o MSI com o WiX v3 (`candle`/`light`) ou o `wixl` (msitools, no Linux) e assina com o `signtool`;
+4. grava os SHA-256 em `web/agente/SHA256SUMS.txt`.
+
+Sem `-Certificado`, os arquivos saem sem assinatura. Depois, publique a pasta `web/agente` e, se o coletor mudou, use *Agente coletor → Atualizações → Publicar*.
+
+- **Agente assinado só aceita atualização assinada pelo mesmo certificado.** Se o coletor instalado estiver assinado, uma versão publicada sem assinatura (ou com outro certificado) é recusada e registrada no `coletor.log`.
+- **Liberação por hash:** se o time de segurança preferir, envie o `SHA256SUMS.txt` para eles cadastrarem os arquivos como permitidos no Falcon (*IOC Management*). Regere e reenvie a cada versão.
+- Com GPO `AllSigned`, os scripts precisam estar assinados por um certificado confiável no domínio. O empacotar.ps1 já cuida disso quando recebe `-Certificado`.

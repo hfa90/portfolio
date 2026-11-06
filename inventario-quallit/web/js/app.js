@@ -2504,19 +2504,24 @@ async function renderAgente(aba = 'instalacao') {
     ${abas}
     <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
       <div style="flex:1 1 320px"><h2>Mais fácil: envie um link para o colaborador</h2>
-        <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e abre o arquivo. O instalador já vem configurado (patrimônio e setor opcionais), funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
+        <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e executa o arquivo com o botão direito → <b>Executar com o PowerShell</b>. O instalador é um script fixo e legível (pode ser assinado pela CA da empresa); patrimônio e setor vão por um código curto. Funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
       <button class="btn btn--primary" id="btn-link-agente">Gerar link de instalação</button>
     </div>
     <div class="grid-2">
       <div class="card card-pad">
-        <div class="card-head"><h2>Instalação</h2></div>
-        <ol class="steps">
-          <li><div><strong>Copie a pasta <code>agente</code></strong><p>Para um pendrive ou uma pasta compartilhada da rede. Ela já contém o <code>config.json</code> com a URL e o token.</p></div></li>
-          <li><div><strong>Execute <code>INSTALAR.bat</code> como administrador</strong><p>Informe o nº de patrimônio quando pedir (opcional — pode preencher depois no painel).</p></div></li>
-          <li><div><strong>Pronto</strong><p>A máquina aparece aqui em segundos. O agente fica em <code>C:\\ProgramData\\InventarioQuallit</code> e roda como SYSTEM pela tarefa agendada <code>InventarioQuallit</code> (a cada 5 min). Depois disso ele se atualiza sozinho.</p></div></li>
-        </ol>
-        <h3 style="margin:20px 0 8px">Instalar em massa (GPO / SCCM / Intune / PDQ)</h3>
-        <pre class="code">powershell.exe -NoProfile -ExecutionPolicy Bypass -File "\\\\SERVIDOR\\Compartilhamento\\agente\\instalar-agente.ps1"</pre>
+        <div class="card-head"><h2>Pacote MSI (Intune · SCCM · PDQ · GPO)</h2><a class="btn btn--sm btn--primary" href="agente/InventarioQuallit.msi" download>Baixar MSI</a></div>
+        <p class="muted" style="margin-top:0">O jeito recomendado em computadores da empresa com antivírus/EDR (CrowdStrike): pacote padrão do Windows, instalado pelo <code>msiexec</code> como SYSTEM, sem janelas e com desinstalação limpa. O token vai como propriedade e não aparece no log.</p>
+        <h3 style="margin:14px 0 6px">Instalar (silencioso)</h3>
+        <pre class="code">msiexec /i InventarioQuallit.msi /qn TOKEN=&lt;token do agente&gt;</pre>
+        <p class="muted" style="font-size:12.5px">Opcionais: <code>ATIVO=PAT123</code> <code>SETOR="Expedição"</code> <code>LOCALIZACAO="Doca 2"</code> <code>RESPONSAVEL="Nome"</code> <code>PROXY=http://proxy:8080</code>. Gere o token em <b>Tokens do agente</b> (ao lado): ele define o CD das máquinas.</p>
+        <h3 style="margin:14px 0 6px">Intune (app Win32 ou linha de negócio)</h3>
+        <ul class="muted" style="font-size:13px;margin:0 0 6px;padding-left:18px">
+          <li>Instalação: <code>msiexec /i InventarioQuallit.msi /qn TOKEN=…</code> · Desinstalação: <code>msiexec /x InventarioQuallit.msi /qn</code></li>
+          <li>Contexto: <b>Sistema</b> · Detecção: código do produto MSI (atualizações seguem pelo próprio agente)</li>
+        </ul>
+        <h3 style="margin:14px 0 6px">Remover</h3>
+        <pre class="code">msiexec /x InventarioQuallit.msi /qn</pre>
+        <p class="muted" style="font-size:12.5px">Os hashes SHA-256 do MSI e dos scripts ficam em <a href="agente/SHA256SUMS.txt" target="_blank" rel="noopener">SHA256SUMS.txt</a>. Envie para o time de segurança se for preciso liberar no antivírus.</p>
         <h3 style="margin:20px 0 8px">Só ver o que seria enviado (teste)</h3>
         <pre class="code">powershell -ExecutionPolicy Bypass -File coletor.ps1 -SoMostrar</pre>
         <p class="muted">Rede com proxy? Preencha <code>"proxy": "http://proxy:porta"</code> no <code>config.json</code>.</p>
