@@ -7,6 +7,7 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../js/config.js';
 import { idbGet, idbSet } from '../js/offline.js';
+import { anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, fmtDuracao } from '../js/prazo.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -148,7 +149,9 @@ async function carregarMaquinas() {
 
 async function carregarConfs() {
   try {
-    let q = sb.from('conferencias').select('*, conferencia_itens(maquina_id)').order('criado_em', { ascending: false }).limit(40);
+    // cria os inventários programados que já chegaram na hora (idempotente; ignora se o SQL 05 não foi rodado)
+    if (navigator.onLine) { try { await sb.rpc('gerar_inventarios_agendados'); } catch { /* ok */ } }
+    let q = sb.from('conferencias').select('*, conferencia_itens(maquina_id, lido_em)').order('criado_em', { ascending: false }).limit(40);
     if (S.cd) q = q.eq('cd_id', S.cd);
     const { data: d, error } = await q;
     if (error) throw error;
@@ -215,7 +218,8 @@ async function telaInicio() {
   mostrar('t-inicio', { titulo: 'Conferência', sub: S.cd ? cdTxt(S.cd) : 'Inventário Quallit' });
   const sessoes = {};
   for (const id of await listaSessoes()) { const s = await idbGet(chaveSess(id)); if (s) sessoes[id] = s; }
-  const abertos = S.confs.filter((c) => c.status === 'aberta');
+  const prazoMs = (c) => (c.prazo_em ? new Date(c.prazo_em).getTime() : Infinity);
+  const abertos = S.confs.filter((c) => c.status === 'aberta').sort((a, b) => prazoMs(a) - prazoMs(b));
   const finalizados = S.confs.filter((c) => c.status === 'finalizada').slice(0, 6);
   const pendentes = Object.values(sessoes).filter((s) => s.finalizarPendente);
   const primeiroNome = (S.perfil?.nome || S.user.email).split(/[\s@]/)[0];
@@ -239,8 +243,8 @@ async function telaInicio() {
       <button class="btn btn--lar btn--bloco" style="margin-top:10px" id="sinc-agora">Sincronizar agora</button></div>` : ''}
     <div class="sec-titulo"><span>Em andamento</span><button class="btn--texto btn" id="atualizar" style="min-height:36px">↻ Atualizar</button></div>
     ${abertos.length ? abertos.map((c) => { const p = progresso(c); return `
-      <button class="inv" data-conf="${c.id}">
-        <div class="inv-topo"><div><h3>${esc(c.nome)}</h3><small>${esc(c.setor || 'Todos os setores')} · ${new Date(c.criado_em).toLocaleDateString('pt-BR')}</small></div>
+      <button class="inv ${c.prazo_em ? 'inv--prazo' : ''}" data-conf="${c.id}">
+        <div class="inv-topo">${c.prazo_em ? anelPrazo(c, { tam: 58, progresso: p.esp.length ? p.ok / p.esp.length : 0 }) : ''}<div class="inv-tit"><h3>${c.agendamento_id ? '🔁 ' : ''}${esc(c.nome)}</h3><small>${esc(c.setor || 'Todos os setores')} · ${new Date(c.inicio_em || c.criado_em).toLocaleDateString('pt-BR')}</small>${c.prazo_em ? `<div>${etiquetaPrazo(c)}</div>` : ''}</div>
           ${sessoes[c.id]?.finalizarPendente ? '<span class="etq etq--lar">Na fila</span>' : p.local ? `<span class="etq etq--lar">${p.local} no aparelho</span>` : '<span class="etq etq--pri">Aberto</span>'}</div>
         <div class="barra-prog"><i style="width:${p.pct}%"></i></div>
         <div class="inv-num"><b>${p.ok}</b> de ${p.esp.length} encontradas · ${p.pct}%</div>
@@ -250,6 +254,7 @@ async function telaInicio() {
       <div class="inv" style="opacity:.85">
         <div class="inv-topo"><div><h3>${esc(c.nome)}</h3><small>${esc(c.setor || 'Todos os setores')} · ${c.finalizado_em ? new Date(c.finalizado_em).toLocaleDateString('pt-BR') : ''}</small></div>
           <span class="etq etq--ok">${pct != null ? pct + '%' : 'Finalizado'}</span></div>
+        ${c.prazo_em ? `<div>${etiquetaPrazo(c)}</div>` : ''}
         ${c.total_esperadas != null ? `<div class="inv-num"><b>${c.total_encontradas}</b> de ${c.total_esperadas} · ${c.total_faltando} faltando</div>` : ''}
       </div>`; }).join('')}` : ''}
     <div class="rodape-fixo"><div><button class="btn btn--pri btn--grande" id="novo-inv">＋ Novo inventário</button></div></div>`;
@@ -334,6 +339,7 @@ function telaConf() {
   S.local ||= store.get('campo-local') || '';
   const el = $('#t-conf');
   el.innerHTML = `
+    ${c.prazo_em ? '<div id="prazo-conf"></div>' : ''}
     <div class="cartao prog" id="prog"></div>
     <div class="cartao leitor">
       <form class="leitor-linha" id="f-ler" autocomplete="off">
@@ -360,8 +366,15 @@ function telaConf() {
   manterTelaLigada();
 }
 
+function desenharPrazo(k) {
+  const el = $('#prazo-conf');
+  if (!el) return;
+  const datas = S.sess.leituras.map((l) => l.lido_em).filter(Boolean).sort();
+  el.innerHTML = relogioCompleto(S.sess.conf, { encontradas: k.ok, esperadas: k.esp.length, primeiraLeitura: datas[0] || null });
+}
 function desenharProg() {
   const k = calcular();
+  desenharPrazo(k);
   const local = S.sess.leituras.filter((l) => !l.enviado).length;
   $('#prog').innerHTML = `
     <div class="prog-topo"><div class="prog-num">${k.ok}<small> / ${k.esp.length}</small></div><div class="prog-pct">${k.pct}%</div></div>
@@ -587,6 +600,8 @@ async function telaFinal(id) {
         <div><b>${local}</b><span>Leituras a enviar</span></div>
       </div>
     </div>
+    ${(() => { const p = estadoPrazo(c); if (!p) return ''; const fora = p.estado === 'vencido';
+      return `<div class="cartao aviso-prazo ${fora ? 'ruim' : 'bom'}">${fora ? `⏰ <span>O prazo venceu há <b>${fmtDuracao(-p.restante)}</b>. O inventário será registrado como <b>concluído com atraso</b>.</span>` : `🏁 <span>Você está dentro do prazo: ainda restam <b>${fmtDuracao(p.restante)}</b>.</span>`}</div>`; })()}
     ${k.faltando.length ? `<div class="sec-titulo"><span>Faltando (${k.faltando.length})</span></div>
       <div class="lista">${k.faltando.slice(0, 5).map((m) => `<div class="item"><span class="ponto ponto--bad"></span><span class="item-txt"><strong>${esc(m.ativo || m.hostname)}</strong><span>${esc(m.hostname)} · ${esc(m.localizacao || m.setor || '')}</span></span></div>`).join('')}
       ${k.faltando.length > 5 ? `<div class="mais">e mais ${k.faltando.length - 5}…</div>` : ''}</div>` : ''}
@@ -676,7 +691,10 @@ function telaSucesso(r, k, c) {
       <p class="muted">Sem internet agora. <b>${k.ok} de ${k.esp.length}</b> máquinas encontradas. Assim que a conexão voltar, o inventário é sincronizado automaticamente.</p>
       <button class="btn btn--pri btn--grande btn--bloco" id="ini">Voltar ao início</button></div>`;
   } else {
+    const p = estadoPrazo(c);
+    const noPrazo = p ? Date.now() <= p.fim : null;
     el.innerHTML = `<div class="sucesso"><div class="check-grande">✓</div><h2>Inventário sincronizado!</h2>
+      ${noPrazo === true ? `<div class="selo-prazo bom">🏁 Concluído no prazo · sobraram ${fmtDuracao(p.fim - Date.now())}</div>` : noPrazo === false ? `<div class="selo-prazo ruim">🐢 Concluído ${fmtDuracao(Date.now() - p.fim)} depois do prazo</div>` : ''}
       <p class="muted">${r.jaFinalizado ? 'O inventário já havia sido encerrado por outra pessoa; suas leituras foram enviadas.' : 'Tudo foi enviado ao sistema e o inventário foi encerrado.'}</p>
       <div class="grade" style="width:100%;padding:0"><div><b>${k.ok}/${k.esp.length}</b><span>Encontradas (${k.pct}%)</span></div><div><b style="color:var(--bad)">${k.faltando.length}</b><span>Faltando</span></div></div>
       <button class="btn btn--pri btn--grande btn--bloco" id="ini">Voltar ao início</button></div>`;
@@ -797,6 +815,7 @@ async function entrar(session) {
   S.cd = ehAdmin() ? (store.get('campo-cd') && S.cds.some((c) => c.id === store.get('campo-cd')) ? store.get('campo-cd') : S.cds[0]?.id || null) : S.perfil.cd_id || null;
   $('#t-login').hidden = true; $('#app').hidden = false;
   await Promise.all([carregarMaquinas(), carregarConfs()]);
+  iniciarRelogios();
   window.addEventListener('hashchange', rotear);
   if (!location.hash) history.replaceState(null, '', '#inicio');
   await rotear();
