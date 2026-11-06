@@ -1,5 +1,5 @@
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
-import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { SUPABASE_URL, SUPABASE_ANON_KEY, URL_PUBLICA } from './config.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -406,6 +406,7 @@ function renderMaquinas() {
       <div class="view-head">
         <div><h1>Máquinas</h1><p>Clique em uma linha para ver detalhes, editar e o histórico.</p></div>
         <div class="actions">
+          <button class="btn" id="btn-link">Link de instalação</button>
           <button class="btn" id="btn-csv">Exportar CSV</button>
           <button class="btn btn--primary" id="btn-nova">+ Nova máquina</button>
         </div>
@@ -430,6 +431,7 @@ function renderMaquinas() {
     }));
     $('#tbody').onclick = (e) => { const tr = e.target.closest('tr[data-id]'); if (tr) abrirMaquina(tr.dataset.id); };
     $('#btn-csv').onclick = exportarCSV;
+    $('#btn-link').onclick = () => modalLinkInstalacao();
     $('#btn-nova').onclick = () => modalNovaMaquina();
     state.maqMontada = true;
   }
@@ -597,6 +599,7 @@ async function abrirMaquina(id, silencioso = false) {
     </div>
     <div class="drawer-foot">
       <button class="btn btn--danger btn--sm" id="d-excluir">Excluir</button>
+      ${m.origem === 'manual' || situacao(m) === 'offline' ? '<button class="btn btn--sm" id="d-link">Link de instalação</button>' : ''}
       <span class="spacer"></span>
       <button class="btn" id="d-cancelar">Fechar</button>
       <button class="btn btn--primary" id="d-salvar" disabled>Salvar alterações</button>
@@ -608,6 +611,7 @@ async function abrirMaquina(id, silencioso = false) {
   form.oninput = () => { state.drawerDirty = true; $('#d-salvar').disabled = false; };
   form.onsubmit = (e) => { e.preventDefault(); salvar(); };
   $('#d-salvar').onclick = salvar;
+  $('#d-link')?.addEventListener('click', () => modalLinkInstalacao({ ativo: m.ativo, setor: m.setor, localizacao: m.localizacao, responsavel: m.responsavel }));
   $('#d-excluir').onclick = async () => {
     if (!confirm(`Excluir ${m.hostname} definitivamente? Prefira marcar como "Descartado" para manter o histórico.`)) return;
     const { error } = await sb.from('maquinas').delete().eq('id', id);
@@ -972,6 +976,79 @@ function exportarConf() {
 }
 
 /* =====================================================================
+   LINK DE INSTALAÇÃO (para enviar ao colaborador)
+   ===================================================================== */
+let tokenLink = null;
+async function obterTokenLink(novo = false) {
+  if (tokenLink && !novo) return tokenLink;
+  const { data: t, error } = await sb.rpc('obter_token_link', { p_novo: novo });
+  if (error) throw error;
+  tokenLink = t;
+  return t;
+}
+function baseInstalar() {
+  const base = URL_PUBLICA ? URL_PUBLICA.replace(/\/?$/, '/') : new URL('.', location.href).href;
+  return base + 'instalar.html';
+}
+
+async function modalLinkInstalacao(pre = {}) {
+  let token;
+  try { token = await obterTokenLink(); } catch (e) {
+    return toast('Não foi possível obter o token de links. Rode o arquivo sql/02_link_instalacao.sql no Supabase. (' + erroMsg(e) + ')', true);
+  }
+  const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || location.protocol === 'file:';
+  modal(`
+    <div class="modal-head"><h2>Link de instalação</h2>
+      <p class="muted" style="margin:4px 0 0">Envie para o colaborador abrir <b>no computador</b>. Ele clica em Baixar, abre o arquivo e pronto: a máquina é reconhecida sozinha.</p></div>
+    <div class="modal-body">
+      <div class="form-grid" id="lk-form">
+        ${campo('pat', 'Patrimônio (opcional)', pre.ativo, 'text', 'class="mono" placeholder="Etiqueta da máquina"')}
+        ${campo('setor', 'Setor', pre.setor, 'text', 'list="dl-lk-set"')}
+        ${campo('loc', 'Localização', pre.localizacao)}
+        ${campo('resp', 'Responsável', pre.responsavel)}
+      </div>
+      <datalist id="dl-lk-set">${setores().map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+      <p class="muted" style="margin:0;font-size:12.5px">Setor, localização e responsável só são gravados se a máquina ainda não tiver esses dados. Deixe tudo vazio para um link genérico que serve para qualquer computador.</p>
+      <label>Link<input id="lk-url" readonly class="mono" style="font-size:12px"></label>
+      ${local ? `<p class="tag" style="white-space:normal;padding:8px 10px;font-size:12.5px;font-weight:500">O painel está aberto em <b>${esc(location.host || 'arquivo local')}</b>, então este link só funciona neste computador. Publique a pasta <code>web</code> (ex.: GitHub Pages) e preencha <code>URL_PUBLICA</code> em <code>js/config.js</code>.</p>` : ''}
+      <div class="actions">
+        <button class="btn btn--primary" id="lk-copiar">Copiar link</button>
+        <button class="btn" id="lk-msg">Copiar mensagem</button>
+        <a class="btn" id="lk-wa" target="_blank" rel="noopener">WhatsApp</a>
+        <a class="btn" id="lk-mail">E-mail</a>
+        <a class="btn btn--ghost" id="lk-abrir" target="_blank" rel="noopener">Abrir página ↗</a>
+      </div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      <button class="btn btn--ghost btn--sm" id="lk-rotacionar" title="Links enviados antes deixam de funcionar">Invalidar links antigos</button>
+      <button class="btn" data-close>Fechar</button>
+    </div>`, () => {
+    const atualizar = () => {
+      const q = new URLSearchParams({ k: token });
+      for (const n of ['pat', 'setor', 'loc', 'resp']) {
+        const v = $(`#lk-form [name=${n}]`).value.trim();
+        if (v) q.set(n, v);
+      }
+      const url = `${baseInstalar()}#${q.toString()}`;
+      const texto = `Olá! A TI está atualizando o inventário de computadores. Abra este link NO SEU COMPUTADOR, clique em "Baixar instalador" e depois abra o arquivo baixado. Leva menos de 1 minuto:\n${url}`;
+      $('#lk-url').value = url;
+      $('#lk-abrir').href = url;
+      $('#lk-wa').href = 'https://wa.me/?text=' + encodeURIComponent(texto);
+      $('#lk-mail').href = 'mailto:?subject=' + encodeURIComponent('Registro do computador no inventário de TI') + '&body=' + encodeURIComponent(texto);
+      $('#lk-msg').onclick = () => navigator.clipboard.writeText(texto).then(() => toast('Mensagem copiada'));
+    };
+    $('#lk-form').oninput = atualizar;
+    $('#lk-copiar').onclick = () => navigator.clipboard.writeText($('#lk-url').value).then(() => toast('Link copiado'));
+    $('#lk-url').onclick = (e) => e.target.select();
+    $('#lk-rotacionar').onclick = async () => {
+      if (!confirm('Gerar um novo token de links? Todos os links já enviados param de funcionar (as máquinas já instaladas com eles também deixam de reportar até serem reinstaladas).')) return;
+      try { token = await obterTokenLink(true); atualizar(); toast('Novo token gerado'); } catch (e) { toast(erroMsg(e), true); }
+    };
+    atualizar();
+  });
+}
+
+/* =====================================================================
    AGENTE
    ===================================================================== */
 async function renderAgente() {
@@ -984,6 +1061,11 @@ async function renderAgente() {
   el.innerHTML = `
     <div class="view-head"><div><h1>Agente coletor</h1>
       <p>Script PowerShell que roda em cada máquina e envia RAM, discos, SO, versão, série, usuário e IP. Executa ao ligar, no logon e a cada 1 hora — é isso que mantém o "último contato" sempre correto.</p></div></div>
+    <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
+      <div style="flex:1 1 320px"><h2>Mais fácil: envie um link para o colaborador</h2>
+        <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e abre o arquivo. O instalador já vem configurado (patrimônio e setor opcionais), funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
+      <button class="btn btn--primary" id="btn-link-agente">Gerar link de instalação</button>
+    </div>
     <div class="grid-2">
       <div class="card card-pad">
         <div class="card-head"><h2>Instalação</h2></div>
@@ -1018,6 +1100,7 @@ async function renderAgente() {
       </div>
     </div>`;
   $$('.bar', el).forEach((b) => (b.style.cursor = 'default'));
+  $('#btn-link-agente').onclick = () => modalLinkInstalacao();
   $$('[data-tok]', el).forEach((b) => (b.onclick = async () => {
     const ativo = b.dataset.ativo === 'true';
     if (ativo && !confirm('Revogar este token? Agentes usando ele param de reportar.')) return;
