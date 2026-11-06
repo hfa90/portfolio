@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY, URL_PUBLICA } from './config.js';
 import { idbGet, idbSet, filaListar, filaAdicionar, filaRemover, ehErroDeRede } from './offline.js';
 import { criarAssinatura } from './assinatura.js';
 import { MODELOS, montarFolhas } from './etiquetas.js';
+import { fmtDuracao, anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, descreverAgendamento, proximasExecucoes, DIAS_SEMANA, ESTADOS } from './prazo.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -191,6 +192,8 @@ const state = {
   cacheEm: null,
   pendentes: 0,
   etqIds: null,
+  modo: (() => { try { return localStorage.getItem('maq-modo') || 'tabela'; } catch { return 'tabela'; } })(),
+  modoOpts: (() => { try { return { agrup: 'status', metrica: 'contato', mosGrupo: '', destaque: '', ...JSON.parse(localStorage.getItem('maq-modo-opts') || '{}') }; } catch { return { agrup: 'status', metrica: 'contato', mosGrupo: '', destaque: '' }; } })(),
   perfil: null,
   cds: [],
   cdAtual: '',
@@ -274,6 +277,13 @@ function iniciarRealtime() {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'emprestimos' }, () => {
       if (state.view === 'emprestimos') carregarEmprestimos().then(rerender);
     })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conferencias' }, (p) => {
+      if (!noCD(p.new)) return;
+      state.resumoInvEm = 0;
+      if (p.new.agendamento_id) toast(`Novo inventário programado: ${p.new.nome}`);
+      if (state.view === 'conferencia' && !state.conf && location.hash === '#conferencia') renderConferencias();
+      if (state.view === 'painel') desenharPrazosPainel();
+    })
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'conferencia_itens' }, (p) => {
       if (state.conf && p.new.conferencia_id === state.conf.id && !state.confItens.some((i) => i.id === p.new.id)) {
         state.confItens.push(p.new);
@@ -310,7 +320,7 @@ function navegar() {
   window.scrollTo(0, 0);
   if (state.view === 'painel') renderPainel();
   if (state.view === 'maquinas') renderMaquinas();
-  if (state.view === 'conferencia') arg ? abrirConferencia(arg) : renderConferencias();
+  if (state.view === 'conferencia') arg === 'agendados' ? renderAgendados() : arg ? abrirConferencia(arg) : renderConferencias();
   if (state.view === 'agente') renderAgente();
   if (state.view === 'emprestimos') carregarEmprestimos().then(() => renderEmprestimos(true));
   if (state.view === 'etiquetas') renderEtiquetas();
@@ -341,88 +351,179 @@ function barras(pares, filtroKey, corFn = () => '', limite = 8) {
     </button>`).join('')}</div>`;
 }
 
+// ---- composição do parque: uma dimensão por vez, barra empilhada 100% + legenda clicável
+const PALETA = ['#1c9ba9', '#ff8221', '#3a5fd0', '#8e5bd6', '#16a36a', '#e0a10b', '#d6342a', '#64748b', '#0f6f7a', '#c2410c'];
+const DIST = {
+  so:       { l: 'Sistema', fn: soGrupo, f: 'so', cor: (k) => (/Windows 11|Server/.test(k) ? '#16a36a' : /Windows (10|8|7)/.test(k) ? '#d6342a' : '#94a3b8') },
+  ram:      { l: 'Memória', fn: ramFaixa, f: 'ram', ordem: ['4 GB ou menos', '8 GB', '16 GB', '32 GB ou mais', 'Sem dado'], cor: (k) => ({ '4 GB ou menos': '#d6342a', '8 GB': '#e0a10b', '16 GB': '#16a36a', '32 GB ou mais': '#0f8a5f' }[k] || '#94a3b8') },
+  disco:    { l: 'Armazenamento', fn: tipoDisco, f: 'disco', cor: (k) => ({ SSD: '#16a36a', HDD: '#d6342a', 'SSD + HDD': '#e0a10b' }[k] || '#94a3b8') },
+  contato:  { l: 'Último contato', fn: (m) => SIT[situacao(m)], f: 'situacao', ordem: Object.values(SIT), cor: (k) => ({ 'Online agora': '#16a36a', 'Até 7 dias': '#3a5fd0', '7 a 30 dias': '#e0a10b', 'Mais de 30 dias': '#d6342a' }[k] || '#94a3b8') },
+  idade:    { l: 'Idade', fn: idadeFaixa, f: 'idade', ordem: ['0 a 2 anos', '3 a 4 anos', '5 anos ou mais', 'Sem data de compra'], cor: (k) => ({ '0 a 2 anos': '#16a36a', '3 a 4 anos': '#e0a10b', '5 anos ou mais': '#d6342a' }[k] || '#94a3b8') },
+  garantia: { l: 'Garantia', fn: garantiaFaixa, f: 'garantia', ordem: ['Vigente', 'Vence em 90 dias', 'Vence em 30 dias', 'Vencida', 'Sem informação'], cor: (k) => ({ Vigente: '#16a36a', 'Vence em 90 dias': '#3a5fd0', 'Vence em 30 dias': '#e0a10b', Vencida: '#d6342a' }[k] || '#94a3b8') },
+  setor:    { l: 'Setores', fn: (m) => m.setor || 'Sem setor', f: 'setor' },
+  status:   { l: 'Status', fn: (m) => STATUS[m.status], f: 'status' },
+};
+function composicao(lista, chave) {
+  const d = DIST[chave];
+  let pares = contar(lista, d.fn);
+  if (d.ordem) pares.sort((a, b) => d.ordem.indexOf(a[0]) - d.ordem.indexOf(b[0]));
+  const total = pares.reduce((s, p) => s + p[1], 0) || 1;
+  const cor = (k, i) => (d.cor ? d.cor(k) : PALETA[i % PALETA.length]);
+  return `<div class="pilha-barra">${pares.map(([k, n], i) => `<span style="width:${(100 * n) / total}%;background:${cor(k, i)}" title="${esc(k)}: ${n}"></span>`).join('')}</div>
+    <div class="legenda">${pares.map(([k, n], i) => `<button class="leg" data-f="${d.f}" data-v="${esc(k)}"><i style="background:${cor(k, i)}"></i><span>${esc(k)}</span><b>${n}</b><small>${Math.round((100 * n) / total)}%</small></button>`).join('')}</div>`;
+}
+function irFiltroDist(f, v) {
+  if (f === 'situacao') v = Object.keys(SIT).find((k) => SIT[k] === v);
+  if (f === 'status') v = Object.keys(STATUS).find((k) => STATUS[k] === v);
+  if (f === 'setor' && v === 'Sem setor') v = '_vazio';
+  irMaquinas({ [f]: v });
+}
+
+// ---- saúde: % das máquinas ativas sem nenhum alerta importante
+function saudeDe(lista) {
+  if (!lista.length) return null;
+  const ok = lista.filter((m) => !(m.alertas || []).some((a) => ALERTAS[a]?.grave)).length;
+  return Math.round((100 * ok) / lista.length);
+}
+function anelSaude(p, tam = 120) {
+  const r = 44, c = 2 * Math.PI * r;
+  const cor = p == null ? '#94a3b8' : p >= 90 ? '#16a36a' : p >= 70 ? '#e0a10b' : '#d6342a';
+  return `<span class="anel-saude" style="--tam:${tam}px;--cor:${cor}"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="${r}" class="as-fundo"/><circle cx="50" cy="50" r="${r}" class="as-arco" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c * (1 - (p || 0) / 100)).toFixed(1)}"/></svg><b>${p == null ? '—' : p + '%'}</b></span>`;
+}
+
+// ---- inventários abertos + agendamentos (para painel e prazos)
+async function carregarResumoInv() {
+  try { await sb.rpc('gerar_inventarios_agendados'); } catch { /* sem o 05 ainda */ }
+  const [c, a] = await Promise.all([
+    sb.from('conferencias').select('*, conferencia_itens(maquina_id, lido_em)').eq('status', 'aberta').order('prazo_em', { ascending: true, nullsFirst: false }),
+    sb.from('agendamentos').select('*').eq('ativo', true).order('proxima_execucao'),
+  ]);
+  state.resumoInv = { abertas: c.data || [], agendamentos: a.error ? null : a.data || [] };
+  return state.resumoInv;
+}
+function infoProgresso(c) {
+  const itens = c.conferencia_itens || [];
+  const r = resumoConf(c, itens);
+  const prim = itens.map((i) => i.lido_em).filter(Boolean).sort()[0];
+  return { encontradas: r.encontradas, esperadas: r.esperadas, primeiraLeitura: prim, pct: r.pct };
+}
+
 function renderPainel() {
   const el = $('#view-painel');
   const L = ativas();
   const by = (fn) => L.filter(fn).length;
+  const saude = saudeDe(L);
   const online = by((m) => situacao(m) === 'online');
-  const comAlerta = by((m) => (m.alertas || []).some((a) => ALERTAS[a]?.grave));
-  const kpi = (label, valor, sub, cls, filtros) =>
-    `<button class="card kpi ${cls}" data-filtros='${esc(JSON.stringify(filtros))}'>
-       <div class="kpi-label">${label}</div><div class="kpi-value">${valor}</div><div class="kpi-sub">${sub}</div></button>`;
+  const graves = by((m) => (m.alertas || []).some((a) => ALERTAS[a]?.grave));
+  const semContato = by((m) => situacao(m) === 'offline');
+  const escopo = state.cdAtual ? `${cdCod(state.cdAtual)} · ${cdNome(state.cdAtual)}` : state.cds.length > 1 ? `Todos os CDs (${state.cds.length})` : '';
+  state.distAba ||= store.get('dist-aba') || 'so';
 
-  const alertaCont = Object.keys(ALERTAS).map((k) => [k, by((m) => (m.alertas || []).includes(k))]).filter((x) => x[1] > 0);
-  const corSO = (k) => (/Windows 11|Server/.test(k) ? 'c-ok' : /Windows (10|8|7)/.test(k) ? 'c-bad' : 'c-idle');
-  const corRAM = (k) => ({ '4 GB ou menos': 'c-bad', '8 GB': 'c-warn', '16 GB': 'c-ok', '32 GB ou mais': 'c-ok' }[k] || 'c-idle');
-  const corDisco = (k) => ({ SSD: 'c-ok', HDD: 'c-bad', 'SSD + HDD': 'c-warn' }[k] || 'c-idle');
-  const corSit = (k) => 'c-' + (SIT_COR[Object.keys(SIT).find((s) => SIT[s] === k)] || 'idle');
-  const ordemSit = Object.values(SIT);
-  const ordemRam = ['4 GB ou menos', '8 GB', '16 GB', '32 GB ou mais', 'Sem dado'];
+  if (!state.maquinas.length || !L.length) {
+    el.innerHTML = `<div class="view-head"><div><h1>Painel</h1><p>${esc(escopo)}</p></div></div>
+      <div class="card card-pad empty"><h2>Nenhuma máquina ${L.length ? '' : 'neste CD '}ainda</h2>
+      <p>Envie o link de instalação para os colaboradores ou cadastre manualmente.</p>
+      <div class="actions" style="justify-content:center"><a class="btn btn--primary" href="#agente">Instalar agente</a></div></div>`;
+    return;
+  }
+
+  // problemas ordenados por gravidade e quantidade
+  const problemas = Object.entries(ALERTAS).map(([k, a]) => ({ k, ...a, n: by((m) => (m.alertas || []).includes(k)) }))
+    .filter((p) => p.n > 0).sort((a, b) => (b.grave - a.grave) || (b.n - a.n));
+  const ICONE = { hw_reduzido: '🧩', emprestimo_atrasado: '⏰', so_sem_suporte: '🪟', estoque_online: '📦', hostname_duplicado: '👯', disco_cheio: '💾', ram_baixa: '🧠', hdd: '🐌', sem_contato: '📡', sem_ativo: '🏷️', garantia_vencendo: '🛡️', renovacao: '♻️' };
 
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Painel</h1><p>Atualizado ao vivo conforme os agentes reportam · ${MQ().length} registros</p></div>
-      <div class="actions"><button class="btn" data-go="maquinas">Ver todas as máquinas →</button></div>
+      <div><h1>Painel</h1><p>${escopo ? esc(escopo) + ' · ' : ''}atualizado ao vivo</p></div>
+      <div class="actions"><button class="btn" data-go="maquinas">Ver máquinas →</button></div>
     </div>
-    ${MQ().length === 0 ? `
-      <div class="card card-pad empty">
-        <h2>Nenhuma máquina ainda</h2>
-        <p>Instale o agente coletor nas máquinas ou cadastre manualmente.</p>
-        <div class="actions" style="justify-content:center"><a class="btn btn--primary" href="#agente">Instalar agente</a></div>
-      </div>` : `
-    <div class="kpis">
-      ${kpi('Máquinas ativas', L.length, `${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks`, '', {})}
-      ${kpi('<span class="dot dot--online"></span> Online agora', online, 'reportaram nas últimas 2h', 'kpi--ok', { situacao: 'online' })}
-      ${kpi('Sem contato +30 dias', by((m) => situacao(m) === 'offline'), 'verificar se ainda existem', 'kpi--bad', { situacao: 'offline' })}
-      ${kpi('Em estoque', by((m) => m.status === 'estoque'), `${by((m) => m.status === 'manutencao')} em manutenção`, '', { status: 'estoque' })}
-      ${kpi('Precisam de atenção', comAlerta, 'alertas importantes', 'kpi--warn', { alerta: '_grave' })}
-      ${kpi('Nunca reportaram', by((m) => situacao(m) === 'nunca'), 'cadastro manual, sem agente', '', { situacao: 'nunca' })}
-      ${kpi('Emprestados', by((m) => m.emprestimo_atual), `${by((m) => (m.alertas || []).includes('emprestimo_atrasado'))} com devolução atrasada`, by((m) => (m.alertas || []).includes('emprestimo_atrasado')) ? 'kpi--bad' : '', { status: 'emprestado' })}
-    </div>
-    <div class="grid-3">
-      <div class="card card-pad"><div class="card-head"><h2>Sistema operacional</h2></div>${barras(contar(L, soGrupo), 'so', corSO)}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Memória RAM</h2></div>${barras(contar(L, ramFaixa).sort((a, b) => ordemRam.indexOf(a[0]) - ordemRam.indexOf(b[0])), 'ram', corRAM)}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Armazenamento</h2></div>${barras(contar(L, tipoDisco), 'disco', corDisco)}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Último contato</h2></div>${barras(contar(L, (m) => SIT[situacao(m)]).sort((a, b) => ordemSit.indexOf(a[0]) - ordemSit.indexOf(b[0])), 'situacao', corSit)}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Status</h2></div>${barras(contar(MQ(), (m) => STATUS[m.status]), 'status')}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Setores</h2></div>${barras(contar(L, (m) => m.setor || 'Sem setor'), 'setor', () => 'c-info')}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Idade do parque</h2><span class="muted" style="font-size:12px">pela data de compra</span></div>${barras(contar(L, idadeFaixa).sort((a, b) => ORDEM_IDADE.indexOf(a[0]) - ORDEM_IDADE.indexOf(b[0])), 'idade', (k) => ({ '0 a 2 anos': 'c-ok', '3 a 4 anos': 'c-warn', '5 anos ou mais': 'c-bad' }[k] || 'c-idle'))}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Garantia</h2></div>${barras(contar(L, garantiaFaixa).sort((a, b) => ORDEM_GAR.indexOf(a[0]) - ORDEM_GAR.indexOf(b[0])), 'garantia', (k) => ({ Vigente: 'c-ok', 'Vence em 90 dias': 'c-info', 'Vence em 30 dias': 'c-warn', Vencida: 'c-bad' }[k] || 'c-idle'))}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Emprestados agora</h2><a href="#emprestimos" class="muted" style="font-size:12.5px">ver todos →</a></div>
-        ${(() => {
-          const emp = L.filter((m) => m.emprestimo_atual).sort((a, b) => new Date(a.emprestimo_atual.previsto_devolucao || 8.64e15) - new Date(b.emprestimo_atual.previsto_devolucao || 8.64e15));
-          if (!emp.length) return '<p class="muted">Nenhum notebook emprestado.</p>';
-          return `<div class="feed">${emp.slice(0, 6).map((m) => { const e = m.emprestimo_atual; const atras = e.previsto_devolucao && new Date(e.previsto_devolucao) < new Date();
-            return `<div class="feed-item"><a data-id="${m.id}" class="mono">${esc(m.hostname)}</a><span class="t">${atras ? pill('atrasado', 'bad') : e.previsto_devolucao ? 'até ' + dataHora(e.previsto_devolucao) : ''}</span><span class="d">${esc(e.colaborador)} · desde ${rel(e.retirado_em).replace('há ', '')}</span></div>`; }).join('')}</div>`;
-        })()}
-      </div>
-    </div>
-    <div class="grid-2" style="margin-top:16px">
-      <div class="card card-pad">
-        <div class="card-head"><h2>Pontos de atenção</h2></div>
-        ${alertaCont.length ? `<div class="alert-list">${alertaCont.map(([k, n]) => `
-          <button class="alert-row" data-alerta="${k}">
-            <span class="tag ${ALERTAS[k].grave ? 'tag--bad' : ''}">${esc(ALERTAS[k].l)}</span>
-            <small>${esc(ALERTAS[k].d)}</small><span class="n">${n}</span>
-          </button>`).join('')}</div>` : '<p class="muted">Tudo em ordem. 🎉</p>'}
-      </div>
-      <div class="card card-pad">
-        <div class="card-head"><h2>Alterações recentes</h2><span class="muted" style="font-size:12px">troca de peças, SO, status…</span></div>
-        <div class="feed">${(() => { const hs = state.hist.filter((h) => !state.cdAtual || h.maquinas?.cd_id === state.cdAtual).slice(0, 40); return hs.length ? hs.map(feedItem).join('') : '<p class="muted">Nenhuma alteração registrada.</p>'; })()}</div>
-      </div>
-    </div>`}`;
 
-  $$('.kpi', el).forEach((b) => (b.onclick = () => irMaquinas(JSON.parse(b.dataset.filtros))));
-  $$('.bar', el).forEach((b) => (b.onclick = () => {
-    let v = b.dataset.v; const f = b.dataset.f;
-    if (f === 'situacao') v = Object.keys(SIT).find((k) => SIT[k] === v);
-    if (f === 'status') { v = Object.keys(STATUS).find((k) => STATUS[k] === v); return irMaquinas({ status: v }); }
-    if (f === 'setor' && v === 'Sem setor') v = '_vazio';
-    irMaquinas({ [f]: v });
-  }));
-  $$('.alert-row', el).forEach((b) => (b.onclick = () => irMaquinas({ alerta: b.dataset.alerta })));
+    <div class="hero">
+      <div class="card hero-saude">
+        ${anelSaude(saude)}
+        <div class="hs-txt">
+          <span class="hs-titulo">Saúde do parque</span>
+          <strong>${L.length - graves} de ${L.length} máquinas sem problemas importantes</strong>
+          <p class="muted">${saude >= 90 ? 'Tudo sob controle. 👌' : saude >= 70 ? 'Alguns pontos pedem atenção.' : 'Muitos problemas importantes — veja a lista ao lado.'}</p>
+        </div>
+      </div>
+      <div class="hero-kpis">
+        <button class="card kpi2" data-filtros='{}'><span class="k-rot">Máquinas</span><b>${L.length}</b>
+          <span class="k-sub">${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks</span></button>
+        <button class="card kpi2" data-filtros='{"situacao":"online"}'><span class="k-rot"><span class="dot dot--online"></span> Online agora</span><b class="t-ok">${online}</b>
+          <span class="mini-barra"><i style="width:${Math.round((100 * online) / L.length)}%;background:var(--ok)"></i></span><span class="k-sub">${Math.round((100 * online) / L.length)}% do parque</span></button>
+        <button class="card kpi2" data-filtros='{"alerta":"_grave"}'><span class="k-rot">Precisam de atenção</span><b class="${graves ? 't-bad' : ''}">${graves}</b>
+          <span class="k-sub">${semContato ? `${semContato} sem contato há +30 dias` : 'nenhuma sem contato prolongado'}</span></button>
+        <button class="card kpi2" data-go-inv><span class="k-rot">Inventários abertos</span><b id="kpi-inv">…</b><span class="k-sub" id="kpi-inv-sub">carregando…</span></button>
+      </div>
+    </div>
+
+    <div class="grid-painel">
+      <div class="card card-pad">
+        <div class="card-head"><h2>O que resolver agora</h2>${problemas.length ? `<span class="muted" style="font-size:12.5px">${problemas.length} tipo(s) de problema</span>` : ''}</div>
+        ${problemas.length ? `<div class="acoes-lista">${problemas.slice(0, 6).map((p) => `
+          <button class="acao-item ${p.grave ? 'grave' : ''}" data-alerta="${p.k}">
+            <span class="ai-ico">${ICONE[p.k] || '•'}</span>
+            <span class="ai-txt"><strong>${esc(p.l)}</strong><small>${esc(p.d)}</small></span>
+            <span class="ai-n">${p.n}</span><span class="ai-seta">›</span>
+          </button>`).join('')}</div>
+          ${problemas.length > 6 ? `<button class="btn btn--ghost btn--sm" id="mais-problemas" style="margin-top:6px">Ver mais ${problemas.length - 6}</button>` : ''}`
+        : '<div class="tudo-ok">✅<strong>Nenhum problema encontrado</strong><span class="muted">Todas as máquinas estão saudáveis.</span></div>'}
+      </div>
+      <div class="card card-pad">
+        <div class="card-head"><h2>Inventários e prazos</h2><a href="#conferencia" class="muted" style="font-size:12.5px">abrir →</a></div>
+        <div id="painel-prazos"><div class="skeleton" style="padding:20px">Carregando…</div></div>
+      </div>
+    </div>
+
+    <div class="grid-painel">
+      <div class="card card-pad">
+        <div class="card-head"><h2>Composição do parque</h2></div>
+        <div class="seg" id="dist-abas">${Object.entries(DIST).map(([k, d]) => `<button class="${state.distAba === k ? 'on' : ''}" data-dist="${k}">${d.l}</button>`).join('')}</div>
+        <div id="dist-corpo">${composicao(L, state.distAba)}</div>
+      </div>
+      <div class="card card-pad">
+        <div class="card-head"><h2>Atividade recente</h2></div>
+        <div class="feed">${(() => { const hs = state.hist.filter((h) => !state.cdAtual || h.maquinas?.cd_id === state.cdAtual).slice(0, 7); return hs.length ? hs.map(feedItem).join('') : '<p class="muted">Nenhuma alteração registrada.</p>'; })()}</div>
+      </div>
+    </div>`;
+
+  $$('.kpi2[data-filtros]', el).forEach((b) => (b.onclick = () => irMaquinas(JSON.parse(b.dataset.filtros))));
+  $('[data-go-inv]', el).onclick = () => (location.hash = '#conferencia');
   $$('[data-go]', el).forEach((b) => (b.onclick = () => irMaquinas()));
+  $$('.acao-item', el).forEach((b) => (b.onclick = () => irMaquinas({ alerta: b.dataset.alerta })));
+  $('#mais-problemas')?.addEventListener('click', () => irMaquinas({ alerta: '_grave' }));
   $$('.feed a', el).forEach((a) => (a.onclick = () => abrirMaquina(a.dataset.id)));
+  const ligarLegenda = () => $$('#dist-corpo .leg', el).forEach((b) => (b.onclick = () => irFiltroDist(b.dataset.f, b.dataset.v)));
+  ligarLegenda();
+  $$('[data-dist]', el).forEach((b) => (b.onclick = () => {
+    state.distAba = b.dataset.dist; store.set('dist-aba', state.distAba);
+    $$('[data-dist]', el).forEach((x) => x.classList.toggle('on', x === b));
+    $('#dist-corpo').innerHTML = composicao(ativas(), state.distAba); ligarLegenda();
+  }));
+  desenharPrazosPainel();
+}
+
+async function desenharPrazosPainel() {
+  const alvo = $('#painel-prazos');
+  if (!alvo) return;
+  const r = state.resumoInv && Date.now() - (state.resumoInvEm || 0) < 30_000 ? state.resumoInv : await carregarResumoInv();
+  state.resumoInvEm = Date.now();
+  if (!$('#painel-prazos')) return;
+  const abertas = r.abertas.filter(noCD).sort((a, b) => new Date(a.prazo_em || 8.64e15) - new Date(b.prazo_em || 8.64e15));
+  const venc = abertas.filter((c) => c.prazo_em && new Date(c.prazo_em) < new Date()).length;
+  $('#kpi-inv').textContent = abertas.length;
+  $('#kpi-inv').className = venc ? 't-bad' : '';
+  $('#kpi-inv-sub').innerHTML = venc ? `${venc} com prazo vencido` : abertas.some((c) => c.prazo_em) ? `próximo prazo ${etiquetaPrazo(abertas.find((c) => c.prazo_em))}` : 'nenhum com prazo';
+  const prox = (r.agendamentos || []).filter((a) => a.proxima_execucao && (!state.cdAtual || !a.cd_id || a.cd_id === state.cdAtual))[0];
+  $('#painel-prazos').innerHTML = (abertas.length ? `<div class="prazos-lista">${abertas.slice(0, 5).map((c) => { const p = infoProgresso(c); return `
+      <a class="prazo-item" href="#conferencia/${c.id}">
+        ${c.prazo_em ? anelPrazo(c, { tam: 52, progresso: p.esperadas ? p.encontradas / p.esperadas : 0 }) : `<span class="sem-prazo">${p.pct}%</span>`}
+        <span class="pi-txt"><strong>${esc(c.nome)}</strong><small>${mostrarColCD() ? esc(cdCod(c.cd_id)) + ' · ' : ''}${p.encontradas}/${p.esperadas} conferidas</small></span>
+        ${c.prazo_em ? etiquetaPrazo(c) : '<span class="muted" style="font-size:12px">sem prazo</span>'}
+      </a>`; }).join('')}</div>`
+    : '<div class="tudo-ok">📋<strong>Nenhum inventário aberto</strong><span class="muted">Crie um ou programe inventários recorrentes.</span></div>')
+    + (prox ? `<div class="proximo-agend">📅 Próximo programado: <b>${esc(prox.nome)}</b> · ${new Date(prox.proxima_execucao).toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} <span class="muted">(em ${fmtDuracao(new Date(prox.proxima_execucao) - Date.now())})</span></div>` : '');
 }
 
 const ORDEM_IDADE = ['0 a 2 anos', '3 a 4 anos', '5 anos ou mais', 'Sem data de compra'];
@@ -518,7 +619,7 @@ function renderMaquinas() {
   if (!state.maqMontada) {
     el.innerHTML = `
       <div class="view-head">
-        <div><h1>Máquinas</h1><p>Clique em uma linha para ver detalhes, editar e o histórico.</p></div>
+        <div><h1>Máquinas</h1><p>Veja em tabela, cartões, quadro ou mosaico. Clique numa máquina para detalhes, edição e histórico.</p></div>
         <div class="actions">
           <button class="btn" id="btn-link">Link de instalação</button>
           <button class="btn" id="btn-etq">Etiquetas</button>
@@ -533,9 +634,11 @@ function renderMaquinas() {
           <select id="f-tipo"></select><select id="f-status"></select><select id="f-situacao"></select>
           <select id="f-so"></select><select id="f-alerta"></select><select id="f-setor"></select><select id="f-garantia"></select>
         </div>
-        <div class="chips" id="chips-wrap" style="padding-bottom:10px;align-items:center"><span id="chips" style="display:contents"></span><span class="count" id="count"></span></div>
+        <div class="barra-modos"><div class="seg seg--modos" id="modos"></div><span id="modo-opts" class="modo-opts"></span><span class="count" id="count"></span></div>
+        <div class="chips" id="chips-wrap" style="padding:0 12px 10px;align-items:center"><span id="chips" style="display:contents"></span></div>
         <div class="sel-bar" id="sel-bar" hidden></div>
         <div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+        <div id="maq-alt" class="maq-alt" hidden></div>
       </div>`;
     $('#f-q').oninput = debounce((e) => { state.f.q = e.target.value; renderTabela(); }, 120);
     ['tipo', 'status', 'situacao', 'so', 'alerta', 'setor', 'garantia'].forEach((k) => {
@@ -559,6 +662,14 @@ function renderMaquinas() {
       if (e.target.closest('.td-sel')) return;
       const tr = e.target.closest('tr[data-id]'); if (tr) abrirMaquina(tr.dataset.id);
     };
+    $('#modos').onclick = (e) => { const b = e.target.closest('[data-modo]'); if (!b) return; state.modo = b.dataset.modo; store.set('maq-modo', state.modo); renderTabela(); };
+    $('#modo-opts').onchange = (e) => {
+      const map = { 'opt-agrup': 'agrup', 'opt-metrica': 'metrica', 'opt-mosgrupo': 'mosGrupo' };
+      if (!map[e.target.id]) return;
+      state.modoOpts[map[e.target.id]] = e.target.value; state.modoOpts.destaque = '';
+      store.set('maq-modo-opts', JSON.stringify(state.modoOpts)); renderTabela();
+    };
+    ligarModoAlt();
     $('#btn-etq').onclick = () => irEtiquetas(state.sel.size ? [...state.sel] : filtrar().map((m) => m.id));
     $('#btn-import').onclick = modalImportarCompras;
     $('#btn-csv').onclick = exportarCSV;
@@ -604,9 +715,179 @@ function renderTabela() {
   $('#limpar')?.addEventListener('click', () => { state.f = { ...F_PADRAO }; syncToolbar(); renderTabela(); });
   $('#count').textContent = `${lista.length} de ${MQ().length} máquinas`;
   renderSelBar(lista);
+  $('#modos').innerHTML = MODOS.map(([k, i, l]) => `<button class="${state.modo === k ? 'on' : ''}" data-modo="${k}" title="${l}"><span class="seg-ico">${i}</span><span class="seg-txt">${l}</span></button>`).join('');
+  $('#modo-opts').innerHTML = opcoesModo();
+  const tab = state.modo === 'tabela';
+  $('#view-maquinas .table-wrap').hidden = !tab;
+  $('#maq-alt').hidden = tab;
+  if (!tab) {
+    $('#maq-alt').className = 'maq-alt maq-alt--' + state.modo;
+    $('#maq-alt').innerHTML = !lista.length ? '<div class="empty">Nenhuma máquina encontrada com esses filtros.</div>'
+      : state.modo === 'cartoes' ? renderCartoes(lista) : state.modo === 'quadro' ? renderQuadro(lista) : renderMosaico(lista);
+    return;
+  }
   $('#tbody').innerHTML = lista.length
     ? lista.map((m) => `<tr data-id="${m.id}" class="${state.flash.has(m.id) ? 'flash' : ''}">${cols.map((c) => `<td class="${c.cls || ''}">${c.c(m)}</td>`).join('')}</tr>`).join('')
     : `<tr><td colspan="${cols.length}" class="empty">Nenhuma máquina encontrada com esses filtros.</td></tr>`;
+}
+
+// ---- modos de visualização da lista de máquinas
+const MODOS = [['tabela', '☰', 'Tabela'], ['cartoes', '▦', 'Cartões'], ['quadro', '▥', 'Quadro'], ['mosaico', '▩', 'Mosaico']];
+const AGRUP = {
+  status:   { l: 'Status', chave: (m) => m.status, rot: (k) => STATUS[k] || k, ordem: Object.keys(STATUS), editavel: 'status',
+              cor: (k) => ({ em_uso: '#16a36a', estoque: '#3a5fd0', manutencao: '#e0a10b', emprestado: '#8e5bd6', descartado: '#94a3b8', extraviado: '#d6342a' }[k]) },
+  situacao: { l: 'Contato', chave: (m) => situacao(m), rot: (k) => SIT[k], ordem: Object.keys(SIT),
+              cor: (k) => ({ online: '#16a36a', recente: '#3a5fd0', ausente: '#e0a10b', offline: '#d6342a', nunca: '#94a3b8' }[k]) },
+  alerta:   { l: 'Problema principal', chave: (m) => (m.alertas || []).find((a) => ALERTAS[a]?.grave) || (m.alertas || [])[0] || '',
+              rot: (k) => (k ? ALERTAS[k]?.l || k : 'Sem alertas'), cor: (k) => (!k ? '#16a36a' : ALERTAS[k]?.grave ? '#d6342a' : '#e0a10b') },
+  setor:    { l: 'Setor', chave: (m) => m.setor || '', rot: (k) => k || 'Sem setor', editavel: 'setor' },
+  so:       { l: 'Sistema', chave: soGrupo, rot: (k) => k, cor: (k) => (/Windows 11/.test(k) ? '#16a36a' : /Windows (10|8|7)/.test(k) ? '#d6342a' : '#94a3b8') },
+  tipo:     { l: 'Tipo', chave: (m) => m.tipo, rot: (k) => TIPO[k] || k },
+  cd:       { l: 'CD', chave: (m) => m.cd_id, rot: (k) => `${cdCod(k)} · ${cdNome(k)}`, editavel: 'cd_id', soAdmin: true },
+};
+const METRICA_MOS = {
+  contato:  { l: 'Último contato', v: (m) => situacao(m), leg: [['online', 'Online agora', '#16a36a'], ['recente', 'Até 7 dias', '#3a5fd0'], ['ausente', '7 a 30 dias', '#e0a10b'], ['offline', 'Mais de 30 dias', '#d6342a'], ['nunca', 'Nunca reportou', '#94a3b8']] },
+  alertas:  { l: 'Alertas', v: (m) => ((m.alertas || []).some((a) => ALERTAS[a]?.grave) ? 'grave' : (m.alertas || []).length ? 'leve' : 'ok'), leg: [['ok', 'Sem alertas', '#16a36a'], ['leve', 'Só alertas leves', '#e0a10b'], ['grave', 'Alerta importante', '#d6342a']] },
+  disco:    { l: 'Uso do disco', v: (m) => { if (m.livre_pct == null) return 'nd'; const u = 100 - m.livre_pct; return u > 90 ? 'critico' : u > 75 ? 'alto' : u > 50 ? 'medio' : 'baixo'; },
+              leg: [['baixo', 'Até 50%', '#16a36a'], ['medio', '50–75%', '#1c9ba9'], ['alto', '75–90%', '#e0a10b'], ['critico', 'Acima de 90%', '#d6342a'], ['nd', 'Sem dado', '#94a3b8']] },
+  ram:      { l: 'Memória', v: ramFaixa, leg: [['4 GB ou menos', '4 GB ou menos', '#d6342a'], ['8 GB', '8 GB', '#e0a10b'], ['16 GB', '16 GB', '#16a36a'], ['32 GB ou mais', '32 GB ou mais', '#0f6f7a'], ['Sem dado', 'Sem dado', '#94a3b8']] },
+  so:       { l: 'Sistema', v: (m) => (/Windows 11/.test(soFamilia(m)) ? 'w11' : /Windows (10|8|7)/.test(soFamilia(m)) ? 'w10' : m.so_nome ? 'outro' : 'nd'),
+              leg: [['w11', 'Windows 11', '#16a36a'], ['w10', 'Windows 10 ou anterior', '#d6342a'], ['outro', 'Outro', '#3a5fd0'], ['nd', 'Sem dado', '#94a3b8']] },
+  idade:    { l: 'Idade', v: idadeFaixa, leg: [['0 a 2 anos', '0 a 2 anos', '#16a36a'], ['3 a 4 anos', '3 a 4 anos', '#e0a10b'], ['5 anos ou mais', '5 anos ou mais', '#d6342a'], ['Sem data de compra', 'Sem data', '#94a3b8']] },
+  garantia: { l: 'Garantia', v: garantiaFaixa, leg: [['Vigente', 'Vigente', '#16a36a'], ['Vence em 90 dias', 'Vence em 90 dias', '#3a5fd0'], ['Vence em 30 dias', 'Vence em 30 dias', '#e0a10b'], ['Vencida', 'Vencida', '#d6342a'], ['Sem informação', 'Sem informação', '#94a3b8']] },
+};
+const icoTipo = (t) => (t === 'notebook' ? '💻' : t === 'servidor' ? '🗄️' : '🖥️');
+
+function opcoesModo() {
+  const o = state.modoOpts;
+  const gruposVis = Object.entries(AGRUP).filter(([, g]) => !g.soAdmin || (ehAdmin() && state.cds.length > 1));
+  if (state.modo === 'quadro') return `<label class="opt-modo">Colunas por <select id="opt-agrup">${opts(gruposVis.map(([k, g]) => [k, g.l]), o.agrup)}</select></label>
+    ${AGRUP[o.agrup]?.editavel && (o.agrup !== 'cd' || ehAdmin()) ? '<span class="muted" style="font-size:12.5px">↔ arraste os cartões para mudar</span>' : ''}`;
+  if (state.modo === 'mosaico') return `<label class="opt-modo">Cor por <select id="opt-metrica">${opts(Object.entries(METRICA_MOS).map(([k, x]) => [k, x.l]), o.metrica)}</select></label>
+    <label class="opt-modo">Agrupar <select id="opt-mosgrupo">${opts([['', 'Sem grupos'], ...gruposVis.filter(([k]) => ['setor', 'tipo', 'cd', 'status'].includes(k)).map(([k, g]) => [k, g.l])], o.mosGrupo)}</select></label>`;
+  return '';
+}
+
+function cartaoMaq(m, compacto = false) {
+  const usado = m.livre_pct != null ? Math.round(100 - m.livre_pct) : null;
+  const ag = AGRUP[state.modoOpts.agrup];
+  const arrastavel = compacto && ag?.editavel && (state.modoOpts.agrup !== 'cd' || ehAdmin()) && !m.emprestimo_atual;
+  return `<div class="mcard ${compacto ? 'mcard--c' : ''} ${state.sel.has(m.id) ? 'sel' : ''} ${state.flash.has(m.id) ? 'flash' : ''}" data-id="${m.id}" ${arrastavel ? 'draggable="true"' : ''} tabindex="0">
+    <div class="mc-topo">${compacto ? '' : `<input type="checkbox" class="sel" data-sel="${m.id}" ${state.sel.has(m.id) ? 'checked' : ''} aria-label="Selecionar">`}
+      ${dot(m)}<span class="mc-host mono">${esc(m.hostname)}</span>${mostrarColCD() && state.modoOpts.agrup !== 'cd' ? `<span class="pill pill--cd">${esc(cdCod(m.cd_id))}</span>` : ''}<span class="mc-tipo" title="${esc(TIPO[m.tipo])}">${icoTipo(m.tipo)}</span></div>
+    <div class="mc-mod">${esc(m.modelo || 'Modelo não informado')}${m.ativo ? ` · <span class="mono">${esc(m.ativo)}</span>` : ''}</div>
+    ${compacto ? '' : `<div class="mc-specs">
+      <span class="spec-chip"><small>RAM</small><b>${gb(m.memoria_gb)}</b></span>
+      <span class="spec-chip"><small>${esc(['Sem dado', 'Não identificado'].includes(tipoDisco(m)) ? 'Disco' : tipoDisco(m))}</small><b>${gb(m.armazenamento_total_gb)}</b>${usado != null ? `<span class="meter meter--b"><i class="${usado > 90 ? 'bad' : usado > 75 ? 'warn' : ''}" style="width:${usado}%"></i></span>` : ''}</span>
+      <span class="spec-chip"><small>Sistema</small><b>${esc(soFamilia(m).replace('Windows ', 'Win ') + (m.so_display_version ? ' ' + m.so_display_version : ''))}</b></span>
+    </div>`}
+    <div class="mc-pe"><span class="muted">${rel(m.ultimo_online)}${m.usuario_logado ? ' · ' + esc(m.usuario_logado.split('\\').pop()) : ''}</span>${compacto ? '' : statusPill(m.status)}</div>
+    ${(m.alertas || []).length ? `<div class="mc-al">${tags(m, compacto ? 1 : 3)}</div>` : ''}
+  </div>`;
+}
+
+function renderCartoes(lista) {
+  const lim = state.limiteCartoes || 240;
+  return `<div class="mgrid">${lista.slice(0, lim).map((m) => cartaoMaq(m)).join('')}</div>
+    ${lista.length > lim ? `<div class="mais-cartoes"><button class="btn" id="mais-cartoes">Mostrar mais ${Math.min(240, lista.length - lim)} de ${lista.length - lim}</button></div>` : ''}`;
+}
+
+function renderQuadro(lista) {
+  const ag = AGRUP[state.modoOpts.agrup] || AGRUP.status;
+  const grupos = new Map();
+  for (const m of lista) { const k = ag.chave(m); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(m); }
+  let chaves = [...grupos.keys()];
+  const editavel = ag.editavel && (state.modoOpts.agrup !== 'cd' || ehAdmin());
+  if (editavel) {
+    // colunas vazias também viram destino para arrastar
+    if (state.modoOpts.agrup === 'status') chaves = Object.keys(STATUS).filter((k) => k !== 'descartado' || grupos.has(k));
+    if (state.modoOpts.agrup === 'setor') chaves = [...new Set(['', ...setores(), ...chaves])];
+    if (state.modoOpts.agrup === 'cd') chaves = [...new Set([...state.cds.filter((c) => c.ativo).map((c) => c.id), ...chaves])];
+  }
+  chaves.sort((a, b) => (ag.ordem ? ag.ordem.indexOf(a) - ag.ordem.indexOf(b) : (grupos.get(b)?.length || 0) - (grupos.get(a)?.length || 0)));
+  const coresLivres = PALETA;
+  return `<div class="quadro" data-agrup="${state.modoOpts.agrup}">${chaves.map((k, i) => {
+    const ms = grupos.get(k) || [];
+    const cor = (ag.cor && ag.cor(k)) || coresLivres[i % coresLivres.length];
+    const bloqueada = editavel && state.modoOpts.agrup === 'status' && k === 'emprestado';
+    return `<section class="coluna ${bloqueada ? 'bloq' : ''}" data-col-valor="${esc(k)}" ${editavel && !bloqueada ? 'data-alvo' : ''} style="--cor:${cor}">
+      <header><span class="col-ponto"></span><strong>${esc(ag.rot(k))}</strong><span class="col-n">${ms.length}</span></header>
+      <div class="col-cartoes">${ms.slice(0, 80).map((m) => cartaoMaq(m, true)).join('')}${ms.length > 80 ? `<div class="muted" style="text-align:center;font-size:12.5px;padding:6px">+ ${ms.length - 80} — use os filtros</div>` : ''}
+      ${!ms.length ? `<div class="col-vazia">${editavel && !bloqueada ? 'Solte aqui' : 'Vazio'}</div>` : ''}</div>
+    </section>`;
+  }).join('')}</div>`;
+}
+
+function renderMosaico(lista) {
+  const mt = METRICA_MOS[state.modoOpts.metrica] || METRICA_MOS.contato;
+  const corDe = Object.fromEntries(mt.leg.map(([k, , c]) => [k, c]));
+  const cont = contar(lista, mt.v);
+  const destaque = state.modoOpts.destaque;
+  const grupoK = state.modoOpts.mosGrupo;
+  const ag = grupoK ? AGRUP[grupoK] : null;
+  const blocos = new Map();
+  for (const m of lista) { const g = ag ? ag.chave(m) : ''; if (!blocos.has(g)) blocos.set(g, []); blocos.get(g).push(m); }
+  const ordem = [...blocos.keys()].sort((a, b) => (ag?.ordem ? ag.ordem.indexOf(a) - ag.ordem.indexOf(b) : blocos.get(b).length - blocos.get(a).length));
+  const tile = (m) => { const v = mt.v(m); return `<button class="tile ${destaque && destaque !== v ? 'apagado' : ''}" style="background:${corDe[v] || '#94a3b8'}" data-id="${m.id}" data-v="${esc(v)}" aria-label="${esc(m.hostname)}"></button>`; };
+  return `<div class="mos-legenda">${mt.leg.filter(([k]) => cont.some(([c]) => c === k)).map(([k, l, c]) => { const n = (cont.find(([x]) => x === k) || [, 0])[1];
+      return `<button class="mleg ${destaque === k ? 'on' : ''} ${destaque && destaque !== k ? 'off' : ''}" data-dest="${esc(k)}"><i style="background:${c}"></i>${esc(l)} <b>${n}</b><small>${Math.round((100 * n) / (lista.length || 1))}%</small></button>`; }).join('')}
+      ${destaque ? '<button class="btn btn--ghost btn--sm" data-dest="">Mostrar todas</button>' : ''}</div>
+    ${ordem.map((g) => `<div class="mos-bloco">${ag ? `<h4>${esc(ag.rot(g))} <span class="muted">${blocos.get(g).length}</span></h4>` : ''}<div class="mosaico">${blocos.get(g).map(tile).join('')}</div></div>`).join('')}
+    <div class="mos-dica" id="mos-dica" hidden></div>`;
+}
+
+function ligarModoAlt() {
+  const alt = $('#maq-alt');
+  alt.onclick = (e) => {
+    const cb = e.target.closest('[data-sel]');
+    if (cb) { e.stopPropagation(); cb.checked ? state.sel.add(cb.dataset.sel) : state.sel.delete(cb.dataset.sel); cb.closest('.mcard')?.classList.toggle('sel', cb.checked); return renderSelBar(); }
+    const leg = e.target.closest('[data-dest]');
+    if (leg) { state.modoOpts.destaque = state.modoOpts.destaque === leg.dataset.dest ? '' : leg.dataset.dest; return renderTabela(); }
+    if (e.target.id === 'mais-cartoes') { state.limiteCartoes = (state.limiteCartoes || 240) + 240; return renderTabela(); }
+    const c = e.target.closest('[data-id]'); if (c) abrirMaquina(c.dataset.id);
+  };
+  alt.onkeydown = (e) => { if (e.key === 'Enter' && e.target.dataset?.id) abrirMaquina(e.target.dataset.id); };
+  // dica flutuante do mosaico
+  alt.onmouseover = (e) => {
+    const t = e.target.closest('.tile'); const d = $('#mos-dica');
+    if (!t || !d) { if (d) d.hidden = true; return; }
+    const m = state.maquinas.find((x) => x.id === t.dataset.id); if (!m) return;
+    const mt = METRICA_MOS[state.modoOpts.metrica];
+    const rot = mt.leg.find(([k]) => k === t.dataset.v)?.[1] || t.dataset.v;
+    d.innerHTML = `<strong class="mono">${esc(m.hostname)}</strong><span>${esc(m.ativo || 'sem patrimônio')} · ${esc(TIPO[m.tipo])} ${esc(m.modelo || '')}</span><span>${esc(mt.l)}: <b>${esc(rot)}</b></span><span class="muted">${esc(m.setor || 'sem setor')} · ${rel(m.ultimo_online)}</span>`;
+    const r = t.getBoundingClientRect(), base = alt.getBoundingClientRect();
+    d.style.left = Math.min(r.left - base.left, base.width - 240) + 'px'; d.style.top = (r.bottom - base.top + 8) + 'px'; d.hidden = false;
+  };
+  alt.onmouseleave = () => { const d = $('#mos-dica'); if (d) d.hidden = true; };
+  // arrastar e soltar no quadro
+  alt.ondragstart = (e) => { const c = e.target.closest('.mcard[draggable]'); if (!c) return; e.dataTransfer.setData('text/plain', c.dataset.id); e.dataTransfer.effectAllowed = 'move'; c.classList.add('arrastando'); };
+  alt.ondragend = (e) => { e.target.closest?.('.mcard')?.classList.remove('arrastando'); $$('.coluna.sobre', alt).forEach((x) => x.classList.remove('sobre')); };
+  alt.ondragover = (e) => { const col = e.target.closest('.coluna[data-alvo]'); if (!col) return; e.preventDefault(); $$('.coluna.sobre', alt).forEach((x) => x !== col && x.classList.remove('sobre')); col.classList.add('sobre'); };
+  alt.ondrop = async (e) => {
+    const col = e.target.closest('.coluna[data-alvo]'); if (!col) return;
+    e.preventDefault(); col.classList.remove('sobre');
+    const id = e.dataTransfer.getData('text/plain');
+    const m = state.maquinas.find((x) => x.id === id); if (!m) return;
+    const ag = AGRUP[state.modoOpts.agrup];
+    const campo = ag.editavel; const novo = col.dataset.colValor || null; const antigo = m[campo] ?? null;
+    if ((antigo || '') === (novo || '')) return;
+    const { error } = await sb.from('maquinas').update({ [campo]: novo }).eq('id', id);
+    if (error) return toast(erroMsg(error), true);
+    await recarregarMaquina(id); renderTabela();
+    toastAcao(`${m.hostname} → ${ag.rot(novo || '')}`, 'Desfazer', async () => {
+      const r = await sb.from('maquinas').update({ [campo]: antigo }).eq('id', id);
+      if (r.error) return toast(erroMsg(r.error), true);
+      await recarregarMaquina(id); renderTabela();
+    });
+  };
+}
+function toastAcao(msg, rotulo, fn) {
+  const el = document.createElement('div');
+  el.className = 'toast toast--acao';
+  el.innerHTML = `<span>${esc(msg)}</span><button>${esc(rotulo)}</button>`;
+  el.querySelector('button').onclick = () => { el.remove(); fn(); };
+  $('#toasts').append(el);
+  setTimeout(() => el.remove(), 7000);
 }
 
 function renderSelBar(lista = filtrar()) {
@@ -916,10 +1197,164 @@ function modalNovaMaquina(pre = {}) {
 /* =====================================================================
    CONFERÊNCIA física (leitor de código de barras / câmera)
    ===================================================================== */
+/* =====================================================================
+   INVENTÁRIOS PROGRAMADOS (agendamentos)
+   ===================================================================== */
+const ICO_REC = { unica: '📌', diaria: '🔁', semanal: '🗓️', mensal: '📆' };
+const REC = { unica: 'Única vez', diaria: 'Diária', semanal: 'Semanal', mensal: 'Mensal' };
+const abasInventario = (aba) => `<div class="tabs tabs--page"><a class="tab ${aba === 'lista' ? 'active' : ''}" href="#conferencia">Inventários</a><a class="tab ${aba === 'agendados' ? 'active' : ''}" href="#conferencia/agendados">Agendados</a></div>`;
+
+async function renderAgendados() {
+  state.conf = null;
+  const el = $('#view-conferencia');
+  el.innerHTML = `<div class="view-head"><div><h1>Inventários</h1><p>Inventários programados: no horário, cada CD recebe um inventário aberto com prazo para concluir.</p></div>
+      <div class="actions">${ehAdmin() ? '<button class="btn btn--primary" id="btn-novo-ag">+ Programar inventário</button>' : ''}</div></div>
+    ${abasInventario('agendados')}<div id="ag-corpo"><div class="skeleton">Carregando…</div></div>`;
+  $('#btn-novo-ag')?.addEventListener('click', () => modalAgendamento());
+  try { await sb.rpc('gerar_inventarios_agendados'); } catch { /* ok */ }
+  const { data: ags, error } = await sb.from('agendamentos').select('*').order('criado_em', { ascending: false });
+  const corpo = $('#ag-corpo');
+  if (!corpo) return;
+  if (error) {
+    corpo.innerHTML = /agendamentos|does not exist|schema cache/i.test(error.message)
+      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/05_agendamentos.sql</code> no SQL Editor do Supabase para liberar os inventários programados.</p></div>'
+      : `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`;
+    return;
+  }
+  const lista = ags.filter((a) => !state.cdAtual || !a.cd_id || a.cd_id === state.cdAtual);
+  if (!lista.length) {
+    corpo.innerHTML = `<div class="card card-pad empty"><h2>Nenhum inventário programado</h2>
+      <p>${ehAdmin() ? 'Programe inventários diários, semanais ou mensais para um CD ou para todos, com prazo para concluir.' : 'O administrador ainda não programou inventários para o seu CD.'}</p>
+      ${ehAdmin() ? '<div class="actions" style="justify-content:center"><button class="btn btn--primary" id="btn-novo-ag2">+ Programar inventário</button></div>' : ''}</div>`;
+    $('#btn-novo-ag2')?.addEventListener('click', () => modalAgendamento());
+    return;
+  }
+  const ordenados = [...lista].sort((a, b) => (b.ativo - a.ativo) || new Date(a.proxima_execucao || 8.64e15) - new Date(b.proxima_execucao || 8.64e15));
+  corpo.innerHTML = `<div class="ag-lista">${ordenados.map((a) => {
+    const prox = a.ativo && a.proxima_execucao ? new Date(a.proxima_execucao) : null;
+    const pseudo = prox ? { status: 'aberta', inicio_em: a.proxima_execucao, prazo_em: new Date(prox.getTime() + a.prazo_horas * 3600_000).toISOString() } : null;
+    const situ = a.ativo ? (prox ? 'Ativo' : 'Sem próximas datas') : a.recorrencia === 'unica' && a.ultima_execucao ? 'Executado' : 'Pausado';
+    return `<div class="card ag-card ${a.ativo ? '' : 'ag-off'}">
+      <span class="ag-ico">${ICO_REC[a.recorrencia]}</span>
+      <div class="ag-txt">
+        <div class="ag-tit"><strong>${esc(a.nome)}</strong>${a.cd_id ? `<span class="pill pill--cd">${esc(cdCod(a.cd_id))}</span>` : '<span class="pill pill--brand">Todos os CDs</span>'}${a.setor ? `<span class="pill">${esc(a.setor)}</span>` : ''}${pill(situ, a.ativo ? 'ok' : '')}</div>
+        <span class="ag-desc">${esc(descreverAgendamento(a))}</span>
+        <span class="ag-quando">${prox ? `Próximo: <b>${prox.toLocaleString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> ${etiquetaPrazo(pseudo)}` : ''}${a.ultima_execucao ? ` <span class="muted">· último ${dataHora(a.ultima_execucao)}</span>` : ''}</span>
+      </div>
+      ${ehAdmin() ? `<div class="ag-acoes"><button class="btn btn--sm" data-ag-ed="${a.id}">Editar</button>
+        <button class="btn btn--sm btn--ghost" data-ag-tg="${a.id}">${a.ativo ? 'Pausar' : 'Retomar'}</button>
+        <button class="btn btn--sm btn--ghost btn--txt-bad" data-ag-del="${a.id}">Excluir</button></div>` : ''}
+    </div>`; }).join('')}</div>`;
+  corpo.onclick = async (e) => {
+    const b = e.target.closest('[data-ag-ed], [data-ag-tg], [data-ag-del]'); if (!b) return;
+    const a = ags.find((x) => x.id === (b.dataset.agEd || b.dataset.agTg || b.dataset.agDel));
+    if (b.dataset.agEd) return modalAgendamento(a);
+    if (b.dataset.agTg) {
+      const { error: er } = await sb.from('agendamentos').update({ ativo: !a.ativo }).eq('id', a.id);
+      if (er) return toast(erroMsg(er), true);
+      toast(a.ativo ? 'Agendamento pausado' : 'Agendamento retomado'); return renderAgendados();
+    }
+    if (b.dataset.agDel) {
+      if (!confirm(`Excluir o agendamento "${a.nome}"? Os inventários já gerados continuam existindo.`)) return;
+      const { error: er } = await sb.from('agendamentos').delete().eq('id', a.id);
+      if (er) return toast(erroMsg(er), true);
+      toast('Agendamento excluído'); renderAgendados();
+    }
+  };
+}
+
+function modalAgendamento(a = null) {
+  const hoje = new Date().toISOString().slice(0, 10);
+  const v = { nome: 'Inventário diário', cd_id: state.cdAtual || '', setor: '', recorrencia: 'diaria', dias_semana: [1], dia_mes: 1, hora: '08:00', data_inicio: hoje, data_fim: '', prazo_horas: 8, ...(a || {}) };
+  v.hora = String(v.hora).slice(0, 5);
+  const PRAZOS = [[2, '2h'], [4, '4h'], [8, '8h'], [12, '12h'], [24, '1 dia'], [48, '2 dias'], [168, '7 dias']];
+  const setoresTodos = [...new Set(state.maquinas.map((m) => m.setor).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'pt-BR'));
+  modal(`
+    <form id="ag-form">
+      <div class="modal-head"><h2>${a ? 'Editar inventário programado' : 'Programar inventário'}</h2>
+        <p class="muted" style="margin:4px 0 0">No horário marcado, cada CD escolhido recebe um inventário aberto. Admin e Fields acompanham a contagem regressiva até o prazo.</p></div>
+      <div class="modal-body">
+        <div class="form-grid">
+          ${campo('nome', 'Nome *', v.nome, 'text', 'required')}
+          <label>Para qual CD<select name="cd_id">${opts([['', `Todos os CDs (${cdsAtivos().length})`], ...cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`])], v.cd_id || '')}</select></label>
+          <label class="full">Setor (opcional)<input name="setor" list="dl-ag-set" value="${esc(v.setor || '')}" placeholder="Vazio = CD inteiro"></label>
+        </div>
+        <datalist id="dl-ag-set">${setoresTodos.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
+        <div><span class="lbl">Frequência</span><div class="seg seg--larga" id="ag-rec">${Object.entries(REC).map(([k, l]) => `<button type="button" data-rec="${k}" class="${v.recorrencia === k ? 'on' : ''}">${ICO_REC[k]} ${l}</button>`).join('')}</div></div>
+        <div class="form-grid">
+          <label><span id="ag-lbl-data">${v.recorrencia === 'unica' ? 'Data' : 'A partir de'}</span><input type="date" name="data_inicio" value="${v.data_inicio}" required></label>
+          <label>Horário de início<input type="time" name="hora" value="${v.hora}" required></label>
+          <div class="full" id="ag-semana"><span class="lbl">Dias da semana</span><div class="dias">${DIAS_SEMANA.map((d, i) => `<label class="dia"><input type="checkbox" name="dias" value="${i}" ${(v.dias_semana || []).includes(i) ? 'checked' : ''}><span>${d}</span></label>`).join('')}</div>
+            <div class="rapidos" style="margin-top:6px"><button type="button" class="chip-btn" data-dias="1,2,3,4,5">Seg a sex</button><button type="button" class="chip-btn" data-dias="0,1,2,3,4,5,6">Todos</button><button type="button" class="chip-btn" data-dias="1">Só segunda</button></div></div>
+          <label id="ag-mes">Dia do mês<select name="dia_mes">${opts([...Array(28)].map((_, i) => [String(i + 1), `Dia ${i + 1}`]).concat([['31', 'Último dia do mês']]), String(v.dia_mes || 1))}</select></label>
+          <label id="ag-fim">Termina em (opcional)<input type="date" name="data_fim" value="${v.data_fim || ''}"></label>
+        </div>
+        <div><span class="lbl">Prazo para concluir cada inventário</span>
+          <div class="rapidos">${PRAZOS.map(([h, l]) => `<button type="button" class="chip-btn ${v.prazo_horas === h ? 'on' : ''}" data-prazo-h="${h}">${l}</button>`).join('')}
+            <label class="prazo-livre">ou <input type="number" name="prazo_horas" min="1" max="2160" value="${v.prazo_horas}"> horas</label></div></div>
+        <div class="ag-previa" id="ag-previa"></div>
+        <p class="erro" id="ag-erro"></p>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="ag-salvar">${a ? 'Salvar' : 'Programar'}</button></div>
+    </form>`, (dlg) => {
+    let rec = v.recorrencia;
+    const form = $('#ag-form');
+    const ler = () => {
+      const fd = new FormData(form);
+      return {
+        nome: String(fd.get('nome') || '').trim(), cd_id: fd.get('cd_id') || null, setor: String(fd.get('setor') || '').trim() || null,
+        recorrencia: rec, dias_semana: fd.getAll('dias').map(Number), dia_mes: Number(fd.get('dia_mes')) || 1,
+        hora: fd.get('hora') || '08:00', data_inicio: fd.get('data_inicio') || hoje, data_fim: rec === 'unica' ? null : fd.get('data_fim') || null,
+        prazo_horas: Math.max(1, Math.min(2160, Number(fd.get('prazo_horas')) || 8)),
+      };
+    };
+    const atualizar = () => {
+      $('#ag-semana').hidden = rec !== 'semanal';
+      $('#ag-mes').hidden = rec !== 'mensal';
+      $('#ag-fim').hidden = rec === 'unica';
+      $('#ag-lbl-data').textContent = rec === 'unica' ? 'Data' : 'A partir de';
+      const x = ler();
+      $$('[data-prazo-h]', dlg).forEach((b) => b.classList.toggle('on', Number(b.dataset.prazoH) === x.prazo_horas));
+      const prox = proximasExecucoes(x, 4);
+      const alvo = x.cd_id ? `${cdCod(x.cd_id)} · ${cdNome(x.cd_id)}` : `todos os ${cdsAtivos().length} CDs`;
+      $('#ag-previa').innerHTML = prox.length ? `<strong>${esc(descreverAgendamento(x))}</strong>
+        <span class="muted">Cria um inventário para ${esc(alvo)}${x.setor ? ` (setor ${esc(x.setor)})` : ''}. Próximas execuções:</span>
+        <ul>${prox.map((d) => { const fim = new Date(d.getTime() + x.prazo_horas * 3600_000);
+          return `<li><b>${d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</b> → prazo até ${fim.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</li>`; }).join('')}</ul>`
+        : '<span class="erro">Com essas opções não há próximas execuções (verifique a data, os dias da semana ou a data de término).</span>';
+    };
+    $('#ag-rec').onclick = (e) => { const b = e.target.closest('[data-rec]'); if (!b) return; rec = b.dataset.rec; $$('#ag-rec button').forEach((x) => x.classList.toggle('on', x === b));
+      if (!a && $('#ag-form [name=nome]').value.match(/^Inventário (diário|semanal|mensal|único)$/)) $('#ag-form [name=nome]').value = { unica: 'Inventário único', diaria: 'Inventário diário', semanal: 'Inventário semanal', mensal: 'Inventário mensal' }[rec];
+      atualizar(); };
+    $$('[data-prazo-h]', dlg).forEach((b) => (b.onclick = () => { $('#ag-form [name=prazo_horas]').value = b.dataset.prazoH; atualizar(); }));
+    $$('[data-dias]', dlg).forEach((b) => (b.onclick = () => { const ds = b.dataset.dias.split(',').map(Number); $$('#ag-form [name=dias]').forEach((c) => (c.checked = ds.includes(Number(c.value)))); atualizar(); }));
+    form.oninput = atualizar; form.onchange = atualizar;
+    atualizar();
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const x = ler();
+      if (!x.nome) return ($('#ag-erro').textContent = 'Informe o nome.');
+      if (rec === 'semanal' && !x.dias_semana.length) return ($('#ag-erro').textContent = 'Escolha pelo menos um dia da semana.');
+      if (!proximasExecucoes(x, 1).length) return ($('#ag-erro').textContent = 'Não há próximas execuções com essas opções.');
+      $('#ag-salvar').disabled = true;
+      const row = { ...x, dia_mes: rec === 'mensal' ? x.dia_mes : null, dias_semana: rec === 'semanal' ? x.dias_semana : [], ativo: true };
+      const { error } = a ? await sb.from('agendamentos').update(row).eq('id', a.id) : await sb.from('agendamentos').insert(row);
+      $('#ag-salvar').disabled = false;
+      if (error) return ($('#ag-erro').textContent = erroMsg(error));
+      dlg.close();
+      const { data: n } = await sb.rpc('gerar_inventarios_agendados');
+      toast(n ? `Programado! ${n} inventário(s) já foram abertos.` : 'Inventário programado');
+      state.resumoInvEm = 0;
+      renderAgendados();
+    };
+  });
+}
+
 async function renderConferencias() {
   state.conf = null;
   const el = $('#view-conferencia');
   el.innerHTML = `<div class="skeleton">Carregando inventários…</div>`;
+  if (navigator.onLine) { try { await sb.rpc('gerar_inventarios_agendados'); } catch { /* sem o 05 */ } }
   let { data: confs, error } = await sb.from('conferencias').select('*, conferencia_itens(maquina_id)').order('criado_em', { ascending: false });
   if (error && ehErroDeRede(error)) { confs = (await idbGet('confs')) || []; error = null; definirOffline(true); }
   if (error) { el.innerHTML = `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`; return; }
@@ -935,6 +1370,7 @@ async function renderConferencias() {
       <div><h1>Inventários</h1><p>Contagem física com leitor ou câmera: bipe as etiquetas e veja na hora o que foi encontrado, o que falta e o que não está cadastrado.${ehAdmin() ? ' Como administrador, você vê os inventários de todos os CDs e pode editar, reabrir e excluir.' : ''}</p></div>
       <div class="actions"><button class="btn" id="btn-app-campo">📱 App do celular</button>${ehAdmin() ? '<a class="btn" href="#relatorios/inventarios">Relatório de inventários</a>' : ''}<button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
     </div>
+    ${abasInventario('lista')}
     <div class="card" style="margin-bottom:14px"><div class="toolbar">
       <div class="search"><input id="cf-q" type="search" placeholder="Buscar inventário, setor, responsável…" value="${esc(f.q)}"></div>
       <select id="cf-status">${opts([['', 'Todos os status'], ['aberta', 'Abertos'], ['finalizada', 'Finalizados']], f.status)}</select>
@@ -945,12 +1381,15 @@ async function renderConferencias() {
   const desenhar = () => {
     const termos = up(f.q).split(/\s+/).filter(Boolean);
     const lista = confs.filter(noCD).filter((c) => !f.status || c.status === f.status)
+      .sort((a, b) => ((a.status === 'aberta') === (b.status === 'aberta') ? 0 : a.status === 'aberta' ? -1 : 1)
+        || (a.status === 'aberta' ? new Date(a.prazo_em || 8.64e15) - new Date(b.prazo_em || 8.64e15) : new Date(b.criado_em) - new Date(a.criado_em)))
       .filter((c) => { const t = up([c.nome, c.setor, c.criado_por, cdNome(c.cd_id), cdCod(c.cd_id)].join(' ')); return termos.every((x) => t.includes(x)); });
     $('#cf-count').textContent = `${lista.length} inventário(s)`;
     $('#cf-lista').innerHTML = lista.length ? `<div class="conf-list">${lista.map((c) => {
       const r = resumoConf(c);
-      return `<button class="card conf-card" data-id="${c.id}">
-        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h2>${esc(c.nome)}</h2>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</div>
+      return `<button class="card conf-card ${c.prazo_em ? 'com-prazo' : ''}" data-id="${c.id}">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">${c.prazo_em ? anelPrazo(c, { tam: 50, progresso: r.esperadas ? r.encontradas / r.esperadas : 0 }) : ''}<h2 style="flex:1">${c.agendamento_id ? '<span title="Programado">🔁</span> ' : ''}${esc(c.nome)}</h2>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</div>
+        ${c.prazo_em ? `<div>${etiquetaPrazo(c)}</div>` : ''}
         <div class="muted">${mostrarColCD() ? `<span class="pill pill--cd">${esc(cdCod(c.cd_id))}</span> ` : ''}${esc(c.setor || 'Todos os setores')} · ${data(c.criado_em)} · ${esc((c.criado_por || '').split('@')[0])}</div>
         <div class="progress"><i style="width:${r.pct}%"></i></div>
         <div><strong>${r.encontradas}</strong> de ${r.esperadas} encontradas (${r.pct}%)${r.faltando ? ` · <span style="color:var(--bad)">${r.faltando} faltando</span>` : ''}</div></button>`;
@@ -1105,6 +1544,7 @@ function renderConfDetalhe(montar) {
           <p><span class="pill pill--cd" title="${esc(cdNome(c.cd_id))}">${esc(cdCod(c.cd_id))}</span> ${esc(cdNome(c.cd_id))} · ${esc(c.setor || 'Todos os setores')} · iniciada ${dataHora(c.criado_em)} por ${esc(c.criado_por || '—')}${c.finalizado_em ? ' · finalizada ' + dataHora(c.finalizado_em) : ''}</p></div>
         <div class="actions" id="conf-acoes"></div>
       </div>
+      <div id="conf-prazo" style="margin-bottom:14px"></div>
       <div class="scan-wrap">
         <div class="card scan-box">
           ${aberta ? `
@@ -1173,6 +1613,10 @@ function renderConfDetalhe(montar) {
     await carregarMaquinas(); toast('Status atualizado'); renderConfDetalhe(false);
   });
 
+  if (c.prazo_em && $('#conf-prazo')) {
+    const prim = state.confItens.map((i) => i.lido_em).filter(Boolean).sort()[0];
+    $('#conf-prazo').innerHTML = relogioCompleto(c, { encontradas: k.achadasEsperadas, esperadas: k.esperadasN, primeiraLeitura: prim });
+  }
   $('#conf-stats').innerHTML = `
     <h3>Progresso</h3>
     <div><span class="conf-big">${k.achadasEsperadas}</span><span class="muted"> / ${k.esperadasN}</span></div>
@@ -2369,34 +2813,74 @@ async function renderRelatorios(aba = 'parque') {
 function renderRelParque() {
   const f = state.relParque || (state.relParque = { tipo: '' });
   $('#rel-acoes').innerHTML = `<button class="btn" id="rp-csv">Exportar CSV</button><button class="btn btn--primary" id="rp-imprimir">Relatório geral (PDF)</button>`;
+  const PROBLEMAS = METRICAS.filter((m) => m.a);
   const desenhar = () => {
-    const { linhas, total } = dadosParque(f.tipo);
-    const cel = (r, mt) => {
-      const n = r.v[mt.k], t = r.v.total;
-      const txt = mt.pct ? `${n}<small>${t ? Math.round((100 * n) / t) : 0}%</small>` : n;
-      return `<td class="num ${mt.ruim && n ? 'cel-ruim' : ''}">${(mt.a || mt.ir) && n && r.cd.id !== undefined ? `<a data-cd="${r.cd.id || ''}" data-m="${mt.k}">${txt}</a>` : txt}</td>`;
+    const { linhas, total, base } = dadosParque(f.tipo);
+    const pct = (n, t) => (t ? Math.round((100 * n) / t) : 0);
+    const saudeGeral = saudeDe(base);
+    const graves = base.filter((m) => (m.alertas || []).some((a) => ALERTAS[a]?.grave)).length;
+    const cartaoCD = (r) => {
+      const t = r.v.total;
+      const probs = PROBLEMAS.map((mt) => ({ mt, n: r.v[mt.k] })).filter((x) => x.n > 0)
+        .sort((a, b) => (!!b.mt.ruim - !!a.mt.ruim) || b.n - a.n).slice(0, 5);
+      const maxN = Math.max(1, ...probs.map((x) => x.n));
+      return `<div class="card cd-saude">
+        <div class="cs-topo">${anelSaude(saudeDe(r.ms), 78)}
+          <div><span class="pill pill--cd">${esc(r.cd.codigo)}</span><h3>${esc(r.cd.nome || '')}</h3>
+            <span class="muted">${t} máquina(s) · ${r.v.desk} desk · ${r.v.note} note</span></div></div>
+        <div class="cs-online"><span>Online nas últimas 24h</span><span class="mini-barra"><i style="width:${pct(r.v.online, t)}%;background:var(--ok)"></i></span><b>${pct(r.v.online, t)}%</b></div>
+        <div class="cs-probs">${probs.length ? probs.map(({ mt, n }) => `
+          <button class="cs-prob ${mt.ruim ? 'ruim' : ''}" data-cd="${r.cd.id || ''}" data-m="${mt.k}">
+            <span>${esc(mt.l)}</span><span class="mini-barra" title="${pct(n, t)}% do CD"><i style="width:${Math.max(8, Math.round((100 * n) / maxN))}%"></i></span><b>${n}</b></button>`).join('')
+          : '<div class="cs-ok">✅ Nenhum problema encontrado</div>'}</div>
+        <div class="cs-pe"><button class="btn btn--sm" data-ver="${r.cd.id || ''}">Ver máquinas</button>${r.cd.id ? `<button class="btn btn--sm btn--ghost" data-relcd="${r.cd.id}">Relatório PDF</button>` : ''}</div>
+      </div>`;
+    };
+    // matriz: só os problemas que aparecem em algum CD
+    const linhasMatriz = PROBLEMAS.filter((mt) => linhas.some((r) => r.v[mt.k] > 0));
+    const celula = (r, mt) => {
+      const n = r.v[mt.k], p = pct(n, r.v.total);
+      const cor = mt.ruim ? '214,52,42' : '224,161,11';
+      return `<td class="hm ${n ? '' : 'zero'}" style="--a:${n ? Math.max(0.12, Math.min(0.85, p / 60)) : 0};--rgb:${cor}">${n ? `<a data-cd="${r.cd.id || ''}" data-m="${mt.k}"><b>${n}</b><small>${p}%</small></a>` : '–'}</td>`;
     };
     $('#rel-corpo').innerHTML = `
-      <div class="card" style="margin-bottom:12px"><div class="toolbar">
-        <select id="rp-tipo">${opts([['', 'Desktops e notebooks'], ['desktop', 'Só desktops'], ['notebook', 'Só notebooks']], f.tipo)}</select>
-        <span class="count">${linhas.length} CD(s) · descartadas não entram</span></div></div>
-      <div class="card"><div class="table-wrap" style="max-height:none"><table class="rel-tab">
-        <thead><tr><th>CD</th>${METRICAS.map((mt) => `<th class="num">${mt.l}</th>`).join('')}<th></th></tr></thead>
-        <tbody>${linhas.map((r) => `<tr><td><span class="pill pill--cd">${esc(r.cd.codigo)}</span> ${esc(r.cd.nome)}</td>${METRICAS.map((mt) => cel(r, mt)).join('')}
-          <td class="acoes">${r.cd.id ? `<button class="btn btn--sm btn--ghost" data-relcd="${r.cd.id}">Relatório</button>` : ''}</td></tr>`).join('')}
-          ${linhas.length > 1 ? `<tr class="row-total"><td>Total</td>${METRICAS.map((mt) => `<td class="num">${total.v[mt.k]}${mt.pct ? `<small>${total.v.total ? Math.round((100 * total.v[mt.k]) / total.v.total) : 0}%</small>` : ''}</td>`).join('')}<td></td></tr>` : ''}
-        </tbody></table></div></div>`;
-    $('#rp-tipo').onchange = (e) => { f.tipo = e.target.value; desenhar(); };
+      <div class="rel-filtro"><div class="seg" id="rp-tipo">${[['', 'Todos'], ['desktop', 'Desktops'], ['notebook', 'Notebooks']].map(([k, l]) => `<button class="${f.tipo === k ? 'on' : ''}" data-tipo="${k}">${l}</button>`).join('')}</div>
+        <span class="muted" style="font-size:13px">${linhas.length} CD(s) · máquinas descartadas não entram</span></div>
+      <div class="rel-resumo">
+        <div class="card rr-saude">${anelSaude(saudeGeral, 92)}<div><span class="hs-titulo">Saúde geral</span><strong>${base.length - graves} de ${base.length}</strong><span class="muted">máquinas sem problemas importantes</span></div></div>
+        <div class="card rr-kpi"><span class="k-rot">Máquinas</span><b>${total.v.total}</b><span class="k-sub">${total.v.desk} desktops · ${total.v.note} notebooks</span></div>
+        <div class="card rr-kpi"><span class="k-rot">Online 24h</span><b class="t-ok">${pct(total.v.online, total.v.total)}%</b><span class="k-sub">${total.v.online} máquina(s)</span></div>
+        <div class="card rr-kpi"><span class="k-rot">Problemas importantes</span><b class="${graves ? 't-bad' : ''}">${graves}</b><span class="k-sub">máquinas afetadas</span></div>
+      </div>
+      <h3 class="sec-rel">Saúde por CD</h3>
+      <div class="cds-grid">${linhas.map(cartaoCD).join('')}</div>
+      ${linhas.length > 1 && linhasMatriz.length ? `
+      <h3 class="sec-rel">Comparativo entre CDs <span class="muted">quanto mais forte a cor, maior a proporção do CD com o problema</span></h3>
+      <div class="card"><div class="table-wrap" style="max-height:none"><table class="heatmap">
+        <thead><tr><th>Problema</th>${linhas.map((r) => `<th class="num" title="${esc(r.cd.nome)}">${esc(r.cd.codigo)}</th>`).join('')}<th class="num">Total</th></tr></thead>
+        <tbody>
+          <tr class="hm-online"><td>Online 24h</td>${linhas.map((r) => `<td class="hm" style="--a:${Math.max(0.1, pct(r.v.online, r.v.total) / 120)};--rgb:22,163,106"><b>${pct(r.v.online, r.v.total)}%</b></td>`).join('')}<td class="num"><b>${pct(total.v.online, total.v.total)}%</b></td></tr>
+          ${linhasMatriz.map((mt) => `<tr><td>${mt.ruim ? '<span class="dot dot--offline"></span> ' : ''}${esc(mt.l)}</td>${linhas.map((r) => celula(r, mt)).join('')}<td class="num"><b>${total.v[mt.k]}</b></td></tr>`).join('')}
+        </tbody></table></div></div>` : ''}
+      <details class="card tabela-completa"><summary>Ver todos os números (tabela completa)</summary>
+        <div class="table-wrap" style="max-height:none"><table class="rel-tab">
+          <thead><tr><th>CD</th>${METRICAS.map((mt) => `<th class="num">${mt.l}</th>`).join('')}</tr></thead>
+          <tbody>${linhas.map((r) => `<tr><td><span class="pill pill--cd">${esc(r.cd.codigo)}</span> ${esc(r.cd.nome)}</td>${METRICAS.map((mt) => `<td class="num ${mt.ruim && r.v[mt.k] ? 'cel-ruim' : ''}">${r.v[mt.k]}</td>`).join('')}</tr>`).join('')}
+          ${linhas.length > 1 ? `<tr class="row-total"><td>Total</td>${METRICAS.map((mt) => `<td class="num">${total.v[mt.k]}</td>`).join('')}</tr>` : ''}</tbody></table></div>
+      </details>`;
+    $$('#rp-tipo [data-tipo]').forEach((b) => (b.onclick = () => { f.tipo = b.dataset.tipo; desenhar(); }));
     $$('#rel-corpo [data-relcd]').forEach((b) => (b.onclick = () => relatorioCD(b.dataset.relcd)));
-    $$('#rel-corpo a[data-m]').forEach((a) => (a.onclick = () => {
+    const irCD = (cd) => { if (ehAdmin() && cd) { state.cdAtual = cd; store.set('cd-atual', cd); renderSidebar(); } };
+    $$('#rel-corpo [data-ver]').forEach((b) => (b.onclick = () => { irCD(b.dataset.ver); irMaquinas(f.tipo ? { tipo: f.tipo } : {}); }));
+    $$('#rel-corpo [data-m]').forEach((a) => (a.onclick = () => {
       const mt = METRICAS.find((x) => x.k === a.dataset.m);
-      if (ehAdmin() && a.dataset.cd) { state.cdAtual = a.dataset.cd; store.set('cd-atual', state.cdAtual); renderSidebar(); }
+      irCD(a.dataset.cd);
       irMaquinas({ ...(mt.ir || {}), ...(mt.a ? { alerta: mt.a } : {}), ...(f.tipo ? { tipo: f.tipo } : {}) });
     }));
   };
   $('#rp-csv').onclick = () => {
     const { linhas, total } = dadosParque(f.tipo);
-    const rows = [['Código', 'CD', ...METRICAS.map((m) => m.l)], ...linhas.map((r) => [r.cd.codigo, r.cd.nome, ...METRICAS.map((m) => r.v[m.k])]), ['Total', '', ...METRICAS.map((m) => total.v[m.k])]];
+    const rows = [['Código', 'CD', 'Saúde %', ...METRICAS.map((m) => m.l)], ...linhas.map((r) => [r.cd.codigo, r.cd.nome, saudeDe(r.ms) ?? '', ...METRICAS.map((m) => r.v[m.k])]), ['Total', '', saudeDe(total.ms) ?? '', ...METRICAS.map((m) => total.v[m.k])]];
     baixar(`parque-por-cd-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((l) => l.map(csvCel).join(';')).join('\r\n'));
   };
   $('#rp-imprimir').onclick = () => relatorioGeralParque(f.tipo);
@@ -2439,7 +2923,7 @@ async function renderRelInventarios() {
     <div class="kpis" id="ri-kpis"></div>
     ${ehAdmin() && !f.cd && state.cds.length > 1 ? '<div class="card card-pad" style="margin-bottom:12px"><div class="card-head"><h2>Último inventário de cada CD</h2></div><div id="ri-ultimos"></div></div>' : ''}
     <div class="card"><div class="table-wrap" style="max-height:none"><table class="rel-tab">
-      <thead><tr><th>Inventário</th>${ehAdmin() ? '<th>CD</th>' : ''}<th>Setor</th><th>Status</th><th>Responsável</th><th>Início</th><th>Finalizado</th>
+      <thead><tr><th>Inventário</th>${ehAdmin() ? '<th>CD</th>' : ''}<th>Setor</th><th>Status</th><th>Responsável</th><th>Início</th><th>Finalizado</th><th>Prazo</th>
         <th class="num">Esperadas</th><th class="num">Encontradas</th><th class="num">Faltando</th><th class="num">Não cad.</th><th class="num">Fora</th><th>Acuracidade</th><th></th></tr></thead>
       <tbody id="ri-tbody"></tbody></table></div></div>`;
   const filtrados = () => {
@@ -2460,7 +2944,11 @@ async function renderRelInventarios() {
       <div class="card kpi kpi--ok" style="cursor:default"><div class="kpi-label">Acuracidade geral</div><div class="kpi-value">${acur}%</div><div class="kpi-sub">encontradas ÷ esperadas</div></div>
       <div class="card kpi" style="cursor:default"><div class="kpi-label">Máquinas conferidas</div><div class="kpi-value">${t.enc}</div><div class="kpi-sub">de ${t.esp} esperadas</div></div>
       <div class="card kpi ${t.fal ? 'kpi--bad' : ''}" style="cursor:default"><div class="kpi-label">Faltando</div><div class="kpi-value">${t.fal}</div><div class="kpi-sub">somando os inventários</div></div>
-      <div class="card kpi ${t.des ? 'kpi--warn' : ''}" style="cursor:default"><div class="kpi-label">Não cadastradas</div><div class="kpi-value">${t.des}</div><div class="kpi-sub">códigos desconhecidos</div></div>`;
+      <div class="card kpi ${t.des ? 'kpi--warn' : ''}" style="cursor:default"><div class="kpi-label">Não cadastradas</div><div class="kpi-value">${t.des}</div><div class="kpi-sub">códigos desconhecidos</div></div>
+      ${(() => { const comPrazo = l.filter((c) => c.prazo_em); if (!comPrazo.length) return '';
+        const fin = comPrazo.filter((c) => c.status === 'finalizada'); const noPrazo = fin.filter((c) => new Date(c.finalizado_em) <= new Date(c.prazo_em)).length;
+        const venc = comPrazo.filter((c) => c.status === 'aberta' && new Date(c.prazo_em) < new Date()).length;
+        return `<div class="card kpi ${venc ? 'kpi--bad' : 'kpi--ok'}" style="cursor:default"><div class="kpi-label">Pontualidade</div><div class="kpi-value">${fin.length ? Math.round((100 * noPrazo) / fin.length) + '%' : '—'}</div><div class="kpi-sub">${noPrazo}/${fin.length} no prazo${venc ? ` · ${venc} vencido(s) em aberto` : ''}</div></div>`; })()}`;
     if ($('#ri-ultimos')) {
       const ult = state.cds.map((cd) => ({ cd, c: confs.find((c) => c.cd_id === cd.id) }));
       $('#ri-ultimos').innerHTML = `<table class="mini-table"><thead><tr><th>CD</th><th>Último inventário</th><th>Data</th><th>Status</th><th>Acuracidade</th></tr></thead><tbody>
@@ -2471,11 +2959,12 @@ async function renderRelInventarios() {
       <td><a data-rel="${c.id}"><strong>${esc(c.nome)}</strong></a></td>${ehAdmin() ? `<td><span class="pill pill--cd" title="${esc(cdNome(c.cd_id))}">${esc(cdCod(c.cd_id))}</span></td>` : ''}
       <td>${esc(c.setor || 'Todos')}</td><td>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</td>
       <td>${esc((c.criado_por || '').split('@')[0])}</td><td>${data(c.criado_em)}</td><td>${c.finalizado_em ? data(c.finalizado_em) : '—'}</td>
+      <td>${c.prazo_em ? etiquetaPrazo(c) : '<span class="muted">—</span>'}</td>
       <td class="num">${c.r.esperadas}</td><td class="num">${c.r.encontradas}</td><td class="num ${c.r.faltando ? 'cel-ruim' : ''}">${c.r.faltando}</td><td class="num">${c.r.desconhecidas}</td><td class="num">${c.r.fora}</td>
       <td>${barraAc(c.r.pct)}</td>
       <td class="acoes"><button class="btn btn--sm btn--ghost" data-ac="abrir">Abrir</button>${ehAdmin() ? '<button class="btn btn--sm btn--ghost" data-ac="editar">Editar</button><button class="btn btn--sm btn--ghost btn--txt-bad" data-ac="excluir">Excluir</button>' : ''}</td></tr>`).join('')
-      + (l.length > 1 ? `<tr class="row-total"><td colspan="${ehAdmin() ? 7 : 6}">Total (${l.length})</td><td class="num">${t.esp}</td><td class="num">${t.enc}</td><td class="num">${t.fal}</td><td class="num">${t.des}</td><td class="num">${t.fora}</td><td>${barraAc(acur)}</td><td></td></tr>` : '')
-      : `<tr><td colspan="14" class="empty">Nenhum inventário com esses filtros.</td></tr>`;
+      + (l.length > 1 ? `<tr class="row-total"><td colspan="${ehAdmin() ? 8 : 7}">Total (${l.length})</td><td class="num">${t.esp}</td><td class="num">${t.enc}</td><td class="num">${t.fal}</td><td class="num">${t.des}</td><td class="num">${t.fora}</td><td>${barraAc(acur)}</td><td></td></tr>` : '')
+      : `<tr><td colspan="15" class="empty">Nenhum inventário com esses filtros.</td></tr>`;
   };
   const bind = (id, k, ev = 'onchange') => { const e = $('#' + id); if (e) e[ev] = (x) => { f[k] = x.target.value; if (k === 'cd') f.cdTocado = true; desenhar(); }; };
   $('#ri-q').oninput = debounce((x) => { f.q = x.target.value; desenhar(); }, 150);
@@ -2742,6 +3231,7 @@ async function entrar(session) {
   window.addEventListener('hashchange', navegar);
   navegar();
   registrarSW();
+  iniciarRelogios();
   atualizarBadge();
   atualizarPendentes().then(sincronizar);
   setInterval(sincronizar, 20_000);
