@@ -42,7 +42,7 @@ const CAMPOS_HIST = {
   cadastro: 'Cadastro', hostname: 'Hostname', ativo: 'Patrimônio', tipo: 'Tipo', status: 'Status', numero_serie: 'Nº de série',
   fabricante: 'Fabricante', modelo: 'Modelo', cpu: 'Processador', memoria_gb: 'Memória', armazenamento_total_gb: 'Armazenamento',
   so_nome: 'Sistema', so_display_version: 'Versão do SO', so_build: 'Build', setor: 'Setor', localizacao: 'Localização', responsavel: 'Responsável',
-  data_compra: 'Data de compra', fornecedor: 'Fornecedor', nota_fiscal: 'Nota fiscal', garantia_fim: 'Fim da garantia', hw_verificado: 'Verificação',
+  cd_id: 'CD', data_compra: 'Data de compra', fornecedor: 'Fornecedor', nota_fiscal: 'Nota fiscal', garantia_fim: 'Fim da garantia', hw_verificado: 'Verificação',
 };
 const CAMPOS_HW = ['memoria_gb', 'armazenamento_total_gb', 'cpu', 'numero_serie', 'so_nome', 'so_display_version'];
 
@@ -191,9 +191,22 @@ const state = {
   cacheEm: null,
   pendentes: 0,
   etqIds: null,
+  perfil: null,
+  cds: [],
+  cdAtual: '',
+  usuarios: null,
 };
-const ativas = () => state.maquinas.filter((m) => m.status !== 'descartado');
-const setores = () => [...new Set(state.maquinas.map((m) => m.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+// ---- CD atual e perfil (admin vê todos ou escolhe um CD; Field fica preso ao seu)
+const ehAdmin = () => state.perfil?.papel === 'admin';
+const noCD = (r) => !state.cdAtual || r.cd_id === state.cdAtual;
+const MQ = () => state.maquinas.filter(noCD);
+const cdDe = (id) => state.cds.find((c) => c.id === id);
+const cdNome = (id) => cdDe(id)?.nome || '—';
+const cdCod = (id) => cdDe(id)?.codigo || '—';
+const cdsAtivos = () => state.cds.filter((c) => c.ativo);
+const mostrarColCD = () => ehAdmin() && !state.cdAtual && state.cds.length > 1;
+const ativas = () => MQ().filter((m) => m.status !== 'descartado');
+const setores = () => [...new Set(MQ().map((m) => m.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
 /* =====================================================================
    Dados
@@ -220,7 +233,7 @@ async function carregarMaquinas() {
 }
 async function carregarHist() {
   const { data: d } = await sb.from('maquinas_historico')
-    .select('*, maquinas(hostname)').order('criado_em', { ascending: false }).limit(40);
+    .select('*, maquinas(hostname, cd_id)').order('criado_em', { ascending: false }).limit(60);
   state.hist = d || [];
 }
 async function recarregarMaquina(id) {
@@ -289,7 +302,8 @@ function navegar() {
     if (m) abrirMaquina(m.id); else toast(`Máquina "${decodeURIComponent(arg)}" não encontrada no inventário`, true);
     return;
   }
-  state.view = ['painel', 'maquinas', 'emprestimos', 'etiquetas', 'conferencia', 'agente'].includes(view) ? view : 'painel';
+  state.view = ['painel', 'maquinas', 'emprestimos', 'etiquetas', 'conferencia', 'agente', 'relatorios', 'usuarios'].includes(view) ? view : 'painel';
+  if (state.view === 'usuarios' && !ehAdmin()) { history.replaceState(null, '', '#painel'); state.view = 'painel'; }
   if (state.view !== 'etiquetas') $('#view-etiquetas').innerHTML = ''; // remove o @page das etiquetas
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + state.view));
@@ -300,6 +314,8 @@ function navegar() {
   if (state.view === 'agente') renderAgente();
   if (state.view === 'emprestimos') carregarEmprestimos().then(() => renderEmprestimos(true));
   if (state.view === 'etiquetas') renderEtiquetas();
+  if (state.view === 'relatorios') renderRelatorios(arg || 'parque');
+  if (state.view === 'usuarios') renderUsuarios(arg || 'usuarios');
 }
 function irMaquinas(filtros = {}) {
   state.f = { ...F_PADRAO, ...filtros };
@@ -345,10 +361,10 @@ function renderPainel() {
 
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Painel</h1><p>Atualizado ao vivo conforme os agentes reportam · ${state.maquinas.length} registros</p></div>
+      <div><h1>Painel</h1><p>Atualizado ao vivo conforme os agentes reportam · ${MQ().length} registros</p></div>
       <div class="actions"><button class="btn" data-go="maquinas">Ver todas as máquinas →</button></div>
     </div>
-    ${state.maquinas.length === 0 ? `
+    ${MQ().length === 0 ? `
       <div class="card card-pad empty">
         <h2>Nenhuma máquina ainda</h2>
         <p>Instale o agente coletor nas máquinas ou cadastre manualmente.</p>
@@ -368,7 +384,7 @@ function renderPainel() {
       <div class="card card-pad"><div class="card-head"><h2>Memória RAM</h2></div>${barras(contar(L, ramFaixa).sort((a, b) => ordemRam.indexOf(a[0]) - ordemRam.indexOf(b[0])), 'ram', corRAM)}</div>
       <div class="card card-pad"><div class="card-head"><h2>Armazenamento</h2></div>${barras(contar(L, tipoDisco), 'disco', corDisco)}</div>
       <div class="card card-pad"><div class="card-head"><h2>Último contato</h2></div>${barras(contar(L, (m) => SIT[situacao(m)]).sort((a, b) => ordemSit.indexOf(a[0]) - ordemSit.indexOf(b[0])), 'situacao', corSit)}</div>
-      <div class="card card-pad"><div class="card-head"><h2>Status</h2></div>${barras(contar(state.maquinas, (m) => STATUS[m.status]), 'status')}</div>
+      <div class="card card-pad"><div class="card-head"><h2>Status</h2></div>${barras(contar(MQ(), (m) => STATUS[m.status]), 'status')}</div>
       <div class="card card-pad"><div class="card-head"><h2>Setores</h2></div>${barras(contar(L, (m) => m.setor || 'Sem setor'), 'setor', () => 'c-info')}</div>
       <div class="card card-pad"><div class="card-head"><h2>Idade do parque</h2><span class="muted" style="font-size:12px">pela data de compra</span></div>${barras(contar(L, idadeFaixa).sort((a, b) => ORDEM_IDADE.indexOf(a[0]) - ORDEM_IDADE.indexOf(b[0])), 'idade', (k) => ({ '0 a 2 anos': 'c-ok', '3 a 4 anos': 'c-warn', '5 anos ou mais': 'c-bad' }[k] || 'c-idle'))}</div>
       <div class="card card-pad"><div class="card-head"><h2>Garantia</h2></div>${barras(contar(L, garantiaFaixa).sort((a, b) => ORDEM_GAR.indexOf(a[0]) - ORDEM_GAR.indexOf(b[0])), 'garantia', (k) => ({ Vigente: 'c-ok', 'Vence em 90 dias': 'c-info', 'Vence em 30 dias': 'c-warn', Vencida: 'c-bad' }[k] || 'c-idle'))}</div>
@@ -392,7 +408,7 @@ function renderPainel() {
       </div>
       <div class="card card-pad">
         <div class="card-head"><h2>Alterações recentes</h2><span class="muted" style="font-size:12px">troca de peças, SO, status…</span></div>
-        <div class="feed">${state.hist.length ? state.hist.map(feedItem).join('') : '<p class="muted">Nenhuma alteração registrada.</p>'}</div>
+        <div class="feed">${(() => { const hs = state.hist.filter((h) => !state.cdAtual || h.maquinas?.cd_id === state.cdAtual).slice(0, 40); return hs.length ? hs.map(feedItem).join('') : '<p class="muted">Nenhuma alteração registrada.</p>'; })()}</div>
       </div>
     </div>`}`;
 
@@ -420,6 +436,7 @@ function fmtValorHist(campo, v) {
   if (campo === 'status') return STATUS[v] || v;
   if (campo === 'tipo') return TIPO[v] || v;
   if (campo === 'data_compra' || campo === 'garantia_fim') return dataBR(v);
+  if (campo === 'cd_id') return cdNome(v);
   return v;
 }
 function feedItem(h) {
@@ -440,6 +457,7 @@ const COLS = [
     c: (m) => `<input type="checkbox" class="sel" data-sel="${m.id}" ${state.sel.has(m.id) ? 'checked' : ''} aria-label="Selecionar ${esc(m.hostname)}">`, cls: 'td-sel' },
   { k: 'situacao', l: '', v: (m) => (m.ultimo_online ? -new Date(m.ultimo_online) : 0), c: (m) => dot(m) },
   { k: 'hostname', l: 'Hostname', v: (m) => m.hostname, c: (m) => `<span class="mono">${esc(m.hostname)}</span>`, cls: 'host' },
+  { k: 'cd', l: 'CD', soCD: true, v: (m) => cdCod(m.cd_id), c: (m) => `<span class="pill pill--cd" title="${esc(cdNome(m.cd_id))}">${esc(cdCod(m.cd_id))}</span>` },
   { k: 'ativo', l: 'Patrimônio', v: (m) => m.ativo || '', c: (m) => (m.ativo ? `<span class="mono">${esc(m.ativo)}</span>` : '<span class="muted">—</span>') },
   { k: 'tipo', l: 'Tipo', v: (m) => m.tipo, c: (m) => esc(TIPO[m.tipo]) },
   { k: 'modelo', l: 'Modelo', v: (m) => m.modelo || '', c: (m) => `${esc(m.modelo || '—')}<span class="sub">${esc(m.fabricante || '')}</span>` },
@@ -455,10 +473,11 @@ const COLS = [
   { k: 'alertas', l: 'Alertas', v: (m) => (m.alertas || []).length, c: (m) => tags(m) },
 ];
 
+const colsVisiveis = () => COLS.filter((c) => !c.soCD || mostrarColCD());
 function filtrar() {
   const f = state.f;
   const termos = up(f.q).split(/\s+/).filter(Boolean);
-  return state.maquinas.filter((m) => {
+  return MQ().filter((m) => {
     if (f.status === '_ativos' ? m.status === 'descartado' : f.status && m.status !== f.status) return false;
     if (f.tipo && m.tipo !== f.tipo) return false;
     if (f.situacao && situacao(m) !== f.situacao) return false;
@@ -516,13 +535,14 @@ function renderMaquinas() {
         </div>
         <div class="chips" id="chips-wrap" style="padding-bottom:10px;align-items:center"><span id="chips" style="display:contents"></span><span class="count" id="count"></span></div>
         <div class="sel-bar" id="sel-bar" hidden></div>
-        <div class="table-wrap"><table><thead><tr>${COLS.map((c) => `<th data-col="${c.k}" class="${c.cls || ''}">${c.l}</th>`).join('')}</tr></thead><tbody id="tbody"></tbody></table></div>
+        <div class="table-wrap"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
       </div>`;
     $('#f-q').oninput = debounce((e) => { state.f.q = e.target.value; renderTabela(); }, 120);
     ['tipo', 'status', 'situacao', 'so', 'alerta', 'setor', 'garantia'].forEach((k) => {
       $('#f-' + k).onchange = (e) => { state.f[k] = e.target.value; renderTabela(); };
     });
-    $$('th', el).forEach((th) => (th.onclick = (e) => {
+    $('#thead').onclick = (e) => {
+      const th = e.target.closest('th'); if (!th) return;
       const k = th.dataset.col;
       if (k === 'sel') {
         if (e.target.id !== 'sel-todos') return;
@@ -532,7 +552,7 @@ function renderMaquinas() {
       }
       state.sort = { col: k, dir: state.sort.col === k ? -state.sort.dir : 1 };
       renderTabela();
-    }));
+    };
     $('#tbody').onclick = (e) => {
       const cb = e.target.closest('[data-sel]');
       if (cb) { cb.checked ? state.sel.add(cb.dataset.sel) : state.sel.delete(cb.dataset.sel); return renderSelBar(); }
@@ -557,7 +577,7 @@ function syncToolbar() {
   $('#f-tipo').innerHTML = opts([['', 'Todos os tipos'], ...Object.entries(TIPO)], f.tipo);
   $('#f-status').innerHTML = opts([['_ativos', 'Status: ativos'], ['', 'Todos (inclui descartados)'], ...Object.entries(STATUS)], f.status);
   $('#f-situacao').innerHTML = opts([['', 'Qualquer contato'], ...Object.entries(SIT)], f.situacao);
-  const sos = contar(state.maquinas, soGrupo).map(([k]) => [k, k]);
+  const sos = contar(MQ(), soGrupo).map(([k]) => [k, k]);
   $('#f-so').innerHTML = opts([['', 'Todos os sistemas'], ...sos], f.so);
   $('#f-alerta').innerHTML = opts([['', 'Sem filtro de alerta'], ['_grave', 'Alertas importantes'], ...Object.entries(ALERTAS).map(([k, a]) => [k, a.l])], f.alerta);
   $('#f-garantia').innerHTML = opts([['', 'Qualquer garantia'], ...ORDEM_GAR.map((g) => [g, g])], f.garantia);
@@ -566,6 +586,8 @@ function syncToolbar() {
 function renderTabela() {
   if (!state.maqMontada || state.view !== 'maquinas') return;
   const lista = ordenar(filtrar());
+  const cols = colsVisiveis();
+  $('#thead').innerHTML = `<tr>${cols.map((c) => `<th data-col="${c.k}" class="${c.cls || ''}">${c.l}</th>`).join('')}</tr>`;
   $$('#view-maquinas th').forEach((th) => {
     th.classList.toggle('sorted', th.dataset.col === state.sort.col);
     th.classList.toggle('asc', state.sort.dir === 1);
@@ -580,11 +602,11 @@ function renderTabela() {
     + (algum ? '<button class="btn btn--ghost btn--sm" id="limpar">Limpar filtros</button>' : '');
   $$('#chips .chip').forEach((c) => (c.onclick = () => { state.f[c.dataset.k] = ''; renderTabela(); }));
   $('#limpar')?.addEventListener('click', () => { state.f = { ...F_PADRAO }; syncToolbar(); renderTabela(); });
-  $('#count').textContent = `${lista.length} de ${state.maquinas.length} máquinas`;
+  $('#count').textContent = `${lista.length} de ${MQ().length} máquinas`;
   renderSelBar(lista);
   $('#tbody').innerHTML = lista.length
-    ? lista.map((m) => `<tr data-id="${m.id}" class="${state.flash.has(m.id) ? 'flash' : ''}">${COLS.map((c) => `<td class="${c.cls || ''}">${c.c(m)}</td>`).join('')}</tr>`).join('')
-    : `<tr><td colspan="${COLS.length}" class="empty">Nenhuma máquina encontrada com esses filtros.</td></tr>`;
+    ? lista.map((m) => `<tr data-id="${m.id}" class="${state.flash.has(m.id) ? 'flash' : ''}">${cols.map((c) => `<td class="${c.cls || ''}">${c.c(m)}</td>`).join('')}</tr>`).join('')
+    : `<tr><td colspan="${cols.length}" class="empty">Nenhuma máquina encontrada com esses filtros.</td></tr>`;
 }
 
 function renderSelBar(lista = filtrar()) {
@@ -617,11 +639,11 @@ function baixar(nome, conteudo, tipo = 'text/csv;charset=utf-8') {
 }
 const csvCel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 function exportarCSV() {
-  const cab = ['Hostname', 'Patrimônio', 'Tipo', 'Status', 'Fabricante', 'Modelo', 'Nº série', 'Processador', 'RAM (GB)', 'Slots RAM',
+  const cab = ['CD', 'Hostname', 'Patrimônio', 'Tipo', 'Status', 'Fabricante', 'Modelo', 'Nº série', 'Processador', 'RAM (GB)', 'Slots RAM',
     'Armazenamento (GB)', 'Livre (GB)', 'Tipo disco', 'Sistema', 'Versão', 'Build', 'Arquitetura', 'IP', 'MAC', 'Domínio', 'Usuário',
     'Setor', 'Localização', 'Responsável', 'Último contato', 'Situação', 'Alertas', 'Observações',
     'Data de compra', 'Fornecedor', 'Nota fiscal', 'Valor', 'Fim da garantia', 'Situação garantia', 'Emprestado para', 'Devolução prevista'];
-  const linhas = ordenar(filtrar()).map((m) => [m.hostname, m.ativo, TIPO[m.tipo], STATUS[m.status], m.fabricante, m.modelo, m.numero_serie,
+  const linhas = ordenar(filtrar()).map((m) => [cdNome(m.cd_id), m.hostname, m.ativo, TIPO[m.tipo], STATUS[m.status], m.fabricante, m.modelo, m.numero_serie,
     m.cpu, m.memoria_gb, m.memoria_slots_total, m.armazenamento_total_gb, m.armazenamento_livre_gb, tipoDisco(m), m.so_nome,
     m.so_display_version, m.so_build, m.so_arquitetura, m.ip, m.mac, m.dominio, m.usuario_logado, m.setor, m.localizacao,
     m.responsavel, dataHora(m.ultimo_online), SIT[situacao(m)], (m.alertas || []).map((a) => ALERTAS[a]?.l || a).join(', '), m.observacoes,
@@ -698,6 +720,7 @@ async function abrirMaquina(id, silencioso = false) {
       <form id="d-form">
         <div class="section-title"><h3>Controle de inventário</h3></div>
         <div class="form-grid">
+          ${ehAdmin() ? `<label>CD<select name="cd_id">${opts(state.cds.map((c) => [c.id, `${c.codigo} · ${c.nome}`]), m.cd_id)}</select></label>` : `<label>CD<input value="${esc(cdCod(m.cd_id) + ' · ' + cdNome(m.cd_id))}" disabled></label>`}
           ${campo('ativo', 'Patrimônio', m.ativo, 'text', 'class="mono" placeholder="Nº da etiqueta"')}
           ${sel('status', 'Status', STATUS, m.status)}
           ${sel('tipo', 'Tipo', TIPO, m.tipo)}
@@ -727,7 +750,7 @@ async function abrirMaquina(id, silencioso = false) {
           ${campo('valor_compra', 'Valor (R$)', m.valor_compra, 'number', 'step="0.01" min="0"')}
           <label>Idade<input value="${m.data_compra ? esc(idadeTexto(m.data_compra)) : '—'}" disabled></label>
         </div>
-        <datalist id="dl-forn">${[...new Set(state.maquinas.map((x) => x.fornecedor).filter(Boolean))].map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
+        <datalist id="dl-forn">${[...new Set(MQ().map((x) => x.fornecedor).filter(Boolean))].map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
         <datalist id="dl-setores">${setores().map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
         <datalist id="dl-so"><option value="Microsoft Windows 11 Pro"><option value="Microsoft Windows 10 Pro"><option value="Microsoft Windows 11 Enterprise"></datalist>
       </form>
@@ -768,7 +791,7 @@ async function abrirMaquina(id, silencioso = false) {
       <div><div class="section-title"><h3>Histórico</h3></div><div class="timeline" id="d-hist"><p class="muted">Carregando…</p></div></div>
     </div>
     <div class="drawer-foot">
-      <button class="btn btn--danger btn--sm" id="d-excluir">Excluir</button>
+      ${ehAdmin() ? '<button class="btn btn--danger btn--sm" id="d-excluir">Excluir</button>' : ''}
       ${m.origem === 'manual' || situacao(m) === 'offline' ? '<button class="btn btn--sm" id="d-link">Link de instalação</button>' : ''}
       <button class="btn btn--sm" id="d-etq">Etiqueta</button>
       ${!m.emprestimo_atual && !['descartado', 'extraviado'].includes(m.status) ? '<button class="btn btn--sm" id="d-emprestar">Emprestar</button>' : ''}
@@ -792,13 +815,13 @@ async function abrirMaquina(id, silencioso = false) {
     await recarregarMaquina(id); toast('Alerta marcado como verificado'); abrirMaquina(id, true); rerender();
   });
   $('#d-link')?.addEventListener('click', () => modalLinkInstalacao({ ativo: m.ativo, setor: m.setor, localizacao: m.localizacao, responsavel: m.responsavel }));
-  $('#d-excluir').onclick = async () => {
+  $('#d-excluir')?.addEventListener('click', async () => {
     if (!confirm(`Excluir ${m.hostname} definitivamente? Prefira marcar como "Descartado" para manter o histórico.`)) return;
     const { error } = await sb.from('maquinas').delete().eq('id', id);
     if (error) return toast(erroMsg(error), true);
     state.maquinas = state.maquinas.filter((x) => x.id !== id);
     state.drawerDirty = false; fecharDrawer(); rerender(); toast('Máquina excluída');
-  };
+  });
 
   async function salvar() {
     const fd = new FormData(form);
@@ -857,6 +880,7 @@ function modalNovaMaquina(pre = {}) {
     <form method="dialog" id="nova-form">
       <div class="modal-head"><h2>Cadastrar máquina</h2><p class="muted" style="margin:4px 0 0">Prefira instalar o agente: ele preenche e mantém tudo atualizado sozinho. Se o agente for instalado depois, ele reconhece a máquina pelo nº de série, patrimônio ou hostname.</p></div>
       <div class="modal-body"><div class="form-grid">
+        ${ehAdmin() ? `<label class="full">CD *<select name="cd_id" required>${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), pre.cd_id || state.cdAtual || cdsAtivos()[0]?.id)}</select></label>` : ''}
         ${campo('hostname', 'Hostname *', pre.hostname, 'text', 'class="mono" required')}
         ${campo('ativo', 'Patrimônio', pre.ativo, 'text', 'class="mono"')}
         ${sel('tipo', 'Tipo', TIPO, pre.tipo || 'desktop')}
@@ -895,7 +919,7 @@ function modalNovaMaquina(pre = {}) {
 async function renderConferencias() {
   state.conf = null;
   const el = $('#view-conferencia');
-  el.innerHTML = `<div class="skeleton">Carregando conferências…</div>`;
+  el.innerHTML = `<div class="skeleton">Carregando inventários…</div>`;
   let { data: confs, error } = await sb.from('conferencias').select('*, conferencia_itens(maquina_id)').order('criado_em', { ascending: false });
   if (error && ehErroDeRede(error)) { confs = (await idbGet('confs')) || []; error = null; definirOffline(true); }
   if (error) { el.innerHTML = `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`; return; }
@@ -904,50 +928,102 @@ async function renderConferencias() {
   const fila = await filaListar();
   confs.forEach((c) => fila.filter((i) => i.conferencia_id === c.id).forEach((i) => c.conferencia_itens.push({ maquina_id: i.maquina_id })));
   state.confs = confs;
+  const f = state.confFiltro || (state.confFiltro = { q: '', status: '' });
+
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Conferência física</h1><p>Bipe as etiquetas de patrimônio com o leitor (ou digite o hostname / nº de série). O sistema mostra o que foi encontrado, o que está faltando e o que não está cadastrado.</p></div>
-      <div class="actions"><button class="btn btn--primary" id="btn-nova-conf">+ Nova conferência</button></div>
+      <div><h1>Inventários</h1><p>Contagem física com leitor ou câmera: bipe as etiquetas e veja na hora o que foi encontrado, o que falta e o que não está cadastrado.${ehAdmin() ? ' Como administrador, você vê os inventários de todos os CDs e pode editar, reabrir e excluir.' : ''}</p></div>
+      <div class="actions">${ehAdmin() ? '<a class="btn" href="#relatorios/inventarios">Relatório de inventários</a>' : ''}<button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
     </div>
-    ${confs.length ? `<div class="conf-list">${confs.map((c) => {
-      const esperadas = esperadasDe(c).length;
-      const achadas = new Set(c.conferencia_itens.map((i) => i.maquina_id).filter(Boolean)).size;
-      const pct = esperadas ? Math.min(100, Math.round((achadas / esperadas) * 100)) : 0;
+    <div class="card" style="margin-bottom:14px"><div class="toolbar">
+      <div class="search"><input id="cf-q" type="search" placeholder="Buscar inventário, setor, responsável…" value="${esc(f.q)}"></div>
+      <select id="cf-status">${opts([['', 'Todos os status'], ['aberta', 'Abertos'], ['finalizada', 'Finalizados']], f.status)}</select>
+      <span class="count" id="cf-count"></span>
+    </div></div>
+    <div id="cf-lista"></div>`;
+
+  const desenhar = () => {
+    const termos = up(f.q).split(/\s+/).filter(Boolean);
+    const lista = confs.filter(noCD).filter((c) => !f.status || c.status === f.status)
+      .filter((c) => { const t = up([c.nome, c.setor, c.criado_por, cdNome(c.cd_id), cdCod(c.cd_id)].join(' ')); return termos.every((x) => t.includes(x)); });
+    $('#cf-count').textContent = `${lista.length} inventário(s)`;
+    $('#cf-lista').innerHTML = lista.length ? `<div class="conf-list">${lista.map((c) => {
+      const r = resumoConf(c);
       return `<button class="card conf-card" data-id="${c.id}">
-        <div style="display:flex;justify-content:space-between;gap:8px"><h2>${esc(c.nome)}</h2>${pill(c.status === 'aberta' ? 'Aberta' : 'Finalizada', c.status === 'aberta' ? 'info' : 'ok')}</div>
-        <div class="muted">${esc(c.setor || 'Todos os setores')} · ${data(c.criado_em)} · ${esc(c.criado_por || '')}</div>
-        <div class="progress"><i style="width:${pct}%"></i></div>
-        <div><strong>${achadas}</strong> de ${esperadas} encontradas (${pct}%)</div></button>`;
-    }).join('')}</div>` : `<div class="card card-pad empty"><h2>Nenhuma conferência ainda</h2><p>Crie uma para fazer a contagem física de um setor ou do CD inteiro.</p></div>`}`;
-  $('#btn-nova-conf').onclick = modalNovaConf;
-  $$('.conf-card', el).forEach((b) => (b.onclick = () => (location.hash = '#conferencia/' + b.dataset.id)));
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><h2>${esc(c.nome)}</h2>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</div>
+        <div class="muted">${mostrarColCD() ? `<span class="pill pill--cd">${esc(cdCod(c.cd_id))}</span> ` : ''}${esc(c.setor || 'Todos os setores')} · ${data(c.criado_em)} · ${esc((c.criado_por || '').split('@')[0])}</div>
+        <div class="progress"><i style="width:${r.pct}%"></i></div>
+        <div><strong>${r.encontradas}</strong> de ${r.esperadas} encontradas (${r.pct}%)${r.faltando ? ` · <span style="color:var(--bad)">${r.faltando} faltando</span>` : ''}</div></button>`;
+    }).join('')}</div>` : `<div class="card card-pad empty"><h2>${confs.length ? 'Nada encontrado com esses filtros' : 'Nenhum inventário ainda'}</h2><p>Crie um para fazer a contagem física de um setor ou do CD inteiro.</p></div>`;
+    $$('.conf-card', el).forEach((b) => (b.onclick = () => (location.hash = '#conferencia/' + b.dataset.id)));
+  };
+  $('#cf-q').oninput = debounce((e) => { f.q = e.target.value; desenhar(); }, 120);
+  $('#cf-status').onchange = (e) => { f.status = e.target.value; desenhar(); };
+  $('#btn-nova-conf').onclick = () => modalConf();
+  desenhar();
+}
+
+// números de um inventário (usa o resultado congelado quando finalizado)
+function resumoConf(c, itens = c.conferencia_itens || []) {
+  if (c.status === 'finalizada' && c.total_esperadas != null) {
+    const esperadas = c.total_esperadas, encontradas = c.total_encontradas || 0;
+    return { esperadas, encontradas, faltando: c.total_faltando || 0, desconhecidas: c.total_desconhecidas || 0, fora: c.total_fora || 0,
+      pct: esperadas ? Math.min(100, Math.round((encontradas / esperadas) * 100)) : 0 };
+  }
+  const esp = esperadasDe(c);
+  const ids = new Set(esp.map((m) => m.id));
+  const lidos = new Set(itens.map((i) => i.maquina_id).filter(Boolean));
+  const encontradas = [...lidos].filter((id) => ids.has(id)).length;
+  return { esperadas: esp.length, encontradas, faltando: esp.length - encontradas, desconhecidas: itens.filter((i) => !i.maquina_id).length,
+    fora: [...lidos].filter((id) => !ids.has(id)).length, pct: esp.length ? Math.min(100, Math.round((encontradas / esp.length) * 100)) : 0 };
 }
 
 function esperadasDe(c) {
-  return state.maquinas.filter((m) => !['descartado', 'extraviado'].includes(m.status) && (!c.setor || m.setor === c.setor));
+  return state.maquinas.filter((m) => m.cd_id === c.cd_id && !['descartado', 'extraviado'].includes(m.status) && (!c.setor || m.setor === c.setor));
 }
 
-function modalNovaConf() {
+// criar (todos) ou editar (admin) um inventário
+function modalConf(c = null) {
+  const cdInicial = c?.cd_id || state.cdAtual || state.perfil?.cd_id || cdsAtivos()[0]?.id;
+  const setoresDoCD = (cd) => [...new Set(state.maquinas.filter((m) => m.cd_id === cd).map((m) => m.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  const optsSetor = (cd, atual) => `<option value="">Todos os setores (CD inteiro)</option>${[...new Set([...setoresDoCD(cd), ...(atual ? [atual] : [])])].map((s) => `<option ${s === atual ? 'selected' : ''}>${esc(s)}</option>`).join('')}`;
   modal(`
     <form id="conf-form">
-      <div class="modal-head"><h2>Nova conferência</h2></div>
+      <div class="modal-head"><h2>${c ? 'Editar inventário' : 'Novo inventário'}</h2></div>
       <div class="modal-body">
-        ${campo('nome', 'Nome *', `Inventário ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`, 'text', 'required')}
-        <label>Setor (opcional)<select name="setor"><option value="">Todos os setores (CD inteiro)</option>${setores().map((s) => `<option>${esc(s)}</option>`).join('')}</select></label>
-        <p class="muted" style="margin:0">Máquinas esperadas: todas com status diferente de Descartado/Extraviado${setores().length ? ' do setor escolhido' : ''}.</p>
+        ${campo('nome', 'Nome *', c?.nome || `Inventário ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`, 'text', 'required')}
+        ${ehAdmin() ? `<label>CD *<select name="cd_id" id="conf-cd">${opts(state.cds.map((x) => [x.id, `${x.codigo} · ${x.nome}`]), cdInicial)}</select></label>` : `<label>CD<input value="${esc(cdCod(cdInicial) + ' · ' + cdNome(cdInicial))}" disabled></label>`}
+        <label>Setor (opcional)<select name="setor" id="conf-setor">${optsSetor(cdInicial, c?.setor)}</select></label>
+        <p class="muted" style="margin:0">Máquinas esperadas: todas do CD${' '}(ou do setor escolhido) com status diferente de Descartado/Extraviado.</p>
         <p class="erro" id="conf-erro"></p>
       </div>
-      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">Começar</button></div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">${c ? 'Salvar' : 'Começar'}</button></div>
     </form>`, (dlg) => {
+    $('#conf-cd')?.addEventListener('change', (e) => { $('#conf-setor').innerHTML = optsSetor(e.target.value, ''); });
     $('#conf-form').onsubmit = async (e) => {
       e.preventDefault();
       const fd = Object.fromEntries(new FormData(e.target));
-      const { data: d, error } = await sb.from('conferencias').insert({ nome: fd.nome.trim(), setor: fd.setor || null }).select('id').single();
+      const row = { nome: fd.nome.trim(), setor: fd.setor || null };
+      if (ehAdmin()) row.cd_id = fd.cd_id;
+      const q = c ? sb.from('conferencias').update(row).eq('id', c.id) : sb.from('conferencias').insert(row);
+      const { data: d, error } = await q.select('id').single();
       if (error) { $('#conf-erro').textContent = erroMsg(error); return; }
       dlg.close();
-      location.hash = '#conferencia/' + d.id;
+      toast(c ? 'Inventário atualizado' : 'Inventário criado');
+      if (location.hash === '#conferencia/' + d.id) abrirConferencia(d.id); else location.hash = '#conferencia/' + d.id;
     };
   });
+}
+
+async function excluirConf(c) {
+  const r = resumoConf(c, state.conf?.id === c.id ? state.confItens : c.conferencia_itens);
+  const txt = prompt(`Excluir o inventário "${c.nome}" (${cdCod(c.cd_id)}) com ${r.encontradas + r.desconhecidas + r.fora} leitura(s)?\nIsso não pode ser desfeito. Digite EXCLUIR para confirmar.`);
+  if (txt === null) return false;
+  if (txt.trim().toUpperCase() !== 'EXCLUIR') { toast('Exclusão cancelada', true); return false; }
+  const { error } = await sb.from('conferencias').delete().eq('id', c.id);
+  if (error) { toast(erroMsg(error), true); return false; }
+  toast('Inventário excluído');
+  return true;
 }
 
 async function abrirConferencia(id) {
@@ -969,32 +1045,44 @@ async function abrirConferencia(id) {
   renderConfDetalhe(true);
 }
 
-function confCalculo() {
-  const c = state.conf;
-  const esperadas = esperadasDe(c);
-  const idsEsperados = new Set(esperadas.map((m) => m.id));
-  const lidos = new Map(state.confItens.filter((i) => i.maquina_id).map((i) => [i.maquina_id, i]));
-  const encontradas = state.confItens.filter((i) => i.maquina_id).map((i) => ({ item: i, m: state.maquinas.find((m) => m.id === i.maquina_id) })).filter((x) => x.m);
-  const faltando = esperadas.filter((m) => !lidos.has(m.id));
-  const desconhecidos = state.confItens.filter((i) => !i.maquina_id);
-  const foraDoEsperado = encontradas.filter((x) => !idsEsperados.has(x.m.id));
-  const achadasEsperadas = encontradas.length - foraDoEsperado.length;
-  return { esperadas, encontradas, faltando, desconhecidos, foraDoEsperado, achadasEsperadas };
+function calcularConf(c, itens) {
+  const congelado = c.status === 'finalizada' && Array.isArray(c.faltantes);
+  const esperadasVivas = esperadasDe(c);
+  const idsEsperados = new Set(esperadasVivas.map((m) => m.id));
+  const lidos = new Set(itens.filter((i) => i.maquina_id).map((i) => i.maquina_id));
+  const encontradas = itens.filter((i) => i.maquina_id).map((i) => ({
+    item: i, m: state.maquinas.find((m) => m.id === i.maquina_id) || { id: i.maquina_id, hostname: '(fora do seu acesso)', ativo: i.codigo_lido, tipo: 'outro', status: '', cd_id: null },
+  }));
+  const desconhecidos = itens.filter((i) => !i.maquina_id);
+  let faltando, esperadasN, foraDoEsperado, achadasEsperadas;
+  if (congelado) {
+    faltando = c.faltantes.map((f) => state.maquinas.find((m) => m.id === f.id) || { ...f, removida: true });
+    foraDoEsperado = encontradas.filter((x) => x.m.cd_id !== c.cd_id || (c.setor && x.m.setor !== c.setor));
+    esperadasN = c.total_esperadas ?? faltando.length + (c.total_encontradas || 0);
+    achadasEsperadas = c.total_encontradas ?? encontradas.length - foraDoEsperado.length;
+  } else {
+    faltando = esperadasVivas.filter((m) => !lidos.has(m.id));
+    foraDoEsperado = encontradas.filter((x) => !idsEsperados.has(x.m.id));
+    esperadasN = esperadasVivas.length;
+    achadasEsperadas = encontradas.length - foraDoEsperado.length;
+  }
+  return { esperadasN, encontradas, faltando, desconhecidos, foraDoEsperado, achadasEsperadas, congelado };
 }
+const confCalculo = () => calcularConf(state.conf, state.confItens);
 
 function renderConfDetalhe(montar) {
   const el = $('#view-conferencia');
   const c = state.conf;
   const k = confCalculo();
-  const pct = k.esperadas.length ? Math.min(100, Math.round((k.achadasEsperadas / k.esperadas.length) * 100)) : 0;
+  const pct = k.esperadasN ? Math.min(100, Math.round((k.achadasEsperadas / k.esperadasN) * 100)) : 0;
   const aberta = c.status === 'aberta';
 
   if (montar || !$('#scan-input') && aberta) {
     el.innerHTML = `
       <div class="view-head">
-        <div><a href="#conferencia" class="muted" style="text-decoration:none">← Conferências</a>
+        <div><a href="#conferencia" class="muted" style="text-decoration:none">← Inventários</a>
           <h1 style="margin-top:4px">${esc(c.nome)}</h1>
-          <p>${esc(c.setor || 'Todos os setores')} · iniciada ${dataHora(c.criado_em)} por ${esc(c.criado_por || '—')}${c.finalizado_em ? ' · finalizada ' + dataHora(c.finalizado_em) : ''}</p></div>
+          <p><span class="pill pill--cd" title="${esc(cdNome(c.cd_id))}">${esc(cdCod(c.cd_id))}</span> ${esc(cdNome(c.cd_id))} · ${esc(c.setor || 'Todos os setores')} · iniciada ${dataHora(c.criado_em)} por ${esc(c.criado_por || '—')}${c.finalizado_em ? ' · finalizada ' + dataHora(c.finalizado_em) : ''}</p></div>
         <div class="actions" id="conf-acoes"></div>
       </div>
       <div class="scan-wrap">
@@ -1027,22 +1115,37 @@ function renderConfDetalhe(montar) {
   }
 
   $('#conf-acoes').innerHTML = `
-    <button class="btn" id="conf-csv">Exportar resultado</button>
-    ${aberta ? '<button class="btn btn--primary" id="conf-fim">Finalizar conferência</button>'
-             : `<button class="btn" id="conf-reabrir">Reabrir</button>${k.faltando.length ? `<button class="btn btn--danger" id="conf-extraviar">Marcar ${k.faltando.length} faltantes como extraviadas</button>` : ''}`}`;
+    <button class="btn" id="conf-relatorio">Relatório</button>
+    <button class="btn" id="conf-csv">Exportar CSV</button>
+    ${ehAdmin() ? '<button class="btn" id="conf-editar">Editar</button><button class="btn btn--danger" id="conf-excluir">Excluir</button>' : ''}
+    ${aberta ? '<button class="btn btn--primary" id="conf-fim">Finalizar inventário</button>'
+             : `${ehAdmin() ? '<button class="btn" id="conf-reabrir">Reabrir</button>' : ''}${k.faltando.length ? `<button class="btn btn--danger" id="conf-extraviar">Marcar ${k.faltando.length} faltantes como extraviadas</button>` : ''}`}`;
   $('#conf-csv').onclick = exportarConf;
+  $('#conf-relatorio').onclick = () => relatorioInventario(c.id);
+  $('#conf-editar')?.addEventListener('click', () => modalConf(c));
+  $('#conf-excluir')?.addEventListener('click', async () => { if (await excluirConf(c)) location.hash = '#conferencia'; });
   $('#conf-fim')?.addEventListener('click', async () => {
-    if (k.faltando.length && !confirm(`Ainda faltam ${k.faltando.length} máquinas. Finalizar mesmo assim?`)) return;
-    await sb.from('conferencias').update({ status: 'finalizada', finalizado_em: new Date().toISOString() }).eq('id', c.id);
+    if (state.pendentes) return toast('Ainda há leituras salvas no aparelho aguardando envio. Aguarde a internet voltar para finalizar.', true);
+    if (k.faltando.length && !confirm(`Ainda faltam ${k.faltando.length} máquinas. Finalizar mesmo assim?${ehAdmin() ? '' : ' Depois de finalizado, só um administrador pode reabrir.'}`)) return;
+    // congela o resultado para os relatórios
+    const { error } = await sb.from('conferencias').update({
+      status: 'finalizada', finalizado_em: new Date().toISOString(), finalizado_por: state.user?.email,
+      total_esperadas: k.esperadasN, total_encontradas: k.achadasEsperadas, total_faltando: k.faltando.length,
+      total_desconhecidas: k.desconhecidos.length, total_fora: k.foraDoEsperado.length,
+      faltantes: k.faltando.map((m) => ({ id: m.id, hostname: m.hostname, ativo: m.ativo, modelo: m.modelo, tipo: m.tipo, setor: m.setor, localizacao: m.localizacao, ultimo_online: m.ultimo_online })),
+    }).eq('id', c.id);
+    if (error) return toast(erroMsg(error), true);
+    toast('Inventário finalizado');
     abrirConferencia(c.id);
   });
   $('#conf-reabrir')?.addEventListener('click', async () => {
-    await sb.from('conferencias').update({ status: 'aberta', finalizado_em: null }).eq('id', c.id);
+    const { error } = await sb.from('conferencias').update({ status: 'aberta', finalizado_em: null, faltantes: null }).eq('id', c.id);
+    if (error) return toast(erroMsg(error), true);
     abrirConferencia(c.id);
   });
   $('#conf-extraviar')?.addEventListener('click', async () => {
     if (!confirm(`Alterar o status de ${k.faltando.length} máquinas para "Extraviado"? Isso fica registrado no histórico de cada uma.`)) return;
-    const ids = k.faltando.map((m) => m.id);
+    const ids = k.faltando.filter((m) => !m.removida).map((m) => m.id);
     for (let i = 0; i < ids.length; i += 200) {
       const { error } = await sb.from('maquinas').update({ status: 'extraviado' }).in('id', ids.slice(i, i + 200));
       if (error) return toast(erroMsg(error), true);
@@ -1052,7 +1155,7 @@ function renderConfDetalhe(montar) {
 
   $('#conf-stats').innerHTML = `
     <h3>Progresso</h3>
-    <div><span class="conf-big">${k.achadasEsperadas}</span><span class="muted"> / ${k.esperadas.length}</span></div>
+    <div><span class="conf-big">${k.achadasEsperadas}</span><span class="muted"> / ${k.esperadasN}</span></div>
     <div class="progress"><i style="width:${pct}%"></i></div>
     <div class="muted">${pct}% das máquinas esperadas foram encontradas</div>
     <div class="alert-list">
@@ -1088,7 +1191,7 @@ function renderConfDetalhe(montar) {
 
 function cadastrarDesconhecido(codigo, itemId) {
   modalNovaMaquina({
-    ativo: codigo, hostname: '', setor: state.conf?.setor || '', localizacao: $('#scan-local')?.value || '',
+    ativo: codigo, hostname: '', setor: state.conf?.setor || '', cd_id: state.conf?.cd_id, localizacao: $('#scan-local')?.value || '',
     onDone: async (maqId) => {
       if (itemId) {
         await sb.from('conferencia_itens').update({ maquina_id: maqId }).eq('id', itemId);
@@ -1142,6 +1245,7 @@ async function processarLeitura(bruto) {
     const det = `${esc(m.ativo ? 'Patrimônio ' + m.ativo : 'Sem patrimônio')} · ${esc(TIPO[m.tipo])} ${esc(m.modelo || '')} · ${gb(m.memoria_gb)} RAM · ${esc(soFamilia(m))}`;
     if (esperada) mostrarResultado('ok', `✓ ${esc(m.hostname)}`, det + avisoOff);
     else if (['extraviado', 'descartado'].includes(m.status)) mostrarResultado('warn', `${esc(m.hostname)} — estava como ${STATUS[m.status]}`, det + ' · ajuste o status no cadastro.');
+    else if (m.cd_id !== state.conf.cd_id) mostrarResultado('warn', `${esc(m.hostname)} — pertence a outro CD`, `Cadastrada em: ${esc(cdCod(m.cd_id))} · ${esc(cdNome(m.cd_id))} · ${det}`);
     else mostrarResultado('warn', `${esc(m.hostname)} — pertence a outro setor`, `Cadastrada em: ${esc(m.setor || 'sem setor')} · ${det}`);
     if (!offline && local && $('#scan-gravar')?.checked && m.localizacao !== local) {
       sb.from('maquinas').update({ localizacao: local }).eq('id', m.id).then(() => recarregarMaquina(m.id));
@@ -1284,7 +1388,7 @@ window.addEventListener('online', () => { sincronizar(); tentarReconectar(); });
 window.addEventListener('offline', () => definirOffline(true));
 
 function atualizarBadge() {
-  const n = state.maquinas.filter((m) => (m.alertas || []).includes('emprestimo_atrasado')).length;
+  const n = MQ().filter((m) => (m.alertas || []).includes('emprestimo_atrasado')).length;
   const b = $('#badge-emp');
   if (!b) return;
   b.hidden = !n; b.textContent = n;
@@ -1324,12 +1428,12 @@ async function carregarEmprestimos() {
 
 function renderEmprestimos() {
   const el = $('#view-emprestimos');
-  const E = state.emprestimos;
+  const E = state.emprestimos.filter(noCD);
   const abertos = E.filter((e) => !e.devolvido_em)
     .sort((a, b) => new Date(a.previsto_devolucao || 8.64e15) - new Date(b.previsto_devolucao || 8.64e15));
   const atrasados = abertos.filter(atrasado).length;
   const dev7 = E.filter((e) => e.devolvido_em && Date.now() - new Date(e.devolvido_em) < 7 * 864e5).length;
-  const disponiveis = state.maquinas.filter((m) => m.tipo === 'notebook' && m.status === 'estoque' && !m.emprestimo_atual).length;
+  const disponiveis = MQ().filter((m) => m.tipo === 'notebook' && m.status === 'estoque' && !m.emprestimo_atual).length;
   const busca = $('#emp-busca')?.value || '';
   const host = (e) => e.maquinas?.hostname || '(removida)';
 
@@ -1399,7 +1503,7 @@ function cardMaquinaEmp(m) {
 
 function modalEmprestimo(pre = null) {
   let maq = pre;
-  const disponiveis = state.maquinas.filter((m) => !m.emprestimo_atual && !['descartado', 'extraviado'].includes(m.status))
+  const disponiveis = MQ().filter((m) => !m.emprestimo_atual && !['descartado', 'extraviado'].includes(m.status))
     .sort((a, b) => (a.tipo === 'notebook' ? 0 : 1) - (b.tipo === 'notebook' ? 0 : 1) || (a.ativo || a.hostname).localeCompare(b.ativo || b.hostname));
   const colaboradores = [...new Set(state.emprestimos.map((e) => e.colaborador))];
   const ACESSORIOS = ['Carregador', 'Mouse', 'Mochila / case', 'Headset', 'Coletor / leitor'];
@@ -1784,12 +1888,13 @@ function registrarSW() {
 /* =====================================================================
    LINK DE INSTALAÇÃO (para enviar ao colaborador)
    ===================================================================== */
-let tokenLink = null;
-async function obterTokenLink(novo = false) {
-  if (tokenLink && !novo) return tokenLink;
-  const { data: t, error } = await sb.rpc('obter_token_link', { p_novo: novo });
+const tokensLink = new Map(); // um token de link por CD
+async function obterTokenLink(cd, novo = false) {
+  const chave = cd || 'meu';
+  if (tokensLink.has(chave) && !novo) return tokensLink.get(chave);
+  const { data: t, error } = await sb.rpc('obter_token_link', { p_cd: cd || null, p_novo: novo });
   if (error) throw error;
-  tokenLink = t;
+  tokensLink.set(chave, t);
   return t;
 }
 function baseInstalar() {
@@ -1798,9 +1903,10 @@ function baseInstalar() {
 }
 
 async function modalLinkInstalacao(pre = {}) {
+  let cd = ehAdmin() ? (pre.cd_id || state.cdAtual || cdsAtivos()[0]?.id) : state.perfil?.cd_id;
   let token;
-  try { token = await obterTokenLink(); } catch (e) {
-    return toast('Não foi possível obter o token de links. Rode o arquivo sql/02_link_instalacao.sql no Supabase. (' + erroMsg(e) + ')', true);
+  try { token = await obterTokenLink(cd); } catch (e) {
+    return toast('Não foi possível obter o token de links. Rode os arquivos sql/02 e sql/04 no Supabase. (' + erroMsg(e) + ')', true);
   }
   const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || location.protocol === 'file:';
   modal(`
@@ -1808,6 +1914,7 @@ async function modalLinkInstalacao(pre = {}) {
       <p class="muted" style="margin:4px 0 0">Envie para o colaborador abrir <b>no computador</b>. Ele clica em Baixar, abre o arquivo e pronto: a máquina é reconhecida sozinha.</p></div>
     <div class="modal-body">
       <div class="form-grid" id="lk-form">
+        ${ehAdmin() ? `<label class="full">CD onde a máquina será cadastrada<select id="lk-cd">${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), cd)}</select></label>` : `<label class="full">CD<input value="${esc(cdCod(cd) + ' · ' + cdNome(cd))}" disabled></label>`}
         ${campo('pat', 'Patrimônio (opcional)', pre.ativo, 'text', 'class="mono" placeholder="Etiqueta da máquina"')}
         ${campo('setor', 'Setor', pre.setor, 'text', 'list="dl-lk-set"')}
         ${campo('loc', 'Localização', pre.localizacao)}
@@ -1826,7 +1933,7 @@ async function modalLinkInstalacao(pre = {}) {
       </div>
     </div>
     <div class="modal-foot" style="justify-content:space-between">
-      <button class="btn btn--ghost btn--sm" id="lk-rotacionar" title="Links enviados antes deixam de funcionar">Invalidar links antigos</button>
+      ${ehAdmin() ? '<button class="btn btn--ghost btn--sm" id="lk-rotacionar" title="Links enviados antes deixam de funcionar">Invalidar links antigos deste CD</button>' : '<span></span>'}
       <button class="btn" data-close>Fechar</button>
     </div>`, () => {
     const atualizar = () => {
@@ -1843,13 +1950,17 @@ async function modalLinkInstalacao(pre = {}) {
       $('#lk-mail').href = 'mailto:?subject=' + encodeURIComponent('Registro do computador no inventário de TI') + '&body=' + encodeURIComponent(texto);
       $('#lk-msg').onclick = () => navigator.clipboard.writeText(texto).then(() => toast('Mensagem copiada'));
     };
-    $('#lk-form').oninput = atualizar;
+    $('#lk-form').oninput = (e) => { if (e.target.id !== 'lk-cd') atualizar(); };
+    $('#lk-cd')?.addEventListener('change', async (e) => {
+      cd = e.target.value;
+      try { token = await obterTokenLink(cd); atualizar(); } catch (er) { toast(erroMsg(er), true); }
+    });
     $('#lk-copiar').onclick = () => navigator.clipboard.writeText($('#lk-url').value).then(() => toast('Link copiado'));
     $('#lk-url').onclick = (e) => e.target.select();
-    $('#lk-rotacionar').onclick = async () => {
-      if (!confirm('Gerar um novo token de links? Todos os links já enviados param de funcionar (as máquinas já instaladas com eles também deixam de reportar até serem reinstaladas).')) return;
-      try { token = await obterTokenLink(true); atualizar(); toast('Novo token gerado'); } catch (e) { toast(erroMsg(e), true); }
-    };
+    $('#lk-rotacionar')?.addEventListener('click', async () => {
+      if (!confirm(`Gerar um novo token de links para ${cdCod(cd)}? Todos os links já enviados deste CD param de funcionar (as máquinas instaladas com eles também deixam de reportar até serem reinstaladas).`)) return;
+      try { token = await obterTokenLink(cd, true); atualizar(); toast('Novo token gerado'); } catch (e) { toast(erroMsg(e), true); }
+    });
     atualizar();
   });
 }
@@ -1859,10 +1970,10 @@ async function modalLinkInstalacao(pre = {}) {
    ===================================================================== */
 async function renderAgente() {
   const el = $('#view-agente');
-  const { data: tokens } = await sb.from('agente_tokens').select('id, descricao, ativo, criado_em, ultimo_uso').order('criado_em');
+  const { data: tokens } = ehAdmin() ? await sb.from('agente_tokens').select('id, descricao, ativo, criado_em, ultimo_uso, cd_id').order('criado_em') : { data: [] };
   state.tokens = tokens || [];
-  const versoes = contar(state.maquinas.filter((m) => m.origem === 'agente'), (m) => m.agente_versao || '?');
-  const comAgente = state.maquinas.filter((m) => m.origem === 'agente').length;
+  const versoes = contar(MQ().filter((m) => m.origem === 'agente'), (m) => m.agente_versao || '?');
+  const comAgente = MQ().filter((m) => m.origem === 'agente').length;
 
   el.innerHTML = `
     <div class="view-head"><div><h1>Agente coletor</h1>
@@ -1890,19 +2001,19 @@ async function renderAgente() {
         <div class="card card-pad">
           <div class="card-head"><h2>Cobertura</h2></div>
           <div class="kpis" style="margin:0">
-            <div class="card kpi" style="cursor:default"><div class="kpi-label">Com agente</div><div class="kpi-value">${comAgente}</div><div class="kpi-sub">de ${state.maquinas.length} máquinas</div></div>
-            <div class="card kpi" style="cursor:default"><div class="kpi-label">Sem agente</div><div class="kpi-value">${state.maquinas.length - comAgente}</div><div class="kpi-sub">cadastro manual</div></div>
+            <div class="card kpi" style="cursor:default"><div class="kpi-label">Com agente</div><div class="kpi-value">${comAgente}</div><div class="kpi-sub">de ${MQ().length} máquinas</div></div>
+            <div class="card kpi" style="cursor:default"><div class="kpi-label">Sem agente</div><div class="kpi-value">${MQ().length - comAgente}</div><div class="kpi-sub">cadastro manual</div></div>
           </div>
           ${versoes.length ? `<h3 style="margin:16px 0 8px">Versões do agente</h3>${barras(versoes, 'x')}` : ''}
         </div>
-        <div class="card card-pad">
+        ${ehAdmin() ? `<div class="card card-pad">
           <div class="card-head"><h2>Tokens do agente</h2><button class="btn btn--sm" id="btn-token">+ Gerar token</button></div>
           <p class="muted" style="margin-top:0">O agente só consegue gravar com um token ativo. Se um token vazar, revogue e gere outro (atualize o <code>config.json</code>).</p>
-          <table class="mini-table"><thead><tr><th>Descrição</th><th>Criado</th><th>Último uso</th><th></th></tr></thead><tbody>
-            ${state.tokens.map((t) => `<tr><td>${esc(t.descricao)} ${t.ativo ? '' : pill('revogado', 'bad')}</td><td>${data(t.criado_em)}</td><td>${rel(t.ultimo_uso)}</td>
+          <table class="mini-table"><thead><tr><th>Descrição</th><th>CD</th><th>Criado</th><th>Último uso</th><th></th></tr></thead><tbody>
+            ${state.tokens.filter(noCD).map((t) => `<tr><td>${esc(t.descricao)} ${t.ativo ? '' : pill('revogado', 'bad')}</td><td>${esc(cdCod(t.cd_id))}</td><td>${data(t.criado_em)}</td><td>${rel(t.ultimo_uso)}</td>
               <td><button class="btn btn--sm ${t.ativo ? 'btn--danger' : ''}" data-tok="${t.id}" data-ativo="${t.ativo}">${t.ativo ? 'Revogar' : 'Reativar'}</button></td></tr>`).join('')}
           </tbody></table>
-        </div>
+        </div>` : ''}
       </div>
     </div>`;
   $$('.bar', el).forEach((b) => (b.style.cursor = 'default'));
@@ -1914,10 +2025,10 @@ async function renderAgente() {
     if (error) return toast(erroMsg(error), true);
     renderAgente();
   }));
-  $('#btn-token').onclick = async () => {
+  $('#btn-token')?.addEventListener('click', async () => {
     const desc = prompt('Descrição do token (ex.: "Implantação GPO 2026")');
     if (desc === null) return;
-    const { data: tok, error } = await sb.rpc('gerar_token_agente', { p_descricao: desc });
+    const { data: tok, error } = await sb.rpc('gerar_token_agente', { p_descricao: desc, p_cd: state.cdAtual || cdsAtivos()[0]?.id || null });
     if (error) return toast(erroMsg(error), true);
     modal(`<div class="modal-head"><h2>Novo token gerado</h2></div>
       <div class="modal-body"><p style="margin:0">Copie agora — ele <strong>não será exibido novamente</strong>. Cole no campo <code>agente_token</code> do <code>config.json</code>.</p>
@@ -1925,7 +2036,583 @@ async function renderAgente() {
       <div class="modal-foot"><button class="btn" id="tok-copiar">Copiar</button><button class="btn btn--primary" data-close>Fechei, já copiei</button></div>`,
     () => { $('#tok-copiar').onclick = () => navigator.clipboard.writeText(tok).then(() => toast('Copiado')); });
     renderAgente();
+  });
+}
+
+/* =====================================================================
+   USUÁRIOS E CDs (somente administrador)
+   ===================================================================== */
+async function chamarAdmin(body) {
+  const { data: d, error } = await sb.functions.invoke('admin-usuarios', { body });
+  if (error) {
+    let msg = error.message;
+    const status = error.context?.status;
+    try { const j = await error.context.json(); if (j?.error) msg = j.error; } catch { /* sem corpo */ }
+    const e = new Error(msg);
+    if (status === 404 || /Failed to send|FunctionsFetchError|FunctionsRelayError/i.test(`${error.name} ${error.message}`)) e.semFuncao = true;
+    throw e;
+  }
+  if (d?.error) throw new Error(d.error);
+  return d;
+}
+function gerarSenha() {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const v = crypto.getRandomValues(new Uint32Array(10));
+  let s = [...v].map((n) => abc[n % abc.length]).join('');
+  if (!/\d/.test(s)) s = s.slice(0, 9) + '7';
+  return s;
+}
+const PAPEL = { admin: 'Administrador', field: 'Field' };
+const urlPainel = () => baseIndex();
+
+async function renderUsuarios(aba = 'usuarios') {
+  const el = $('#view-usuarios');
+  el.innerHTML = `
+    <div class="view-head">
+      <div><h1>Usuários e CDs</h1><p>Crie acessos para os Fields de cada CD e para outros administradores. Fields enxergam apenas o próprio CD.</p></div>
+      <div class="actions" id="us-acoes"></div>
+    </div>
+    <div class="tabs tabs--page"><a class="tab ${aba === 'usuarios' ? 'active' : ''}" href="#usuarios/usuarios">Usuários</a><a class="tab ${aba === 'cds' ? 'active' : ''}" href="#usuarios/cds">CDs</a></div>
+    <div id="us-corpo"><div class="skeleton">Carregando…</div></div>`;
+  if (aba === 'cds') return renderCDsAdmin();
+  return renderListaUsuarios();
+}
+
+async function renderListaUsuarios(recarregar = true) {
+  const corpo = $('#us-corpo');
+  $('#us-acoes').innerHTML = '<button class="btn btn--primary" id="btn-novo-us">+ Novo usuário</button>';
+  $('#btn-novo-us').onclick = () => modalUsuario();
+  if (recarregar || !state.usuarios) {
+    try {
+      state.usuarios = (await chamarAdmin({ acao: 'listar' })).usuarios;
+      state.usuariosSemFuncao = false;
+    } catch (e) {
+      if (!e.semFuncao) { corpo.innerHTML = `<div class="card card-pad erro">${esc(e.message)}</div>`; return; }
+      state.usuariosSemFuncao = true;
+      const { data: perfis } = await sb.from('perfis').select('*').order('nome');
+      state.usuarios = (perfis || []).map((p) => ({ id: p.user_id, nome: p.nome, email: p.email, papel: p.papel, cd_id: p.cd_id, ativo: p.ativo }));
+    }
+  }
+  const f = state.usFiltro || (state.usFiltro = { q: '', papel: '', cd: '', status: '' });
+  if (state.cdAtual && !f.cdTocado) f.cd = state.cdAtual;
+  corpo.innerHTML = `
+    ${state.usuariosSemFuncao ? `<div class="banner banner--bad" style="margin-bottom:14px"><div><strong>Falta publicar a função de usuários no Supabase</strong>
+      <span>Sem ela, a lista abaixo é só leitura. No Supabase: <b>Edge Functions → Deploy a new function → Via Editor</b>, nome <code>admin-usuarios</code>, cole o arquivo <code>supabase/functions/admin-usuarios/index.ts</code> e clique em <b>Deploy</b>.</span></div></div>` : ''}
+    <div class="card">
+      <div class="toolbar">
+        <div class="search"><input id="us-q" type="search" placeholder="Buscar nome ou e-mail…" value="${esc(f.q)}"></div>
+        <select id="us-papel">${opts([['', 'Todos os perfis'], ['admin', 'Administradores'], ['field', 'Fields']], f.papel)}</select>
+        <select id="us-cd">${opts([['', 'Todos os CDs'], ...state.cds.map((c) => [c.id, `${c.codigo} · ${c.nome}`])], f.cd)}</select>
+        <select id="us-status">${opts([['', 'Ativos e inativos'], ['ativo', 'Ativos'], ['inativo', 'Desativados']], f.status)}</select>
+        <span class="count" id="us-count"></span>
+      </div>
+      <div class="table-wrap" style="max-height:none"><table><thead><tr><th>Nome</th><th>Perfil</th><th>CD</th><th>Status</th><th>Último acesso</th><th></th></tr></thead><tbody id="us-tbody"></tbody></table></div>
+    </div>`;
+  const desenhar = () => {
+    const termos = up(f.q).split(/\s+/).filter(Boolean);
+    const lista = state.usuarios
+      .filter((u) => !f.papel || u.papel === f.papel)
+      .filter((u) => !f.cd || u.cd_id === f.cd)
+      .filter((u) => !f.status || (f.status === 'ativo' ? u.ativo : !u.ativo))
+      .filter((u) => termos.every((t) => up(`${u.nome} ${u.email}`).includes(t)))
+      .sort((a, b) => (a.papel === b.papel ? 0 : a.papel === 'admin' ? -1 : 1) || String(a.nome || a.email).localeCompare(String(b.nome || b.email), 'pt-BR'));
+    $('#us-count').textContent = `${lista.length} usuário(s)`;
+    const ro = state.usuariosSemFuncao;
+    $('#us-tbody').innerHTML = lista.length ? lista.map((u) => `<tr data-us="${u.id}">
+      <td><strong>${esc(u.nome || '—')}</strong>${u.id === state.user.id ? ' <span class="pill">você</span>' : ''}<span class="sub">${esc(u.email || '')}</span></td>
+      <td>${u.sem_perfil ? pill('sem acesso', 'warn') : pill(PAPEL[u.papel] || u.papel, u.papel === 'admin' ? 'brand' : '')}</td>
+      <td>${u.papel === 'admin' ? '<span class="muted">Todos</span>' : `<span class="pill pill--cd">${esc(cdCod(u.cd_id))}</span> ${esc(cdNome(u.cd_id))}`}</td>
+      <td>${u.ativo ? pill('Ativo', 'ok') : pill('Desativado', 'bad')}</td>
+      <td>${u.ultimo_acesso ? `${rel(u.ultimo_acesso)}<span class="sub">${dataHora(u.ultimo_acesso)}</span>` : '<span class="muted">nunca</span>'}</td>
+      <td class="acoes">${ro ? '' : `<button class="btn btn--sm" data-ac="editar">${u.sem_perfil ? 'Liberar acesso' : 'Editar'}</button>
+        <button class="btn btn--sm btn--ghost" data-ac="senha">Senha</button>
+        ${u.id !== state.user.id ? '<button class="btn btn--sm btn--ghost btn--txt-bad" data-ac="excluir">Excluir</button>' : ''}`}</td></tr>`).join('')
+      : '<tr><td colspan="6" class="empty">Nenhum usuário com esses filtros.</td></tr>';
   };
+  $('#us-q').oninput = debounce((e) => { f.q = e.target.value; desenhar(); }, 120);
+  $('#us-papel').onchange = (e) => { f.papel = e.target.value; desenhar(); };
+  $('#us-cd').onchange = (e) => { f.cd = e.target.value; f.cdTocado = true; desenhar(); };
+  $('#us-status').onchange = (e) => { f.status = e.target.value; desenhar(); };
+  $('#us-tbody').onclick = async (e) => {
+    const b = e.target.closest('[data-ac]'); if (!b) return;
+    const u = state.usuarios.find((x) => x.id === b.closest('tr').dataset.us);
+    if (b.dataset.ac === 'editar') modalUsuario(u);
+    if (b.dataset.ac === 'senha') modalSenha(u);
+    if (b.dataset.ac === 'excluir') {
+      if (!confirm(`Excluir o usuário ${u.nome || u.email}? O login deixa de existir. (Para bloquear temporariamente, use Editar → Desativar.)`)) return;
+      try { await chamarAdmin({ acao: 'excluir', id: u.id }); toast('Usuário excluído'); renderListaUsuarios(); } catch (er) { toast(er.message, true); }
+    }
+  };
+  desenhar();
+}
+
+function modalUsuario(u = null) {
+  const novo = !u;
+  let papel = u?.papel || 'field';
+  const senha = novo ? gerarSenha() : '';
+  modal(`
+    <form id="us-form" autocomplete="off">
+      <div class="modal-head"><h2>${novo ? 'Novo usuário' : u.sem_perfil ? 'Liberar acesso' : 'Editar usuário'}</h2></div>
+      <div class="modal-body">
+        <div class="papeis">
+          <label class="papel"><input type="radio" name="papel" value="field" ${papel === 'field' ? 'checked' : ''}><span><b>Field</b><small>Trabalha em um CD: máquinas, inventários, empréstimos e etiquetas só daquele CD.</small></span></label>
+          <label class="papel"><input type="radio" name="papel" value="admin" ${papel === 'admin' ? 'checked' : ''}><span><b>Administrador</b><small>Todos os CDs, usuários, exclusões e relatórios gerais.</small></span></label>
+        </div>
+        <div class="form-grid">
+          ${campo('nome', 'Nome *', u?.nome || '', 'text', 'required')}
+          ${campo('email', 'E-mail (login) *', u?.email || '', 'email', 'required autocomplete="off"')}
+          <label class="full" id="us-cd-wrap">CD *<select name="cd_id">${opts([['', 'Selecione o CD'], ...cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`])], u?.cd_id || state.cdAtual || '')}</select></label>
+          ${novo ? `<label class="full">Senha inicial *<span class="input-row"><input name="senha" id="us-senha" class="mono" value="${senha}" minlength="8" required><button type="button" class="btn" id="us-gerar">Gerar</button></span><small class="muted">Mínimo 8 caracteres. Você verá a senha para enviar ao usuário.</small></label>`
+               : `<label class="check full"><input type="checkbox" name="ativo" ${u.ativo || u.sem_perfil ? 'checked' : ''}> Acesso ativo (desmarque para bloquear o login sem excluir)</label>`}
+        </div>
+        <p class="erro" id="us-erro"></p>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="us-salvar">${novo ? 'Criar usuário' : 'Salvar'}</button></div>
+    </form>`, (dlg) => {
+    const sincPapel = () => { papel = $('#us-form [name=papel]:checked').value; $('#us-cd-wrap').hidden = papel === 'admin'; };
+    $$('#us-form [name=papel]').forEach((r) => (r.onchange = sincPapel));
+    sincPapel();
+    $('#us-gerar')?.addEventListener('click', () => { $('#us-senha').value = gerarSenha(); });
+    $('#us-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        acao: novo ? 'criar' : 'atualizar',
+        id: u?.id,
+        nome: String(fd.get('nome')).trim(),
+        email: String(fd.get('email')).trim(),
+        papel,
+        cd_id: papel === 'field' ? fd.get('cd_id') || null : null,
+      };
+      if (papel === 'field' && !body.cd_id) return ($('#us-erro').textContent = 'Escolha o CD do Field.');
+      if (novo) body.senha = String(fd.get('senha'));
+      else body.ativo = !!fd.get('ativo');
+      $('#us-salvar').disabled = true;
+      try {
+        await chamarAdmin(body);
+        dlg.close();
+        if (novo) mostrarCredenciais(body.nome, body.email, body.senha, 'Usuário criado');
+        else toast('Usuário atualizado');
+        renderListaUsuarios();
+      } catch (er) {
+        $('#us-erro').textContent = er.message;
+        $('#us-salvar').disabled = false;
+      }
+    };
+  });
+}
+
+function mostrarCredenciais(nome, email, senha, titulo) {
+  const texto = `Olá, ${nome}! Seu acesso ao Inventário Quallit:\n${urlPainel()}\nLogin: ${email}\nSenha: ${senha}`;
+  modal(`
+    <div class="modal-head"><h2>${esc(titulo)}</h2><p class="muted" style="margin:4px 0 0">Envie estes dados ao usuário. A senha não fica visível depois.</p></div>
+    <div class="modal-body"><div class="token-box" style="white-space:pre-line">${esc(texto)}</div></div>
+    <div class="modal-foot"><a class="btn" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(texto)}">WhatsApp</a>
+      <button class="btn" id="cred-copiar">Copiar</button><button class="btn btn--primary" data-close>Concluir</button></div>`,
+  () => { $('#cred-copiar').onclick = () => navigator.clipboard.writeText(texto).then(() => toast('Copiado')); });
+}
+
+function modalSenha(u) {
+  modal(`
+    <form id="pw-form">
+      <div class="modal-head"><h2>Alterar senha</h2><p class="muted" style="margin:4px 0 0">${esc(u.nome || '')} · ${esc(u.email)}</p></div>
+      <div class="modal-body">
+        <label>Nova senha<span class="input-row"><input name="senha" id="pw-senha" class="mono" minlength="8" required value="${gerarSenha()}"><button type="button" class="btn" id="pw-gerar">Gerar</button></span></label>
+        <p class="erro" id="pw-erro"></p>
+      </div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="pw-salvar">Alterar senha</button></div>
+    </form>`, (dlg) => {
+    $('#pw-gerar').onclick = () => { $('#pw-senha').value = gerarSenha(); };
+    $('#pw-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const senha = $('#pw-senha').value;
+      $('#pw-salvar').disabled = true;
+      try {
+        await chamarAdmin({ acao: 'senha', id: u.id, senha });
+        dlg.close();
+        mostrarCredenciais(u.nome || u.email, u.email, senha, 'Senha alterada');
+      } catch (er) { $('#pw-erro').textContent = er.message; $('#pw-salvar').disabled = false; }
+    };
+  });
+}
+
+async function recarregarCDs() {
+  const { data: d } = await sb.from('cds').select('*').order('codigo');
+  state.cds = d || [];
+  if (state.cdAtual && !state.cds.some((c) => c.id === state.cdAtual)) state.cdAtual = '';
+  renderSidebar();
+}
+
+async function renderCDsAdmin() {
+  $('#us-acoes').innerHTML = '<button class="btn btn--primary" id="btn-novo-cd">+ Novo CD</button>';
+  $('#btn-novo-cd').onclick = () => modalCD();
+  const { data: perfis } = await sb.from('perfis').select('cd_id, papel, ativo');
+  const fields = (id) => (perfis || []).filter((p) => p.cd_id === id && p.papel === 'field' && p.ativo).length;
+  const maqs = (id) => state.maquinas.filter((m) => m.cd_id === id && m.status !== 'descartado').length;
+  $('#us-corpo').innerHTML = `<div class="card"><div class="table-wrap" style="max-height:none"><table>
+    <thead><tr><th>Código</th><th>Nome</th><th>Cidade / UF</th><th class="num">Máquinas</th><th class="num">Fields ativos</th><th>Status</th><th></th></tr></thead>
+    <tbody>${state.cds.map((c) => `<tr data-cd="${c.id}">
+      <td><span class="pill pill--cd">${esc(c.codigo)}</span></td><td><strong>${esc(c.nome)}</strong></td>
+      <td>${esc([c.cidade, c.uf].filter(Boolean).join(' / ') || '—')}</td>
+      <td class="num">${maqs(c.id)}</td><td class="num">${fields(c.id)}</td>
+      <td>${c.ativo ? pill('Ativo', 'ok') : pill('Inativo', 'bad')}</td>
+      <td class="acoes"><button class="btn btn--sm" data-ac="editar">Editar</button> <button class="btn btn--sm btn--ghost" data-ac="relatorio">Relatório</button> <button class="btn btn--sm btn--ghost btn--txt-bad" data-ac="excluir">Excluir</button></td></tr>`).join('')}</tbody>
+  </table></div></div>
+  <p class="muted" style="font-size:12.5px">Um CD com máquinas ou usuários não pode ser excluído — desative-o em <i>Editar</i>.</p>`;
+  $('#us-corpo').onclick = async (e) => {
+    const b = e.target.closest('[data-ac]'); if (!b) return;
+    const c = state.cds.find((x) => x.id === b.closest('tr').dataset.cd);
+    if (b.dataset.ac === 'editar') modalCD(c);
+    if (b.dataset.ac === 'relatorio') relatorioCD(c.id);
+    if (b.dataset.ac === 'excluir') {
+      if (!confirm(`Excluir o CD ${c.codigo} · ${c.nome}?`)) return;
+      const { error } = await sb.from('cds').delete().eq('id', c.id);
+      if (error) return toast(error.code === '23503' ? 'Este CD tem máquinas, inventários ou usuários. Desative-o em vez de excluir.' : erroMsg(error), true);
+      toast('CD excluído'); await recarregarCDs(); renderCDsAdmin();
+    }
+  };
+}
+
+function modalCD(c = null) {
+  modal(`
+    <form id="cd-form">
+      <div class="modal-head"><h2>${c ? 'Editar CD' : 'Novo CD'}</h2></div>
+      <div class="modal-body"><div class="form-grid">
+        ${campo('codigo', 'Código *', c?.codigo || '', 'text', 'required class="mono" placeholder="Ex.: CD03" maxlength="12"')}
+        ${campo('nome', 'Nome *', c?.nome || '', 'text', 'required placeholder="Ex.: CD Embu das Artes"')}
+        ${campo('cidade', 'Cidade', c?.cidade || '')}
+        ${campo('uf', 'UF', c?.uf || '', 'text', 'maxlength="2" style="text-transform:uppercase"')}
+        ${c ? `<label class="check full"><input type="checkbox" name="ativo" ${c.ativo ? 'checked' : ''}> CD ativo</label>` : ''}
+      </div><p class="erro" id="cd-erro"></p></div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary">${c ? 'Salvar' : 'Criar CD'}</button></div>
+    </form>`, (dlg) => {
+    $('#cd-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const row = { codigo: String(fd.get('codigo')).trim().toUpperCase(), nome: String(fd.get('nome')).trim(),
+        cidade: String(fd.get('cidade')).trim() || null, uf: String(fd.get('uf')).trim().toUpperCase() || null };
+      if (c) row.ativo = !!fd.get('ativo');
+      const { error } = c ? await sb.from('cds').update(row).eq('id', c.id) : await sb.from('cds').insert(row);
+      if (error) return ($('#cd-erro').textContent = error.code === '23505' ? 'Já existe um CD com esse código.' : erroMsg(error));
+      dlg.close(); toast(c ? 'CD atualizado' : 'CD criado');
+      await recarregarCDs(); renderCDsAdmin();
+    };
+  });
+}
+
+/* =====================================================================
+   RELATÓRIOS
+   ===================================================================== */
+const METRICAS = [
+  { k: 'total', l: 'Máquinas', f: () => true, ir: {} },
+  { k: 'desk', l: 'Desktops', f: (m) => m.tipo === 'desktop', ir: { tipo: 'desktop' } },
+  { k: 'note', l: 'Notebooks', f: (m) => m.tipo === 'notebook', ir: { tipo: 'notebook' } },
+  { k: 'online', l: 'Online 24h', f: (m) => m.ultimo_online && Date.now() - new Date(m.ultimo_online) < 864e5, pct: true },
+  { k: 'semc', l: 'Sem contato 30d', a: 'sem_contato', ruim: true },
+  { k: 'so', l: 'Windows sem suporte', a: 'so_sem_suporte', ruim: true },
+  { k: 'peca', l: 'Peça removida', a: 'hw_reduzido', ruim: true },
+  { k: 'ram', l: 'RAM < 8 GB', a: 'ram_baixa' },
+  { k: 'hdd', l: 'Disco HDD', a: 'hdd' },
+  { k: 'cheio', l: 'Disco cheio', a: 'disco_cheio' },
+  { k: 'gar', l: 'Garantia ≤ 30d', a: 'garantia_vencendo' },
+  { k: 'ren', l: 'Mais de 5 anos', a: 'renovacao' },
+  { k: 'emp', l: 'Emprestados', f: (m) => !!m.emprestimo_atual, ir: { status: 'emprestado' } },
+  { k: 'atr', l: 'Devolução atrasada', a: 'emprestimo_atrasado', ruim: true },
+  { k: 'pat', l: 'Sem patrimônio', a: 'sem_ativo' },
+];
+const temMetrica = (mt, m) => (mt.a ? (m.alertas || []).includes(mt.a) : mt.f(m));
+
+function dadosParque(tipo = '') {
+  const base = state.maquinas.filter((m) => m.status !== 'descartado' && (!tipo || m.tipo === tipo) && noCD(m));
+  const cdsVis = state.cds.length ? state.cds.filter((c) => noCD({ cd_id: c.id }) && (c.ativo || base.some((m) => m.cd_id === c.id))) : [{ id: null, codigo: '—', nome: 'Todas' }];
+  const linhas = cdsVis.map((c) => {
+    const ms = state.cds.length ? base.filter((m) => m.cd_id === c.id) : base;
+    return { cd: c, ms, v: Object.fromEntries(METRICAS.map((mt) => [mt.k, ms.filter((m) => temMetrica(mt, m)).length])) };
+  });
+  const total = { cd: { codigo: 'Total', nome: '' }, ms: base, v: Object.fromEntries(METRICAS.map((mt) => [mt.k, base.filter((m) => temMetrica(mt, m)).length])) };
+  return { linhas, total, base };
+}
+
+async function renderRelatorios(aba = 'parque') {
+  const el = $('#view-relatorios');
+  el.innerHTML = `
+    <div class="view-head">
+      <div><h1>Relatórios</h1><p>${ehAdmin() ? (state.cdAtual ? `CD selecionado: <b>${esc(cdCod(state.cdAtual))} · ${esc(cdNome(state.cdAtual))}</b>. Escolha "Todos os CDs" no menu lateral para o consolidado.` : 'Visão consolidada de todos os CDs. Clique em um número para abrir a lista de máquinas.') : `Relatórios do ${esc(cdNome(state.cdAtual))}.`}</p></div>
+      <div class="actions" id="rel-acoes"></div>
+    </div>
+    <div class="tabs tabs--page"><a class="tab ${aba === 'parque' ? 'active' : ''}" href="#relatorios/parque">Parque de máquinas</a><a class="tab ${aba === 'inventarios' ? 'active' : ''}" href="#relatorios/inventarios">Inventários</a></div>
+    <div id="rel-corpo"></div>`;
+  if (aba === 'inventarios') return renderRelInventarios();
+  return renderRelParque();
+}
+
+function renderRelParque() {
+  const f = state.relParque || (state.relParque = { tipo: '' });
+  $('#rel-acoes').innerHTML = `<button class="btn" id="rp-csv">Exportar CSV</button><button class="btn btn--primary" id="rp-imprimir">Relatório geral (PDF)</button>`;
+  const desenhar = () => {
+    const { linhas, total } = dadosParque(f.tipo);
+    const cel = (r, mt) => {
+      const n = r.v[mt.k], t = r.v.total;
+      const txt = mt.pct ? `${n}<small>${t ? Math.round((100 * n) / t) : 0}%</small>` : n;
+      return `<td class="num ${mt.ruim && n ? 'cel-ruim' : ''}">${(mt.a || mt.ir) && n && r.cd.id !== undefined ? `<a data-cd="${r.cd.id || ''}" data-m="${mt.k}">${txt}</a>` : txt}</td>`;
+    };
+    $('#rel-corpo').innerHTML = `
+      <div class="card" style="margin-bottom:12px"><div class="toolbar">
+        <select id="rp-tipo">${opts([['', 'Desktops e notebooks'], ['desktop', 'Só desktops'], ['notebook', 'Só notebooks']], f.tipo)}</select>
+        <span class="count">${linhas.length} CD(s) · descartadas não entram</span></div></div>
+      <div class="card"><div class="table-wrap" style="max-height:none"><table class="rel-tab">
+        <thead><tr><th>CD</th>${METRICAS.map((mt) => `<th class="num">${mt.l}</th>`).join('')}<th></th></tr></thead>
+        <tbody>${linhas.map((r) => `<tr><td><span class="pill pill--cd">${esc(r.cd.codigo)}</span> ${esc(r.cd.nome)}</td>${METRICAS.map((mt) => cel(r, mt)).join('')}
+          <td class="acoes">${r.cd.id ? `<button class="btn btn--sm btn--ghost" data-relcd="${r.cd.id}">Relatório</button>` : ''}</td></tr>`).join('')}
+          ${linhas.length > 1 ? `<tr class="row-total"><td>Total</td>${METRICAS.map((mt) => `<td class="num">${total.v[mt.k]}${mt.pct ? `<small>${total.v.total ? Math.round((100 * total.v[mt.k]) / total.v.total) : 0}%</small>` : ''}</td>`).join('')}<td></td></tr>` : ''}
+        </tbody></table></div></div>`;
+    $('#rp-tipo').onchange = (e) => { f.tipo = e.target.value; desenhar(); };
+    $$('#rel-corpo [data-relcd]').forEach((b) => (b.onclick = () => relatorioCD(b.dataset.relcd)));
+    $$('#rel-corpo a[data-m]').forEach((a) => (a.onclick = () => {
+      const mt = METRICAS.find((x) => x.k === a.dataset.m);
+      if (ehAdmin() && a.dataset.cd) { state.cdAtual = a.dataset.cd; store.set('cd-atual', state.cdAtual); renderSidebar(); }
+      irMaquinas({ ...(mt.ir || {}), ...(mt.a ? { alerta: mt.a } : {}), ...(f.tipo ? { tipo: f.tipo } : {}) });
+    }));
+  };
+  $('#rp-csv').onclick = () => {
+    const { linhas, total } = dadosParque(f.tipo);
+    const rows = [['Código', 'CD', ...METRICAS.map((m) => m.l)], ...linhas.map((r) => [r.cd.codigo, r.cd.nome, ...METRICAS.map((m) => r.v[m.k])]), ['Total', '', ...METRICAS.map((m) => total.v[m.k])]];
+    baixar(`parque-por-cd-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((l) => l.map(csvCel).join(';')).join('\r\n'));
+  };
+  $('#rp-imprimir').onclick = () => relatorioGeralParque(f.tipo);
+  desenhar();
+}
+
+async function carregarConfsRelatorio() {
+  const { data: confs, error } = await sb.from('conferencias').select('*').order('criado_em', { ascending: false });
+  if (error) throw error;
+  const abertas = confs.filter((c) => c.status === 'aberta' || c.total_esperadas == null).map((c) => c.id);
+  const itens = [];
+  for (let i = 0; i < abertas.length; i += 100) {
+    const { data: d } = await sb.from('conferencia_itens').select('conferencia_id, maquina_id').in('conferencia_id', abertas.slice(i, i + 100));
+    itens.push(...(d || []));
+  }
+  confs.forEach((c) => { c.r = resumoConf(c, itens.filter((i) => i.conferencia_id === c.id)); });
+  return confs;
+}
+
+async function renderRelInventarios() {
+  const corpo = $('#rel-corpo');
+  corpo.innerHTML = '<div class="skeleton">Carregando inventários…</div>';
+  let confs;
+  try { confs = await carregarConfsRelatorio(); } catch (e) { corpo.innerHTML = `<div class="card card-pad erro">${esc(erroMsg(e))}</div>`; return; }
+  state.relConfs = confs;
+  const f = state.relInv || (state.relInv = { q: '', cd: '', status: '', de: '', ate: '', resp: '' });
+  if (!f.cdTocado) f.cd = state.cdAtual || '';
+  const responsaveis = [...new Set(confs.map((c) => c.criado_por).filter(Boolean))].sort();
+  $('#rel-acoes').innerHTML = `<button class="btn" id="ri-csv">Exportar CSV</button><button class="btn btn--primary" id="ri-imprimir">Imprimir lista (PDF)</button>`;
+  corpo.innerHTML = `
+    <div class="card" style="margin-bottom:12px"><div class="toolbar filtros-rel">
+      <div class="search"><input id="ri-q" type="search" placeholder="Buscar inventário ou setor…" value="${esc(f.q)}"></div>
+      ${ehAdmin() && state.cds.length > 1 ? `<select id="ri-cd">${opts([['', 'Todos os CDs'], ...state.cds.map((c) => [c.id, `${c.codigo} · ${c.nome}`])], f.cd)}</select>` : ''}
+      <select id="ri-status">${opts([['', 'Todos os status'], ['aberta', 'Abertos'], ['finalizada', 'Finalizados']], f.status)}</select>
+      <select id="ri-resp">${opts([['', 'Qualquer responsável'], ...responsaveis.map((r) => [r, r])], f.resp)}</select>
+      <label class="periodo">De<input type="date" id="ri-de" value="${f.de}"></label>
+      <label class="periodo">Até<input type="date" id="ri-ate" value="${f.ate}"></label>
+      <button class="btn btn--ghost btn--sm" id="ri-limpar">Limpar</button>
+    </div></div>
+    <div class="kpis" id="ri-kpis"></div>
+    ${ehAdmin() && !f.cd && state.cds.length > 1 ? '<div class="card card-pad" style="margin-bottom:12px"><div class="card-head"><h2>Último inventário de cada CD</h2></div><div id="ri-ultimos"></div></div>' : ''}
+    <div class="card"><div class="table-wrap" style="max-height:none"><table class="rel-tab">
+      <thead><tr><th>Inventário</th>${ehAdmin() ? '<th>CD</th>' : ''}<th>Setor</th><th>Status</th><th>Responsável</th><th>Início</th><th>Finalizado</th>
+        <th class="num">Esperadas</th><th class="num">Encontradas</th><th class="num">Faltando</th><th class="num">Não cad.</th><th class="num">Fora</th><th>Acuracidade</th><th></th></tr></thead>
+      <tbody id="ri-tbody"></tbody></table></div></div>`;
+  const filtrados = () => {
+    const termos = up(f.q).split(/\s+/).filter(Boolean);
+    const de = f.de ? new Date(f.de + 'T00:00:00') : null, ate = f.ate ? new Date(f.ate + 'T23:59:59') : null;
+    return confs.filter((c) => (!f.cd || c.cd_id === f.cd) && (!f.status || c.status === f.status) && (!f.resp || c.criado_por === f.resp)
+      && (!de || new Date(c.criado_em) >= de) && (!ate || new Date(c.criado_em) <= ate)
+      && termos.every((t) => up(`${c.nome} ${c.setor} ${cdCod(c.cd_id)} ${cdNome(c.cd_id)}`).includes(t)));
+  };
+  const somar = (l) => l.reduce((a, c) => ({ esp: a.esp + c.r.esperadas, enc: a.enc + c.r.encontradas, fal: a.fal + c.r.faltando, des: a.des + c.r.desconhecidas, fora: a.fora + c.r.fora }), { esp: 0, enc: 0, fal: 0, des: 0, fora: 0 });
+  const barraAc = (p) => `<div class="ac"><span class="meter"><i class="${p < 90 ? (p < 70 ? 'bad' : 'warn') : 'ok'}" style="width:${p}%"></i></span><b>${p}%</b></div>`;
+  const desenhar = () => {
+    const l = filtrados();
+    const t = somar(l);
+    const acur = t.esp ? Math.round((100 * t.enc) / t.esp) : 0;
+    $('#ri-kpis').innerHTML = `
+      <div class="card kpi" style="cursor:default"><div class="kpi-label">Inventários</div><div class="kpi-value">${l.length}</div><div class="kpi-sub">${l.filter((c) => c.status === 'aberta').length} em aberto</div></div>
+      <div class="card kpi kpi--ok" style="cursor:default"><div class="kpi-label">Acuracidade geral</div><div class="kpi-value">${acur}%</div><div class="kpi-sub">encontradas ÷ esperadas</div></div>
+      <div class="card kpi" style="cursor:default"><div class="kpi-label">Máquinas conferidas</div><div class="kpi-value">${t.enc}</div><div class="kpi-sub">de ${t.esp} esperadas</div></div>
+      <div class="card kpi ${t.fal ? 'kpi--bad' : ''}" style="cursor:default"><div class="kpi-label">Faltando</div><div class="kpi-value">${t.fal}</div><div class="kpi-sub">somando os inventários</div></div>
+      <div class="card kpi ${t.des ? 'kpi--warn' : ''}" style="cursor:default"><div class="kpi-label">Não cadastradas</div><div class="kpi-value">${t.des}</div><div class="kpi-sub">códigos desconhecidos</div></div>`;
+    if ($('#ri-ultimos')) {
+      const ult = state.cds.map((cd) => ({ cd, c: confs.find((c) => c.cd_id === cd.id) }));
+      $('#ri-ultimos').innerHTML = `<table class="mini-table"><thead><tr><th>CD</th><th>Último inventário</th><th>Data</th><th>Status</th><th>Acuracidade</th></tr></thead><tbody>
+        ${ult.map(({ cd, c }) => `<tr><td><span class="pill pill--cd">${esc(cd.codigo)}</span> ${esc(cd.nome)}</td>${c ? `<td><a data-rel="${c.id}">${esc(c.nome)}</a></td><td>${data(c.criado_em)}</td><td>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</td><td>${barraAc(c.r.pct)}</td>` : '<td colspan="4" class="muted">Nenhum inventário ainda</td>'}</tr>`).join('')}
+      </tbody></table>`;
+    }
+    $('#ri-tbody').innerHTML = l.length ? l.map((c) => `<tr data-conf="${c.id}">
+      <td><a data-rel="${c.id}"><strong>${esc(c.nome)}</strong></a></td>${ehAdmin() ? `<td><span class="pill pill--cd" title="${esc(cdNome(c.cd_id))}">${esc(cdCod(c.cd_id))}</span></td>` : ''}
+      <td>${esc(c.setor || 'Todos')}</td><td>${pill(c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.status === 'aberta' ? 'info' : 'ok')}</td>
+      <td>${esc((c.criado_por || '').split('@')[0])}</td><td>${data(c.criado_em)}</td><td>${c.finalizado_em ? data(c.finalizado_em) : '—'}</td>
+      <td class="num">${c.r.esperadas}</td><td class="num">${c.r.encontradas}</td><td class="num ${c.r.faltando ? 'cel-ruim' : ''}">${c.r.faltando}</td><td class="num">${c.r.desconhecidas}</td><td class="num">${c.r.fora}</td>
+      <td>${barraAc(c.r.pct)}</td>
+      <td class="acoes"><button class="btn btn--sm btn--ghost" data-ac="abrir">Abrir</button>${ehAdmin() ? '<button class="btn btn--sm btn--ghost" data-ac="editar">Editar</button><button class="btn btn--sm btn--ghost btn--txt-bad" data-ac="excluir">Excluir</button>' : ''}</td></tr>`).join('')
+      + (l.length > 1 ? `<tr class="row-total"><td colspan="${ehAdmin() ? 7 : 6}">Total (${l.length})</td><td class="num">${t.esp}</td><td class="num">${t.enc}</td><td class="num">${t.fal}</td><td class="num">${t.des}</td><td class="num">${t.fora}</td><td>${barraAc(acur)}</td><td></td></tr>` : '')
+      : `<tr><td colspan="14" class="empty">Nenhum inventário com esses filtros.</td></tr>`;
+  };
+  const bind = (id, k, ev = 'onchange') => { const e = $('#' + id); if (e) e[ev] = (x) => { f[k] = x.target.value; if (k === 'cd') f.cdTocado = true; desenhar(); }; };
+  $('#ri-q').oninput = debounce((x) => { f.q = x.target.value; desenhar(); }, 150);
+  bind('ri-cd', 'cd'); bind('ri-status', 'status'); bind('ri-resp', 'resp'); bind('ri-de', 'de'); bind('ri-ate', 'ate');
+  $('#ri-limpar').onclick = () => { Object.assign(f, { q: '', cd: ehAdmin() ? '' : f.cd, status: '', de: '', ate: '', resp: '', cdTocado: true }); renderRelInventarios(); };
+  corpo.onclick = async (e) => {
+    const rel = e.target.closest('[data-rel]'); if (rel) return relatorioInventario(rel.dataset.rel);
+    const b = e.target.closest('[data-ac]'); if (!b) return;
+    const c = confs.find((x) => x.id === b.closest('tr').dataset.conf);
+    if (b.dataset.ac === 'abrir') location.hash = '#conferencia/' + c.id;
+    if (b.dataset.ac === 'editar') modalConf(c);
+    if (b.dataset.ac === 'excluir' && await excluirConf(c)) renderRelInventarios();
+  };
+  $('#ri-csv').onclick = () => {
+    const l = filtrados();
+    const rows = [['Inventário', 'Código CD', 'CD', 'Setor', 'Status', 'Responsável', 'Início', 'Finalizado', 'Esperadas', 'Encontradas', 'Faltando', 'Não cadastradas', 'Fora do esperado', 'Acuracidade %'],
+      ...l.map((c) => [c.nome, cdCod(c.cd_id), cdNome(c.cd_id), c.setor || 'Todos', c.status === 'aberta' ? 'Aberto' : 'Finalizado', c.criado_por, dataHora(c.criado_em), c.finalizado_em ? dataHora(c.finalizado_em) : '', c.r.esperadas, c.r.encontradas, c.r.faltando, c.r.desconhecidas, c.r.fora, c.r.pct])];
+    baixar(`inventarios-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => r.map(csvCel).join(';')).join('\r\n'));
+  };
+  $('#ri-imprimir').onclick = () => {
+    const l = filtrados(); const t = somar(l);
+    const filtrosTxt = [f.cd && `CD ${cdCod(f.cd)}`, f.status && (f.status === 'aberta' ? 'abertos' : 'finalizados'), f.resp && `responsável ${f.resp}`, f.de && `de ${dataBR(f.de)}`, f.ate && `até ${dataBR(f.ate)}`, f.q && `busca "${f.q}"`].filter(Boolean).join(' · ') || 'sem filtros';
+    abrirRelatorio('Relatório de inventários', `${l.length} inventário(s) · ${esc(filtrosTxt)}`, `
+      ${kpisRel([['Inventários', l.length], ['Acuracidade geral', (t.esp ? Math.round((100 * t.enc) / t.esp) : 0) + '%', 'ok'], ['Encontradas', `${t.enc} / ${t.esp}`], ['Faltando', t.fal, t.fal ? 'bad' : ''], ['Não cadastradas', t.des]])}
+      <table><thead><tr><th>Inventário</th><th>CD</th><th>Setor</th><th>Status</th><th>Responsável</th><th>Início</th><th>Fim</th><th class="n">Esp.</th><th class="n">Enc.</th><th class="n">Falt.</th><th class="n">Não cad.</th><th class="n">Acur.</th></tr></thead><tbody>
+      ${l.map((c) => `<tr><td>${esc(c.nome)}</td><td>${esc(cdCod(c.cd_id))}</td><td>${esc(c.setor || 'Todos')}</td><td>${c.status === 'aberta' ? 'Aberto' : 'Finalizado'}</td><td>${esc((c.criado_por || '').split('@')[0])}</td><td>${data(c.criado_em)}</td><td>${c.finalizado_em ? data(c.finalizado_em) : '—'}</td><td class="n">${c.r.esperadas}</td><td class="n">${c.r.encontradas}</td><td class="n">${c.r.faltando}</td><td class="n">${c.r.desconhecidas}</td><td class="n">${c.r.pct}%</td></tr>`).join('')}
+      <tr class="total"><td colspan="7">Total</td><td class="n">${t.esp}</td><td class="n">${t.enc}</td><td class="n">${t.fal}</td><td class="n">${t.des}</td><td class="n">${t.esp ? Math.round((100 * t.enc) / t.esp) : 0}%</td></tr></tbody></table>`);
+  };
+  desenhar();
+}
+
+// ---------------------------------------------------------------- janelas de relatório (imprimir / PDF)
+function kpisRel(itens) {
+  return `<div class="kpis">${itens.map(([l, v, cls]) => `<div class="kpi ${cls || ''}"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`;
+}
+function distRel(titulo, pares) {
+  const tot = pares.reduce((a, p) => a + p[1], 0) || 1;
+  return `<div><h2>${titulo}</h2><table><tbody>${pares.map(([k, n]) => `<tr><td>${esc(k)}</td><td style="width:45%"><div class="bar"><i style="width:${(100 * n) / tot}%"></i></div></td><td class="n">${n}</td><td class="n">${Math.round((100 * n) / tot)}%</td></tr>`).join('')}</tbody></table></div>`;
+}
+const LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo5Nzg2NTliNC01NGQxLTRlN2YtOWM1Zi1hZWQ4ZTE3MTM3ZTgAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaB78rESD5ZblQB3/0hn5UosAAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpmNjM2NWRlZS1mOGM1LTQ3YTQtYjFmZi1iOWI1ZGQ5Zjc3OTdscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoCesrCbNp4DJjzijMdXnmiAAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFggLJSXadGHdbHznwllDKwHoYNJM5mV0Fv72djZuoR3LVWkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaC7PzB8TTrDn3hOQd6aVvicAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCDRjn7YobVZOix//VLHStZRBGZmSuHPZdcUegbZukrqhWRuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBh9Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjk3ODY1OWI0LTU0ZDEtNGU3Zi05YzVmLWFlZDhlMTcxMzdlOC9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOmQ2YjE3M2MzLWQ2YzktNGEyMS1iZjhiLTg2ZWY3NmNlYTAxZnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCAslJdp0Yd1sfOfCWUMrAehg0kzmZXQW/vZ2Nm6hHctVaJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggjjvl4ivi27bjwwzebsFqgijdiYjRK52skrOtiEwDNpeiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggwEHycfQfdEJHnJKHsIwdKUH6dd/0beX1mTyvWxwV/8d0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQMe+2kGPMyWwbrxfGjBxuk9gPWb3iThBvZN51FJ3G4tiu9pgKql3cUwCEgq7o7CePAfEE6HPGxuA/pW8brpuhzc=</c2pa:manifest></metadata><defs><mask id="qmr" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><rect width="200" height="200" fill="#fff"/><line x1="124" y1="124" x2="157" y2="157" stroke="#000" stroke-width="45" stroke-linecap="round"/></mask></defs><circle cx="99.5" cy="99.5" r="65" fill="none" stroke="#1C9BA9" stroke-width="33" mask="url(#qmr)"/><line x1="125" y1="125" x2="156" y2="156" stroke="#FF8221" stroke-width="31" stroke-linecap="round"/></svg>';
+function abrirRelatorio(titulo, subtitulo, corpo, janela) {
+  const w = janela || window.open('', '_blank');
+  if (!w) return toast('Permita pop-ups deste site para abrir o relatório.', true);
+  w.document.open();
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
+    @page { size: A4; margin: 13mm 11mm; }
+    body { font: 12px/1.45 "Segoe UI", Arial, sans-serif; color: #0e1d20; margin: 0; background: #fff; }
+    .barra { position: sticky; top: 0; background: #0c2226; color: #fff; padding: 10px 18px; display: flex; gap: 10px; justify-content: space-between; align-items: center; }
+    .barra button { background: #1c9ba9; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; font: inherit; }
+    main { max-width: 1040px; margin: 0 auto; padding: 22px 20px; }
+    header { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #1c9ba9; padding-bottom: 10px; margin-bottom: 14px; position: relative; }
+    header::after { content: ""; position: absolute; left: 0; bottom: -3px; width: 70px; height: 3px; background: #ff8221; }
+    header svg { width: 44px; height: 44px; flex: none; } header h1 { font-size: 19px; margin: 0; } header p { margin: 2px 0 0; color: #557276; }
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 12px 0 6px; }
+    .kpi { border: 1px solid #dde6e8; border-radius: 8px; padding: 8px 10px; } .kpi b { display: block; font-size: 19px; } .kpi span { color: #627a7f; font-size: 11px; }
+    .kpi.bad b { color: #cc2b20; } .kpi.ok b { color: #127f8b; } .kpi.warn b { color: #b25f00; }
+    h2 { font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; color: #127f8b; margin: 18px 0 6px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; } th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #e3eaec; vertical-align: top; }
+    th { background: #f1f5f6; font-weight: 600; color: #33474b; } .n { text-align: right; white-space: nowrap; }
+    tr.total td { font-weight: 700; border-top: 2px solid #0e1d20; background: #f6f9fa; }
+    .ruim { color: #cc2b20; font-weight: 700; }
+    .bar { height: 7px; background: #ecf1f2; border-radius: 9px; overflow: hidden; } .bar i { display: block; height: 100%; background: #1c9ba9; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; } .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 18px; }
+    .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #fdf1df; color: #b25f00; margin: 1px; white-space: nowrap; }
+    .tag.bad { background: #fde8e6; color: #cc2b20; } .mono { font-family: Consolas, monospace; } .muted { color: #7a8f93; }
+    footer { margin-top: 22px; color: #8a9b9e; font-size: 10px; border-top: 1px solid #e3eaec; padding-top: 6px; }
+    @media print { .barra { display: none; } main { padding: 0; max-width: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
+  </style></head><body><div class="barra"><span>${esc(titulo)}</span><button onclick="print()">Imprimir / Salvar PDF</button></div>
+  <main><header>${LOGO_SVG}<div><h1>${esc(titulo)}</h1><p>${subtitulo}</p></div></header>${corpo}
+  <footer>Inventário Quallit · gerado em ${dataHora(new Date().toISOString())} por ${esc(state.perfil?.nome || state.user?.email || '')}</footer></main></body></html>`);
+  w.document.close();
+}
+
+function relatorioGeralParque(tipo = '') {
+  const { linhas, total, base } = dadosParque(tipo);
+  const pct = (n, t) => (t ? Math.round((100 * n) / t) : 0);
+  const sub = `${state.cdAtual ? esc(cdCod(state.cdAtual) + ' · ' + cdNome(state.cdAtual)) : `${linhas.length} CD(s)`} · ${tipo ? (tipo === 'desktop' ? 'só desktops' : 'só notebooks') : 'desktops e notebooks'} · ${data(new Date().toISOString())}`;
+  abrirRelatorio('Relatório geral do parque', sub, `
+    ${kpisRel([['Máquinas', total.v.total], ['Online 24h', pct(total.v.online, total.v.total) + '%', 'ok'], ['Sem contato 30d', total.v.semc, total.v.semc ? 'bad' : ''],
+      ['Windows sem suporte', total.v.so, total.v.so ? 'bad' : ''], ['Peça removida', total.v.peca, total.v.peca ? 'bad' : ''], ['Emprestados', total.v.emp], ['Mais de 5 anos', total.v.ren, total.v.ren ? 'warn' : '']])}
+    <h2>Indicadores por CD</h2>
+    <table><thead><tr><th>CD</th>${METRICAS.map((m) => `<th class="n">${m.l}</th>`).join('')}</tr></thead><tbody>
+      ${linhas.map((r) => `<tr><td><b>${esc(r.cd.codigo)}</b> ${esc(r.cd.nome)}</td>${METRICAS.map((m) => `<td class="n ${m.ruim && r.v[m.k] ? 'ruim' : ''}">${r.v[m.k]}${m.pct ? ` (${pct(r.v[m.k], r.v.total)}%)` : ''}</td>`).join('')}</tr>`).join('')}
+      ${linhas.length > 1 ? `<tr class="total"><td>Total</td>${METRICAS.map((m) => `<td class="n">${total.v[m.k]}</td>`).join('')}</tr>` : ''}
+    </tbody></table>
+    <div class="grid3">
+      ${distRel('Sistema operacional', contar(base, soGrupo))}
+      ${distRel('Memória RAM', contar(base, ramFaixa).sort((a, b) => ['4 GB ou menos', '8 GB', '16 GB', '32 GB ou mais', 'Sem dado'].indexOf(a[0]) - ['4 GB ou menos', '8 GB', '16 GB', '32 GB ou mais', 'Sem dado'].indexOf(b[0])))}
+      ${distRel('Armazenamento', contar(base, tipoDisco))}
+      ${distRel('Idade do parque', contar(base, idadeFaixa).sort((a, b) => ORDEM_IDADE.indexOf(a[0]) - ORDEM_IDADE.indexOf(b[0])))}
+      ${distRel('Garantia', contar(base, garantiaFaixa).sort((a, b) => ORDEM_GAR.indexOf(a[0]) - ORDEM_GAR.indexOf(b[0])))}
+      ${distRel('Status', contar(base, (m) => STATUS[m.status]))}
+    </div>`);
+}
+
+async function relatorioCD(cdId) {
+  const w = window.open('', '_blank');
+  if (!w) return toast('Permita pop-ups deste site para abrir o relatório.', true);
+  w.document.write('<p style="font:16px sans-serif;padding:24px">Gerando relatório…</p>');
+  const cd = cdDe(cdId) || { codigo: '—', nome: '' };
+  const ms = state.maquinas.filter((m) => m.cd_id === cdId && m.status !== 'descartado');
+  const v = Object.fromEntries(METRICAS.map((mt) => [mt.k, ms.filter((m) => temMetrica(mt, m)).length]));
+  const graves = ms.filter((m) => (m.alertas || []).some((a) => ALERTAS[a]?.grave)).sort((a, b) => (b.alertas || []).length - (a.alertas || []).length);
+  const emp = ms.filter((m) => m.emprestimo_atual);
+  const { data: confs } = await sb.from('conferencias').select('*').eq('cd_id', cdId).order('criado_em', { ascending: false }).limit(8);
+  const pct = (n) => (v.total ? Math.round((100 * n) / v.total) : 0);
+  abrirRelatorio(`Relatório do CD ${cd.codigo}`, `${esc(cd.nome)}${cd.cidade ? ' · ' + esc(cd.cidade) + (cd.uf ? '/' + esc(cd.uf) : '') : ''} · ${data(new Date().toISOString())}`, `
+    ${kpisRel([['Máquinas', v.total], ['Desktops / notebooks', `${v.desk} / ${v.note}`], ['Online 24h', pct(v.online) + '%', 'ok'], ['Sem contato 30d', v.semc, v.semc ? 'bad' : ''],
+      ['Windows sem suporte', v.so, v.so ? 'bad' : ''], ['Peça removida', v.peca, v.peca ? 'bad' : ''], [v.atr ? `Emprestados · ${v.atr} atrasado(s)` : 'Emprestados', v.emp, v.atr ? 'bad' : ''], ['Garantia ≤ 30d', v.gar, v.gar ? 'warn' : '']])}
+    <div class="grid3">
+      ${distRel('Sistema operacional', contar(ms, soGrupo))}
+      ${distRel('Memória RAM', contar(ms, ramFaixa))}
+      ${distRel('Armazenamento', contar(ms, tipoDisco))}
+      ${distRel('Idade', contar(ms, idadeFaixa).sort((a, b) => ORDEM_IDADE.indexOf(a[0]) - ORDEM_IDADE.indexOf(b[0])))}
+      ${distRel('Garantia', contar(ms, garantiaFaixa).sort((a, b) => ORDEM_GAR.indexOf(a[0]) - ORDEM_GAR.indexOf(b[0])))}
+      ${distRel('Setores', contar(ms, (m) => m.setor || 'Sem setor'))}
+    </div>
+    <h2>Máquinas com alertas importantes (${graves.length})</h2>
+    ${graves.length ? `<table><thead><tr><th>Hostname</th><th>Patrimônio</th><th>Tipo / modelo</th><th>Setor</th><th>Último contato</th><th>Alertas</th></tr></thead><tbody>
+      ${graves.map((m) => `<tr><td class="mono">${esc(m.hostname)}</td><td class="mono">${esc(m.ativo || '—')}</td><td>${esc(TIPO[m.tipo])} ${esc(m.modelo || '')}</td><td>${esc(m.setor || '—')}</td><td>${m.ultimo_online ? dataHora(m.ultimo_online) : 'nunca'}</td>
+        <td>${(m.alertas || []).map((a) => `<span class="tag ${ALERTAS[a]?.grave ? 'bad' : ''}">${esc(ALERTAS[a]?.l || a)}</span>`).join('')}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">Nenhum alerta importante. 🎉</p>'}
+    <h2>Empréstimos em aberto (${emp.length})</h2>
+    ${emp.length ? `<table><thead><tr><th>Equipamento</th><th>Colaborador</th><th>Retirada</th><th>Devolução prevista</th></tr></thead><tbody>
+      ${emp.map((m) => { const e = m.emprestimo_atual; const at = e.previsto_devolucao && new Date(e.previsto_devolucao) < new Date();
+        return `<tr><td class="mono">${esc(m.hostname)} ${esc(m.ativo || '')}</td><td>${esc(e.colaborador)} ${esc(e.matricula || '')}</td><td>${dataHora(e.retirado_em)}</td><td class="${at ? 'ruim' : ''}">${e.previsto_devolucao ? dataHora(e.previsto_devolucao) : '—'}${at ? ' (atrasado)' : ''}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted">Nenhum equipamento emprestado.</p>'}
+    <h2>Últimos inventários</h2>
+    ${(confs || []).length ? `<table><thead><tr><th>Inventário</th><th>Setor</th><th>Status</th><th>Início</th><th class="n">Esperadas</th><th class="n">Encontradas</th><th class="n">Faltando</th><th class="n">Acuracidade</th></tr></thead><tbody>
+      ${confs.map((c) => { const r = resumoConf(c, []); const ok = c.status === 'finalizada' && c.total_esperadas != null;
+        return `<tr><td>${esc(c.nome)}</td><td>${esc(c.setor || 'Todos')}</td><td>${c.status === 'aberta' ? 'Aberto' : 'Finalizado'}</td><td>${data(c.criado_em)}</td><td class="n">${ok ? r.esperadas : '—'}</td><td class="n">${ok ? r.encontradas : '—'}</td><td class="n">${ok ? r.faltando : '—'}</td><td class="n">${ok ? r.pct + '%' : 'em andamento'}</td></tr>`; }).join('')}</tbody></table>` : '<p class="muted">Nenhum inventário registrado.</p>'}`, w);
+}
+
+async function relatorioInventario(confId) {
+  const w = window.open('', '_blank');
+  if (!w) return toast('Permita pop-ups deste site para abrir o relatório.', true);
+  w.document.write('<p style="font:16px sans-serif;padding:24px">Gerando relatório…</p>');
+  const [{ data: c, error }, { data: itens }] = await Promise.all([
+    sb.from('conferencias').select('*').eq('id', confId).single(),
+    sb.from('conferencia_itens').select('*').eq('conferencia_id', confId).order('lido_em'),
+  ]);
+  if (error) { w.close(); return toast(erroMsg(error), true); }
+  const k = calcularConf(c, itens || []);
+  const pct = k.esperadasN ? Math.round((100 * k.achadasEsperadas) / k.esperadasN) : 0;
+  const tabelaMaq = (lista, extra) => `<table><thead><tr><th>Hostname</th><th>Patrimônio</th><th>Tipo / modelo</th><th>Setor / local</th>${extra.cab}</tr></thead><tbody>
+    ${lista.map((x) => { const m = x.m || x; return `<tr><td class="mono">${esc(m.hostname)}</td><td class="mono">${esc(m.ativo || '—')}</td><td>${esc(TIPO[m.tipo] || '')} ${esc(m.modelo || '')}</td><td>${esc(m.setor || '—')}${m.localizacao ? ' · ' + esc(m.localizacao) : ''}</td>${extra.cel(x)}</tr>`; }).join('')}</tbody></table>`;
+  abrirRelatorio(`Inventário: ${c.nome}`, `${esc(cdCod(c.cd_id))} · ${esc(cdNome(c.cd_id))} · ${esc(c.setor || 'todos os setores')} · ${c.status === 'aberta' ? 'em andamento' : 'finalizado em ' + dataHora(c.finalizado_em)}`, `
+    ${kpisRel([['Acuracidade', pct + '%', pct >= 95 ? 'ok' : pct >= 80 ? 'warn' : 'bad'], ['Encontradas', `${k.achadasEsperadas} / ${k.esperadasN}`], ['Faltando', k.faltando.length, k.faltando.length ? 'bad' : ''],
+      ['Fora do esperado', k.foraDoEsperado.length, k.foraDoEsperado.length ? 'warn' : ''], ['Não cadastradas', k.desconhecidos.length, k.desconhecidos.length ? 'warn' : ''], ['Leituras', (itens || []).length]])}
+    <table style="margin-top:8px"><tbody>
+      <tr><th style="width:22%">Iniciado</th><td>${dataHora(c.criado_em)} por ${esc(c.criado_por || '—')}</td><th style="width:22%">Finalizado</th><td>${c.finalizado_em ? `${dataHora(c.finalizado_em)} por ${esc(c.finalizado_por || '—')}` : '—'}</td></tr>
+    </tbody></table>
+    <h2>Faltando (${k.faltando.length})</h2>
+    ${k.faltando.length ? tabelaMaq(k.faltando, { cab: '<th>Último contato</th>', cel: (m) => `<td>${m.ultimo_online ? dataHora(m.ultimo_online) : 'nunca'}</td>` }) : '<p class="muted">Nenhuma máquina faltando.</p>'}
+    ${k.foraDoEsperado.length ? `<h2>Encontradas fora do esperado (${k.foraDoEsperado.length})</h2>${tabelaMaq(k.foraDoEsperado, { cab: '<th>Motivo</th><th>Lida em</th>', cel: (x) => `<td>${x.m.cd_id !== c.cd_id ? 'Outro CD: ' + esc(cdCod(x.m.cd_id)) : ['extraviado', 'descartado'].includes(x.m.status) ? 'Estava ' + esc(STATUS[x.m.status]) : 'Outro setor'}</td><td>${dataHora(x.item.lido_em)}</td>` })}` : ''}
+    ${k.desconhecidos.length ? `<h2>Códigos não cadastrados (${k.desconhecidos.length})</h2><table><thead><tr><th>Código lido</th><th>Local</th><th>Lido em</th><th>Por</th></tr></thead><tbody>
+      ${k.desconhecidos.map((i) => `<tr><td class="mono">${esc(i.codigo_lido)}</td><td>${esc(i.localizacao || '—')}</td><td>${dataHora(i.lido_em)}</td><td>${esc(i.lido_por || '')}</td></tr>`).join('')}</tbody></table>` : ''}
+    <h2>Encontradas (${k.encontradas.length - k.foraDoEsperado.length})</h2>
+    ${tabelaMaq(k.encontradas.filter((x) => !k.foraDoEsperado.includes(x)), { cab: '<th>Lida em</th><th>Local da leitura</th><th>Por</th>', cel: (x) => `<td>${dataHora(x.item.lido_em)}</td><td>${esc(x.item.localizacao || '—')}</td><td>${esc((x.item.lido_por || '').split('@')[0])}</td>` })}`, w);
 }
 
 /* =====================================================================
@@ -1958,13 +2645,71 @@ $('#login-form').onsubmit = async (e) => {
   if (error) $('#login-erro').textContent = error.message === 'Invalid login credentials' ? 'E-mail ou senha inválidos.' : error.message;
 };
 
+async function carregarPerfil(userId) {
+  const [p, c] = await Promise.all([
+    sb.from('perfis').select('*').eq('user_id', userId).maybeSingle(),
+    sb.from('cds').select('*').order('codigo'),
+  ]);
+  if (ehErroDeRede(p.error) || ehErroDeRede(c.error)) {
+    const cache = await idbGet('perfil:' + userId);
+    if (cache) { state.perfil = cache.perfil; state.cds = cache.cds; return true; }
+  }
+  if (p.error && /perfis|relation|does not exist|schema cache/i.test(p.error.message)) {
+    // banco ainda sem o 04: funciona como antes (todos administradores, um CD)
+    state.perfil = { papel: 'admin', nome: state.user.email, ativo: true, legado: true };
+    state.cds = [];
+    return true;
+  }
+  if (!p.data || !p.data.ativo) return false;
+  state.perfil = p.data;
+  state.cds = c.data || [];
+  idbSet('perfil:' + userId, { perfil: state.perfil, cds: state.cds });
+  return true;
+}
+
+function renderSidebar() {
+  const box = $('#cd-box');
+  const admin = ehAdmin();
+  $$('[data-admin]').forEach((el) => (el.hidden = !admin));
+  $('#user-email').innerHTML = `<strong>${esc(state.perfil?.nome || state.user?.email || '')}</strong><span>${admin ? 'Administrador' : 'Field'}</span>`;
+  if (!state.cds.length) { box.hidden = true; return; }
+  box.hidden = false;
+  if (admin) {
+    box.innerHTML = `<label class="cd-label" for="cd-sel">CD</label>
+      <select id="cd-sel">${opts([['', `Todos os CDs (${state.cds.length})`], ...state.cds.map((c) => [c.id, `${c.codigo} · ${c.nome}${c.ativo ? '' : ' (inativo)'}`])], state.cdAtual)}</select>`;
+    $('#cd-sel').onchange = (e) => {
+      state.cdAtual = e.target.value;
+      store.set('cd-atual', state.cdAtual);
+      state.sel.clear();
+      state.maqMontada && renderTabela();
+      navegar();
+    };
+  } else {
+    box.innerHTML = `<span class="cd-label">CD</span><div class="cd-fixo"><b>${esc(cdCod(state.cdAtual))}</b> ${esc(cdNome(state.cdAtual))}</div>`;
+  }
+}
+
+function semAcesso() {
+  $('#app').hidden = true;
+  $('#login').hidden = false;
+  $('#login-form').innerHTML = `
+    <div class="brand brand--lg"><span class="brand-mark"></span><div><strong>Inventário</strong><small>Quallit · CD</small></div></div>
+    <h2>Acesso não liberado</h2>
+    <p class="muted" style="margin:0">O usuário <b>${esc(state.user?.email || '')}</b> ainda não tem permissão ou foi desativado. Peça ao administrador para liberar o seu acesso.</p>
+    <button type="button" class="btn btn--block" id="sem-sair">Sair</button>`;
+  $('#sem-sair').onclick = () => sb.auth.signOut();
+}
+
 let iniciado = false;
 async function entrar(session) {
   state.user = session.user;
-  $('#login').hidden = true; $('#app').hidden = false;
-  $('#user-email').textContent = session.user.email;
   if (iniciado) return;
   iniciado = true;
+  if (!(await carregarPerfil(session.user.id))) return semAcesso();
+  state.cdAtual = ehAdmin() ? (store.get('cd-atual') || '') : state.perfil.cd_id;
+  if (state.cdAtual && !state.cds.some((c) => c.id === state.cdAtual)) state.cdAtual = '';
+  $('#login').hidden = true; $('#app').hidden = false;
+  renderSidebar();
   $('#view-painel').innerHTML = '<div class="skeleton">Carregando inventário…</div>';
   try {
     await Promise.all([carregarMaquinas(), carregarHist()]);
@@ -1980,9 +2725,9 @@ async function entrar(session) {
   atualizarBadge();
   atualizarPendentes().then(sincronizar);
   setInterval(sincronizar, 20_000);
-  const atrasados = state.maquinas.filter((m) => (m.alertas || []).includes('emprestimo_atrasado')).length;
+  const atrasados = MQ().filter((m) => (m.alertas || []).includes('emprestimo_atrasado')).length;
   if (atrasados) toast(`${atrasados} empréstimo(s) com devolução atrasada`, true);
-  const pecas = state.maquinas.filter((m) => (m.alertas || []).includes('hw_reduzido')).length;
+  const pecas = MQ().filter((m) => (m.alertas || []).includes('hw_reduzido')).length;
   if (pecas) toast(`${pecas} máquina(s) com memória ou disco reduzido — confira`, true);
 }
 
