@@ -1,4 +1,7 @@
-// Página pública: o colaborador baixa o instalador já configurado e vê o computador ser reconhecido.
+// Página pública: o colaborador baixa o instalador e vê o computador ser reconhecido.
+// O instalador é um .ps1 FIXO (igual para todos, pode ser assinado pela CA da empresa). O que é
+// deste link (token, patrimônio, setor) fica num convite no servidor; o código curto do convite
+// vai no nome do arquivo baixado e o instalador busca a configuração por ele.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 
 const $ = (s) => document.querySelector(s);
@@ -36,9 +39,37 @@ function codigoInstalacao() {
 }
 const codigo = codigoInstalacao();
 
-const nomeArquivo = `Inventario-Quallit${link.ativo ? '-' + link.ativo.replace(/[^\w-]/g, '') : ''}.cmd`;
-$('#nome-arquivo').textContent = nomeArquivo;
-$('#mock-nome').textContent = nomeArquivo;
+const rpc = (fn, corpo) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+  method: 'POST',
+  headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify(corpo),
+});
+
+// convite no servidor: devolve o código curto (o mesmo enquanto este navegador usar o mesmo código de instalação)
+let convite = null;
+async function prepararConvite() {
+  if (convite) return convite;
+  const r = await rpc('preparar_instalacao', {
+    p_token: link.token, p_codigo_instalacao: codigo,
+    p_dados: { ativo: link.ativo, setor: link.setor, localizacao: link.localizacao, responsavel: link.responsavel, proxy: link.proxy },
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(/invalido|expirado/i.test(j.message || '') ? 'este link expirou. Peça um link novo para o técnico de TI.' : (j.message || 'servidor indisponível'));
+  }
+  convite = await r.json();
+  return convite;
+}
+const nomeArquivo = (cod) => `Instalar-InventarioQuallit-${cod}.ps1`;
+const codFmt = (cod) => cod.slice(0, 5) + '-' + cod.slice(5);
+function mostrarCodigo(cod) {
+  $('#nome-arquivo').textContent = nomeArquivo(cod);
+  $('#mock-nome').textContent = nomeArquivo(cod);
+  $('#codigo-inst').textContent = codFmt(cod);
+  $('#bloco-codigo').hidden = false;
+}
+prepararConvite().then(mostrarCodigo).catch((err) => { $('#nome-arquivo').textContent = 'Não foi possível preparar a instalação: ' + err.message; });
+$('#btn-copiar-cod')?.addEventListener('click', () => navigator.clipboard?.writeText(convite || '').then(() => { $('#btn-copiar-cod').textContent = 'Copiado'; setTimeout(() => ($('#btn-copiar-cod').textContent = 'Copiar'), 1500); }));
 
 // chips com o que o técnico já definiu
 $('#chips').innerHTML = [
@@ -73,54 +104,24 @@ function passo(n) {
   });
 }
 
-function b64utf8(texto) {
-  const bytes = new TextEncoder().encode(texto);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-
-async function gerarInstalador() {
-  const v = Date.now();
-  const [coletor, modelo] = await Promise.all([
-    fetch(`agente/coletor.ps1?v=${v}`).then((r) => { if (!r.ok) throw new Error('coletor.ps1 não encontrado'); return r.text(); }),
-    fetch(`agente/instalador.ps1?v=${v}`).then((r) => { if (!r.ok) throw new Error('instalador.ps1 não encontrado'); return r.text(); }),
-  ]);
-  const config = {
-    supabase_url: SUPABASE_URL,
-    supabase_anon_key: SUPABASE_ANON_KEY,
-    agente_token: link.token,
-    proxy: link.proxy,
-    ativo: link.ativo,
-    setor: link.setor,
-    localizacao: link.localizacao,
-    responsavel: link.responsavel,
-    codigo_instalacao: codigo,
-  };
-  const coletorB64 = b64utf8(coletor).match(/.{1,100}/g).join('\n');
-  const ps = modelo
-    .replace('__COLETOR_B64__', () => coletorB64)
-    .replace('__CONFIG_B64__', () => b64utf8(JSON.stringify(config)));
-  const cabecalho = [
-    '@echo off',
-    'setlocal',
-    'title Inventario Quallit - Instalacao',
-    'set "IQ_SELF=%~f0"',
-    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllText($env:IQ_SELF); $i=$t.LastIndexOf(\'#__INSTALADOR__\'); Invoke-Expression $t.Substring($i)"',
-    'exit /b %errorlevel%',
-    '',
-  ].join('\n');
-  return (cabecalho + ps).replace(/\r?\n/g, '\r\n');
+async function baixarInstalador() {
+  const cod = await prepararConvite();
+  // o arquivo é o mesmo para todos (fixo e assinável): os bytes vão sem nenhuma alteração
+  const r = await fetch(`agente/Instalar-InventarioQuallit.ps1?v=${Date.now()}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error('instalador não encontrado no site');
+  const blob = new Blob([await r.arrayBuffer()], { type: 'application/octet-stream' });
+  return { cod, blob };
 }
 
 $('#btn-baixar').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   try {
-    const conteudo = await gerarInstalador();
+    const { cod, blob } = await baixarInstalador();
+    mostrarCodigo(cod);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([conteudo], { type: 'application/octet-stream' }));
-    a.download = nomeArquivo;
+    a.href = URL.createObjectURL(blob);
+    a.download = nomeArquivo(cod);
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     store.set('iq-baixou', String(Date.now()));
