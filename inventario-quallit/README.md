@@ -40,6 +40,10 @@ sql/04_multicd_usuarios.sql → CDs, perfis (Administrador / Field) e regras de 
 sql/05_agendamentos.sql     → inventários programados (único, diário, semanal, mensal) com prazo
 sql/06_agente_v2.sql        → agente 2.0: sinal, "Coletar agora", atualização automática e redes
 sql/07_instalador_ps1.sql   → convites com código curto para o instalador .ps1 fixo (sem .cmd)
+sql/08_coleta_planilha.sql  → importação da coleta por planilha (kit sem instalação)
+sql/09_registro_planilha.sql → página "Registrar computador" importa a planilha do Invent_local
+web/agente/planilha/        → Invent_local novo: COLETAR.bat + coletar.ps1 (grava planilha do Excel .xlsx)
+web/js/planilha.js          → leitura de .xlsx/.csv e montagem do Invent_local.zip
 msi/                        → pacote MSI do agente (WiX) para Intune / SCCM / PDQ / GPO
 ferramentas/empacotar.ps1   → assina e gera o instalador .ps1, o MSI e os hashes SHA-256
 supabase/functions/admin-usuarios/ → função do servidor que cria e gerencia logins
@@ -56,7 +60,7 @@ agente/config.json       → URL, chave anon e token do agente (NÃO versionar)
 ## Instalação
 
 ### 1. Banco de dados (uma vez)
-1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql`, `sql/04_multicd_usuarios.sql`, `sql/05_agendamentos.sql`, `sql/06_agente_v2.sql` e `sql/07_instalador_ps1.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
+1. Supabase → **SQL Editor** → New query → cole todo o conteúdo de `sql/01_schema.sql` → **Run**. Depois faça o mesmo com `sql/02_link_instalacao.sql`, `sql/03_garantia_emprestimos.sql`, `sql/04_multicd_usuarios.sql`, `sql/05_agendamentos.sql`, `sql/06_agente_v2.sql`, `sql/07_instalador_ps1.sql`, `sql/08_coleta_planilha.sql` e `sql/09_registro_planilha.sql` (sempre nessa ordem; se rodar um arquivo anterior de novo, rode os seguintes em seguida). Ao rodar o 04, **quem já tem login vira Administrador** e as máquinas existentes vão para o CD "CD01 · CD Principal" (renomeie em *Usuários e CDs → CDs*).
 2. **Authentication → Users → Add user**: crie o usuário de cada pessoa que vai usar o painel (e-mail + senha, marque *Auto Confirm*).
 3. **Authentication → Sign In / Providers → Email**: desative **"Allow new users to sign up"** (só quem você criar entra).
 
@@ -67,6 +71,7 @@ Por usar módulos ES, abra via servidor HTTP (não funciona com duplo clique em 
 - Publique a pasta `web/` no **GitHub Pages**, Netlify ou Vercel (é só estático).
 
 ### 3. Agente nas máquinas
+- **Sem instalar nada (Invent_local + planilha do Excel)**: para máquinas onde o agente não pode ser instalado. Veja [Invent_local](#invent_local-registro-sem-instalação-planilha-do-excel).
 - **Link para o colaborador (mais fácil)**: Painel → *Agente coletor* → **Gerar link de instalação** (ou *Máquinas* → *Link de instalação*). Patrimônio/setor são opcionais. O colaborador abre o link **no computador**, clica em **Baixar instalador** e abre o arquivo `.cmd`:
   - como usuário comum: instala em `C:\Users\<usuário>\AppData\Local\InventarioQuallit`, sinal a cada 5 min e coleta completa ao entrar no Windows e de hora em hora;
   - como administrador: instala em `C:\InventarioQuallit` (protegida), sinal a cada 5 min e coleta completa ao ligar, ao entrar e de hora em hora (tarefa SYSTEM).
@@ -259,3 +264,41 @@ Sem `-Certificado`, os arquivos saem sem assinatura. Depois, publique a pasta `w
 - **Agente assinado só aceita atualização assinada pelo mesmo certificado.** Se o coletor instalado estiver assinado, uma versão publicada sem assinatura (ou com outro certificado) é recusada e registrada no `coletor.log`.
 - **Liberação por hash:** se o time de segurança preferir, envie o `SHA256SUMS.txt` para eles cadastrarem os arquivos como permitidos no Falcon (*IOC Management*). Regere e reenvie a cada versão.
 - Com GPO `AllSigned`, os scripts precisam estar assinados por um certificado confiável no domínio. O empacotar.ps1 já cuida disso quando recebe `-Certificado`.
+
+## Invent_local: registro sem instalação (planilha do Excel)
+
+Nova versão do "Invent_local": um `.bat` que roda sem instalar nada, sem administrador e sem internet, e grava a planilha do Excel **`inventario-quallit.xlsx`** com tudo o que o inventário precisa. Funciona em máquinas da empresa onde o agente é bloqueado, porque não cria tarefa agendada, não baixa nada da internet e não fala com servidor externo: só lê o WMI e grava um arquivo.
+
+**Kit:** `web/agente/planilha/` (`COLETAR.bat`, `coletar.ps1`, `LEIA-ME.txt`). A página e o painel montam o **Invent_local.zip** na hora, a partir desses arquivos.
+
+**Primeiro:** rode `sql/08_coleta_planilha.sql` e depois `sql/09_registro_planilha.sql` no Supabase (uma vez).
+
+### Pela página "Registrar computador" (colaborador)
+O link de instalação agora oferece duas opções: **Instalar o agente** ou **Sem instalar (Invent_local)**. Para abrir já na segunda, acrescente `&modo=planilha` ao link.
+1. **Baixar Invent_local** → `Invent_local.zip`.
+2. Extrair e dar dois cliques em `COLETAR.bat` → patrimônio e setor. Ao terminar, a pasta abre com o `inventario-quallit.xlsx` selecionado.
+3. Na mesma página aparece o campo de importação: escolher (ou arrastar) o arquivo → conferir os dados → **Enviar para o inventário**. A página mostra o computador registrado.
+
+A página não tem login: ela usa o token do link (o mesmo do agente), que define o CD. Patrimônio/setor do link valem quando a planilha não trouxer.
+
+### Pela pasta de rede (técnico, vários computadores)
+1. Extraia o `Invent_local.zip` (botão em *Agente coletor → Instalação*) numa pasta de rede com permissão de gravação (ex.: `\\servidor\TI\Inventario`).
+2. Em cada computador: dois cliques em `COLETAR.bat`. A planilha junta todos os computadores, um por linha.
+3. No painel: **Máquinas → Importar coleta** → `inventario-quallit.xlsx`.
+
+O que muda em relação ao Invent_local antigo:
+
+| | Invent_local antigo | Invent_local novo |
+|---|---|---|
+| Arquivo | CSV separado por vírgula (no Excel pt-BR abre numa coluna só) | Planilha do Excel `.xlsx` de verdade: cabeçalho, filtro, colunas ajustadas, números como número |
+| Dados | 12 colunas (RAM e disco só o total) | Mesmos dados do agente: módulos de RAM, discos SSD/HDD e saúde, volumes, versão do Windows (24H2), build, IP, MAC, usuário, tipo |
+| Executar de novo | Duplica a linha | Atualiza a linha da máquina (série → hostname) |
+| Planilha aberta no Excel | Erro após 15 s | Dados ficam salvos em `dados/`; a planilha é refeita na próxima execução |
+| Data "instalação" | Era a data do BIOS | Data real de instalação do Windows + data da coleta |
+| Depois | Planilha isolada | Importa na página ou no painel: alertas, histórico, etiquetas, conferência |
+
+- A importação usa a mesma regra do agente (nº de série → patrimônio → hostname) e **não duplica**. Por padrão só preenche patrimônio/setor/localização/responsável vazios; no painel, marque *Substituir* para a planilha valer mais.
+- Se a máquina tem o agente e ele reportou depois da coleta da planilha, os dados técnicos do agente são mantidos.
+- Field importa só no próprio CD; Administrador escolhe o CD das máquinas novas.
+- Também são aceitos: planilha re-salva no Excel, CSV e a planilha antiga `list_info.csv`.
+- Sem perguntas (script de logon da GPO): `powershell -NoProfile -ExecutionPolicy Bypass -File \\servidor\TI\Inventario\coletar.ps1 -Silencioso`.

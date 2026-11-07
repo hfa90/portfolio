@@ -30,7 +30,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 # registro de tudo o que aparece na tela, para diagnostico mesmo se a janela fechar
-$LogInstalacao = Join-Path $env:TEMP 'InventarioQuallit-instalacao.log'
+$LogInstalacao = Join-Path ([IO.Path]::GetTempPath()) 'InventarioQuallit-instalacao.log'
 try { Start-Transcript -Path $LogInstalacao -Force | Out-Null } catch {}
 $InstaladorVersao = '2.0.1'
 $SupabaseUrl      = 'https://wrmlmtxkukjxkivtsuex.supabase.co'
@@ -48,6 +48,54 @@ function Fim([int]$codigo) {
     else { Read-Host '  Pressione Enter para fechar' | Out-Null }
   }
   exit $codigo
+}
+
+# Tarefa agendada para usuario comum. Tenta, nesta ordem:
+#   1) a API do Agendador (Register-ScheduledTask);
+#   2) o schtasks.exe do Windows (muitos computadores de empresa negam a API, mas aceitam este);
+# e explica o motivo se a politica da empresa nao permitir nenhum dos dois.
+function Criar-TarefaUsuario($psExe, $ps, $argumentos, $acao, $cfgT) {
+  $eu = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+  $existente = Get-ScheduledTask -TaskName 'InventarioQuallit' -ErrorAction SilentlyContinue
+  if ($existente -and $existente.Principal.UserId -and $existente.Principal.UserId -notmatch [regex]::Escape(($eu -split '\\')[-1])) {
+    Linha ('[4/5] Ja existe uma tarefa do agente instalada pela TI (' + $existente.Principal.UserId + '). Nada a fazer.') Green
+    return
+  }
+  $erros = @()
+  try {
+    $pr = New-ScheduledTaskPrincipal -UserId $eu -LogonType Interactive -RunLevel Limited
+    $rep = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 15)
+    try {
+      $logon = New-ScheduledTaskTrigger -AtLogOn -User $eu; $logon.Delay = 'PT1M'
+      Register-ScheduledTask -TaskName 'InventarioQuallit' -Action $acao -Trigger @($logon, $rep) -Principal $pr -Settings $cfgT `
+        -Description 'Inventario Quallit - agente coletor de hardware (TI)' -Force -ErrorAction Stop | Out-Null
+    } catch {
+      Register-ScheduledTask -TaskName 'InventarioQuallit' -Action $acao -Trigger $rep -Principal $pr -Settings $cfgT `
+        -Description 'Inventario Quallit - agente coletor de hardware (TI)' -Force -ErrorAction Stop | Out-Null
+    }
+    Linha '[4/5] Tarefa agendada: sinal a cada 15 min e coleta completa a cada 1 hora' Green
+    return
+  } catch { $erros += ('API: ' + $_.Exception.Message.Trim()) }
+
+  # schtasks.exe: /TR com aspas internas escapadas (\") e no maximo 261 caracteres
+  $tr = '\"' + $psExe + '\" ' + ($argumentos -replace '"', '\"')
+  if ($tr.Length -gt 261) { $tr = '\"' + $psExe + '\" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"' + $ps + '\"' }
+  $linhaCmd = '/Create /F /TN InventarioQuallit /SC MINUTE /MO 15 /RL LIMITED /TR "' + $tr + '"'
+  $saidaTxt = Join-Path ([IO.Path]::GetTempPath()) 'InventarioQuallit-schtasks.txt'
+  try {
+    $p = Start-Process -FilePath (Join-Path $env:WINDIR 'System32\schtasks.exe') -ArgumentList $linhaCmd -NoNewWindow -Wait -PassThru `
+           -RedirectStandardOutput $saidaTxt -RedirectStandardError ($saidaTxt + '.err')
+    if ($p.ExitCode -eq 0) {
+      Linha '[4/5] Tarefa agendada (schtasks): sinal a cada 15 min e coleta completa a cada 1 hora' Green
+      return
+    }
+    $erros += ('schtasks: ' + ((Get-Content ($saidaTxt + '.err') -Raw -ErrorAction SilentlyContinue) + (Get-Content $saidaTxt -Raw -ErrorAction SilentlyContinue)).Trim())
+  } catch { $erros += ('schtasks: ' + $_.Exception.Message.Trim()) }
+
+  Linha '[4/5] Aviso: este computador nao permite criar tarefas agendadas sem administrador' Yellow
+  Linha '      (politica da empresa). Os dados foram enviados agora, mas a coleta automatica' Yellow
+  Linha '      precisa ser instalada pela TI como administrador ou pelo pacote MSI.' Yellow
+  foreach ($e in $erros) { Linha ('      ' + $e) DarkGray }
 }
 
 # ---------------------------------------------------------------- coletor (texto do arquivo coletor.ps1)
@@ -518,6 +566,14 @@ Fim $codigo
 '@
 
 try {
+  if ($SupabaseUrl -notmatch '^https?://') {
+    # este e o MODELO (os dados sao preenchidos pelo ferramentas\empacotar.ps1)
+    Write-Host ''
+    Linha 'Este arquivo e o MODELO do instalador e nao funciona sozinho.' Yellow
+    Linha 'Use o instalador pronto: web\agente\Instalar-InventarioQuallit.ps1' Yellow
+    Linha '(ou baixe pela pagina de instalacao). Para gerar de novo: ferramentas\empacotar.ps1' DarkGray
+    Fim 2
+  }
   Write-Host ''
   Linha 'INVENTARIO QUALLIT' Cyan
   Linha 'Registrando este computador no inventario de TI...'
@@ -608,21 +664,10 @@ try {
         -Description 'Inventario Quallit - agente coletor de hardware (TI)' -Force | Out-Null
       Linha '[4/5] Tarefa agendada: sinal a cada 5 min e coleta completa a cada 1 hora' Green
     } else {
-      $eu = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-      $pr = New-ScheduledTaskPrincipal -UserId $eu -LogonType Interactive -RunLevel Limited
-      $rep = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 15)
-      try {
-        $logon = New-ScheduledTaskTrigger -AtLogOn -User $eu; $logon.Delay = 'PT1M'
-        Register-ScheduledTask -TaskName 'InventarioQuallit' -Action $acao -Trigger @($logon, $rep) -Principal $pr -Settings $cfgT `
-          -Description 'Inventario Quallit - agente coletor de hardware (TI)' -Force | Out-Null
-      } catch {
-        Register-ScheduledTask -TaskName 'InventarioQuallit' -Action $acao -Trigger $rep -Principal $pr -Settings $cfgT `
-          -Description 'Inventario Quallit - agente coletor de hardware (TI)' -Force | Out-Null
-      }
-      Linha '[4/5] Tarefa agendada: sinal a cada 15 min e coleta completa a cada 1 hora' Green
+      Criar-TarefaUsuario $psExe $ps $argumentos $acao $cfgT
     }
   } catch {
-    Linha ('[4/5] Aviso: a tarefa agendada nao foi criada (' + $_.Exception.Message + ')') Yellow
+    Linha ('[4/5] Aviso: a tarefa agendada nao foi criada (' + $_.Exception.Message.Trim() + ')') Yellow
     Linha '      Peca para a TI instalar como administrador (ou pelo pacote MSI).' Yellow
   }
 

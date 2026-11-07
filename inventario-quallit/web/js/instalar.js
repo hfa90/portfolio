@@ -3,6 +3,7 @@
 // deste link (token, patrimônio, setor) fica num convite no servidor; o código curto do convite
 // vai no nome do arquivo baixado e o instalador busca a configuração por ele.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal } from './planilha.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -156,9 +157,12 @@ function mostrarMaquina(m) {
   passo(4);
   $('#p3-titulo').textContent = 'Computador reconhecido!';
   $('#p3-texto').textContent = 'Estes dados já estão no inventário da TI.';
+  $('#resultado').innerHTML = cartaoMaquina(m);
+}
+function cartaoMaquina(m, fim = '✓ Tudo certo. Pode fechar esta página.') {
   const discos = [...new Set((m.discos || []).map((d) => d.tipo).filter((t) => t && t !== 'Desconhecido'))].join(' + ');
   const so = (m.so_nome || '—').replace(/^Microsoft\s+/i, '') + (m.so_display_version ? ' ' + m.so_display_version : '');
-  $('#resultado').innerHTML = `
+  return `
     <div class="inst-ok">
       <div class="host">${esc(m.hostname)} <span class="pill pill--ok">${esc(TIPO[m.tipo] || m.tipo)}</span></div>
       <dl class="inst-specs">
@@ -169,7 +173,7 @@ function mostrarMaquina(m) {
         <div><dt>Sistema</dt><dd>${esc(so)}</dd></div>
         <div><dt>Processador</dt><dd>${esc((m.cpu || '—').replace(/\(R\)|\(TM\)|CPU/g, '').replace(/\s+/g, ' '))}</dd></div>
       </dl>
-      <p class="fim">✓ Tudo certo. Pode fechar esta página.</p>
+      ${fim ? `<p class="fim">${esc(fim)}</p>` : ''}
     </div>`;
 }
 
@@ -228,3 +232,120 @@ $('#btn-executar').addEventListener('click', () => {
     }
   }, 2500);
 });
+
+// ================================================================ SEM INSTALAR: Invent_local (planilha do Excel)
+function trocarModo(modo, salvar = true) {
+  document.querySelectorAll('.inst-modo').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.modo === modo)));
+  $('#modo-agente').hidden = modo !== 'agente';
+  $('#modo-planilha').hidden = modo !== 'planilha';
+  $('.inst-rodape').textContent = modo === 'agente'
+    ? 'Instala um pequeno agente da TI que envia apenas dados técnicos do equipamento (hardware, Windows, rede). Nenhum arquivo pessoal é lido.'
+    : 'O Invent_local não instala nada: lê apenas dados técnicos do equipamento (hardware, Windows, rede) e grava a planilha. Nenhum arquivo pessoal é lido.';
+  if (salvar) store.set('iq-modo', modo);
+}
+document.querySelectorAll('.inst-modo').forEach((b) => b.addEventListener('click', () => trocarModo(b.dataset.modo)));
+trocarModo(p.get('modo') === 'planilha' ? 'planilha' : (store.get('iq-modo') || 'agente'), false);
+
+function passoB(n) {
+  [1, 2, 3].forEach((i) => { $('#pb' + i).dataset.estado = i < n ? 'feito' : i === n ? 'atual' : 'espera'; });
+}
+function mostrarImportar(focar) {
+  $('#pb3').hidden = false;
+  if (focar) { passoB(3); $('#pb3').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+}
+if (store.get('iq-kit-baixou')) { passoB(2); mostrarImportar(false); }
+
+$('#btn-baixar-kit').addEventListener('click', async (e) => {
+  const btn = e.currentTarget; btn.disabled = true;
+  try {
+    const zip = await montarKitInventLocal();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(zip); a.download = 'Invent_local.zip';
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    store.set('iq-kit-baixou', String(Date.now()));
+    $('#kit-msg').textContent = '✓ Invent_local.zip baixado. Siga o passo 2.';
+    passoB(2); mostrarImportar(false);
+  } catch (err) {
+    $('#kit-msg').textContent = 'Não foi possível baixar: ' + err.message;
+  } finally { btn.disabled = false; }
+});
+$('#btn-ja-tenho').addEventListener('click', () => mostrarImportar(true));
+
+// ---------------------------------------------------------------- importar a planilha
+let coletas = [];
+const espec = (rot, val) => `<div><dt>${rot}</dt><dd>${val}</dd></div>`;
+async function lerEscolhido(f) {
+  if (!f) return;
+  passoB(3);
+  $('#resultado-planilha').innerHTML = '';
+  $('#prev-planilha').innerHTML = '<div class="inst-aguarda"><span class="spinner"></span>Lendo a planilha…</div>';
+  try {
+    const res = coletasDaPlanilha(await lerArquivoPlanilha(f));
+    if (res.erro) throw new Error(res.erro);
+    // o que o técnico definiu no link vale quando a planilha não trouxer
+    coletas = res.lista.map((r) => ({
+      ...r,
+      ativo: r.ativo || link.ativo || null, setor: r.setor || link.setor || null,
+      localizacao: r.localizacao || link.localizacao || null, responsavel: r.responsavel || link.responsavel || null,
+    }));
+    const um = coletas.length === 1 ? coletas[0] : null;
+    const so = um ? ((um.so_nome || '—').replace(/^Microsoft\s+/i, '') + ' ' + (um.so_display_version || '')).trim() : '';
+    $('#prev-planilha').innerHTML = `
+      <div class="inst-prev">
+        ${um ? `<div class="host">${esc(um.hostname)}</div>
+          <dl class="inst-specs">
+            ${espec('Patrimônio', esc(um.ativo || 'a definir pela TI'))}${espec('Setor', esc(um.setor || '—'))}
+            ${espec('Modelo', esc([um.fabricante, um.modelo].filter(Boolean).join(' ') || '—'))}${espec('Nº de série', esc(um.numero_serie || '—'))}
+            ${espec('Memória', gb(um.memoria_gb))}${espec('Armazenamento', gb(um.armazenamento_total_gb))}
+            ${espec('Sistema', esc(so))}${espec('Processador', esc((um.cpu || '—').replace(/\(R\)|\(TM\)|CPU/g, '').replace(/\s+/g, ' ')))}
+          </dl>`
+        : `<div class="host">${coletas.length} computadores na planilha</div>
+          <p class="muted" style="margin:6px 0 0">${esc(coletas.slice(0, 8).map((c) => c.hostname).join(', '))}${coletas.length > 8 ? '…' : ''}</p>`}
+        ${res.completa ? '' : '<p class="inst-mini">Planilha antiga: entram só as colunas que ela tem. Para dados completos, use o Invent_local novo (passo 1).</p>'}
+        <div class="acoes"><button class="btn btn--primary inst-btn" id="btn-enviar-planilha" style="margin-top:0">Enviar para o inventário</button>
+          <button class="btn inst-btn inst-btn--sec" id="btn-outro-arq" type="button">Escolher outro arquivo</button></div>
+      </div>`;
+    $('#btn-enviar-planilha').onclick = enviarPlanilha;
+    $('#btn-outro-arq').onclick = () => $('#arq-planilha').click();
+  } catch (err) {
+    coletas = [];
+    $('#prev-planilha').innerHTML = `<div class="inst-erro">${esc(err.message)}</div>`;
+  }
+}
+async function enviarPlanilha(e) {
+  const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Enviando…';
+  try {
+    const r = await rpc('registrar_por_planilha', { p_token: link.token, p_codigo_instalacao: codigo, p_linhas: coletas });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const msg = j.message || '';
+      throw new Error(/registrar_por_planilha/.test(msg) ? 'o sistema ainda não foi atualizado para receber planilhas. Avise o técnico de TI.'
+        : /invalido|expirado/i.test(msg) ? 'este link expirou. Peça um link novo para o técnico de TI.' : (msg || 'servidor indisponível'));
+    }
+    $('#prev-planilha').innerHTML = '';
+    const gravadas = (j.criadas || 0) + (j.atualizadas || 0);
+    passoB(gravadas ? 4 : 3);
+    $('#pb3-titulo').textContent = gravadas ? (coletas.length === 1 ? 'Computador registrado!' : 'Planilha importada!') : 'Nada foi registrado';
+    $('#pb3-texto').textContent = !gravadas ? 'Veja o motivo abaixo e avise o técnico de TI.'
+      : coletas.length === 1 ? 'Estes dados já estão no inventário da TI.'
+      : `${j.criadas} computador(es) novo(s) e ${j.atualizadas} atualizado(s) no inventário.`;
+    let html = '';
+    if (gravadas && coletas.length === 1) {
+      const m = await verificar().catch(() => null);
+      html = cartaoMaquina(m && m.hostname ? m : coletas[0]);
+    } else if (gravadas) {
+      html = '<div class="inst-ok"><p class="fim" style="margin:0">✓ Tudo certo. Pode fechar esta página.</p></div>';
+    }
+    if (j.avisos?.length) html += `<div class="inst-erro" style="background:var(--warn-soft);color:var(--warn);border-color:var(--warn)">${j.avisos.slice(0, 6).map((a) => esc((a.host ? a.host + ': ' : '') + a.msg)).join('<br>')}</div>`;
+    $('#resultado-planilha').innerHTML = html;
+  } catch (err) {
+    btn.disabled = false; btn.textContent = 'Enviar para o inventário';
+    $('#resultado-planilha').innerHTML = `<div class="inst-erro">Não foi possível enviar: ${esc(err.message)}</div>`;
+  }
+}
+$('#arq-planilha').addEventListener('change', (e) => { lerEscolhido(e.target.files[0]); e.target.value = ''; });
+const drop = $('#drop');
+['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('arrastando'); }));
+['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('arrastando'); }));
+drop.addEventListener('drop', (e) => lerEscolhido(e.dataTransfer.files[0]));
