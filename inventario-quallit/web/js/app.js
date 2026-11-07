@@ -427,8 +427,8 @@ function renderPainel() {
   if (!state.maquinas.length || !L.length) {
     el.innerHTML = `<div class="view-head"><div><h1>Painel</h1><p>${esc(escopo)}</p></div></div>
       <div class="card card-pad empty"><h2>Nenhuma máquina ${L.length ? '' : 'neste CD '}ainda</h2>
-      <p>Envie o link de instalação para os colaboradores ou cadastre manualmente.</p>
-      <div class="actions" style="justify-content:center"><a class="btn btn--primary" href="#agente">Instalar agente</a></div></div>`;
+      <p>Envie o link de registro para os colaboradores, use o Invent_local na pasta de rede ou cadastre manualmente.</p>
+      <div class="actions" style="justify-content:center"><a class="btn btn--primary" href="#agente">Como coletar</a></div></div>`;
     return;
   }
 
@@ -626,7 +626,7 @@ function renderMaquinas() {
       <div class="view-head">
         <div><h1>Máquinas</h1><p>Veja em tabela, cartões, quadro ou mosaico. Clique numa máquina para detalhes, edição e histórico.</p></div>
         <div class="actions">
-          <button class="btn" id="btn-link">Link de instalação</button>
+          <button class="btn" id="btn-link">Link de registro</button>
           <button class="btn" id="btn-etq">Etiquetas</button>
           <button class="btn" id="btn-coleta" title="Planilha gerada pelo COLETAR.bat (sem instalação)">Importar coleta</button>
           <button class="btn" id="btn-import">Importar compras</button>
@@ -1067,47 +1067,6 @@ const campo = (nome, label, valor, tipo = 'text', extra = '') =>
   `<label>${label}<input name="${nome}" type="${tipo}" value="${esc(valor ?? '')}" ${extra}></label>`;
 const sel = (nome, label, mapa, valor) => `<label>${label}<select name="${nome}">${opts(Object.entries(mapa), valor)}</select></label>`;
 
-/* ---- agente 2.0: "Coletar agora" e rede ---- */
-const vNum = (v) => String(v || '0').split('.').map((n) => parseInt(n, 10) || 0);
-function cmpVer(a, b) { const x = vNum(a), y = vNum(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { const d = (x[i] || 0) - (y[i] || 0); if (d) return d; } return 0; }
-const agenteV2 = (m) => cmpVer(m.agente_versao, '2.0.0') >= 0;
-function comandoPendente(m) {
-  const c = m.ultimo_comando;
-  return c && !c.concluido_em && Date.now() - new Date(c.criado_em).getTime() < 2 * 864e5 ? c : null;
-}
-function faixaAgente(m) {
-  const c = m.ultimo_comando, pend = comandoPendente(m), v2 = agenteV2(m);
-  let txt;
-  if (pend) txt = pend.entregue_em ? '<b>🔄 A máquina recebeu o pedido</b> e está coletando agora…'
-    : `<b>⏳ Pedido enviado ${esc(rel(pend.criado_em))}</b> · a máquina responde no próximo sinal (até 5 min)`;
-  else if (c?.concluido_em && Date.now() - new Date(c.concluido_em).getTime() < 864e5) txt = `✅ Coleta pedida concluída ${esc(rel(c.concluido_em))}`;
-  else if (v2) txt = 'Agente 2.0 · sinal a cada 5 min, coleta completa de hora em hora';
-  else txt = `Agente ${esc(m.agente_versao || 'antigo')} · reinstale pelo link <b>uma vez</b> para ativar “Coletar agora” e a atualização automática`;
-  return `<div class="agente-faixa ${pend ? 'pend' : ''}">
-    <span class="af-txt">${txt}</span>
-    ${m.rede ? `<span class="af-rede" title="${esc(m.rede.descricao || 'Rede cadastrada')}">🌐 ${esc(m.rede.cidr)}${m.rede.setor ? ' · ' + esc(m.rede.setor) : ''}</span>` : ''}
-    <button class="btn btn--sm" id="d-coletar" ${!v2 || pend ? 'disabled' : ''} title="${v2 ? 'Pede uma coleta completa na próxima vez que a máquina der sinal' : 'Disponível a partir do agente 2.0'}">⟳ Coletar agora</button>
-  </div>`;
-}
-function ligarFaixaAgente(m) {
-  clearTimeout(state.cmdTimer);
-  $('#d-coletar')?.addEventListener('click', async () => {
-    $('#d-coletar').disabled = true;
-    const { error } = await sb.from('agente_comandos').insert({ maquina_id: m.id });
-    if (error) { $('#d-coletar').disabled = false; return toast(/agente_comandos|schema cache/i.test(error.message) ? 'Rode o sql/06_agente_v2.sql no Supabase para liberar o “Coletar agora”' : erroMsg(error), true); }
-    toast('Pedido enviado. A máquina responde em até 5 minutos.');
-    await recarregarMaquina(m.id);
-    if (state.drawerId === m.id && !state.drawerDirty) abrirMaquina(m.id, true);
-  });
-  // enquanto houver pedido pendente, confere a cada 15 s (a coleta concluída também chega pelo tempo real)
-  if (comandoPendente(m)) {
-    state.cmdTimer = setTimeout(async () => {
-      if (state.drawerId !== m.id || state.drawerDirty || !$('#drawer').classList.contains('open')) return;
-      await recarregarMaquina(m.id); abrirMaquina(m.id, true);
-    }, 15000);
-  }
-}
-
 async function abrirMaquina(id, silencioso = false) {
   let m = state.maquinas.find((x) => x.id === id);
   if (!m) m = await recarregarMaquina(id);
@@ -1127,7 +1086,6 @@ async function abrirMaquina(id, silencioso = false) {
         Último contato: <strong style="color:var(--ink)">${rel(m.ultimo_online)}</strong>
         ${m.origem === 'agente' ? `· via agente ${esc(m.agente_versao || '')}` : m.origem === 'planilha' ? '· via coleta por planilha' : '· cadastro manual'}</div>
       ${(m.alertas || []).length ? `<div>${tags(m, 9)}</div>` : ''}
-      ${m.origem === 'agente' ? faixaAgente(m) : ''}
     </div>
     <div class="drawer-body">
       ${(m.alertas || []).includes('fora_do_cd') && m.rede ? `<div class="banner banner--bad"><div><strong>🌐 Na rede de outro CD</strong>
@@ -1239,7 +1197,6 @@ async function abrirMaquina(id, silencioso = false) {
 
   if (!silencioso) { d.classList.add('open'); $('#drawer-bg').hidden = false; }
   $('#d-fechar').onclick = $('#d-cancelar').onclick = fecharDrawer;
-  ligarFaixaAgente(m);
   $('#d-mover-cd')?.addEventListener('click', async () => {
     const { error } = await sb.from('maquinas').update({ cd_id: m.rede.cd_id }).eq('id', id);
     if (error) return toast(erroMsg(error), true);
@@ -1380,7 +1337,7 @@ async function renderAgendados() {
   if (!corpo) return;
   if (error) {
     corpo.innerHTML = /agendamentos|does not exist|schema cache/i.test(error.message)
-      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/05_agendamentos.sql</code> no SQL Editor do Supabase para liberar os inventários programados.</p></div>'
+      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Aplique as migrações do banco (<code>supabase db push --remote</code>; veja o README) para liberar os inventários programados.</p></div>'
       : `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`;
     return;
   }
@@ -2523,7 +2480,7 @@ function modalImportarColeta() {
       for (let i = 0; i < lista.length; i += 500) {
         btn.textContent = `Importando ${Math.min(i + 500, lista.length)}/${lista.length}…`;
         const { data: r, error } = await sb.rpc('importar_coletas', { p_linhas: lista.slice(i, i + 500), p_cd: $('#ic-cd')?.value || null, p_sobrescrever: $('#ic-sobre').checked });
-        if (error) { btn.textContent = 'Importar'; btn.disabled = false; return toast(/importar_coletas/.test(error.message) ? 'Rode o sql/08_coleta_planilha.sql no Supabase antes de importar.' : erroMsg(error), true); }
+        if (error) { btn.textContent = 'Importar'; btn.disabled = false; return toast(/importar_coletas/.test(error.message) ? 'O banco está desatualizado: aplique as migrações (supabase db push --remote) antes de importar.' : erroMsg(error), true); }
         tot.criadas += r.criadas; tot.atualizadas += r.atualizadas; tot.ignoradas += r.ignoradas; tot.avisos.push(...(r.avisos || []));
       }
       await carregarMaquinas(); rerender(); if (state.view === 'maquinas') renderTabela();
@@ -2572,12 +2529,12 @@ async function modalLinkInstalacao(pre = {}) {
   let cd = ehAdmin() ? (pre.cd_id || state.cdAtual || cdsAtivos()[0]?.id) : state.perfil?.cd_id;
   let token;
   try { token = await obterTokenLink(cd); } catch (e) {
-    return toast('Não foi possível obter o token de links. Rode os arquivos sql/02 e sql/04 no Supabase. (' + erroMsg(e) + ')', true);
+    return toast('Não foi possível obter o token de links. Confira se as migrações do banco foram aplicadas. (' + erroMsg(e) + ')', true);
   }
   const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || location.protocol === 'file:';
   modal(`
-    <div class="modal-head"><h2>Link de instalação</h2>
-      <p class="muted" style="margin:4px 0 0">Envie para o colaborador abrir <b>no computador</b>. Ele clica em Baixar, abre o arquivo e pronto: a máquina é reconhecida sozinha.</p></div>
+    <div class="modal-head"><h2>Link de registro</h2>
+      <p class="muted" style="margin:4px 0 0">Envie para o colaborador abrir <b>no computador</b>. Ele baixa o Invent_local, abre o <b>COLETAR.bat</b> e pronto: os dados vão sozinhos para o inventário.</p></div>
     <div class="modal-body">
       <div class="form-grid" id="lk-form">
         ${ehAdmin() ? `<label class="full">CD onde a máquina será cadastrada<select id="lk-cd">${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), cd)}</select></label>` : `<label class="full">CD<input value="${esc(cdCod(cd) + ' · ' + cdNome(cd))}" disabled></label>`}
@@ -2609,7 +2566,7 @@ async function modalLinkInstalacao(pre = {}) {
         if (v) q.set(n, v);
       }
       const url = `${baseInstalar()}#${q.toString()}`;
-      const texto = `Olá! A TI está atualizando o inventário de computadores. Abra este link NO SEU COMPUTADOR, clique em "Baixar instalador" e depois abra o arquivo baixado. Leva menos de 1 minuto:\n${url}`;
+      const texto = `Olá! A TI está atualizando o inventário de computadores. Abra este link NO SEU COMPUTADOR, informe o patrimônio e o setor, baixe o Invent_local e dê dois cliques no COLETAR.bat. Leva menos de 1 minuto:\n${url}`;
       $('#lk-url').value = url;
       $('#lk-abrir').href = url;
       $('#lk-wa').href = 'https://wa.me/?text=' + encodeURIComponent(texto);
@@ -2624,7 +2581,7 @@ async function modalLinkInstalacao(pre = {}) {
     $('#lk-copiar').onclick = () => navigator.clipboard.writeText($('#lk-url').value).then(() => toast('Link copiado'));
     $('#lk-url').onclick = (e) => e.target.select();
     $('#lk-rotacionar')?.addEventListener('click', async () => {
-      if (!confirm(`Gerar um novo token de links para ${cdCod(cd)}? Todos os links já enviados deste CD param de funcionar (as máquinas instaladas com eles também deixam de reportar até serem reinstaladas).`)) return;
+      if (!confirm(`Gerar um novo token de links para ${cdCod(cd)}? Todos os links já enviados deste CD param de funcionar.`)) return;
       try { token = await obterTokenLink(cd, true); atualizar(); toast('Novo token gerado'); } catch (e) { toast(erroMsg(e), true); }
     });
     atualizar();
@@ -2634,31 +2591,30 @@ async function modalLinkInstalacao(pre = {}) {
 /* =====================================================================
    AGENTE
    ===================================================================== */
-const ABAS_AGENTE = [['instalacao', 'Instalação'], ['redes', 'Redes e setores'], ['versoes', 'Atualizações', true]];
+const ABAS_COLETA = [['instalacao', 'Como coletar'], ['redes', 'Redes e setores']];
 async function renderAgente(aba = 'instalacao') {
-  if (aba === 'versoes' && !ehAdmin()) aba = 'instalacao';
-  if (!ABAS_AGENTE.some(([k]) => k === aba)) aba = 'instalacao';
+  if (!ABAS_COLETA.some(([k]) => k === aba)) aba = 'instalacao';
   const el = $('#view-agente');
-  const abas = `<div class="tabs tabs--page">${ABAS_AGENTE.filter(([, , adm]) => !adm || ehAdmin()).map(([k, l]) => `<a class="tab ${aba === k ? 'active' : ''}" href="#agente/${k}">${l}</a>`).join('')}</div>`;
+  const abas = `<div class="tabs tabs--page">${ABAS_COLETA.map(([k, l]) => `<a class="tab ${aba === k ? 'active' : ''}" href="#agente/${k}">${l}</a>`).join('')}</div>`;
   if (aba === 'redes') return renderRedes(el, abas);
-  if (aba === 'versoes') return renderVersoes(el, abas);
-  const { data: tokens } = ehAdmin() ? await sb.from('agente_tokens').select('id, descricao, ativo, criado_em, ultimo_uso, cd_id').order('criado_em') : { data: [] };
-  state.tokens = tokens || [];
-  const versoes = contar(MQ().filter((m) => m.origem === 'agente'), (m) => m.agente_versao || '?');
-  const comAgente = MQ().filter((m) => m.origem === 'agente').length;
+  const L = MQ().filter((m) => m.status !== 'descartado');
+  const porPlanilha = L.filter((m) => m.origem === 'planilha').length;
+  const antigas = L.filter((m) => m.origem === 'agente').length;   // registradas pelo agente antigo (removido)
+  const manuais = L.length - porPlanilha - antigas;
+  const desatualizadas = L.filter((m) => !m.ultimo_online || Date.now() - new Date(m.ultimo_online) > 180 * 864e5).length;
 
   el.innerHTML = `
-    <div class="view-head"><div><h1>Agente coletor</h1>
-      <p>Script PowerShell que roda em cada máquina: dá sinal a cada 5 minutos (online, pedidos do painel, atualização) e envia RAM, discos, SO, série, usuário e IP de hora em hora, ao ligar ou quando o IP muda. Sem internet, guarda a coleta e envia depois.</p></div></div>
+    <div class="view-head"><div><h1>Coleta</h1>
+      <p>Os dados técnicos são lidos pelo <b>Invent_local</b> (computadores) e pelo <b>kit dos coletores</b> (Android pelo cabo USB). Nada é instalado: cada leitura gera uma planilha do Excel que entra no inventário sozinha ou pela importação.</p></div></div>
     ${abas}
     <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
       <div style="flex:1 1 320px"><h2>Mais fácil: envie um link para o colaborador</h2>
-        <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e executa o arquivo com o botão direito → <b>Executar com o PowerShell</b>. O instalador é um script fixo e legível (pode ser assinado pela CA da empresa); patrimônio e setor vão por um código curto. Funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
-      <button class="btn btn--primary" id="btn-link-agente">Gerar link de instalação</button>
+        <p class="muted" style="margin:4px 0 0">Ele abre no computador, informa patrimônio e setor, baixa o <b>Invent_local</b> e dá dois cliques no <b>COLETAR.bat</b>. Os dados vão sozinhos para o inventário e a página mostra o computador registrado. Não instala nada e não precisa de administrador.</p></div>
+      <button class="btn btn--primary" id="btn-link-agente">Gerar link de registro</button>
     </div>
     <div class="card card-pad" style="margin-bottom:16px">
-      <div class="card-head"><h2>Sem instalação: Invent_local (planilha do Excel)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-agente">Importar planilha</button></div>
-      <p class="muted" style="margin-top:0">Para computadores onde não é possível instalar o agente (sem administrador, antivírus/EDR bloqueando, sem internet). Nada é instalado: executa-se o <b>COLETAR.bat</b>, informa-se patrimônio e setor, e os dados completos (série, RAM e módulos, discos, SO, IP, usuário) vão para a planilha do Excel <code>inventario-quallit.xlsx</code>. O link de instalação também oferece essa opção ao colaborador, que importa o arquivo na própria página.</p>
+      <div class="card-head"><h2>Invent_local: vários computadores pela pasta de rede</h2><button class="btn btn--sm btn--primary" id="btn-coleta-agente">Importar planilha</button></div>
+      <p class="muted" style="margin-top:0">Executa-se o <b>COLETAR.bat</b>, informa-se patrimônio e setor, e os dados completos (série, RAM e módulos, discos, SO, IP, usuário) vão para a planilha do Excel <code>inventario-quallit.xlsx</code>.</p>
       <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
         <li>Baixe o <b>Invent_local.zip</b> e extraia numa pasta de rede (ex.: <code>&#92;&#92;servidor&#92;TI&#92;Inventario</code>), com permissão de gravação para quem vai coletar.</li>
         <li>Em cada computador: abra a pasta e dê duplo clique em <b>COLETAR.bat</b>. Executar de novo atualiza a mesma linha (não duplica).</li>
@@ -2667,93 +2623,40 @@ async function renderAgente(aba = 'instalacao') {
       <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-zip">Baixar Invent_local.zip</button><a class="btn btn--sm btn--ghost" href="agente/planilha/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
       <p class="muted" style="font-size:12.5px;margin-bottom:0">Automático, sem perguntas: use como script de logon da GPO <code>powershell -NoProfile -ExecutionPolicy Bypass -File &#92;&#92;servidor&#92;TI&#92;Inventario&#92;coletar.ps1 -Silencioso</code>. Se a planilha estiver aberta no Excel, os dados ficam salvos na pasta <code>dados</code> e a planilha é refeita na próxima execução.</p>
     </div>
-    <div class="card card-pad" style="margin-bottom:16px">
-      <div class="card-head"><h2>📟 Coletores de dados Android (cabo USB)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-coletores">Importar planilha</button></div>
-      <p class="muted" style="margin-top:0">Mesma ideia do Invent_local, para os coletores (Zebra, Honeywell, Datalogic…). Num computador, o <b>COLETAR-COLETORES.bat</b> lê pelo cabo USB cada coletor conectado: nº de série, modelo, versão do Android e patch, RAM, memória interna e cartão SD, <b>saúde e capacidade da bateria</b>, IP e MAC do Wi-Fi. Nada é instalado no coletor. Os dados vão para a planilha <code>coletores-quallit.xlsx</code>.</p>
-      <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
-        <li>Em cada coletor (uma vez): <i>Configurações → Sobre o telefone</i>, toque 7× em <b>Número da versão</b>; depois <i>Opções do desenvolvedor</i> → ative <b>Depuração USB</b>.</li>
-        <li>Baixe o kit, extraia e dê duplo clique em <b>COLETAR-COLETORES.bat</b> (na 1ª vez ele oferece baixar o ADB oficial do Google). Conecte um coletor por vez (ou vários num hub), toque em <b>Permitir</b> na tela do coletor e bipe o patrimônio.</li>
-        <li>No painel: <b>Máquinas → Importar coleta</b> e escolha o <code>coletores-quallit.xlsx</code>. Eles entram com o tipo <b>Coletor de dados</b>.</li>
-      </ol>
-      <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
-      <p class="muted" style="font-size:12.5px;margin-bottom:0">Se a empresa usa MDM (SOTI, Zebra StageNow, Intune…), a Depuração USB pode estar bloqueada: peça para liberar ao responsável pelo MDM.</p>
-    </div>
     <div class="grid-2">
       <div class="card card-pad">
-        <div class="card-head"><h2>Pacote MSI (Intune · SCCM · PDQ · GPO)</h2><a class="btn btn--sm btn--primary" href="agente/InventarioQuallit.msi" download>Baixar MSI</a></div>
-        <p class="muted" style="margin-top:0">O jeito recomendado em computadores da empresa com antivírus/EDR (CrowdStrike): pacote padrão do Windows, instalado pelo <code>msiexec</code> como SYSTEM, sem janelas e com desinstalação limpa. O token vai como propriedade e não aparece no log.</p>
-        <h3 style="margin:14px 0 6px">Instalar (silencioso)</h3>
-        <pre class="code">msiexec /i InventarioQuallit.msi /qn TOKEN=&lt;token do agente&gt;</pre>
-        <p class="muted" style="font-size:12.5px">Opcionais: <code>ATIVO=PAT123</code> <code>SETOR="Expedição"</code> <code>LOCALIZACAO="Doca 2"</code> <code>RESPONSAVEL="Nome"</code> <code>PROXY=http://proxy:8080</code>. Gere o token em <b>Tokens do agente</b> (ao lado): ele define o CD das máquinas.</p>
-        <h3 style="margin:14px 0 6px">Intune (app Win32 ou linha de negócio)</h3>
-        <ul class="muted" style="font-size:13px;margin:0 0 6px;padding-left:18px">
-          <li>Instalação: <code>msiexec /i InventarioQuallit.msi /qn TOKEN=…</code> · Desinstalação: <code>msiexec /x InventarioQuallit.msi /qn</code></li>
-          <li>Contexto: <b>Sistema</b> · Detecção: código do produto MSI (atualizações seguem pelo próprio agente)</li>
-        </ul>
-        <h3 style="margin:14px 0 6px">Remover</h3>
-        <pre class="code">msiexec /x InventarioQuallit.msi /qn</pre>
-        <p class="muted" style="font-size:12.5px">Os hashes SHA-256 do MSI e dos scripts ficam em <a href="agente/SHA256SUMS.txt" target="_blank" rel="noopener">SHA256SUMS.txt</a>. Envie para o time de segurança se for preciso liberar no antivírus.</p>
-        <h3 style="margin:20px 0 8px">Só ver o que seria enviado (teste)</h3>
-        <pre class="code">powershell -ExecutionPolicy Bypass -File coletor.ps1 -SoMostrar</pre>
-        <p class="muted">Rede com proxy? Preencha <code>"proxy": "http://proxy:porta"</code> no <code>config.json</code>.</p>
+        <div class="card-head"><h2>📟 Coletores de dados Android (cabo USB)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-coletores">Importar planilha</button></div>
+        <p class="muted" style="margin-top:0">Num computador, o <b>COLETAR-COLETORES.bat</b> lê pelo cabo USB cada coletor conectado: nº de série, modelo, Android e patch, RAM, memória, <b>saúde e capacidade da bateria</b>, IP e MAC. Nada é instalado no coletor. Os dados vão para <code>coletores-quallit.xlsx</code>.</p>
+        <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
+          <li>Em cada coletor (uma vez): <i>Sobre o telefone</i> → 7 toques em <b>Número da versão</b> → <i>Opções do desenvolvedor</i> → ative <b>Depuração USB</b>.</li>
+          <li>Execute o <b>COLETAR-COLETORES.bat</b> no computador, conecte o coletor, toque em <b>Permitir</b> e bipe o patrimônio.</li>
+          <li>Importe o <code>coletores-quallit.xlsx</code> em <b>Máquinas → Importar coleta</b>.</li>
+        </ol>
+        <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+        <p class="muted" style="font-size:12.5px;margin-bottom:0">Se a empresa usa MDM (SOTI, Zebra StageNow, Intune…), a Depuração USB pode estar bloqueada: peça a liberação ao responsável pelo MDM.</p>
       </div>
-      <div class="stack">
-        <div class="card card-pad">
-          <div class="card-head"><h2>Cobertura</h2></div>
-          <div class="kpis" style="margin:0">
-            <div class="card kpi" style="cursor:default"><div class="kpi-label">Com agente</div><div class="kpi-value">${comAgente}</div><div class="kpi-sub">de ${MQ().length} máquinas</div></div>
-            <div class="card kpi" style="cursor:default"><div class="kpi-label">Sem agente</div><div class="kpi-value">${MQ().length - comAgente}</div><div class="kpi-sub">cadastro manual</div></div>
-          </div>
-          ${versoes.length ? `<h3 style="margin:16px 0 8px">Versões do agente</h3>${barras(versoes, 'x')}` : ''}
+      <div class="card card-pad">
+        <div class="card-head"><h2>Cobertura</h2></div>
+        <div class="kpis" style="margin:0">
+          <div class="card kpi" style="cursor:default"><div class="kpi-label">Pela coleta</div><div class="kpi-value">${porPlanilha + antigas}</div><div class="kpi-sub">de ${L.length} equipamentos</div></div>
+          <div class="card kpi" style="cursor:default"><div class="kpi-label">Cadastro manual</div><div class="kpi-value">${manuais}</div><div class="kpi-sub">sem dados técnicos</div></div>
+          <div class="card kpi" style="cursor:default"><div class="kpi-label">Coleta antiga</div><div class="kpi-value ${desatualizadas ? 't-warn' : ''}">${desatualizadas}</div><div class="kpi-sub">sem leitura há 6 meses</div></div>
         </div>
-        ${ehAdmin() ? `<div class="card card-pad">
-          <div class="card-head"><h2>Tokens do agente</h2><button class="btn btn--sm" id="btn-token">+ Gerar token</button></div>
-          <p class="muted" style="margin-top:0">O agente só consegue gravar com um token ativo. Se um token vazar, revogue e gere outro (atualize o <code>config.json</code>).</p>
-          <table class="mini-table"><thead><tr><th>Descrição</th><th>CD</th><th>Criado</th><th>Último uso</th><th></th></tr></thead><tbody>
-            ${state.tokens.filter(noCD).map((t) => `<tr><td>${esc(t.descricao)} ${t.ativo ? '' : pill('revogado', 'bad')}</td><td>${esc(cdCod(t.cd_id))}</td><td>${data(t.criado_em)}</td><td>${rel(t.ultimo_uso)}</td>
-              <td><button class="btn btn--sm ${t.ativo ? 'btn--danger' : ''}" data-tok="${t.id}" data-ativo="${t.ativo}">${t.ativo ? 'Revogar' : 'Reativar'}</button></td></tr>`).join('')}
-          </tbody></table>
-        </div>` : ''}
+        ${antigas ? `<p class="muted" style="font-size:12.5px;margin:12px 0 0">${antigas} equipamento(s) ainda estão com os dados do agente antigo (removido). Na próxima vez que passarem pelo Invent_local, os dados são atualizados normalmente.</p>` : ''}
       </div>
     </div>`;
-  $$('.bar', el).forEach((b) => (b.style.cursor = 'default'));
   $('#btn-link-agente').onclick = () => modalLinkInstalacao();
   $('#btn-coleta-agente').onclick = modalImportarColeta;
   $('#btn-coleta-coletores').onclick = modalImportarColeta;
-  $('#btn-kit-coletores').onclick = async () => {
+  const baixarZip = async (montar, nome) => {
     try {
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(await montarKitColetores()); a.download = 'Coletores_Quallit.zip'; a.click();
+      a.href = URL.createObjectURL(await montar()); a.download = nome; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 5000);
     } catch (err) { toast('Não foi possível montar o kit: ' + err.message, true); }
   };
-  $('#btn-kit-zip').onclick = async (e) => {
-    try {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(await montarKitInventLocal()); a.download = 'Invent_local.zip'; a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    }
-    catch (err) { toast('Não foi possível montar o kit: ' + err.message, true); }
-  };
-  $$('[data-tok]', el).forEach((b) => (b.onclick = async () => {
-    const ativo = b.dataset.ativo === 'true';
-    if (ativo && !confirm('Revogar este token? Agentes usando ele param de reportar.')) return;
-    const { error } = await sb.from('agente_tokens').update({ ativo: !ativo }).eq('id', b.dataset.tok);
-    if (error) return toast(erroMsg(error), true);
-    renderAgente('instalacao');
-  }));
-  $('#btn-token')?.addEventListener('click', async () => {
-    const desc = prompt('Descrição do token (ex.: "Implantação GPO 2026")');
-    if (desc === null) return;
-    const { data: tok, error } = await sb.rpc('gerar_token_agente', { p_descricao: desc, p_cd: state.cdAtual || cdsAtivos()[0]?.id || null });
-    if (error) return toast(erroMsg(error), true);
-    modal(`<div class="modal-head"><h2>Novo token gerado</h2></div>
-      <div class="modal-body"><p style="margin:0">Copie agora — ele <strong>não será exibido novamente</strong>. Cole no campo <code>agente_token</code> do <code>config.json</code>.</p>
-      <div class="token-box" id="tok">${esc(tok)}</div></div>
-      <div class="modal-foot"><button class="btn" id="tok-copiar">Copiar</button><button class="btn btn--primary" data-close>Fechei, já copiei</button></div>`,
-    () => { $('#tok-copiar').onclick = () => navigator.clipboard.writeText(tok).then(() => toast('Copiado')); });
-    renderAgente('instalacao');
-  });
+  $('#btn-kit-zip').onclick = () => baixarZip(montarKitInventLocal, 'Invent_local.zip');
+  $('#btn-kit-coletores').onclick = () => baixarZip(montarKitColetores, 'Coletores_Quallit.zip');
 }
 
 /* ---- Redes e setores: faixa de IP → CD/setor ---- */
@@ -2768,7 +2671,7 @@ function cidrOk(c) {
 const ipNaRede = (ip, c) => { const n = ipNum(ip), r = cidrOk(c); return n != null && r && ((n & r.mask) >>> 0) === r.base; };
 
 async function renderRedes(el, abas) {
-  el.innerHTML = `<div class="view-head"><div><h1>Agente coletor</h1>
+  el.innerHTML = `<div class="view-head"><div><h1>Coleta</h1>
       <p>Cadastre as faixas de IP de cada CD e setor. A máquina que aparece numa faixa recebe o setor automaticamente, e o painel avisa quando ela surge na rede de outro CD.</p></div>
       <div class="actions">${ehAdmin() ? '<button class="btn" id="rd-aplicar" title="Reaplica as faixas usando o último IP de cada máquina">Aplicar agora</button><button class="btn btn--primary" id="rd-nova">+ Nova rede</button>' : ''}</div></div>
     ${abas}<div id="rd-corpo"><div class="skeleton">Carregando…</div></div>`;
@@ -2776,7 +2679,7 @@ async function renderRedes(el, abas) {
   const corpo = $('#rd-corpo');
   if (error) {
     corpo.innerHTML = /redes|does not exist|schema cache/i.test(error.message)
-      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/06_agente_v2.sql</code> no SQL Editor do Supabase para liberar redes, “Coletar agora” e a atualização automática.</p></div>'
+      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Aplique as migrações do banco (<code>supabase db push --remote</code>; veja o README) para liberar as redes e setores.</p></div>'
       : `<div class="card card-pad erro">${esc(erroMsg(error))}</div>`;
     return;
   }
@@ -2872,90 +2775,6 @@ function modalRede(r = null, pre = {}) {
       renderAgente('redes');
     };
   });
-}
-
-/* ---- Atualização automática do agente (admin) ---- */
-async function renderVersoes(el, abas) {
-  el.innerHTML = `<div class="view-head"><div><h1>Agente coletor</h1>
-      <p>Publique uma versão nova e todas as máquinas com agente 2.0 se atualizam sozinhas em até 5 minutos, sem reinstalar.</p></div></div>
-    ${abas}<div id="vs-corpo"><div class="skeleton">Carregando…</div></div>`;
-  const [rv, site] = await Promise.all([
-    sb.from('agente_versoes').select('versao, ativa, sha256, notas, publicado_por, publicado_em').order('publicado_em', { ascending: false }),
-    fetch(`agente/coletor.ps1?v=${Date.now()}`, { cache: 'no-store' }).then((r) => (r.ok ? r.text() : null)).catch(() => null),
-  ]);
-  const corpo = $('#vs-corpo');
-  if (rv.error) {
-    corpo.innerHTML = /agente_versoes|does not exist|schema cache/i.test(rv.error.message)
-      ? '<div class="card card-pad"><h2>Falta um passo no banco</h2><p class="muted">Rode o arquivo <code>sql/06_agente_v2.sql</code> no SQL Editor do Supabase.</p></div>'
-      : `<div class="card card-pad erro">${esc(erroMsg(rv.error))}</div>`;
-    return;
-  }
-  const versoes = rv.data || [];
-  const ativa = versoes.find((v) => v.ativa);
-  const vSite = site?.match(/\$AgenteVersao\s*=\s*'(\d+\.\d+\.\d+)'/)?.[1] || null;
-  const podePublicar = vSite && (!ativa || cmpVer(vSite, ativa.versao) > 0);
-  const ms = MQ().filter((m) => m.origem === 'agente' && m.status !== 'descartado');
-  const alvo = ativa?.versao || vSite;
-  const emDia = ms.filter((m) => alvo && cmpVer(m.agente_versao, alvo) >= 0);
-  const v2 = ms.filter((m) => agenteV2(m) && !emDia.includes(m));
-  const v1 = ms.filter((m) => !agenteV2(m));
-  const pct = (n) => (ms.length ? Math.round((100 * n) / ms.length) : 0);
-
-  corpo.innerHTML = `
-    <div class="vs-topo">
-      <div class="card card-pad vs-atual">
-        <span class="hs-titulo">Versão publicada</span>
-        <strong class="vs-num">${ativa ? 'v' + esc(ativa.versao) : '—'}</strong>
-        <span class="muted">${ativa ? `por ${esc(ativa.publicado_por || '—')} · ${esc(dataHora(ativa.publicado_em))}` : 'Atualização automática ainda não ativada'}</span>
-        ${ativa ? '<button class="btn btn--sm btn--ghost" id="vs-pausar">Pausar atualizações</button>' : ''}
-      </div>
-      <div class="card card-pad vs-site ${podePublicar ? 'destaque' : ''}">
-        <span class="hs-titulo">Versão no site</span>
-        <strong class="vs-num">${vSite ? 'v' + esc(vSite) : '?'}</strong>
-        <span class="muted">${!vSite ? 'Não encontrei <code>agente/coletor.ps1</code> no site' : podePublicar ? 'Pronta para enviar às máquinas' : cmpVer(vSite, ativa.versao) === 0 ? 'Igual à publicada — nada a fazer' : 'A publicada é mais nova que a do site'}</span>
-        ${podePublicar ? `<button class="btn btn--primary" id="vs-publicar">Publicar v${esc(vSite)} para todas as máquinas</button>` : ''}
-      </div>
-    </div>
-    <h3 class="sec-rel">Andamento nas máquinas <span class="muted">${ms.length} com agente</span></h3>
-    <div class="card card-pad">
-      <div class="pilha-barra" style="margin-top:0">
-        <span style="width:${pct(emDia.length)}%;background:var(--ok)" title="Em dia"></span>
-        <span style="width:${pct(v2.length)}%;background:var(--accent)" title="Atualizando"></span>
-        <span style="width:${pct(v1.length)}%;background:var(--warn)" title="Agente 1.x"></span>
-      </div>
-      <div class="vs-legenda">
-        <div><i style="background:var(--ok)"></i><span><b>${emDia.length}</b> em dia${alvo ? ` (v${esc(alvo)})` : ''}</span></div>
-        <div><i style="background:var(--accent)"></i><span><b>${v2.length}</b> com agente 2.x antigo — atualizam sozinhas no próximo sinal (as desligadas, quando ligarem)</span></div>
-        <div><i style="background:var(--warn)"></i><span><b>${v1.length}</b> com agente 1.x — precisam reinstalar <b>uma vez</b> pelo link de instalação</span></div>
-      </div>
-      ${v1.length ? `<details class="vs-v1"><summary>Ver as ${v1.length} máquina(s) com agente 1.x</summary><div class="vs-v1-lista">${v1.slice(0, 60).map((m) => `<button class="chip" data-abrir="${m.id}">${esc(m.hostname)} <span class="muted">v${esc(m.agente_versao || '?')}</span></button>`).join('')}${v1.length > 60 ? `<span class="muted">e mais ${v1.length - 60}…</span>` : ''}</div></details>` : ''}
-    </div>
-    ${versoes.length ? `<h3 class="sec-rel">Histórico</h3><div class="card"><table class="mini-table"><thead><tr><th>Versão</th><th>Publicada</th><th>Por</th><th>SHA-256</th><th></th></tr></thead><tbody>
-      ${versoes.map((v) => `<tr><td><b>v${esc(v.versao)}</b></td><td>${esc(dataHora(v.publicado_em))}</td><td>${esc(v.publicado_por || '—')}</td><td><code class="sha">${esc((v.sha256 || '').slice(0, 16))}…</code></td><td>${v.ativa ? pill('ativa', 'ok') : ''}</td></tr>`).join('')}
-    </tbody></table></div>` : ''}
-    <p class="muted dica-redes">🔒 Só administradores publicam. Antes de trocar o arquivo, o agente confere o SHA-256 e a sintaxe do script, testa a nova versão e volta sozinho para a anterior se ela falhar (e não tenta a mesma versão de novo). Para desfazer uma versão, publique uma com número maior.</p>`;
-
-  $$('[data-abrir]', corpo).forEach((b) => (b.onclick = () => abrirMaquina(b.dataset.abrir)));
-  $('#vs-pausar')?.addEventListener('click', async () => {
-    if (!confirm('Pausar as atualizações automáticas? As máquinas continuam na versão que estão.')) return;
-    const { error } = await sb.from('agente_versoes').update({ ativa: false }).eq('versao', ativa.versao);
-    if (error) return toast(erroMsg(error), true);
-    toast('Atualizações pausadas'); renderAgente('versoes');
-  });
-  $('#vs-publicar')?.addEventListener('click', () => modal(`
-    <div class="modal-head"><h2>Publicar agente v${esc(vSite)}</h2></div>
-    <div class="modal-body">
-      <p style="margin:0">Todas as máquinas com agente 2.0 ou mais novo vão baixar e instalar esta versão no próximo sinal (até 5 minutos). Elas rodam como <b>SYSTEM</b>, então publique apenas o arquivo oficial do repositório.</p>
-      <label>Notas da versão (opcional)<textarea id="vs-notas" placeholder="O que mudou"></textarea></label>
-    </div>
-    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="vs-ok">Publicar</button></div>`, (dlg) => {
-    $('#vs-ok').onclick = async () => {
-      $('#vs-ok').disabled = true;
-      const { error } = await sb.from('agente_versoes').upsert({ versao: vSite, script: site, notas: $('#vs-notas').value.trim() || null, ativa: true }, { onConflict: 'versao' });
-      if (error) { $('#vs-ok').disabled = false; return toast(erroMsg(error), true); }
-      dlg.close(); toast(`Agente v${vSite} publicado`); renderAgente('versoes');
-    };
-  }));
 }
 
 /* =====================================================================
@@ -3682,7 +3501,7 @@ async function entrar(session) {
     await Promise.all([carregarMaquinas(), carregarHist()]);
   } catch (e) {
     $('#view-painel').innerHTML = `<div class="card card-pad"><h2>Não foi possível carregar</h2><p class="erro">${esc(erroMsg(e))}</p>
-      <p class="muted">Verifique se o arquivo <code>sql/01_schema.sql</code> foi executado no SQL Editor do Supabase.</p></div>`;
+      <p class="muted">Verifique se as migrações do banco foram aplicadas (<code>supabase db push --remote</code>; veja o README).</p></div>`;
     return;
   }
   iniciarRealtime();
