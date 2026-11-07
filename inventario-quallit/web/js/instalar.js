@@ -255,10 +255,54 @@ function mostrarImportar(focar) {
 }
 if (store.get('iq-kit-baixou')) { passoB(2); mostrarImportar(false); }
 
+// ---------------------------------------------------------------- envio automático: a página espera o Invent_local terminar
+// O .zip leva o código do convite; ao terminar, o próprio Invent_local envia os dados e esta página os reconhece
+// pelo código de instalação (o mesmo do agente). Se o envio automático falhar, o campo de importação continua aqui.
+let registrado = false, esperando = false;
+async function aguardarEnvio(desde) {
+  if (esperando || registrado) return;
+  esperando = true;
+  let st = $('#auto-status');
+  if (!st) { $('#drop').insertAdjacentHTML('beforebegin', '<div id="auto-status"></div>'); st = $('#auto-status'); }
+  st.innerHTML = `<div class="inst-auto"><span class="spinner"></span><div><b>Aguardando o Invent_local terminar neste computador…</b>
+    <span>Ao final da coleta os dados são enviados sozinhos e aparecem aqui. Se não aparecerem, importe a planilha abaixo.</span></div></div>`;
+  const fim = desde + 30 * 60 * 1000;
+  while (Date.now() < fim && !registrado) {
+    try {
+      const m = await verificar();
+      if (m && m.hostname && m.ultimo_online && new Date(m.ultimo_online).getTime() >= desde - 5 * 60 * 1000) {
+        registrado = true;
+        st.remove();
+        mostrarRegistrado(m, 'Computador registrado automaticamente!', 'O Invent_local terminou e já enviou os dados. Estes dados já estão no inventário da TI.');
+        break;
+      }
+    } catch { /* rede instável: tenta de novo */ }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  esperando = false;
+  if (!registrado && $('#auto-status')) $('#auto-status').innerHTML = '<p class="inst-mini">Os dados ainda não chegaram sozinhos. Importe a planilha <b>inventario-quallit.xlsx</b> abaixo.</p>';
+}
+function mostrarRegistrado(m, titulo, texto) {
+  passoB(4);
+  $('#pb3-titulo').textContent = titulo;
+  $('#pb3-texto').textContent = texto;
+  $('#drop').hidden = true;
+  $('#prev-planilha').innerHTML = '';
+  $('#resultado-planilha').innerHTML = cartaoMaquina(m);
+  $('#pb3').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+{
+  const ts = Number(store.get('iq-kit-auto') || 0);
+  if (ts && Date.now() - ts < 30 * 60 * 1000) aguardarEnvio(ts);
+}
+
 $('#btn-baixar-kit').addEventListener('click', async (e) => {
   const btn = e.currentTarget; btn.disabled = true;
   try {
-    const zip = await montarKitInventLocal();
+    // código do convite (sem token): liga o envio automático. Se o link estiver inválido, o kit sai sem ele (só planilha).
+    let cfg = null;
+    try { cfg = { supabase_url: SUPABASE_URL, supabase_anon_key: SUPABASE_ANON_KEY, convite: await prepararConvite() }; } catch { cfg = null; }
+    const zip = await montarKitInventLocal('agente/planilha/', cfg);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(zip); a.download = 'Invent_local.zip';
     document.body.append(a); a.click(); a.remove();
@@ -266,6 +310,7 @@ $('#btn-baixar-kit').addEventListener('click', async (e) => {
     store.set('iq-kit-baixou', String(Date.now()));
     $('#kit-msg').textContent = '✓ Invent_local.zip baixado. Siga o passo 2.';
     passoB(2); mostrarImportar(false);
+    if (cfg) { const agora = Date.now(); store.set('iq-kit-auto', String(agora)); aguardarEnvio(agora); }
   } catch (err) {
     $('#kit-msg').textContent = 'Não foi possível baixar: ' + err.message;
   } finally { btn.disabled = false; }
@@ -325,6 +370,7 @@ async function enviarPlanilha(e) {
     }
     $('#prev-planilha').innerHTML = '';
     const gravadas = (j.criadas || 0) + (j.atualizadas || 0);
+    if (gravadas) { registrado = true; $('#auto-status')?.remove(); }
     passoB(gravadas ? 4 : 3);
     $('#pb3-titulo').textContent = gravadas ? (coletas.length === 1 ? 'Computador registrado!' : 'Planilha importada!') : 'Nada foi registrado';
     $('#pb3-texto').textContent = !gravadas ? 'Veja o motivo abaixo e avise o técnico de TI.'

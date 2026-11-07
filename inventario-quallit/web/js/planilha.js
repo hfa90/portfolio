@@ -213,13 +213,15 @@ export function criarZip(arquivos) {
   return new Blob([...partes, ...central, f], { type: 'application/zip' });
 }
 
-// baixa os arquivos do kit do site e devolve o Invent_local.zip
-export async function montarKitInventLocal(base = 'agente/planilha/') {
+// baixa os arquivos do kit do site e devolve o Invent_local.zip.
+// config (opcional): { supabase_url, supabase_anon_key, convite } → vira Invent_local/config.json e liga o envio automático.
+export async function montarKitInventLocal(base = 'agente/planilha/', config = null) {
   const nomes = ['COLETAR.bat', 'coletar.ps1', 'LEIA-ME.txt'];
   const arquivos = await Promise.all(nomes.map(async (n) => {
     const r = await fetch(base + n + '?v=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) throw new Error(`arquivo ${n} não encontrado no site`);
     return { nome: 'Invent_local/' + n, dados: new Uint8Array(await r.arrayBuffer()) };
   }));
+  if (config) arquivos.push({ nome: 'Invent_local/config.json', dados: new TextEncoder().encode(JSON.stringify(config, null, 2)) });
   return criarZip(arquivos);
 }
