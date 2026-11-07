@@ -2,6 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY, URL_PUBLICA } from './config.js';
 import { idbGet, idbSet, filaListar, filaAdicionar, filaRemover, ehErroDeRede } from './offline.js';
 import { criarAssinatura } from './assinatura.js';
+import { lerCSV, normCab, lerValor, lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal } from './planilha.js';
 import { MODELOS, montarFolhas } from './etiquetas.js';
 import { fmtDuracao, anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, descreverAgendamento, proximasExecucoes, DIAS_SEMANA, ESTADOS } from './prazo.js';
 
@@ -624,6 +625,7 @@ function renderMaquinas() {
         <div class="actions">
           <button class="btn" id="btn-link">Link de instalação</button>
           <button class="btn" id="btn-etq">Etiquetas</button>
+          <button class="btn" id="btn-coleta" title="Planilha gerada pelo COLETAR.bat (sem instalação)">Importar coleta</button>
           <button class="btn" id="btn-import">Importar compras</button>
           <button class="btn" id="btn-csv">Exportar CSV</button>
           <button class="btn btn--primary" id="btn-nova">+ Nova máquina</button>
@@ -673,6 +675,7 @@ function renderMaquinas() {
     ligarModoAlt();
     $('#btn-etq').onclick = () => irEtiquetas(state.sel.size ? [...state.sel] : filtrar().map((m) => m.id));
     $('#btn-import').onclick = modalImportarCompras;
+    $('#btn-coleta').onclick = modalImportarColeta;
     $('#btn-csv').onclick = exportarCSV;
     $('#btn-link').onclick = () => modalLinkInstalacao();
     $('#btn-nova').onclick = () => modalNovaMaquina();
@@ -1018,7 +1021,7 @@ async function abrirMaquina(id, silencioso = false) {
         <button class="btn btn--ghost btn--sm close" id="d-fechar" aria-label="Fechar">✕</button></div>
       <div class="muted">${esc(TIPO[m.tipo])} · ${esc(m.modelo || 'modelo não informado')} ·
         Último contato: <strong style="color:var(--ink)">${rel(m.ultimo_online)}</strong>
-        ${m.origem === 'agente' ? `· via agente ${esc(m.agente_versao || '')}` : '· cadastro manual'}</div>
+        ${m.origem === 'agente' ? `· via agente ${esc(m.agente_versao || '')}` : m.origem === 'planilha' ? '· via coleta por planilha' : '· cadastro manual'}</div>
       ${(m.alertas || []).length ? `<div>${tags(m, 9)}</div>` : ''}
       ${m.origem === 'agente' ? faixaAgente(m) : ''}
     </div>
@@ -2284,24 +2287,6 @@ function renderEtiquetas() {
 /* =====================================================================
    IMPORTAR COMPRAS / GARANTIAS (CSV)
    ===================================================================== */
-function lerCSV(texto) {
-  texto = texto.replace(/^﻿/, '');
-  const primeira = texto.split(/\r?\n/)[0] || '';
-  const sep = [';', '\t', ','].sort((a, b) => primeira.split(b).length - primeira.split(a).length)[0];
-  const linhas = []; let campo = '', linha = [], aspas = false;
-  for (let i = 0; i < texto.length; i++) {
-    const ch = texto[i];
-    if (aspas) {
-      if (ch === '"' && texto[i + 1] === '"') { campo += '"'; i++; } else if (ch === '"') aspas = false; else campo += ch;
-    } else if (ch === '"') aspas = true;
-    else if (ch === sep) { linha.push(campo); campo = ''; }
-    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && texto[i + 1] === '\n') i++; linha.push(campo); linhas.push(linha); linha = []; campo = ''; }
-    else campo += ch;
-  }
-  if (campo || linha.length) { linha.push(campo); linhas.push(linha); }
-  return linhas.filter((l) => l.some((c) => c.trim()));
-}
-const normCab = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const CAB_IMPORT = {
   codigo: ['patrimonio', 'ativo', 'hostname', 'serie', 'numero_serie', 'n_serie', 'n_de_serie', 'codigo'],
   data_compra: ['data_compra', 'data_da_compra', 'compra', 'data_aquisicao', 'aquisicao'],
@@ -2316,13 +2301,6 @@ function lerDataBR(v) {
   if (m) { const a = m[3].length === 2 ? '20' + m[3] : m[3]; return `${a}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`; }
   m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
-}
-function lerValor(v) {
-  v = String(v || '').replace(/[R$\s]/g, '');
-  if (!v) return null;
-  if (v.includes(',')) v = v.replace(/\./g, '').replace(',', '.');
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
 }
 function modalImportarCompras() {
   let plano = [];
@@ -2385,6 +2363,70 @@ function modalImportarCompras() {
       dlg.close();
       await carregarMaquinas(); rerender(); if (state.view === 'maquinas') renderTabela();
       toast(`${ok} máquina(s) atualizada(s)${falhas ? `, ${falhas} com erro` : ''}`, !!falhas);
+    };
+  });
+}
+
+/* =====================================================================
+   IMPORTAR COLETA POR PLANILHA (kit COLETAR.bat, sem instalação)
+   Aceita a planilha do Invent_local novo (inventario-quallit.xlsx) e a antiga
+   do "Invent_local" (list_info.csv: HOSTNAME,FABRICANTE,MODELO,SERIAL,ATIVO,SETOR…).
+   ===================================================================== */
+function maquinaDaColeta(r) {
+  const s = up(r.numero_serie), a = up(r.ativo), h = up(r.hostname);
+  return (s && state.maquinas.find((m) => up(m.numero_serie) === s))
+    || (a && state.maquinas.find((m) => up(m.ativo) === a))
+    || state.maquinas.find((m) => up(m.hostname) === h && (!m.numero_serie || !s)) || null;
+}
+function modalImportarColeta() {
+  let lista = [];
+  const cds = cdsAtivos();
+  modal(`
+    <div class="modal-head"><h2>Importar coleta (planilha)</h2>
+      <p class="muted" style="margin:4px 0 0">Escolha a planilha do Excel <code>inventario-quallit.xlsx</code> gerada pelo <b>Invent_local</b> (COLETAR.bat, em <i>Agente coletor → Instalação</i>). A planilha antiga <code>list_info.csv</code> e o CSV também são aceitos. As máquinas são reconhecidas pelo nº de série, patrimônio ou hostname: nada é duplicado.</p></div>
+    <div class="modal-body">
+      <div class="actions"><input type="file" id="ic-arq" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></div>
+      <div class="form-grid" style="margin-top:10px">
+        ${ehAdmin() ? `<label>CD das máquinas novas<select id="ic-cd">${opts(cds.map((c) => [c.id, `${c.codigo} · ${c.nome}`]), state.cdAtual || cds[0]?.id)}</select></label>` : ''}
+        <label class="full" style="display:flex;gap:8px;align-items:flex-start;font-weight:400"><input type="checkbox" id="ic-sobre" style="width:auto;margin-top:3px">
+          <span>Substituir patrimônio, setor, localização e responsável pelos da planilha<br><span class="muted" style="font-size:12.5px">Desmarcado: a planilha só preenche o que estiver vazio no sistema.</span></span></label>
+      </div>
+      <div id="ic-prev"></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="ic-ok" disabled>Importar</button></div>`, (dlg) => {
+    const mostrar = (res) => {
+      if (res.erro !== undefined) { lista = []; $('#ic-prev').innerHTML = res.erro ? `<p class="erro">${esc(res.erro)}</p>` : ''; $('#ic-ok').disabled = true; return; }
+      lista = res.lista;
+      const novas = lista.filter((r) => !maquinaDaColeta(r)).length;
+      $('#ic-prev').innerHTML = `
+        <div class="banner banner--info"><div><strong>${lista.length} computador(es) na planilha: ${novas} novo(s), ${lista.length - novas} já cadastrado(s)</strong>
+          <span>${res.repetidas ? `${res.repetidas} linha(s) repetida(s) do mesmo computador: vale a última. ` : ''}${res.completa ? 'Planilha completa (memória, discos, volumes, rede).' : 'Planilha simples: entram só as colunas disponíveis.'}</span></div></div>
+        <table class="mini-table"><thead><tr><th></th><th>Hostname</th><th>Patrimônio</th><th>Setor</th><th>Modelo</th><th>RAM</th><th>Sistema</th></tr></thead><tbody>
+          ${lista.slice(0, 10).map((r) => `<tr><td>${maquinaDaColeta(r) ? pill('atualiza') : pill('nova', 'ok')}</td><td class="mono">${esc(r.hostname)}</td><td class="mono">${esc(r.ativo || '—')}</td><td>${esc(r.setor || '—')}</td><td>${esc(r.modelo || '—')}</td><td>${r.memoria_gb != null ? esc(r.memoria_gb) + ' GB' : '—'}</td><td>${esc(r.so_nome || '—')}</td></tr>`).join('')}
+          ${lista.length > 10 ? `<tr><td colspan="7" class="muted">… e mais ${lista.length - 10}</td></tr>` : ''}</tbody></table>`;
+      $('#ic-ok').disabled = !lista.length;
+    };
+    $('#ic-arq').onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { mostrar(coletasDaPlanilha(await lerArquivoPlanilha(f))); } catch (err) { mostrar({ erro: err.message }); }
+    };
+    $('#ic-ok').onclick = async () => {
+      const btn = $('#ic-ok'); btn.disabled = true;
+      const tot = { criadas: 0, atualizadas: 0, ignoradas: 0, avisos: [] };
+      for (let i = 0; i < lista.length; i += 500) {
+        btn.textContent = `Importando ${Math.min(i + 500, lista.length)}/${lista.length}…`;
+        const { data: r, error } = await sb.rpc('importar_coletas', { p_linhas: lista.slice(i, i + 500), p_cd: $('#ic-cd')?.value || null, p_sobrescrever: $('#ic-sobre').checked });
+        if (error) { btn.textContent = 'Importar'; btn.disabled = false; return toast(/importar_coletas/.test(error.message) ? 'Rode o sql/08_coleta_planilha.sql no Supabase antes de importar.' : erroMsg(error), true); }
+        tot.criadas += r.criadas; tot.atualizadas += r.atualizadas; tot.ignoradas += r.ignoradas; tot.avisos.push(...(r.avisos || []));
+      }
+      await carregarMaquinas(); rerender(); if (state.view === 'maquinas') renderTabela();
+      toast(`${tot.criadas} máquina(s) nova(s), ${tot.atualizadas} atualizada(s)${tot.ignoradas ? `, ${tot.ignoradas} ignorada(s)` : ''}`, !!tot.ignoradas);
+      if (!tot.avisos.length) return dlg.close();
+      $('.modal-body', dlg).innerHTML = `<div class="banner banner--info"><div><strong>Importação concluída com ${tot.avisos.length} aviso(s)</strong><span>${tot.criadas} nova(s), ${tot.atualizadas} atualizada(s), ${tot.ignoradas} ignorada(s).</span></div></div>
+        <table class="mini-table"><thead><tr><th>Linha</th><th>Hostname</th><th>Aviso</th></tr></thead><tbody>
+        ${tot.avisos.slice(0, 50).map((a) => `<tr><td>${esc(a.linha ?? '')}</td><td class="mono">${esc(a.host || '')}</td><td>${esc(a.msg)}</td></tr>`).join('')}</tbody></table>`;
+      $('.modal-foot', dlg).innerHTML = '<button class="btn btn--primary" data-close>Fechar</button>';
+      $$('[data-close]', dlg).forEach((b) => (b.onclick = () => dlg.close()));
     };
   });
 }
@@ -2507,6 +2549,17 @@ async function renderAgente(aba = 'instalacao') {
         <p class="muted" style="margin:4px 0 0">Ele abre no computador, clica em <b>Baixar</b> e executa o arquivo com o botão direito → <b>Executar com o PowerShell</b>. O instalador é um script fixo e legível (pode ser assinado pela CA da empresa); patrimônio e setor vão por um código curto. Funciona sem ser administrador e a página mostra a máquina reconhecida ao vivo.</p></div>
       <button class="btn btn--primary" id="btn-link-agente">Gerar link de instalação</button>
     </div>
+    <div class="card card-pad" style="margin-bottom:16px">
+      <div class="card-head"><h2>Sem instalação: Invent_local (planilha do Excel)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-agente">Importar planilha</button></div>
+      <p class="muted" style="margin-top:0">Para computadores onde não é possível instalar o agente (sem administrador, antivírus/EDR bloqueando, sem internet). Nada é instalado: executa-se o <b>COLETAR.bat</b>, informa-se patrimônio e setor, e os dados completos (série, RAM e módulos, discos, SO, IP, usuário) vão para a planilha do Excel <code>inventario-quallit.xlsx</code>. O link de instalação também oferece essa opção ao colaborador, que importa o arquivo na própria página.</p>
+      <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
+        <li>Baixe o <b>Invent_local.zip</b> e extraia numa pasta de rede (ex.: <code>&#92;&#92;servidor&#92;TI&#92;Inventario</code>), com permissão de gravação para quem vai coletar.</li>
+        <li>Em cada computador: abra a pasta e dê duplo clique em <b>COLETAR.bat</b>. Executar de novo atualiza a mesma linha (não duplica).</li>
+        <li>No painel: <b>Máquinas → Importar coleta</b> e escolha o <code>inventario-quallit.xlsx</code>. Pode importar quantas vezes quiser.</li>
+      </ol>
+      <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-zip">Baixar Invent_local.zip</button><a class="btn btn--sm btn--ghost" href="agente/planilha/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+      <p class="muted" style="font-size:12.5px;margin-bottom:0">Automático, sem perguntas: use como script de logon da GPO <code>powershell -NoProfile -ExecutionPolicy Bypass -File &#92;&#92;servidor&#92;TI&#92;Inventario&#92;coletar.ps1 -Silencioso</code>. Se a planilha estiver aberta no Excel, os dados ficam salvos na pasta <code>dados</code> e a planilha é refeita na próxima execução.</p>
+    </div>
     <div class="grid-2">
       <div class="card card-pad">
         <div class="card-head"><h2>Pacote MSI (Intune · SCCM · PDQ · GPO)</h2><a class="btn btn--sm btn--primary" href="agente/InventarioQuallit.msi" download>Baixar MSI</a></div>
@@ -2547,6 +2600,15 @@ async function renderAgente(aba = 'instalacao') {
     </div>`;
   $$('.bar', el).forEach((b) => (b.style.cursor = 'default'));
   $('#btn-link-agente').onclick = () => modalLinkInstalacao();
+  $('#btn-coleta-agente').onclick = modalImportarColeta;
+  $('#btn-kit-zip').onclick = async (e) => {
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await montarKitInventLocal()); a.download = 'Invent_local.zip'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    }
+    catch (err) { toast('Não foi possível montar o kit: ' + err.message, true); }
+  };
   $$('[data-tok]', el).forEach((b) => (b.onclick = async () => {
     const ativo = b.dataset.ativo === 'true';
     if (ativo && !confirm('Revogar este token? Agentes usando ele param de reportar.')) return;
