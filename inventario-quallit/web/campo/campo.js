@@ -32,7 +32,7 @@ function rel(ts) {
   const d = Math.floor(s / 86400);
   return d < 60 ? `há ${d} dia${d > 1 ? 's' : ''}` : new Date(ts).toLocaleDateString('pt-BR');
 }
-const TIPO = { desktop: 'Desktop', notebook: 'Notebook', servidor: 'Servidor', outro: 'Outro' };
+const TIPO = { desktop: 'Desktop', notebook: 'Notebook', coletor: 'Coletor de dados', servidor: 'Servidor', outro: 'Outro' };
 const STATUS = { em_uso: 'Em uso', estoque: 'Estoque', manutencao: 'Manutenção', emprestado: 'Emprestado', descartado: 'Descartado', extraviado: 'Extraviado' };
 const msgErro = (e) => (e?.code === '42501' ? 'O inventário já foi encerrado ou você não tem permissão para gravar nele. Fale com o administrador.' : e?.message || String(e));
 const erroRede = (e) => !navigator.onLine || (/Failed to fetch|NetworkError|Load failed|network/i.test(String(e?.message || e || '')) && !e?.code);

@@ -165,7 +165,7 @@ export function coletasDaPlanilha(linhas) {
       if (idx[k] >= 0) r[k] = pegar(k) || null;
     }
     const tipo = pegar('tipo').toLowerCase();
-    if (['desktop', 'notebook', 'servidor', 'outro'].includes(tipo)) r.tipo = tipo;
+    if (['desktop', 'notebook', 'servidor', 'coletor', 'outro'].includes(tipo)) r.tipo = tipo;
     for (const k of ['memoria_gb', 'armazenamento_total_gb', 'armazenamento_livre_gb', 'cpu_nucleos']) {
       if (idx[k] >= 0 && pegar(k) && !(k in base)) r[k] = lerNum(pegar(k));
     }
@@ -223,6 +223,17 @@ export async function montarKitInventLocal(base = 'agente/planilha/', config = n
     return { nome: 'Invent_local/' + n, dados: new Uint8Array(await r.arrayBuffer()) };
   }));
   if (config) arquivos.push({ nome: 'Invent_local/config.json', dados: new TextEncoder().encode(JSON.stringify(config, null, 2)) });
+  return criarZip(arquivos);
+}
+
+// kit dos coletores Android (leitura pelo cabo USB / ADB) → Coletores_Quallit.zip
+export async function montarKitColetores(base = 'agente/coletores/') {
+  const nomes = ['COLETAR-COLETORES.bat', 'coletar-coletores.ps1', 'LEIA-ME.txt'];
+  const arquivos = await Promise.all(nomes.map(async (n) => {
+    const r = await fetch(base + n + '?v=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) throw new Error(`arquivo ${n} não encontrado no site`);
+    return { nome: 'Coletores_Quallit/' + n, dados: new Uint8Array(await r.arrayBuffer()) };
+  }));
   return criarZip(arquivos);
 }
 

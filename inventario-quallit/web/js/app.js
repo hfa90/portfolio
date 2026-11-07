@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY, URL_PUBLICA } from './config.js';
 import { idbGet, idbSet, filaListar, filaAdicionar, filaRemover, ehErroDeRede } from './offline.js';
 import { criarAssinatura } from './assinatura.js';
-import { lerCSV, normCab, lerValor, lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal, criarXlsx } from './planilha.js';
+import { lerCSV, normCab, lerValor, lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal, montarKitColetores, criarXlsx } from './planilha.js';
 import { MODELOS, montarFolhas } from './etiquetas.js';
 import { fmtDuracao, anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, descreverAgendamento, proximasExecucoes, DIAS_SEMANA, ESTADOS } from './prazo.js';
 
@@ -23,7 +23,7 @@ const store = {
 
 const STATUS = { em_uso: 'Em uso', estoque: 'Estoque', manutencao: 'Manutenção', emprestado: 'Emprestado', descartado: 'Descartado', extraviado: 'Extraviado' };
 const STATUS_COR = { em_uso: 'ok', estoque: 'info', manutencao: 'warn', emprestado: 'info', descartado: '', extraviado: 'bad' };
-const TIPO = { desktop: 'Desktop', notebook: 'Notebook', servidor: 'Servidor', outro: 'Outro' };
+const TIPO = { desktop: 'Desktop', notebook: 'Notebook', coletor: 'Coletor de dados', servidor: 'Servidor', outro: 'Outro' };
 const SIT = { online: 'Online agora', recente: 'Até 7 dias', ausente: '7 a 30 dias', offline: 'Mais de 30 dias', nunca: 'Nunca reportou' };
 const SIT_COR = { online: 'ok', recente: 'info', ausente: 'warn', offline: 'bad', nunca: 'idle' };
 const ALERTAS = {
@@ -40,6 +40,7 @@ const ALERTAS = {
   sem_ativo:          { l: 'Sem patrimônio', d: 'Sem número de patrimônio cadastrado', grave: false },
   garantia_vencendo:  { l: 'Garantia vencendo', d: 'Garantia termina nos próximos 30 dias', grave: false },
   renovacao:          { l: 'Mais de 5 anos', d: 'Comprada há mais de 5 anos — candidata a renovação', grave: false },
+  bateria_ruim:       { l: 'Bateria ruim', d: 'Coletor com bateria com defeito ou abaixo de 80% da capacidade original — candidata a troca', grave: true },
 };
 const CAMPOS_HIST = {
   cadastro: 'Cadastro', hostname: 'Hostname', ativo: 'Patrimônio', tipo: 'Tipo', status: 'Status', numero_serie: 'Nº de série',
@@ -63,6 +64,7 @@ function soFamilia(m) {
   if (r) return 'Windows ' + r[1];
   if (/mac/i.test(n)) return 'macOS';
   if (/linux|ubuntu/i.test(n)) return 'Linux';
+  if (/android/i.test(n)) return n.replace(/^(Android\s+\d+).*/i, '$1');
   return n ? n.replace(/^Microsoft\s+/i, '') : 'Sem dado';
 }
 const soGrupo = (m) => (m.so_nome ? soFamilia(m) + (m.so_display_version ? ' · ' + m.so_display_version : '') : 'Sem dado');
@@ -80,6 +82,7 @@ function tipoDisco(m) {
   if (t.has('SSD') && t.has('HDD')) return 'SSD + HDD';
   if (t.has('SSD')) return 'SSD';
   if (t.has('HDD')) return 'HDD';
+  if (t.has('Flash')) return t.has('SD') ? 'Interna + cartão SD' : 'Memória interna';
   return (m.discos || []).length ? 'Não identificado' : 'Sem dado';
 }
 function gb(v, dec = 0) {
@@ -451,7 +454,7 @@ function renderPainel() {
       </div>
       <div class="hero-kpis">
         <button class="card kpi2" data-filtros='{}'><span class="k-rot">Máquinas</span><b>${L.length}</b>
-          <span class="k-sub">${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks</span></button>
+          <span class="k-sub">${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks${by((m) => m.tipo === 'coletor') ? ` · ${by((m) => m.tipo === 'coletor')} coletores` : ''}</span></button>
         <button class="card kpi2" data-filtros='{"situacao":"online"}'><span class="k-rot"><span class="dot dot--online"></span> Online agora</span><b class="t-ok">${online}</b>
           <span class="mini-barra"><i style="width:${Math.round((100 * online) / L.length)}%;background:var(--ok)"></i></span><span class="k-sub">${Math.round((100 * online) / L.length)}% do parque</span></button>
         <button class="card kpi2" data-filtros='{"alerta":"_grave"}'><span class="k-rot">Precisam de atenção</span><b class="${graves ? 't-bad' : ''}">${graves}</b>
@@ -762,7 +765,13 @@ const METRICA_MOS = {
   idade:    { l: 'Idade', v: idadeFaixa, leg: [['0 a 2 anos', '0 a 2 anos', '#16a36a'], ['3 a 4 anos', '3 a 4 anos', '#e0a10b'], ['5 anos ou mais', '5 anos ou mais', '#d6342a'], ['Sem data de compra', 'Sem data', '#94a3b8']] },
   garantia: { l: 'Garantia', v: garantiaFaixa, leg: [['Vigente', 'Vigente', '#16a36a'], ['Vence em 90 dias', 'Vence em 90 dias', '#3a5fd0'], ['Vence em 30 dias', 'Vence em 30 dias', '#e0a10b'], ['Vencida', 'Vencida', '#d6342a'], ['Sem informação', 'Sem informação', '#94a3b8']] },
 };
-const icoTipo = (t) => (t === 'notebook' ? '💻' : t === 'servidor' ? '🗄️' : '🖥️');
+const icoTipo = (t) => (t === 'notebook' ? '💻' : t === 'coletor' ? '📟' : t === 'servidor' ? '🗄️' : '🖥️');
+// resumo da bateria do coletor: "85% · boa · capacidade 92% · 310 ciclos"
+const SAUDE_BAT = { boa: 'boa', desconhecida: 'desconhecida', superaquecida: 'superaquecida', defeito: 'com defeito', sobretensao: 'sobretensão', falha: 'com falha', fria: 'fria demais' };
+function bateriaTxt(m) {
+  const b = m.bateria || {};
+  return [b.nivel != null && b.nivel + '%', b.saude && (SAUDE_BAT[b.saude] || b.saude), b.capacidade_pct != null && 'capacidade ' + b.capacidade_pct + '%', b.ciclos != null && b.ciclos + ' ciclos'].filter(Boolean).join(' · ');
+}
 
 function opcoesModo() {
   const o = state.modoOpts;
@@ -929,13 +938,13 @@ function exportarCSV() {
   const cab = ['CD', 'Hostname', 'Patrimônio', 'Tipo', 'Status', 'Fabricante', 'Modelo', 'Nº série', 'Processador', 'RAM (GB)', 'Slots RAM',
     'Armazenamento (GB)', 'Livre (GB)', 'Tipo disco', 'Sistema', 'Versão', 'Build', 'Arquitetura', 'IP', 'MAC', 'Domínio', 'Usuário',
     'Setor', 'Localização', 'Responsável', 'Último contato', 'Situação', 'Alertas', 'Observações',
-    'Data de compra', 'Fornecedor', 'Nota fiscal', 'Valor', 'Fim da garantia', 'Situação garantia', 'Emprestado para', 'Devolução prevista'];
+    'Data de compra', 'Fornecedor', 'Nota fiscal', 'Valor', 'Fim da garantia', 'Situação garantia', 'Emprestado para', 'Devolução prevista', 'Bateria (coletor)'];
   const linhas = ordenar(filtrar()).map((m) => [cdNome(m.cd_id), m.hostname, m.ativo, TIPO[m.tipo], STATUS[m.status], m.fabricante, m.modelo, m.numero_serie,
     m.cpu, m.memoria_gb, m.memoria_slots_total, m.armazenamento_total_gb, m.armazenamento_livre_gb, tipoDisco(m), m.so_nome,
     m.so_display_version, m.so_build, m.so_arquitetura, m.ip, m.mac, m.dominio, m.usuario_logado, m.setor, m.localizacao,
     m.responsavel, dataHora(m.ultimo_online), SIT[situacao(m)], (m.alertas || []).map((a) => ALERTAS[a]?.l || a).join(', '), m.observacoes,
     dataBR(m.data_compra), m.fornecedor, m.nota_fiscal, m.valor_compra != null ? String(m.valor_compra).replace('.', ',') : '', dataBR(m.garantia_fim), garantiaFaixa(m),
-    m.emprestimo_atual?.colaborador, m.emprestimo_atual?.previsto_devolucao ? dataHora(m.emprestimo_atual.previsto_devolucao) : '']);
+    m.emprestimo_atual?.colaborador, m.emprestimo_atual?.previsto_devolucao ? dataHora(m.emprestimo_atual.previsto_devolucao) : '', m.tipo === 'coletor' ? bateriaTxt(m) : '']);
   baixar(`inventario-${new Date().toISOString().slice(0, 10)}.csv`, [cab, ...linhas].map((l) => l.map(csvCel).join(';')).join('\r\n'));
 }
 
@@ -949,7 +958,7 @@ const COLS_INV = [
   { t: 'PROCESSADOR', w: 34 }, { t: 'NUCLEOS', w: 9 }, { t: 'RAM (GB)', w: 9 }, { t: 'MODULOS DE RAM', w: 30 },
   { t: 'ARMAZENAMENTO (GB)', w: 12 }, { t: 'LIVRE (GB)', w: 10 }, { t: 'DISCOS', w: 32 }, { t: 'IP', w: 14 }, { t: 'MAC', w: 18 },
   { t: 'DOMINIO', w: 14 }, { t: 'USUARIO', w: 22 }, { t: 'WINDOWS INSTALADO EM', w: 12 }, { t: 'ULTIMO CONTATO', w: 16 },
-  { t: 'OBSERVACOES', w: 30 }, { t: 'DADOS (nao editar)', w: 10, oculta: true },
+  { t: 'BATERIA (coletor)', w: 30 }, { t: 'OBSERVACOES', w: 30 }, { t: 'DADOS (nao editar)', w: 10, oculta: true },
 ];
 const numXl = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const numBR = (v) => String(v ?? '').replace('.', ',');
@@ -958,15 +967,16 @@ function linhaInventario(m) {
   const dsk = (m.discos || []).filter(Boolean).map((x) => `${x.tipo || ''} ${x.tamanho_gb != null ? x.tamanho_gb + ' GB' : ''} (${x.modelo || ''})`.replace(/\s+/g, ' ').replace(' ()', '').trim()).join(' / ');
   const chaves = ['hostname', 'tipo', 'ativo', 'fabricante', 'modelo', 'numero_serie', 'cpu', 'cpu_nucleos', 'memoria_gb', 'memoria_slots_total',
     'memoria_modulos', 'armazenamento_total_gb', 'armazenamento_livre_gb', 'discos', 'volumes', 'so_nome', 'so_versao', 'so_build',
-    'so_display_version', 'so_arquitetura', 'so_instalado_em', 'ultimo_boot', 'ip', 'mac', 'dominio', 'usuario_logado', 'setor', 'localizacao', 'responsavel'];
-  const dados = Object.fromEntries(chaves.filter((k) => m[k] != null && m[k] !== '').map((k) => [k, m[k]]));
+    'so_display_version', 'so_arquitetura', 'so_instalado_em', 'ultimo_boot', 'ip', 'mac', 'dominio', 'usuario_logado', 'setor', 'localizacao', 'responsavel', 'bateria'];
+  const vazio = (v) => v == null || v === '' || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+  const dados = Object.fromEntries(chaves.filter((k) => !vazio(m[k])).map((k) => [k, m[k]]));
   if (m.ultimo_online) dados.coletado_em = m.ultimo_online;
   let json = JSON.stringify(dados);
   if (json.length > 32000) { delete dados.volumes; delete dados.memoria_modulos; json = JSON.stringify(dados); } // limite de uma célula do Excel
   return [cdCod(m.cd_id), m.hostname, m.ativo, m.setor, m.localizacao, m.responsavel, m.tipo, STATUS[m.status] || m.status, m.fabricante, m.modelo,
     m.numero_serie, m.so_nome, m.so_display_version, m.so_build, m.cpu, numXl(m.cpu_nucleos), numXl(m.memoria_gb), mods,
     numXl(m.armazenamento_total_gb), numXl(m.armazenamento_livre_gb), dsk, m.ip, m.mac, m.dominio, m.usuario_logado,
-    m.so_instalado_em ? data(m.so_instalado_em) : '', m.ultimo_online ? dataHora(m.ultimo_online) : '', m.observacoes, json.length > 32000 ? '' : json];
+    m.so_instalado_em ? data(m.so_instalado_em) : '', m.ultimo_online ? dataHora(m.ultimo_online) : '', m.tipo === 'coletor' ? bateriaTxt(m) : '', m.observacoes, json.length > 32000 ? '' : json];
 }
 const ordemInv = (a, b) => cdCod(a.cd_id).localeCompare(cdCod(b.cd_id), 'pt-BR') || String(a.hostname || '').localeCompare(String(b.hostname || ''), 'pt-BR');
 function gerarInventarioXlsx(cdId, descartados) {
@@ -1137,6 +1147,9 @@ async function abrirMaquina(id, silencioso = false) {
         <div class="big-spec"><div class="l">Armazenamento</div><div class="v">${gb(m.armazenamento_total_gb)}</div>
           <div class="l">${esc(tipoDisco(m))}${m.armazenamento_livre_gb != null ? ' · ' + gb(m.armazenamento_livre_gb) + ' livre' : ''}</div>
           ${usado != null ? `<div class="progress" style="margin-top:6px"><i style="width:${usado}%;background:${usado > 90 ? 'var(--bad)' : usado > 75 ? 'var(--warn)' : 'var(--ink-2)'}"></i></div>` : ''}</div>
+        ${m.tipo === 'coletor' ? (() => { const b = m.bateria || {}; const ruim = (m.alertas || []).includes('bateria_ruim');
+          return `<div class="big-spec"><div class="l">Bateria</div><div class="v ${ruim ? 't-bad' : ''}">${b.capacidade_pct != null ? b.capacidade_pct + '%' : b.nivel != null ? b.nivel + '%' : '—'}</div>
+          <div class="l">${esc(b.capacidade_pct != null ? 'da capacidade original' : b.nivel != null ? 'de carga' : 'sem leitura')}${b.saude ? ' · saúde ' + esc(SAUDE_BAT[b.saude] || b.saude) : ''}${b.ciclos != null ? ' · ' + b.ciclos + ' ciclos' : ''}</div></div>`; })() : ''}
         <div class="big-spec"><div class="l">Sistema</div><div class="v" style="font-size:16px">${esc(soFamilia(m))}</div>
           <div class="l">${esc([m.so_display_version, m.so_build && 'build ' + m.so_build].filter(Boolean).join(' · ') || '&nbsp;')}</div></div>
       </div>
@@ -2118,7 +2131,7 @@ function cardMaquinaEmp(m) {
 function modalEmprestimo(pre = null) {
   let maq = pre;
   const disponiveis = MQ().filter((m) => !m.emprestimo_atual && !['descartado', 'extraviado'].includes(m.status))
-    .sort((a, b) => (a.tipo === 'notebook' ? 0 : 1) - (b.tipo === 'notebook' ? 0 : 1) || (a.ativo || a.hostname).localeCompare(b.ativo || b.hostname));
+    .sort((a, b) => (['notebook', 'coletor'].includes(a.tipo) ? 0 : 1) - (['notebook', 'coletor'].includes(b.tipo) ? 0 : 1) || (a.ativo || a.hostname).localeCompare(b.ativo || b.hostname));
   const colaboradores = [...new Set(state.emprestimos.map((e) => e.colaborador))];
   const ACESSORIOS = ['Carregador', 'Mouse', 'Mochila / case', 'Headset', 'Coletor / leitor'];
   modal(`
@@ -2654,6 +2667,17 @@ async function renderAgente(aba = 'instalacao') {
       <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-zip">Baixar Invent_local.zip</button><a class="btn btn--sm btn--ghost" href="agente/planilha/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
       <p class="muted" style="font-size:12.5px;margin-bottom:0">Automático, sem perguntas: use como script de logon da GPO <code>powershell -NoProfile -ExecutionPolicy Bypass -File &#92;&#92;servidor&#92;TI&#92;Inventario&#92;coletar.ps1 -Silencioso</code>. Se a planilha estiver aberta no Excel, os dados ficam salvos na pasta <code>dados</code> e a planilha é refeita na próxima execução.</p>
     </div>
+    <div class="card card-pad" style="margin-bottom:16px">
+      <div class="card-head"><h2>📟 Coletores de dados Android (cabo USB)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-coletores">Importar planilha</button></div>
+      <p class="muted" style="margin-top:0">Mesma ideia do Invent_local, para os coletores (Zebra, Honeywell, Datalogic…). Num computador, o <b>COLETAR-COLETORES.bat</b> lê pelo cabo USB cada coletor conectado: nº de série, modelo, versão do Android e patch, RAM, memória interna e cartão SD, <b>saúde e capacidade da bateria</b>, IP e MAC do Wi-Fi. Nada é instalado no coletor. Os dados vão para a planilha <code>coletores-quallit.xlsx</code>.</p>
+      <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
+        <li>Em cada coletor (uma vez): <i>Configurações → Sobre o telefone</i>, toque 7× em <b>Número da versão</b>; depois <i>Opções do desenvolvedor</i> → ative <b>Depuração USB</b>.</li>
+        <li>Baixe o kit, extraia e dê duplo clique em <b>COLETAR-COLETORES.bat</b> (na 1ª vez ele oferece baixar o ADB oficial do Google). Conecte um coletor por vez (ou vários num hub), toque em <b>Permitir</b> na tela do coletor e bipe o patrimônio.</li>
+        <li>No painel: <b>Máquinas → Importar coleta</b> e escolha o <code>coletores-quallit.xlsx</code>. Eles entram com o tipo <b>Coletor de dados</b>.</li>
+      </ol>
+      <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+      <p class="muted" style="font-size:12.5px;margin-bottom:0">Se a empresa usa MDM (SOTI, Zebra StageNow, Intune…), a Depuração USB pode estar bloqueada: peça para liberar ao responsável pelo MDM.</p>
+    </div>
     <div class="grid-2">
       <div class="card card-pad">
         <div class="card-head"><h2>Pacote MSI (Intune · SCCM · PDQ · GPO)</h2><a class="btn btn--sm btn--primary" href="agente/InventarioQuallit.msi" download>Baixar MSI</a></div>
@@ -2695,6 +2719,14 @@ async function renderAgente(aba = 'instalacao') {
   $$('.bar', el).forEach((b) => (b.style.cursor = 'default'));
   $('#btn-link-agente').onclick = () => modalLinkInstalacao();
   $('#btn-coleta-agente').onclick = modalImportarColeta;
+  $('#btn-coleta-coletores').onclick = modalImportarColeta;
+  $('#btn-kit-coletores').onclick = async () => {
+    try {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(await montarKitColetores()); a.download = 'Coletores_Quallit.zip'; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (err) { toast('Não foi possível montar o kit: ' + err.message, true); }
+  };
   $('#btn-kit-zip').onclick = async (e) => {
     try {
       const a = document.createElement('a');
@@ -3194,6 +3226,7 @@ const METRICAS = [
   { k: 'total', l: 'Máquinas', f: () => true, ir: {} },
   { k: 'desk', l: 'Desktops', f: (m) => m.tipo === 'desktop', ir: { tipo: 'desktop' } },
   { k: 'note', l: 'Notebooks', f: (m) => m.tipo === 'notebook', ir: { tipo: 'notebook' } },
+  { k: 'colet', l: 'Coletores', f: (m) => m.tipo === 'coletor', ir: { tipo: 'coletor' } },
   { k: 'online', l: 'Online 24h', f: (m) => m.ultimo_online && Date.now() - new Date(m.ultimo_online) < 864e5, pct: true },
   { k: 'semc', l: 'Sem contato 30d', a: 'sem_contato', ruim: true },
   { k: 'so', l: 'Windows sem suporte', a: 'so_sem_suporte', ruim: true },
@@ -3206,6 +3239,7 @@ const METRICAS = [
   { k: 'emp', l: 'Emprestados', f: (m) => !!m.emprestimo_atual, ir: { status: 'emprestado' } },
   { k: 'atr', l: 'Devolução atrasada', a: 'emprestimo_atrasado', ruim: true },
   { k: 'pat', l: 'Sem patrimônio', a: 'sem_ativo' },
+  { k: 'bat', l: 'Bateria ruim', a: 'bateria_ruim', ruim: true },
 ];
 const temMetrica = (mt, m) => (mt.a ? (m.alertas || []).includes(mt.a) : mt.f(m));
 
@@ -3268,11 +3302,11 @@ function renderRelParque() {
       return `<td class="hm ${n ? '' : 'zero'}" style="--a:${n ? Math.max(0.12, Math.min(0.85, p / 60)) : 0};--rgb:${cor}">${n ? `<a data-cd="${r.cd.id || ''}" data-m="${mt.k}"><b>${n}</b><small>${p}%</small></a>` : '–'}</td>`;
     };
     $('#rel-corpo').innerHTML = `
-      <div class="rel-filtro"><div class="seg" id="rp-tipo">${[['', 'Todos'], ['desktop', 'Desktops'], ['notebook', 'Notebooks']].map(([k, l]) => `<button class="${f.tipo === k ? 'on' : ''}" data-tipo="${k}">${l}</button>`).join('')}</div>
+      <div class="rel-filtro"><div class="seg" id="rp-tipo">${[['', 'Todos'], ['desktop', 'Desktops'], ['notebook', 'Notebooks'], ['coletor', 'Coletores']].map(([k, l]) => `<button class="${f.tipo === k ? 'on' : ''}" data-tipo="${k}">${l}</button>`).join('')}</div>
         <span class="muted" style="font-size:13px">${linhas.length} CD(s) · máquinas descartadas não entram</span></div>
       <div class="rel-resumo">
         <div class="card rr-saude">${anelSaude(saudeGeral, 92)}<div><span class="hs-titulo">Saúde geral</span><strong>${base.length - graves} de ${base.length}</strong><span class="muted">máquinas sem problemas importantes</span></div></div>
-        <div class="card rr-kpi"><span class="k-rot">Máquinas</span><b>${total.v.total}</b><span class="k-sub">${total.v.desk} desktops · ${total.v.note} notebooks</span></div>
+        <div class="card rr-kpi"><span class="k-rot">Máquinas</span><b>${total.v.total}</b><span class="k-sub">${total.v.desk} desktops · ${total.v.note} notebooks${total.v.colet ? ` · ${total.v.colet} coletores` : ''}</span></div>
         <div class="card rr-kpi"><span class="k-rot">Online 24h</span><b class="t-ok">${pct(total.v.online, total.v.total)}%</b><span class="k-sub">${total.v.online} máquina(s)</span></div>
         <div class="card rr-kpi"><span class="k-rot">Problemas importantes</span><b class="${graves ? 't-bad' : ''}">${graves}</b><span class="k-sub">máquinas afetadas</span></div>
       </div>
@@ -3465,7 +3499,7 @@ function abrirRelatorio(titulo, subtitulo, corpo, janela) {
 function relatorioGeralParque(tipo = '') {
   const { linhas, total, base } = dadosParque(tipo);
   const pct = (n, t) => (t ? Math.round((100 * n) / t) : 0);
-  const sub = `${state.cdAtual ? esc(cdCod(state.cdAtual) + ' · ' + cdNome(state.cdAtual)) : `${linhas.length} CD(s)`} · ${tipo ? (tipo === 'desktop' ? 'só desktops' : 'só notebooks') : 'desktops e notebooks'} · ${data(new Date().toISOString())}`;
+  const sub = `${state.cdAtual ? esc(cdCod(state.cdAtual) + ' · ' + cdNome(state.cdAtual)) : `${linhas.length} CD(s)`} · ${tipo ? { desktop: 'só desktops', notebook: 'só notebooks', coletor: 'só coletores' }[tipo] || TIPO[tipo] : 'todos os equipamentos'} · ${data(new Date().toISOString())}`;
   abrirRelatorio('Relatório geral do parque', sub, `
     ${kpisRel([['Máquinas', total.v.total], ['Online 24h', pct(total.v.online, total.v.total) + '%', 'ok'], ['Sem contato 30d', total.v.semc, total.v.semc ? 'bad' : ''],
       ['Windows sem suporte', total.v.so, total.v.so ? 'bad' : ''], ['Peça removida', total.v.peca, total.v.peca ? 'bad' : ''], ['Emprestados', total.v.emp], ['Mais de 5 anos', total.v.ren, total.v.ren ? 'warn' : '']])}
