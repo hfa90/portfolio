@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do painel para abrir e conferir sem internet.
 // Os dados (Supabase) não passam por aqui: o app guarda no IndexedDB e sincroniza sozinho.
-const VERSAO = 'iq-v8';
+const VERSAO = 'iq-v9';
 const ESSENCIAIS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './css/prazo.css', './js/prazo.js',

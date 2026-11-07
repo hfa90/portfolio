@@ -225,3 +225,66 @@ export async function montarKitInventLocal(base = 'agente/planilha/', config = n
   if (config) arquivos.push({ nome: 'Invent_local/config.json', dados: new TextEncoder().encode(JSON.stringify(config, null, 2)) });
   return criarZip(arquivos);
 }
+
+/* ------------------------------------------------------------------ XLSX (escrita) */
+// abas: [{ nome, colunas: [{ t: 'CABEÇALHO', w: 18, oculta?: true }], linhas: [[valor, ...]] }] → Blob .xlsx
+// Mesmo visual da planilha do Invent_local: cabeçalho azul em negrito, 1ª linha congelada e filtro.
+const xmlEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+  .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
+const colLetra = (i) => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + ((i - 1) % 26)) + s; return s; };
+function nomeAba(nome, usados) {
+  const base = String(nome || 'Aba').replace(/[[\]:*?/\\]/g, '-').replace(/^'+|'+$/g, '').trim().slice(0, 31) || 'Aba';
+  let n = base, k = 2;
+  while (usados.has(n.toLowerCase())) { const suf = ` (${k++})`; n = base.slice(0, 31 - suf.length) + suf; }
+  usados.add(n.toLowerCase());
+  return n;
+}
+function celula(ref, v, estilo = 0) {
+  if (v == null || v === '') return '';
+  const s = estilo ? ` s="${estilo}"` : '';
+  if (typeof v === 'number' && Number.isFinite(v)) return `<c r="${ref}"${s}><v>${v}</v></c>`;
+  return `<c r="${ref}"${s} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+}
+export function criarXlsx(abas) {
+  const enc = new TextEncoder();
+  const usados = new Set();
+  const nomes = abas.map((a) => nomeAba(a.nome, usados));
+  const ultCol = (a) => colLetra(Math.max(a.colunas.length, 1) - 1);
+  const folhas = abas.map((a) => {
+    const cols = a.colunas.map((c, i) => `<col min="${i + 1}" max="${i + 1}" width="${c.w || 14}" customWidth="1"${c.oculta ? ' hidden="1"' : ''}/>`).join('');
+    const cab = `<row r="1">${a.colunas.map((c, i) => celula(colLetra(i) + 1, c.t, 1)).join('')}</row>`;
+    const corpo = a.linhas.map((l, r) => `<row r="${r + 2}">${l.map((v, i) => celula(colLetra(i) + (r + 2), v)).join('')}</row>`).join('');
+    return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+      + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+      + `<cols>${cols}</cols><sheetData>${cab}${corpo}</sheetData><autoFilter ref="A1:${ultCol(a)}${a.linhas.length + 1}"/></worksheet>`;
+  });
+  const workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+    + `<sheets>${nomes.map((n, i) => `<sheet name="${xmlEsc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets>`
+    + `<definedNames>${abas.map((a, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${xmlEsc(nomes[i].replace(/'/g, "''"))}'!$A$1:$${ultCol(a)}$${a.linhas.length + 1}</definedName>`).join('')}</definedNames></workbook>`;
+  const rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + abas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')
+    + `<Relationship Id="rId${abas.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const tipos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+    + '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+    + abas.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')
+    + '</Types>';
+  const raiz = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+  const estilos = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+    + '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>'
+    + '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F4E79"/><bgColor indexed="64"/></patternFill></fill></fills>'
+    + '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+    + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+    + '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/></cellXfs>'
+    + '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+  const arq = [
+    { nome: '[Content_Types].xml', dados: tipos }, { nome: '_rels/.rels', dados: raiz },
+    { nome: 'xl/workbook.xml', dados: workbook }, { nome: 'xl/_rels/workbook.xml.rels', dados: rels }, { nome: 'xl/styles.xml', dados: estilos },
+    ...folhas.map((f, i) => ({ nome: `xl/worksheets/sheet${i + 1}.xml`, dados: f })),
+  ].map((a) => ({ nome: a.nome, dados: enc.encode(a.dados) }));
+  return new Blob([criarZip(arq)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+}

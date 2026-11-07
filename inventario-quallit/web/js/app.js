@@ -2,7 +2,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY, URL_PUBLICA } from './config.js';
 import { idbGet, idbSet, filaListar, filaAdicionar, filaRemover, ehErroDeRede } from './offline.js';
 import { criarAssinatura } from './assinatura.js';
-import { lerCSV, normCab, lerValor, lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal } from './planilha.js';
+import { lerCSV, normCab, lerValor, lerArquivoPlanilha, coletasDaPlanilha, montarKitInventLocal, criarXlsx } from './planilha.js';
 import { MODELOS, montarFolhas } from './etiquetas.js';
 import { fmtDuracao, anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, descreverAgendamento, proximasExecucoes, DIAS_SEMANA, ESTADOS } from './prazo.js';
 
@@ -627,7 +627,8 @@ function renderMaquinas() {
           <button class="btn" id="btn-etq">Etiquetas</button>
           <button class="btn" id="btn-coleta" title="Planilha gerada pelo COLETAR.bat (sem instalação)">Importar coleta</button>
           <button class="btn" id="btn-import">Importar compras</button>
-          <button class="btn" id="btn-csv">Exportar CSV</button>
+          <button class="btn" id="btn-csv" title="Só as máquinas filtradas na tela">Exportar CSV</button>
+          <button class="btn" id="btn-inv" title="Planilha .xlsx com o inventário completo do CD">Baixar inventário</button>
           <button class="btn btn--primary" id="btn-nova">+ Nova máquina</button>
         </div>
       </div>
@@ -677,6 +678,7 @@ function renderMaquinas() {
     $('#btn-import').onclick = modalImportarCompras;
     $('#btn-coleta').onclick = modalImportarColeta;
     $('#btn-csv').onclick = exportarCSV;
+    $('#btn-inv').onclick = modalBaixarInventario;
     $('#btn-link').onclick = () => modalLinkInstalacao();
     $('#btn-nova').onclick = () => modalNovaMaquina();
     state.maqMontada = true;
@@ -935,6 +937,98 @@ function exportarCSV() {
     dataBR(m.data_compra), m.fornecedor, m.nota_fiscal, m.valor_compra != null ? String(m.valor_compra).replace('.', ',') : '', dataBR(m.garantia_fim), garantiaFaixa(m),
     m.emprestimo_atual?.colaborador, m.emprestimo_atual?.previsto_devolucao ? dataHora(m.emprestimo_atual.previsto_devolucao) : '']);
   baixar(`inventario-${new Date().toISOString().slice(0, 10)}.csv`, [cab, ...linhas].map((l) => l.map(csvCel).join(';')).join('\r\n'));
+}
+
+/* ---- Baixar inventário (.xlsx no formato do Invent_local)
+   Admin: um CD ou todos (uma aba "Todos os CDs" + uma aba por CD). Field: só o próprio CD.
+   A planilha pode ser reimportada em Máquinas → Importar coleta (coluna DADOS oculta). */
+const COLS_INV = [
+  { t: 'CD', w: 10 }, { t: 'HOSTNAME', w: 18 }, { t: 'PATRIMONIO', w: 13 }, { t: 'SETOR', w: 16 }, { t: 'LOCALIZACAO', w: 14 },
+  { t: 'RESPONSAVEL', w: 16 }, { t: 'TIPO', w: 10 }, { t: 'STATUS', w: 12 }, { t: 'FABRICANTE', w: 13 }, { t: 'MODELO', w: 22 },
+  { t: 'NUMERO DE SERIE', w: 22 }, { t: 'SISTEMA OPERACIONAL', w: 34 }, { t: 'VERSAO', w: 8 }, { t: 'BUILD', w: 12 },
+  { t: 'PROCESSADOR', w: 34 }, { t: 'NUCLEOS', w: 9 }, { t: 'RAM (GB)', w: 9 }, { t: 'MODULOS DE RAM', w: 30 },
+  { t: 'ARMAZENAMENTO (GB)', w: 12 }, { t: 'LIVRE (GB)', w: 10 }, { t: 'DISCOS', w: 32 }, { t: 'IP', w: 14 }, { t: 'MAC', w: 18 },
+  { t: 'DOMINIO', w: 14 }, { t: 'USUARIO', w: 22 }, { t: 'WINDOWS INSTALADO EM', w: 12 }, { t: 'ULTIMO CONTATO', w: 16 },
+  { t: 'OBSERVACOES', w: 30 }, { t: 'DADOS (nao editar)', w: 10, oculta: true },
+];
+const numXl = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const numBR = (v) => String(v ?? '').replace('.', ',');
+function linhaInventario(m) {
+  const mods = (m.memoria_modulos || []).filter(Boolean).map((x) => `${numBR(x.tamanho_gb)} GB ${x.tipo || ''} ${x.velocidade ? x.velocidade + ' MHz' : ''}`.replace(/\s+/g, ' ').trim()).join(' + ');
+  const dsk = (m.discos || []).filter(Boolean).map((x) => `${x.tipo || ''} ${x.tamanho_gb != null ? x.tamanho_gb + ' GB' : ''} (${x.modelo || ''})`.replace(/\s+/g, ' ').replace(' ()', '').trim()).join(' / ');
+  const chaves = ['hostname', 'tipo', 'ativo', 'fabricante', 'modelo', 'numero_serie', 'cpu', 'cpu_nucleos', 'memoria_gb', 'memoria_slots_total',
+    'memoria_modulos', 'armazenamento_total_gb', 'armazenamento_livre_gb', 'discos', 'volumes', 'so_nome', 'so_versao', 'so_build',
+    'so_display_version', 'so_arquitetura', 'so_instalado_em', 'ultimo_boot', 'ip', 'mac', 'dominio', 'usuario_logado', 'setor', 'localizacao', 'responsavel'];
+  const dados = Object.fromEntries(chaves.filter((k) => m[k] != null && m[k] !== '').map((k) => [k, m[k]]));
+  if (m.ultimo_online) dados.coletado_em = m.ultimo_online;
+  let json = JSON.stringify(dados);
+  if (json.length > 32000) { delete dados.volumes; delete dados.memoria_modulos; json = JSON.stringify(dados); } // limite de uma célula do Excel
+  return [cdCod(m.cd_id), m.hostname, m.ativo, m.setor, m.localizacao, m.responsavel, m.tipo, STATUS[m.status] || m.status, m.fabricante, m.modelo,
+    m.numero_serie, m.so_nome, m.so_display_version, m.so_build, m.cpu, numXl(m.cpu_nucleos), numXl(m.memoria_gb), mods,
+    numXl(m.armazenamento_total_gb), numXl(m.armazenamento_livre_gb), dsk, m.ip, m.mac, m.dominio, m.usuario_logado,
+    m.so_instalado_em ? data(m.so_instalado_em) : '', m.ultimo_online ? dataHora(m.ultimo_online) : '', m.observacoes, json.length > 32000 ? '' : json];
+}
+const ordemInv = (a, b) => cdCod(a.cd_id).localeCompare(cdCod(b.cd_id), 'pt-BR') || String(a.hostname || '').localeCompare(String(b.hostname || ''), 'pt-BR');
+function gerarInventarioXlsx(cdId, descartados) {
+  const meuCD = ehAdmin() ? null : state.perfil?.cd_id;
+  if (!ehAdmin() && !meuCD) throw new Error('seu usuário não está vinculado a nenhum CD');
+  const alvo = meuCD || cdId;   // Field: sempre o próprio CD, mesmo que peça outro
+  const base = state.maquinas.filter((m) => (descartados || m.status !== 'descartado') && (!alvo || m.cd_id === alvo)).sort(ordemInv);
+  const aba = (nome, lista) => ({ nome, colunas: COLS_INV, linhas: lista.map(linhaInventario) });
+  const hoje = new Date().toISOString().slice(0, 10);
+  if (alvo) {
+    const cod = cdCod(alvo);
+    return { blob: criarXlsx([aba(`${cod} - ${cdNome(alvo)}`, base)]), nome: `inventario-${cod.replace(/\W+/g, '-')}-${hoje}.xlsx`, total: base.length };
+  }
+  // uma aba por CD (CDs inativos sem máquinas ficam de fora)
+  const porCD = state.cds.slice().sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR'))
+    .map((c) => ({ c, lista: base.filter((m) => m.cd_id === c.id) }))
+    .filter(({ c, lista }) => lista.length || c.ativo)
+    .map(({ c, lista }) => aba(`${c.codigo} - ${c.nome}`, lista));
+  return { blob: criarXlsx([aba('Todos os CDs', base), ...porCD]), nome: `inventario-todos-os-CDs-${hoje}.xlsx`, total: base.length };
+}
+function modalBaixarInventario() {
+  const adm = ehAdmin();
+  const meu = state.perfil?.cd_id;
+  const cdIni = state.cdAtual || cdsAtivos()[0]?.id || state.cds[0]?.id || '';
+  const qtd = (cd, desc) => state.maquinas.filter((m) => (desc || m.status !== 'descartado') && (!cd || m.cd_id === cd)).length;
+  modal(`
+    <div class="modal-head"><h2>Baixar inventário</h2>
+      <p class="muted" style="margin:4px 0 0">Planilha do Excel (.xlsx) no mesmo formato do Invent_local, com todas as máquinas ${adm ? 'do CD escolhido' : 'do seu CD'}, sem os filtros da tela.</p></div>
+    <form class="modal-body" id="inv-form">
+      ${adm ? `
+        <label class="check full"><input type="radio" name="escopo" value="cd" ${state.cdAtual || state.cds.length < 2 ? 'checked' : ''}> Inventário de um CD</label>
+        <label class="full" id="inv-cd-wrap">CD<select name="cd_id">${opts(state.cds.map((c) => [c.id, `${c.codigo} · ${c.nome}${c.ativo ? '' : ' (inativo)'}`]), cdIni)}</select></label>
+        ${state.cds.length > 1 ? `<label class="check full"><input type="radio" name="escopo" value="todos" ${state.cdAtual ? '' : 'checked'}> Todos os CDs <span class="muted">(uma aba com tudo + uma aba por CD)</span></label>` : ''}`
+      : `<label class="full">CD<input value="${esc(cdCod(meu) + ' · ' + cdNome(meu))}" disabled></label>`}
+      <label class="check full"><input type="checkbox" name="descartados"> Incluir máquinas descartadas</label>
+      ${state.cacheEm ? `<p class="muted full">Sem internet: a planilha usa a cópia salva em ${dataHora(state.cacheEm)}.</p>` : ''}
+      <p class="muted full" id="inv-resumo"></p>
+    </form>
+    <div class="modal-foot"><button class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="inv-ok">Baixar .xlsx</button></div>`, (dlg) => {
+    const f = $('#inv-form', dlg);
+    const ler = () => {
+      const todos = adm && f.escopo && [...f.querySelectorAll('[name=escopo]')].find((r) => r.checked)?.value === 'todos';
+      return { cd: adm ? (todos ? '' : f.cd_id.value) : meu, desc: f.descartados.checked };
+    };
+    const atualizar = () => {
+      const { cd, desc } = ler();
+      if (adm) $('#inv-cd-wrap', dlg).hidden = !cd;
+      const n = qtd(cd, desc);
+      $('#inv-resumo', dlg).textContent = `${n} máquina${n === 1 ? '' : 's'}${cd ? ` no ${cdCod(cd)}` : ` em ${state.cds.length} CDs`}.`;
+    };
+    f.onchange = atualizar; atualizar();
+    $('#inv-ok', dlg).onclick = () => {
+      try {
+        const { cd, desc } = ler();
+        const r = gerarInventarioXlsx(cd, desc);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(r.blob); a.download = r.nome; a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        dlg.close(); toast(`Inventário baixado: ${r.total} máquina(s).`);
+      } catch (e) { toast('Não foi possível gerar a planilha: ' + (e.message || e), true); }
+    };
+  });
 }
 
 /* =====================================================================
@@ -3141,7 +3235,8 @@ async function renderRelatorios(aba = 'parque') {
 
 function renderRelParque() {
   const f = state.relParque || (state.relParque = { tipo: '' });
-  $('#rel-acoes').innerHTML = `<button class="btn" id="rp-csv">Exportar CSV</button><button class="btn btn--primary" id="rp-imprimir">Relatório geral (PDF)</button>`;
+  $('#rel-acoes').innerHTML = `<button class="btn" id="rp-csv">Exportar CSV</button><button class="btn" id="rp-inv">Baixar inventário (.xlsx)</button><button class="btn btn--primary" id="rp-imprimir">Relatório geral (PDF)</button>`;
+  $('#rp-inv').onclick = modalBaixarInventario;
   const PROBLEMAS = METRICAS.filter((m) => m.a);
   const desenhar = () => {
     const { linhas, total, base } = dadosParque(f.tipo);

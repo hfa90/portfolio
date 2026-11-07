@@ -233,106 +233,205 @@ $('#btn-executar').addEventListener('click', () => {
   }, 2500);
 });
 
-// ================================================================ SEM INSTALAR: Invent_local (planilha do Excel)
+// ================================================================ SEM INSTALAR: Invent_local (planilha do Excel + envio automático)
+// 1. a pessoa informa patrimônio/setor aqui → vão no convite e no config.json do .zip (o Invent_local roda sem perguntas)
+// 2. a página acompanha ao vivo: baixado → Invent_local aberto (status_instalacao) → dados recebidos (verificar_instalacao)
+// 3. mostra o computador registrado; se não chegar (sem internet), oferece a importação manual da planilha
+const TEXTO_HERO = {
+  agente: 'Leva menos de 1 minuto e você não precisa preencher nada: o sistema reconhece sozinho memória, disco, Windows, número de série e o resto.',
+  planilha: 'Leva menos de 1 minuto: informe o patrimônio e o setor, baixe e abra o arquivo. Memória, disco, Windows e número de série o sistema descobre sozinho.',
+};
+const TEXTO_RODAPE = {
+  agente: 'Instala um pequeno agente da TI que envia apenas dados técnicos do equipamento (hardware, Windows, rede). Nenhum arquivo pessoal é lido.',
+  planilha: 'O Invent_local não instala nada: lê apenas dados técnicos do equipamento (hardware, Windows, rede). Nenhum arquivo pessoal é lido.',
+};
 function trocarModo(modo, salvar = true) {
   document.querySelectorAll('.inst-modo').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.modo === modo)));
   $('#modo-agente').hidden = modo !== 'agente';
   $('#modo-planilha').hidden = modo !== 'planilha';
-  $('.inst-rodape').textContent = modo === 'agente'
-    ? 'Instala um pequeno agente da TI que envia apenas dados técnicos do equipamento (hardware, Windows, rede). Nenhum arquivo pessoal é lido.'
-    : 'O Invent_local não instala nada: lê apenas dados técnicos do equipamento (hardware, Windows, rede) e grava a planilha. Nenhum arquivo pessoal é lido.';
+  $('#hero-texto').textContent = TEXTO_HERO[modo];
+  $('.inst-rodape').textContent = TEXTO_RODAPE[modo];
   if (salvar) store.set('iq-modo', modo);
 }
 document.querySelectorAll('.inst-modo').forEach((b) => b.addEventListener('click', () => trocarModo(b.dataset.modo)));
 trocarModo(p.get('modo') === 'planilha' ? 'planilha' : (store.get('iq-modo') || 'agente'), false);
 
+// ---------------------------------------------------------------- estado (sobrevive a recarregar a página)
+const JANELA = 30 * 60 * 1000;   // acompanha por 30 min depois do download
+const lerEstado = () => { try { return JSON.parse(store.get('iq-pl') || 'null'); } catch { return null; } };
+const salvarEstado = (e) => store.set('iq-pl', JSON.stringify(e));
+let est = lerEstado();            // { ts, dados, auto }
+let registrado = false, acompanhando = false;
+
 function passoB(n) {
   [1, 2, 3].forEach((i) => { $('#pb' + i).dataset.estado = i < n ? 'feito' : i === n ? 'atual' : 'espera'; });
 }
-function mostrarImportar(focar) {
-  $('#pb3').hidden = false;
-  if (focar) { passoB(3); $('#pb3').scrollIntoView({ behavior: 'smooth', block: 'center' }); }
-}
-if (store.get('iq-kit-baixou')) { passoB(2); mostrarImportar(false); }
-
-// ---------------------------------------------------------------- envio automático: a página espera o Invent_local terminar
-// O .zip leva o código do convite; ao terminar, o próprio Invent_local envia os dados e esta página os reconhece
-// pelo código de instalação (o mesmo do agente). Se o envio automático falhar, o campo de importação continua aqui.
-let registrado = false, esperando = false;
-async function aguardarEnvio(desde) {
-  if (esperando || registrado) return;
-  esperando = true;
-  let st = $('#auto-status');
-  if (!st) { $('#drop').insertAdjacentHTML('beforebegin', '<div id="auto-status"></div>'); st = $('#auto-status'); }
-  st.innerHTML = `<div class="inst-auto"><span class="spinner"></span><div><b>Aguardando o Invent_local terminar neste computador…</b>
-    <span>Ao final da coleta os dados são enviados sozinhos e aparecem aqui. Se não aparecerem, importe a planilha abaixo.</span></div></div>`;
-  const fim = desde + 30 * 60 * 1000;
-  while (Date.now() < fim && !registrado) {
-    try {
-      const m = await verificar();
-      if (m && m.hostname && m.ultimo_online && new Date(m.ultimo_online).getTime() >= desde - 5 * 60 * 1000) {
-        registrado = true;
-        st.remove();
-        mostrarRegistrado(m, 'Computador registrado automaticamente!', 'O Invent_local terminou e já enviou os dados. Estes dados já estão no inventário da TI.');
-        break;
-      }
-    } catch { /* rede instável: tenta de novo */ }
-    await new Promise((r) => setTimeout(r, 3000));
-  }
-  esperando = false;
-  if (!registrado && $('#auto-status')) $('#auto-status').innerHTML = '<p class="inst-mini">Os dados ainda não chegaram sozinhos. Importe a planilha <b>inventario-quallit.xlsx</b> abaixo.</p>';
-}
-function mostrarRegistrado(m, titulo, texto) {
-  passoB(4);
-  $('#pb3-titulo').textContent = titulo;
-  $('#pb3-texto').textContent = texto;
-  $('#drop').hidden = true;
-  $('#prev-planilha').innerHTML = '';
-  $('#resultado-planilha').innerHTML = cartaoMaquina(m);
-  $('#pb3').scrollIntoView({ behavior: 'smooth', block: 'center' });
-}
-{
-  const ts = Number(store.get('iq-kit-auto') || 0);
-  if (ts && Date.now() - ts < 30 * 60 * 1000) aguardarEnvio(ts);
+function trilha(fase, extra) {
+  const ordem = ['baixado', 'aberto', 'recebido'];
+  const n = ordem.indexOf(fase);
+  document.querySelectorAll('#trilha li').forEach((li) => {
+    const i = ordem.indexOf(li.dataset.t);
+    li.dataset.estado = i < n ? 'feito' : i === n ? (fase === 'recebido' ? 'feito' : 'atual') : 'espera';
+  });
+  if (extra) $(`#trilha li[data-t="${fase}"] small`).innerHTML = extra;
 }
 
-$('#btn-baixar-kit').addEventListener('click', async (e) => {
-  const btn = e.currentTarget; btn.disabled = true;
+// ---------------------------------------------------------------- 1. formulário
+const campos = { ativo: '#f-ativo', setor: '#f-setor', localizacao: '#f-loc', responsavel: '#f-resp' };
+function preencherForm(d) {
+  for (const [k, sel] of Object.entries(campos)) if (d?.[k]) $(sel).value = d[k];
+}
+preencherForm({ ativo: link.ativo, setor: link.setor, localizacao: link.localizacao, responsavel: link.responsavel });
+if (est?.dados) preencherForm(est.dados);
+$('#setores').innerHTML = [...new Set([link.setor, est?.dados?.setor].filter(Boolean))].map((s) => `<option value="${esc(s)}">`).join('');
+$('#f-ativo').addEventListener('input', (e) => { const p0 = e.target.selectionStart; e.target.value = e.target.value.toUpperCase(); e.target.setSelectionRange(p0, p0); });
+
+function validar() {
+  const d = Object.fromEntries(Object.entries(campos).map(([k, sel]) => [k, $(sel).value.trim().replace(/\s+/g, ' ')]));
+  d.ativo = d.ativo.toUpperCase();
+  let erro = '', foco = null;
+  if (!d.ativo) { erro = 'Informe o número do patrimônio (está na etiqueta do computador).'; foco = '#f-ativo'; }
+  else if (!/^[A-Z0-9][A-Z0-9 ./-]{1,29}$/.test(d.ativo)) { erro = 'Patrimônio inválido: use só letras, números, ponto, barra ou hífen.'; foco = '#f-ativo'; }
+  else if (d.setor.length < 2) { erro = 'Informe o setor onde o computador fica.'; foco = '#f-setor'; }
+  document.querySelectorAll('.inst-form input').forEach((i) => i.removeAttribute('aria-invalid'));
+  $('#form-erro').hidden = !erro; $('#form-erro').textContent = erro;
+  if (foco) { $(foco).setAttribute('aria-invalid', 'true'); $(foco).focus(); return null; }
+  return d;
+}
+function mostrarResumo(d) {
+  $('#form-dados').hidden = true;
+  $('#resumo-dados').hidden = false;
+  $('#resumo-dados').innerHTML = `
+    <div class="inst-chips inst-chips--esq">
+      <span class="pill">Patrimônio <b>${esc(d.ativo)}</b></span><span class="pill">Setor <b>${esc(d.setor)}</b></span>
+      ${d.localizacao ? `<span class="pill">Local <b>${esc(d.localizacao)}</b></span>` : ''}${d.responsavel ? `<span class="pill">Responsável <b>${esc(d.responsavel)}</b></span>` : ''}
+    </div>
+    <p class="inst-mini">✓ Invent_local.zip baixado com estes dados.
+      <button type="button" class="inst-txtbtn" id="btn-alterar">Alterar dados</button> ·
+      <button type="button" class="inst-txtbtn" id="btn-baixar-de-novo">Baixar de novo</button></p>`;
+  $('#btn-alterar').onclick = () => { $('#resumo-dados').hidden = true; $('#form-dados').hidden = false; passoB(1); $('#f-ativo').focus(); };
+  $('#btn-baixar-de-novo').onclick = () => baixarKit(d);
+}
+
+async function baixarKit(d) {
+  const btn = $('#btn-baixar-kit'); btn.disabled = true;
+  $('#kit-msg').textContent = 'Preparando o Invent_local…';
   try {
-    // código do convite (sem token): liga o envio automático. Se o link estiver inválido, o kit sai sem ele (só planilha).
-    let cfg = null;
-    try { cfg = { supabase_url: SUPABASE_URL, supabase_anon_key: SUPABASE_ANON_KEY, convite: await prepararConvite() }; } catch { cfg = null; }
+    // convite com os dados da página (a página e o Invent_local usam o mesmo código). Sem convite, o kit sai só com a planilha.
+    let cfg = { ...d, sem_perguntas: true };
+    try {
+      const r = await rpc('preparar_instalacao', { p_token: link.token, p_codigo_instalacao: codigo, p_dados: { ...d, proxy: link.proxy } });
+      if (!r.ok) throw new Error();
+      convite = await r.json();
+      cfg = { supabase_url: SUPABASE_URL, supabase_anon_key: SUPABASE_ANON_KEY, convite, ...cfg };
+    } catch { /* link inválido ou sem rede: só planilha */ }
     const zip = await montarKitInventLocal('agente/planilha/', cfg);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(zip); a.download = 'Invent_local.zip';
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    store.set('iq-kit-baixou', String(Date.now()));
-    $('#kit-msg').textContent = '✓ Invent_local.zip baixado. Siga o passo 2.';
-    passoB(2); mostrarImportar(false);
-    if (cfg) { const agora = Date.now(); store.set('iq-kit-auto', String(agora)); aguardarEnvio(agora); }
+    est = { ts: Date.now(), dados: d, auto: !!cfg.convite };
+    salvarEstado(est);
+    registrado = false;
+    iniciarAcompanhamento();
+    $('#kit-msg').textContent = 'Invent_local.zip · já vai com estes dados';
   } catch (err) {
     $('#kit-msg').textContent = 'Não foi possível baixar: ' + err.message;
   } finally { btn.disabled = false; }
-});
-$('#btn-ja-tenho').addEventListener('click', () => mostrarImportar(true));
+}
+$('#form-dados').addEventListener('submit', (e) => { e.preventDefault(); const d = validar(); if (d) baixarKit(d); });
 
-// ---------------------------------------------------------------- importar a planilha
+// ---------------------------------------------------------------- 2. acompanhamento ao vivo
+async function statusConvite() {
+  const r = await rpc('status_instalacao', { p_codigo_instalacao: codigo });
+  return r.ok ? r.json() : null;   // sem o sql/10: só não mostra a etapa "aberto"
+}
+function iniciarAcompanhamento() {
+  mostrarResumo(est.dados);
+  passoB(2);
+  trilha('baixado', est.auto ? 'Aguardando você abrir o <b>COLETAR.bat</b>…' : 'Abra o <b>COLETAR.bat</b>. Depois, importe a planilha no passo 3.');
+  $('#pb3-titulo').textContent = 'Pronto';
+  $('#pb3-texto').textContent = est.auto ? 'O computador aparece aqui sozinho assim que o Invent_local terminar.' : 'Importe a planilha gerada pelo Invent_local.';
+  $('#resultado-planilha').innerHTML = '';
+  $('#manual').open = !est.auto;
+  if (est.auto) acompanhar();
+}
+async function acompanhar() {
+  if (acompanhando) return;
+  acompanhando = true;
+  const desde = est.ts;
+  let abertoEm = 0, avisou = false;
+  while (Date.now() < desde + JANELA && !registrado && est?.ts === desde) {
+    try {
+      const m = await verificar();
+      if (m && m.hostname && m.ultimo_online && new Date(m.ultimo_online).getTime() >= desde - 5 * 60 * 1000) {
+        registrado = true;
+        mostrarRegistrado(m, 'Computador registrado!', 'O Invent_local terminou e enviou os dados. Já está tudo no inventário da TI.');
+        break;
+      }
+      if (!abertoEm) {
+        const s = await statusConvite().catch(() => null);
+        if (s?.usado_em && new Date(s.usado_em).getTime() >= desde - 60 * 1000) {
+          abertoEm = Date.now();
+          trilha('aberto');
+          $('#pb2').dataset.estado = 'atual';
+        }
+      } else if (!avisou && Date.now() - abertoEm > 3 * 60 * 1000) {
+        avisou = true;   // abriu mas não enviou: provavelmente sem internet ou um aviso na janela
+        trilha('aberto', 'Está demorando. Olhe a janela preta: se ela disser que o envio não foi possível, importe a planilha no passo 3.');
+        $('#manual').open = true;
+      }
+    } catch { /* rede instável: tenta de novo */ }
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  acompanhando = false;
+  if (!registrado && est?.ts === desde && Date.now() >= desde + JANELA) {
+    trilha(abertoEm ? 'aberto' : 'baixado', 'Os dados não chegaram sozinhos. Importe a planilha no passo 3.');
+    $('#manual').open = true;
+  }
+}
+function mostrarRegistrado(m, titulo, texto) {
+  trilha('recebido');
+  passoB(4);
+  $('#pb3-titulo').textContent = titulo;
+  $('#pb3-texto').textContent = texto;
+  $('#manual').open = false; $('#manual').hidden = true;
+  $('#prev-planilha').innerHTML = '';
+  $('#resultado-planilha').innerHTML = cartaoMaquina(m);
+  document.title = '✓ Registrado! · Registrar computador';
+  $('#pb3').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// voltar à página: retoma de onde parou
+if (est?.ts && Date.now() - est.ts < JANELA) iniciarAcompanhamento();
+else passoB(1);
+
+$('#btn-recomecar').addEventListener('click', () => {
+  store.set('iq-pl', ''); est = null; registrado = false;
+  $('#form-dados').hidden = false; $('#resumo-dados').hidden = true;
+  $('#manual').hidden = false; $('#manual').open = false;
+  $('#resultado-planilha').innerHTML = ''; $('#prev-planilha').innerHTML = '';
+  document.title = 'Registrar computador';
+  trilha('baixado', 'Aguardando você abrir o <b>COLETAR.bat</b>…');
+  document.querySelectorAll('#trilha li').forEach((li) => { li.dataset.estado = 'espera'; });
+  passoB(1);
+  $('#pb1').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+// ---------------------------------------------------------------- 3. importação manual (sem internet no computador)
 let coletas = [];
 const espec = (rot, val) => `<div><dt>${rot}</dt><dd>${val}</dd></div>`;
 async function lerEscolhido(f) {
   if (!f) return;
-  passoB(3);
-  $('#resultado-planilha').innerHTML = '';
   $('#prev-planilha').innerHTML = '<div class="inst-aguarda"><span class="spinner"></span>Lendo a planilha…</div>';
   try {
     const res = coletasDaPlanilha(await lerArquivoPlanilha(f));
     if (res.erro) throw new Error(res.erro);
-    // o que o técnico definiu no link vale quando a planilha não trouxer
+    const pad = est?.dados || { ativo: link.ativo, setor: link.setor, localizacao: link.localizacao, responsavel: link.responsavel };
     coletas = res.lista.map((r) => ({
       ...r,
-      ativo: r.ativo || link.ativo || null, setor: r.setor || link.setor || null,
-      localizacao: r.localizacao || link.localizacao || null, responsavel: r.responsavel || link.responsavel || null,
+      ativo: r.ativo || pad.ativo || null, setor: r.setor || pad.setor || null,
+      localizacao: r.localizacao || pad.localizacao || null, responsavel: r.responsavel || pad.responsavel || null,
     }));
     const um = coletas.length === 1 ? coletas[0] : null;
     const so = um ? ((um.so_nome || '—').replace(/^Microsoft\s+/i, '') + ' ' + (um.so_display_version || '')).trim() : '';
@@ -368,26 +467,20 @@ async function enviarPlanilha(e) {
       throw new Error(/registrar_por_planilha/.test(msg) ? 'o sistema ainda não foi atualizado para receber planilhas. Avise o técnico de TI.'
         : /invalido|expirado/i.test(msg) ? 'este link expirou. Peça um link novo para o técnico de TI.' : (msg || 'servidor indisponível'));
     }
-    $('#prev-planilha').innerHTML = '';
     const gravadas = (j.criadas || 0) + (j.atualizadas || 0);
-    if (gravadas) { registrado = true; $('#auto-status')?.remove(); }
-    passoB(gravadas ? 4 : 3);
-    $('#pb3-titulo').textContent = gravadas ? (coletas.length === 1 ? 'Computador registrado!' : 'Planilha importada!') : 'Nada foi registrado';
-    $('#pb3-texto').textContent = !gravadas ? 'Veja o motivo abaixo e avise o técnico de TI.'
-      : coletas.length === 1 ? 'Estes dados já estão no inventário da TI.'
-      : `${j.criadas} computador(es) novo(s) e ${j.atualizadas} atualizado(s) no inventário.`;
-    let html = '';
-    if (gravadas && coletas.length === 1) {
+    const avisos = j.avisos?.length ? `<div class="inst-erro inst-erro--aviso">${j.avisos.slice(0, 6).map((a) => esc((a.host ? a.host + ': ' : '') + a.msg)).join('<br>')}</div>` : '';
+    if (!gravadas) { btn.disabled = false; btn.textContent = 'Enviar para o inventário'; $('#prev-planilha').insertAdjacentHTML('beforeend', avisos || '<div class="inst-erro">O inventário não aceitou a planilha.</div>'); return; }
+    registrado = true;
+    if (coletas.length === 1) {
       const m = await verificar().catch(() => null);
-      html = cartaoMaquina(m && m.hostname ? m : coletas[0]);
-    } else if (gravadas) {
-      html = '<div class="inst-ok"><p class="fim" style="margin:0">✓ Tudo certo. Pode fechar esta página.</p></div>';
+      mostrarRegistrado(m && m.hostname ? m : coletas[0], 'Computador registrado!', 'A planilha foi importada. Já está tudo no inventário da TI.');
+    } else {
+      mostrarRegistrado({ hostname: `${gravadas} computadores`, tipo: 'outro' }, 'Planilha importada!', `${j.criadas} computador(es) novo(s) e ${j.atualizadas} atualizado(s) no inventário.`);
     }
-    if (j.avisos?.length) html += `<div class="inst-erro" style="background:var(--warn-soft);color:var(--warn);border-color:var(--warn)">${j.avisos.slice(0, 6).map((a) => esc((a.host ? a.host + ': ' : '') + a.msg)).join('<br>')}</div>`;
-    $('#resultado-planilha').innerHTML = html;
+    $('#resultado-planilha').insertAdjacentHTML('beforeend', avisos);
   } catch (err) {
     btn.disabled = false; btn.textContent = 'Enviar para o inventário';
-    $('#resultado-planilha').innerHTML = `<div class="inst-erro">Não foi possível enviar: ${esc(err.message)}</div>`;
+    $('#prev-planilha').insertAdjacentHTML('beforeend', `<div class="inst-erro">Não foi possível enviar: ${esc(err.message)}</div>`);
   }
 }
 $('#arq-planilha').addEventListener('change', (e) => { lerEscolhido(e.target.files[0]); e.target.value = ''; });

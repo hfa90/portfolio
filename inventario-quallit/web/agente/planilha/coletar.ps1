@@ -367,6 +367,16 @@ function Perguntar([string]$rotulo, [string]$atual, [bool]$obrigatorio) {
 
 # ------------------------------------------------------------------ execução
 try {
+  # convite do link: avisa a página que o Invent_local abriu ("coletando…"), traz o patrimônio/setor
+  # preenchidos na página e a credencial do envio automático. Fica antes da coleta para a página reagir logo.
+  $convite = $null; $semEnvio = $null
+  if (-not $SoMostrar -and $Cfg -and $Cfg.convite -and $Cfg.supabase_url) {
+    Write-Host ''
+    Write-Host '  Conectando ao inventário...' -ForegroundColor Cyan
+    try { $convite = Rpc 'obter_instalacao' @{ p_codigo = [string]$Cfg.convite } 15 }
+    catch { $semEnvio = Erro-Rpc $_ }
+  }
+
   Write-Host ''
   Write-Host '  Lendo os dados deste computador...' -ForegroundColor Cyan
   $dados = Coletar-Dados
@@ -376,19 +386,16 @@ try {
   $meuArquivo = Arquivo-Da-Maquina $dados
   $atual = if (Test-Path -LiteralPath $meuArquivo) { Ler-Json $meuArquivo } else { $null }
 
-  # convite do link: patrimônio/setor que o técnico já definiu + credencial do envio automático
-  $convite = $null; $semEnvio = $null
-  if ($Cfg -and $Cfg.convite -and $Cfg.supabase_url) {
-    try { $convite = Rpc 'obter_instalacao' @{ p_codigo = [string]$Cfg.convite } 15 }
-    catch { $semEnvio = Erro-Rpc $_ }
-  }
-
+  # ordem: parâmetro > página/link (convite) > config.json do download (vale sem internet) > planilha anterior > BIOS
   $padrao = @{}
   foreach ($f in 'ativo', 'setor', 'localizacao', 'responsavel') {
     $param = @{ ativo = $Ativo; setor = $Setor; localizacao = $Localizacao; responsavel = $Responsavel }[$f]
     $doLink = if ($convite) { Clean $convite.$f } else { $null }
-    $padrao[$f] = if (Clean $param) { Clean $param } elseif ($doLink) { $doLink } elseif ($atual -and (Clean $atual.$f)) { Clean $atual.$f } elseif ($f -eq 'ativo') { $dados.ativo } else { $null }
+    $doCfg  = if ($Cfg) { Clean $Cfg.$f } else { $null }
+    $padrao[$f] = if (Clean $param) { Clean $param } elseif ($doLink) { $doLink } elseif ($doCfg) { $doCfg } elseif ($atual -and (Clean $atual.$f)) { Clean $atual.$f } elseif ($f -eq 'ativo') { $dados.ativo } else { $null }
   }
+  # a página já pediu patrimônio e setor: roda sem nenhuma pergunta
+  if ($Cfg -and $Cfg.sem_perguntas -and $padrao.ativo -and $padrao.setor) { $Silencioso = $true }
 
   Write-Host ''
   Write-Host ("  Computador : {0}  ({1} {2})" -f $dados.hostname, $dados.fabricante, $dados.modelo)
@@ -399,6 +406,7 @@ try {
 
   if ($Silencioso) {
     foreach ($f in $padrao.Keys) { $dados.$f = $padrao[$f] }
+    if ($dados.ativo -or $dados.setor) { Write-Host ("  Patrimônio : {0}   Setor: {1}" -f $dados.ativo, $dados.setor) }
   } else {
     Write-Host '  Responda e tecle Enter (Enter sozinho mantém o valor entre colchetes):' -ForegroundColor Gray
     $dados.ativo       = Perguntar 'Número do patrimônio (ativo)' $padrao.ativo $true
@@ -441,7 +449,7 @@ try {
     if ($semEnvio) { Write-Host ('  Envio automático não foi possível: ' + $semEnvio) -ForegroundColor Yellow }
     Write-Host '  Próximo passo: na página "Registrar computador", importe este arquivo.' -ForegroundColor Cyan
     # pasta local (não de rede): abre o Explorer com o arquivo selecionado para facilitar a importação
-    if (-not $Silencioso -and $Cfg -and $Arquivo -notmatch '^\\\\' -and ($total -is [int])) { Get-Safe { Start-Process explorer.exe -ArgumentList ('/select,"{0}"' -f $Arquivo) } | Out-Null }
+    if ($Cfg -and $Arquivo -notmatch '^\\\\' -and ($total -is [int])) { Get-Safe { Start-Process explorer.exe -ArgumentList ('/select,"{0}"' -f $Arquivo) } | Out-Null }
   }
   exit 0
 } catch {
