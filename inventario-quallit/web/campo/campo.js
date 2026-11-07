@@ -8,6 +8,8 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../js/config.js';
 import { idbGet, idbSet } from '../js/offline.js';
 import { anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, fmtDuracao } from '../js/prazo.js';
+import { montarResumo, copiarTexto, linkWhatsApp } from '../js/resumo.js';
+import { confirmar } from '../js/dialogos.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -475,7 +477,7 @@ function folhaItem(tipo, id) {
     abrirFolha(`<h2 class="mono">${esc(m.ativo || m.hostname)}</h2><p class="sub">${esc(TIPO[m.tipo] || '')} ${esc(m.modelo || '')}</p>
       <dl class="dados"><div><dt>Hostname</dt><dd class="mono">${esc(m.hostname)}</dd></div><div><dt>Nº de série</dt><dd class="mono">${esc(m.numero_serie || '—')}</dd></div>
         <div><dt>Setor</dt><dd>${esc(m.setor || '—')}</dd></div><div><dt>Localização</dt><dd>${esc(m.localizacao || '—')}</dd></div>
-        <div><dt>Status</dt><dd>${esc(STATUS[m.status] || m.status)}</dd></div><div><dt>Último contato</dt><dd>${rel(m.ultimo_online)}</dd></div></dl>
+        <div><dt>Status</dt><dd>${esc(STATUS[m.status] || m.status)}</dd></div><div><dt>Última coleta</dt><dd>${rel(m.ultimo_online)}</dd></div></dl>
       <div class="pilha"><button class="btn btn--pri btn--grande btn--bloco" id="marcar">✓ Encontrei esta máquina</button>
       <button class="btn btn--bloco" data-fechar>Fechar</button></div>`);
     $('#marcar').onclick = () => { fecharFolha(); registrar(m.ativo || m.hostname, { manual: true, maquina: m }); };
@@ -586,6 +588,15 @@ async function telaFinal(id) {
   const c = S.sess.conf;
   mostrar('t-final', { titulo: 'Finalizar inventário', sub: c.nome, voltar: true });
   const local = S.sess.leituras.filter((l) => !l.enviado).length;
+  const pz = estadoPrazo({ ...c, status: 'finalizada', finalizado_em: new Date().toISOString() });
+  const textoResumo = montarResumo({
+    nome: c.nome, cd: cdTxt(c.cd_id) || 'CD', setor: c.setor, por: S.user.email, quando: Date.now(),
+    esperadas: k.esp.length, encontradas: k.ok,
+    faltando: k.faltando.map((m) => ({ ativo: m.ativo, hostname: m.hostname })),
+    desconhecidas: k.desconhecidas.map((l) => l.codigo_lido), fora: k.fora.length,
+    leitores: S.sess.leituras.map((l) => l.lido_por),
+    prazo: pz ? { noPrazo: pz.estado === 'cumprido', txt: pz.estado === 'cumprido' ? `sobraram ${fmtDuracao(pz.sobra)}` : `${fmtDuracao(-pz.sobra)} depois do prazo` } : null,
+  });
   $('#t-final').innerHTML = `
     <div class="cartao">
       <div class="resumo-topo">
@@ -605,6 +616,16 @@ async function telaFinal(id) {
     ${k.faltando.length ? `<div class="sec-titulo"><span>Faltando (${k.faltando.length})</span></div>
       <div class="lista">${k.faltando.slice(0, 5).map((m) => `<div class="item"><span class="ponto ponto--bad"></span><span class="item-txt"><strong>${esc(m.ativo || m.hostname)}</strong><span>${esc(m.hostname)} · ${esc(m.localizacao || m.setor || '')}</span></span></div>`).join('')}
       ${k.faltando.length > 5 ? `<div class="mais">e mais ${k.faltando.length - 5}…</div>` : ''}</div>` : ''}
+    <div class="cartao resumo-grupo" style="padding:14px 16px;margin-top:14px">
+      <strong>1. Envie o resumo no grupo</strong>
+      <div class="muted" style="font-size:14.5px">Só dá para finalizar depois de copiar ou enviar o resumo. Ele fica gravado no inventário.</div>
+      <textarea id="res-texto" readonly rows="8" style="width:100%;margin-top:8px;font-size:13px;font-family:inherit">${esc(textoResumo)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn" id="res-copiar">📋 Copiar</button>
+        <a class="btn" id="res-wa" href="${linkWhatsApp(textoResumo)}" target="_blank" rel="noopener">WhatsApp</a>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:15px"><input type="checkbox" id="res-colei" ${S.sess.resumoEm ? '' : 'disabled'} style="width:22px;height:22px"> Enviei o resumo no grupo</label>
+    </div>
     <div class="cartao" style="padding:14px 16px;margin-top:14px">
       ${navigator.onLine ? `<strong>Ao confirmar</strong><div class="muted" style="font-size:14.5px">As leituras são enviadas ao sistema e o inventário é encerrado. Depois disso, só um administrador pode reabrir.</div>`
         : `<strong style="color:var(--warn)">Você está sem internet</strong><div class="muted" style="font-size:14.5px">Pode finalizar mesmo assim: tudo fica guardado no celular e é sincronizado automaticamente quando a conexão voltar. Não desinstale o app até lá.</div>`}
@@ -612,11 +633,16 @@ async function telaFinal(id) {
     </div>
     <div class="rodape-fixo"><div>
       <button class="btn" id="voltar-conf">Voltar</button>
-      <button class="btn btn--lar btn--2" id="confirmar">${navigator.onLine ? 'Confirmar e sincronizar' : 'Finalizar offline'}</button>
+      <button class="btn btn--lar btn--2" id="confirmar" disabled>${navigator.onLine ? 'Confirmar e sincronizar' : 'Finalizar offline'}</button>
     </div></div>`;
   $('#voltar-conf').onclick = () => history.back();
+  // resumo: copiar/compartilhar libera a caixa; caixa marcada libera o "Confirmar"
+  const liberar = async () => { S.sess.resumo = textoResumo; S.sess.resumoEm = new Date().toISOString(); await salvarSessao(S.sess); $('#res-colei').disabled = false; };
+  $('#res-copiar').onclick = async () => { if (await copiarTexto(textoResumo, $('#res-texto'))) { $('#res-copiar').textContent = '✓ Copiado'; await liberar(); } };
+  $('#res-wa').onclick = liberar;
+  $('#res-colei').onchange = (e) => { $('#confirmar').disabled = !e.target.checked; };
   $('#confirmar').onclick = async () => {
-    if (k.faltando.length && !confirm(`Ainda faltam ${k.faltando.length} máquina(s). Finalizar mesmo assim?`)) return;
+    if (!S.sess.resumo) return;
     $('#confirmar').disabled = true; $('#voltar-conf').disabled = true;
     const r = await finalizar(S.sess, (feito, total, txt) => {
       $('#envio').hidden = false;
@@ -655,6 +681,14 @@ async function enviarLeituras(sess, progresso = () => {}) {
   return { ok: true, enviados: pend.length };
 }
 
+// inventário finalizado no celular antes da exigência do resumo (estava na fila): gera o resumo aqui
+function resumoNaSincronizacao(sess, k) {
+  return montarResumo({
+    nome: sess.conf.nome, cd: cdTxt(sess.conf.cd_id) || 'CD', setor: sess.conf.setor, por: S.user.email, quando: Date.now(),
+    esperadas: k.esp.length, encontradas: k.ok, faltando: k.faltando.map((m) => ({ ativo: m.ativo, hostname: m.hostname })),
+    desconhecidas: k.desconhecidas.map((l) => l.codigo_lido), fora: k.fora.length, leitores: sess.leituras.map((l) => l.lido_por), prazo: null,
+  }) + '\n\n(resumo gerado na sincronização: o inventário foi finalizado sem internet antes desta exigência)';
+}
 async function finalizar(sess, progresso = () => {}) {
   sess.finalizarPendente = true;
   await salvarSessao(sess);
@@ -668,6 +702,7 @@ async function finalizar(sess, progresso = () => {}) {
     total_esperadas: k.esp.length, total_encontradas: k.ok, total_faltando: k.faltando.length,
     total_desconhecidas: k.desconhecidas.length, total_fora: k.fora.length,
     faltantes: k.faltando.map((m) => ({ id: m.id, hostname: m.hostname, ativo: m.ativo, modelo: m.modelo, tipo: m.tipo, setor: m.setor, localizacao: m.localizacao, ultimo_online: m.ultimo_online })),
+    resumo: sess.resumo || resumoNaSincronizacao(sess, k), resumo_enviado_em: sess.resumoEm || null,
   }).eq('id', sess.conf.id).eq('status', 'aberta').select('id');
   if (error) return erroRede(error) ? { offline: true } : { erro: msgErro(error) };
   await apagarSessao(sess.conf.id);
@@ -767,7 +802,7 @@ function menu() {
     }
     if (m === 'sair') {
       const p = await contarPendencias();
-      if ((p.leituras || p.finalizar) && !confirm(`Há ${p.leituras} leitura(s) ainda não enviadas neste celular. Elas continuam guardadas, mas só serão enviadas quando você entrar de novo. Sair mesmo assim?`)) return;
+      if ((p.leituras || p.finalizar) && !(await confirmar(`Há ${p.leituras} leitura(s) ainda não enviadas neste celular. Elas continuam guardadas, mas só serão enviadas quando você entrar de novo. Sair mesmo assim?`, { titulo: 'Sair do app?', ok: 'Sair', perigo: true }))) return;
       await sb.auth.signOut();
     }
   }));

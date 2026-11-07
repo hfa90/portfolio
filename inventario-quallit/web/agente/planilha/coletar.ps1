@@ -30,7 +30,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$KitVersao = '2.0.0'
+$KitVersao = '2.1.0'
 $Utf8 = New-Object Text.UTF8Encoding $false
 
 function Get-Safe([scriptblock]$sb) { try { & $sb } catch { $null } }
@@ -70,6 +70,80 @@ $PastaPlanilha = Split-Path $Arquivo -Parent
 $DadosPasta = Join-Path $PastaPlanilha 'dados'
 
 # ------------------------------------------------------------------ coleta (mesma lógica do agente)
+# ------------------------------------------------------------------ segurança (auditoria / LGPD) — sem administrador
+# BitLocker: Get-BitLockerVolume exige administrador; sem ele, o Explorer informa o estado de cada unidade
+# (System.Volume.BitLockerProtection: 1 ligado, 2 desligado, 3 criptografando, 4 descriptografando, 5 suspenso, 6 ligado/bloqueado).
+function Coletar-Seguranca($volumes) {
+  $bl = @()
+  $porAdmin = Get-Safe { @(Get-BitLockerVolume -ErrorAction Stop) }
+  if ($porAdmin) {
+    $bl = @($porAdmin | Where-Object { $_.VolumeType -ne 'Data' -or $_.MountPoint } | ForEach-Object {
+      [ordered]@{ letra = "$($_.MountPoint)".TrimEnd('\'); estado = if ("$($_.ProtectionStatus)" -eq 'On') { 'ligado' } elseif ("$($_.VolumeStatus)" -match 'EncryptionInProgress') { 'criptografando' } elseif ("$($_.VolumeStatus)" -match 'FullyEncrypted') { 'suspenso' } else { 'desligado' } }
+    })
+  } else {
+    $sh = Get-Safe { New-Object -ComObject Shell.Application }
+    $mapa = @{ 1 = 'ligado'; 2 = 'desligado'; 3 = 'criptografando'; 4 = 'descriptografando'; 5 = 'suspenso'; 6 = 'ligado' }
+    foreach ($v in @($volumes)) {
+      $val = Get-Safe { $sh.NameSpace("$($v.letra)\").Self.ExtendedProperty('System.Volume.BitLockerProtection') }
+      $bl += [ordered]@{ letra = $v.letra; estado = if ($null -ne $val -and $mapa.ContainsKey([int]$val)) { $mapa[[int]$val] } else { 'indisponivel' } }
+    }
+  }
+  $sistema = $env:SystemDrive
+  $blSis = ($bl | Where-Object { $_.letra -eq $sistema } | Select-Object -First 1)
+
+  # antivírus pela Central de Segurança do Windows (não existe no Windows Server)
+  $av = @(Get-Safe { Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction Stop } | Where-Object { $_ } | ForEach-Object {
+    $h = '{0:X6}' -f [int]$_.productState
+    [ordered]@{ nome = Clean $_.displayName; ativo = $h.Substring(2, 2) -in @('10', '11'); atualizado = $h.Substring(4, 2) -eq '00' }
+  })
+  $mp = Get-Safe { Get-MpComputerStatus -ErrorAction Stop }
+  $defender = if ($mp) { [ordered]@{
+      tempo_real = [bool]$mp.RealTimeProtectionEnabled; ativo = [bool]$mp.AntivirusEnabled
+      assinatura_em = if ($mp.AntivirusSignatureLastUpdated) { ([datetime]$mp.AntivirusSignatureLastUpdated).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ') } else { $null } } } else { $null }
+  if (-not $av.Count -and $defender) { $av = @([ordered]@{ nome = 'Microsoft Defender Antivirus'; ativo = $defender.ativo -and $defender.tempo_real; atualizado = $defender.assinatura_em -and ([datetime]$defender.assinatura_em) -gt (Get-Date).AddDays(-7) }) }
+
+  # última atualização do Windows instalada com sucesso (histórico do Windows Update; reserva: hotfixes)
+  $upd = $null
+  $wu = @(Get-Safe {
+    $s = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher()
+    $n = $s.GetTotalHistoryCount()
+    if ($n -gt 0) { @($s.QueryHistory(0, [math]::Min($n, 100)) | Where-Object { $_.ResultCode -eq 2 -and $_.Operation -eq 1 } | Sort-Object Date -Descending | Select-Object -First 1 | ForEach-Object { [pscustomobject]@{ Date = $_.Date; Title = $_.Title } }) }
+  } | Where-Object { $_ })
+  if ($wu.Count) { $upd = [ordered]@{ data = ([datetime]$wu[0].Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); titulo = Clean $wu[0].Title } }
+  if (-not $upd) {
+    $hf = Get-Safe { Get-CimInstance Win32_QuickFixEngineering | Where-Object { $_.InstalledOn } | Sort-Object InstalledOn -Descending | Select-Object -First 1 }
+    if ($hf) { $upd = [ordered]@{ data = ([datetime]$hf.InstalledOn).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'); titulo = Clean $hf.HotFixID } }
+  }
+
+  [ordered]@{
+    bitlocker            = if ($blSis) { $blSis.estado } else { 'indisponivel' }
+    bitlocker_volumes    = $bl
+    antivirus            = $av
+    antivirus_ativo      = [bool]($av | Where-Object { $_.ativo })
+    antivirus_atualizado = [bool]($av | Where-Object { $_.ativo -and $_.atualizado })
+    defender             = $defender
+    ultima_atualizacao   = $upd
+    firewall             = Get-Safe { $p = @(Get-NetFirewallProfile -ErrorAction Stop | Where-Object { $_.Enabled }); [ordered]@{ ligado = $p.Count -gt 0; perfis = @($p | ForEach-Object { "$($_.Name)" }) } }
+  }
+}
+
+# programas instalados ("Aplicativos instalados"): { n: nome, v: versão, f: fabricante }, sem atualizações nem componentes do sistema
+function Coletar-Programas {
+  $chaves = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+  $vistos = @{}
+  $lista = foreach ($k in $chaves) {
+    Get-Safe { Get-ItemProperty $k -ErrorAction Stop } | Where-Object {
+      $_.DisplayName -and $_.SystemComponent -ne 1 -and -not $_.ParentKeyName -and "$($_.ReleaseType)" -notmatch 'Update|Hotfix' -and $_.DisplayName -notmatch '^(Security Update|Update for|Hotfix)'
+    } | ForEach-Object {
+      $nome = (Clean $_.DisplayName) -replace '\s{2,}', ' '
+      $ver = Clean $_.DisplayVersion
+      $chave = ('{0}|{1}' -f $nome, $ver).ToLowerInvariant()
+      if (-not $vistos.ContainsKey($chave)) { $vistos[$chave] = 1; [pscustomobject][ordered]@{ n = $nome; v = $ver; f = (Clean $_.Publisher) } }
+    }
+  }
+  @($lista | Sort-Object n | Select-Object -First 400)
+}
+
 function Coletar-Dados {
   $cs   = Get-CimInstance Win32_ComputerSystem
   $os   = Get-CimInstance Win32_OperatingSystem
@@ -176,6 +250,10 @@ function Coletar-Dados {
   $usuario = Clean $cs.UserName
   if (-not $usuario) { $usuario = Clean ("{0}\{1}" -f $env:USERDOMAIN, $env:USERNAME) }
 
+  # segurança e programas nunca interrompem a coleta principal
+  $seg = Get-Safe { Coletar-Seguranca $volumes }
+  $programas = @(Get-Safe { Coletar-Programas })
+
   [pscustomobject][ordered]@{
     hostname               = $env:COMPUTERNAME
     tipo                   = $tipo
@@ -203,6 +281,8 @@ function Coletar-Dados {
     mac                    = $mac
     dominio                = Clean $cs.Domain
     usuario_logado         = $usuario
+    seguranca              = $seg
+    programas              = $programas
     coleta                 = "invent_local $KitVersao"
     coletado_em            = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     setor                  = $null
@@ -232,19 +312,37 @@ $Colunas = @(
   @{ t = 'PROCESSADOR'; w = 34 }, @{ t = 'NUCLEOS'; w = 9; n = 1 }, @{ t = 'RAM (GB)'; w = 9; n = 1 }, @{ t = 'MODULOS DE RAM'; w = 30 },
   @{ t = 'ARMAZENAMENTO (GB)'; w = 12; n = 1 }, @{ t = 'LIVRE (GB)'; w = 10; n = 1 }, @{ t = 'DISCOS'; w = 32 }, @{ t = 'IP'; w = 14 },
   @{ t = 'MAC'; w = 18 }, @{ t = 'DOMINIO'; w = 14 }, @{ t = 'USUARIO'; w = 22 }, @{ t = 'WINDOWS INSTALADO EM'; w = 12 },
-  @{ t = 'DATA DA COLETA'; w = 16 }, @{ t = 'DADOS (nao editar)'; w = 10; oculta = 1 }
+  @{ t = 'DATA DA COLETA'; w = 16 }, @{ t = 'BITLOCKER'; w = 13 }, @{ t = 'ANTIVIRUS'; w = 30 }, @{ t = 'ULTIMA ATUALIZACAO DO WINDOWS'; w = 14 },
+  @{ t = 'PROGRAMAS INSTALADOS'; w = 11; n = 1 }, @{ t = 'DADOS (nao editar)'; w = 10; oculta = 1 }
 )
 function Valores-De($d) {
   $mods = (@($d.memoria_modulos) | Where-Object { $_ } | ForEach-Object { ('{0} GB {1} {2}' -f (Num-BR $_.tamanho_gb), $_.tipo, $(if ($_.velocidade) { "$($_.velocidade) MHz" } else { '' })).Trim() }) -join ' + '
   $dsk  = (@($d.discos) | Where-Object { $_ } | ForEach-Object { '{0} {1} GB ({2})' -f $_.tipo, $_.tamanho_gb, $_.modelo }) -join ' / '
   $inst = if ($d.so_instalado_em) { ([datetime]$d.so_instalado_em).ToLocalTime().ToString('dd/MM/yyyy') } else { '' }
   $col  = if ($d.coletado_em) { ([datetime]$d.coletado_em).ToLocalTime().ToString('dd/MM/yyyy HH:mm') } else { '' }
+  $sg   = $d.seguranca
+  $av   = if ($sg) { (@($sg.antivirus) | Where-Object { $_ } | ForEach-Object { '{0}{1}' -f $_.nome, $(if (-not $_.ativo) { ' (desligado)' } elseif (-not $_.atualizado) { ' (desatualizado)' } else { '' }) }) -join ' / ' } else { '' }
+  $upd  = if ($sg -and $sg.ultima_atualizacao -and $sg.ultima_atualizacao.data) { ([datetime]$sg.ultima_atualizacao.data).ToLocalTime().ToString('dd/MM/yyyy') } else { '' }
   @(
     $d.hostname, $d.ativo, $d.setor, $d.localizacao, $d.responsavel, $d.tipo, $d.fabricante, $d.modelo, $d.numero_serie,
     $d.so_nome, $d.so_display_version, $d.so_build, $d.cpu, $d.cpu_nucleos, $d.memoria_gb, $mods,
     $d.armazenamento_total_gb, $d.armazenamento_livre_gb, $dsk, $d.ip, $d.mac, $d.dominio, $d.usuario_logado, $inst,
-    $col, ($d | ConvertTo-Json -Depth 6 -Compress)
+    $col, $sg.bitlocker, $av, $upd, @($d.programas).Count, (Json-Da-Linha $d)
   )
+}
+# JSON da coluna oculta DADOS: uma célula do Excel aceita até 32.767 caracteres.
+# Se a lista de programas for grande demais, tira o fabricante e depois corta a lista (o resto continua completo).
+function Json-Da-Linha($d) {
+  $j = $d | ConvertTo-Json -Depth 6 -Compress
+  if ($j.Length -le 31000 -or -not $d.programas) { return $j }
+  $c = $d | Select-Object *
+  $c.programas = @($d.programas | ForEach-Object { [pscustomobject]@{ n = $_.n; v = $_.v } })
+  for ($n = $c.programas.Count; $n -gt 0; $n = [int]($n * 0.8)) {
+    $c.programas = @($c.programas | Select-Object -First $n)
+    $j = $c | ConvertTo-Json -Depth 6 -Compress
+    if ($j.Length -le 31000) { return $j }
+  }
+  $c.programas = @(); $c | ConvertTo-Json -Depth 6 -Compress
 }
 function Letra([int]$i) { $s = ''; $i++; while ($i -gt 0) { $m = ($i - 1) % 26; $s = [char](65 + $m) + $s; $i = [int](($i - $m - 1) / 26) }; $s }
 function Xml([object]$v) {

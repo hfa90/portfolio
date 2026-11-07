@@ -1,10 +1,13 @@
 // Service worker: guarda os arquivos do painel para abrir e conferir sem internet.
 // Os dados (Supabase) não passam por aqui: o app guarda no IndexedDB e sincroniza sozinho.
-const VERSAO = 'iq-v10';
+const VERSAO = 'iq-v13';
 const ESSENCIAIS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './css/prazo.css', './js/prazo.js',
-  './js/app.js', './js/config.js', './js/offline.js', './js/planilha.js', './js/assinatura.js', './js/etiquetas.js',
+  './js/app.js', './js/config.js', './js/offline.js', './js/planilha.js', './js/assinatura.js', './js/etiquetas.js', './js/resumo.js', './js/dialogos.js',
+  './js/nucleo.js', './js/dados.js', './js/sincronia.js', './js/rotas.js',
+  './js/telas/painel.js', './js/telas/maquinas.js', './js/telas/inventarios.js', './js/telas/patrimonio.js', './js/telas/emprestimos.js',
+  './js/telas/etiquetas.js', './js/telas/importacao.js', './js/telas/coleta.js', './js/telas/usuarios.js', './js/telas/relatorios.js',
   './icons/icon-192.png', './icons/icon-512.png', './img/logo.svg',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;

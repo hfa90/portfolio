@@ -1,9 +1,9 @@
 // Service worker do app de conferência: abre sem internet.
 // Os dados (Supabase) não passam por aqui — ficam no IndexedDB e sincronizam ao finalizar.
-const VERSAO = 'campo-v2';
+const VERSAO = 'campo-v4';
 const ESSENCIAIS = [
   './', './index.html', './campo.css', './campo.js', './manifest.webmanifest',
-  '../js/config.js', '../js/offline.js', '../js/prazo.js', '../css/prazo.css', '../img/logo.svg',
+  '../js/config.js', '../js/offline.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../img/logo.svg',
   '../icons/icon-192.png', '../icons/icon-512.png', '../icons/apple-touch-icon.png',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
