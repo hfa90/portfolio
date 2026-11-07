@@ -320,6 +320,31 @@ function Atualizar-Planilha {
   } finally { if ($lock) { $lock.Dispose() } }
 }
 
+# ------------------------------------------------------------------ envio automático (kit baixado pela página "Registrar computador")
+# O .zip baixado pela página traz um config.json com o CÓDIGO DO CONVITE (o mesmo do instalador do agente),
+# nunca a senha/token. Com ele, ao terminar, os dados já vão para o inventário e a página mostra o computador.
+# Sem config.json (kit da pasta de rede) ou sem internet, nada muda: a planilha fica pronta para importar.
+$Cfg = $null
+$CfgPath = Join-Path $PSScriptRoot 'config.json'
+if (Test-Path -LiteralPath $CfgPath) { $Cfg = Get-Safe { [IO.File]::ReadAllText($CfgPath, $Utf8) | ConvertFrom-Json } }
+function Rpc([string]$nome, $corpo, [int]$timeout = 20) {
+  try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12 } catch {}
+  try { [Net.WebRequest]::DefaultWebProxy.Credentials = [Net.CredentialCache]::DefaultNetworkCredentials } catch {}   # proxy da empresa
+  $json = ConvertTo-Json -InputObject $corpo -Depth 8 -Compress
+  Invoke-RestMethod -Uri (([string]$Cfg.supabase_url).TrimEnd('/') + '/rest/v1/rpc/' + $nome) -Method Post -UseBasicParsing -TimeoutSec $timeout `
+    -Headers @{ apikey = [string]$Cfg.supabase_anon_key; Authorization = 'Bearer ' + [string]$Cfg.supabase_anon_key } `
+    -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($json))
+}
+function Erro-Rpc($err) {
+  $m = ''
+  try { $m = ([string]$err.ErrorDetails.Message | ConvertFrom-Json).message } catch {}
+  if (-not $m) { $m = $err.Exception.Message }
+  if ($m -match '(?i)expirado|nao encontrado|invalido') { return 'o código deste download expirou (vale 7 dias). Importe a planilha na página.' }
+  if ($m -match '(?i)registrar_por_planilha') { return 'o inventário ainda não foi atualizado para receber o envio automático. Importe a planilha na página.' }
+  if (-not $err.ErrorDetails.Message) { return "sem conexão com o inventário ($m)." }
+  $m
+}
+
 function Perguntar([string]$rotulo, [string]$atual, [bool]$obrigatorio) {
   for ($n = 0; $n -lt 5; $n++) {
     $dica = if ($atual) { " [$atual]" } else { '' }
@@ -350,10 +375,19 @@ try {
   New-Item -ItemType Directory -Path $DadosPasta -Force | Out-Null
   $meuArquivo = Arquivo-Da-Maquina $dados
   $atual = if (Test-Path -LiteralPath $meuArquivo) { Ler-Json $meuArquivo } else { $null }
+
+  # convite do link: patrimônio/setor que o técnico já definiu + credencial do envio automático
+  $convite = $null; $semEnvio = $null
+  if ($Cfg -and $Cfg.convite -and $Cfg.supabase_url) {
+    try { $convite = Rpc 'obter_instalacao' @{ p_codigo = [string]$Cfg.convite } 15 }
+    catch { $semEnvio = Erro-Rpc $_ }
+  }
+
   $padrao = @{}
   foreach ($f in 'ativo', 'setor', 'localizacao', 'responsavel') {
     $param = @{ ativo = $Ativo; setor = $Setor; localizacao = $Localizacao; responsavel = $Responsavel }[$f]
-    $padrao[$f] = if (Clean $param) { Clean $param } elseif ($atual -and (Clean $atual.$f)) { Clean $atual.$f } elseif ($f -eq 'ativo') { $dados.ativo } else { $null }
+    $doLink = if ($convite) { Clean $convite.$f } else { $null }
+    $padrao[$f] = if (Clean $param) { Clean $param } elseif ($doLink) { $doLink } elseif ($atual -and (Clean $atual.$f)) { Clean $atual.$f } elseif ($f -eq 'ativo') { $dados.ativo } else { $null }
   }
 
   Write-Host ''
@@ -378,18 +412,36 @@ try {
   Write-Host '  Gravando...' -ForegroundColor Cyan
   Salvar-Json $meuArquivo $dados
   $total = Atualizar-Planilha
+
+  # envio automático: os mesmos dados da linha da planilha vão direto para o inventário
+  $enviado = $false
+  if ($convite -and $convite.agente_token) {
+    Write-Host '  Enviando para o inventário...' -ForegroundColor Cyan
+    try {
+      $r = Rpc 'registrar_por_planilha' @{ p_token = [string]$convite.agente_token; p_codigo_instalacao = [string]$convite.codigo_instalacao; p_linhas = @($dados) } 30
+      if (([int]$r.criadas + [int]$r.atualizadas) -gt 0) { $enviado = $true }
+      else { $semEnvio = (@($r.avisos) | ForEach-Object { $_.msg } | Select-Object -First 1); if (-not $semEnvio) { $semEnvio = 'o inventário não aceitou os dados.' } }
+    } catch { $semEnvio = Erro-Rpc $_ }
+  }
+
   Write-Host ''
   if ($total -is [int]) {
     Write-Host '  PRONTO! Planilha do Excel gravada em:' -ForegroundColor Green
     Write-Host "  $Arquivo" -ForegroundColor Green
     Write-Host ("  ({0} computador(es) na planilha)" -f $total) -ForegroundColor DarkGray
-    Write-Host ''
-    Write-Host '  Próximo passo: na página "Registrar computador", importe este arquivo.' -ForegroundColor Cyan
-    # pasta local (não de rede): abre o Explorer com o arquivo selecionado para facilitar a importação
-    if (-not $Silencioso -and $Arquivo -notmatch '^\\\\') { Get-Safe { Start-Process explorer.exe -ArgumentList ('/select,"{0}"' -f $Arquivo) } | Out-Null }
   } else {
     Write-Host '  Os dados foram SALVOS, mas a planilha está aberta no Excel e não pôde ser refeita agora.' -ForegroundColor Yellow
     Write-Host '  Feche o Excel e execute de novo (em qualquer computador) para atualizar a planilha.' -ForegroundColor Yellow
+  }
+  Write-Host ''
+  if ($enviado) {
+    Write-Host '  ENVIADO! Este computador já está no inventário.' -ForegroundColor Green
+    Write-Host '  A página "Registrar computador" mostra o resultado sozinha. Pode fechar esta janela.' -ForegroundColor Green
+  } else {
+    if ($semEnvio) { Write-Host ('  Envio automático não foi possível: ' + $semEnvio) -ForegroundColor Yellow }
+    Write-Host '  Próximo passo: na página "Registrar computador", importe este arquivo.' -ForegroundColor Cyan
+    # pasta local (não de rede): abre o Explorer com o arquivo selecionado para facilitar a importação
+    if (-not $Silencioso -and $Cfg -and $Arquivo -notmatch '^\\\\' -and ($total -is [int])) { Get-Safe { Start-Process explorer.exe -ArgumentList ('/select,"{0}"' -f $Arquivo) } | Out-Null }
   }
   exit 0
 } catch {
