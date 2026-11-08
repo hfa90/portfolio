@@ -1,4 +1,5 @@
 // Inventário Quallit — rotas (gerado a partir do app.js; imports e exports conferidos automaticamente)
+import { carregarPosses } from './telas/termos.js';
 import { carregarHist, recarregarMaquina } from './dados.js';
 import { $, $$, F_PADRAO, acharMaquina, cdCod, cdNome, debounce, ehAdmin, esc, noCD, sb, state, store, toast } from './nucleo.js';
 import { atualizarBadge } from './sincronia.js';
@@ -88,7 +89,7 @@ export function navegar() {
   if (state.view === 'maquinas') renderMaquinas();
   if (state.view === 'conferencia') arg === 'agendados' ? renderAgendados() : arg ? abrirConferencia(arg) : renderConferencias();
   if (state.view === 'coleta') renderColeta(arg || 'instalacao');
-  if (state.view === 'emprestimos') carregarEmprestimos().then(() => renderEmprestimos(true));
+  if (state.view === 'emprestimos') { state.empAba = arg || 'emprestimos'; Promise.all([carregarEmprestimos(), carregarPosses()]).then(() => renderEmprestimos(true)); }
   if (state.view === 'etiquetas') renderEtiquetas();
   if (state.view === 'relatorios') renderRelatorios(arg || 'parque');
   if (state.view === 'patrimonio') renderPatrimonio(arg || 'pendentes');

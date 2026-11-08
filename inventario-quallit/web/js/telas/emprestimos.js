@@ -7,6 +7,7 @@ import { ehErroDeRede } from '../offline.js';
 import { rerender } from '../rotas.js';
 import { lerCamera } from '../telas/inventarios.js';
 import { abrirMaquina, campo, modal, opts } from '../telas/maquinas.js';
+import { abasEmprestimos, renderColaboradores, renderTermos } from './termos.js';
 
 /* =====================================================================
    EMPRÉSTIMOS
@@ -41,6 +42,8 @@ export async function carregarEmprestimos() {
 }
 
 export function renderEmprestimos() {
+  if (state.empAba === 'termos') return renderTermos();
+  if (state.empAba === 'colaboradores') return renderColaboradores();
   const el = $('#view-emprestimos');
   const E = state.emprestimos.filter(noCD);
   const abertos = E.filter((e) => !e.devolvido_em)
@@ -53,9 +56,10 @@ export function renderEmprestimos() {
 
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Empréstimos de notebooks</h1><p>Quem está com cada equipamento, até quando, com termo assinado na tela.</p></div>
+      <div><h1>Empréstimos e termos</h1><p>Empréstimos têm prazo de devolução; o equipamento fixo de cada colaborador fica em <b>Termos de uso</b>.</p></div>
       <div class="actions"><button class="btn btn--primary" id="btn-novo-emp">+ Novo empréstimo</button></div>
     </div>
+    ${abasEmprestimos('emprestimos')}
     <div class="kpis">
       <div class="card kpi" style="cursor:default"><div class="kpi-label">Emprestados agora</div><div class="kpi-value">${abertos.length}</div><div class="kpi-sub">em aberto</div></div>
       <div class="card kpi ${atrasados ? 'kpi--bad' : ''}" style="cursor:default"><div class="kpi-label">Atrasados</div><div class="kpi-value">${atrasados}</div><div class="kpi-sub">devolução vencida</div></div>

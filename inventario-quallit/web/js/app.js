@@ -1,3 +1,4 @@
+import { talvezMostrarResumoSemana } from './telas/resumo-semana.js';
 import { carregarHist, carregarMaquinas } from './dados.js';
 import { $, $$, MQ, cdCod, dataHora, ehAdmin, erroMsg, esc, sb, state, store, toast } from './nucleo.js';
 import { ehErroDeRede, idbGet, idbSet } from './offline.js';
@@ -113,7 +114,7 @@ async function entrar(session) {
   if (atrasados) toast(`${atrasados} empréstimo(s) com devolução atrasada`, true);
   const pecas = MQ().filter((m) => (m.alertas || []).includes('hw_reduzido')).length;
   if (pecas) toast(`${pecas} máquina(s) com memória ou disco reduzido — confira`, true);
-  if (ehAdmin()) mostrarAvisosAdmin();
+  if (ehAdmin()) mostrarAvisosAdmin().then(talvezMostrarResumoSemana);
 }
 
 /* ---- Administrador: ao entrar, vê quem fez e finalizou inventários desde o último acesso

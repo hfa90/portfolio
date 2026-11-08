@@ -4,6 +4,7 @@ import { anelPrazo, etiquetaPrazo, fmtDuracao } from '../prazo.js';
 import { irMaquinas } from '../rotas.js';
 import { resumoConf } from '../telas/inventarios.js';
 import { abrirMaquina, campo } from '../telas/maquinas.js';
+import { modalResumoSemana } from './resumo-semana.js';
 
 /* =====================================================================
    PAINEL
@@ -108,7 +109,7 @@ export function renderPainel() {
   el.innerHTML = `
     <div class="view-head">
       <div><h1>Painel</h1><p>${escopo ? esc(escopo) + ' · ' : ''}atualizado ao vivo</p></div>
-      <div class="actions"><button class="btn" data-go="maquinas">Ver máquinas →</button></div>
+      <div class="actions"><button class="btn" id="btn-resumo-semana">📨 Resumo da semana</button><button class="btn" data-go="maquinas">Ver máquinas →</button></div>
     </div>
 
     <div class="hero">
@@ -164,6 +165,7 @@ export function renderPainel() {
   $$('.kpi2[data-filtros]', el).forEach((b) => (b.onclick = () => irMaquinas(JSON.parse(b.dataset.filtros))));
   $('[data-go-inv]', el).onclick = () => (location.hash = '#conferencia');
   $$('[data-go]', el).forEach((b) => (b.onclick = () => irMaquinas()));
+  $('#btn-resumo-semana', el)?.addEventListener('click', () => modalResumoSemana());
   $$('.acao-item', el).forEach((b) => (b.onclick = () => irMaquinas({ alerta: b.dataset.alerta })));
   $('#mais-problemas')?.addEventListener('click', () => irMaquinas({ alerta: '_grave' }));
   $$('.feed a', el).forEach((a) => (a.onclick = () => abrirMaquina(a.dataset.id)));

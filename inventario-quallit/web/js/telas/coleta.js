@@ -19,9 +19,9 @@ export async function obterTokenLink(cd, novo = false) {
   tokensLink.set(chave, t);
   return t;
 }
-export function baseInstalar() {
+export function baseInstalar(pagina = 'instalar.html') {
   const base = URL_PUBLICA ? URL_PUBLICA.replace(/\/?$/, '/') : new URL('.', location.href).href;
-  return base + 'instalar.html';
+  return base + pagina;
 }
 
 export async function modalLinkInstalacao(pre = {}) {
@@ -32,8 +32,10 @@ export async function modalLinkInstalacao(pre = {}) {
   }
   const local = /^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(location.hostname) || location.protocol === 'file:';
   modal(`
-    <div class="modal-head"><h2>Link de registro</h2>
-      <p class="muted" style="margin:4px 0 0">Envie para o colaborador abrir <b>no computador</b>. Ele baixa o Invent_local, abre o <b>COLETAR.bat</b> e pronto: os dados vão sozinhos para o inventário.</p></div>
+    <div class="modal-head"><h2>${pre.pagina === 'coletor.html' ? 'Link para registrar coletores' : 'Link de registro'}</h2>
+      <p class="muted" style="margin:4px 0 0">${pre.pagina === 'coletor.html'
+        ? 'Abra <b>no navegador do coletor</b> (ou envie para quem está com ele). Bipa-se a etiqueta do nº de série e a do patrimônio; modelo e Android são lidos sozinhos. Serve quando a Depuração USB está bloqueada.'
+        : 'Envie para o colaborador abrir <b>no computador</b>. Ele baixa o Invent_local, abre o <b>COLETAR.bat</b> e pronto: os dados vão sozinhos para o inventário.'}</p></div>
     <div class="modal-body">
       <div class="form-grid" id="lk-form">
         ${ehAdmin() ? `<label class="full">CD onde a máquina será cadastrada<select id="lk-cd">${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), cd)}</select></label>` : `<label class="full">CD<input value="${esc(cdCod(cd) + ' · ' + cdNome(cd))}" disabled></label>`}
@@ -64,8 +66,10 @@ export async function modalLinkInstalacao(pre = {}) {
         const v = $(`#lk-form [name=${n}]`).value.trim();
         if (v) q.set(n, v);
       }
-      const url = `${baseInstalar()}#${q.toString()}`;
-      const texto = `Olá! A TI está atualizando o inventário de computadores. Abra este link NO SEU COMPUTADOR, informe o patrimônio e o setor, baixe o Invent_local e dê dois cliques no COLETAR.bat. Leva menos de 1 minuto:\n${url}`;
+      const url = `${baseInstalar(pre.pagina)}#${q.toString()}`;
+      const texto = pre.pagina === 'coletor.html'
+        ? `Registro de coletores no inventário: abra este link NO NAVEGADOR DO COLETOR, bipe a etiqueta do nº de série (S/N) e a do patrimônio e toque em Registrar:\n${url}`
+        : `Olá! A TI está atualizando o inventário de computadores. Abra este link NO SEU COMPUTADOR, informe o patrimônio e o setor, baixe o Invent_local e dê dois cliques no COLETAR.bat. Leva menos de 1 minuto:\n${url}`;
       $('#lk-url').value = url;
       $('#lk-abrir').href = url;
       $('#lk-wa').href = 'https://wa.me/?text=' + encodeURIComponent(texto);
@@ -131,8 +135,8 @@ export async function renderColeta(aba = 'instalacao') {
           <li>Execute o <b>COLETAR-COLETORES.bat</b> no computador, conecte o coletor, toque em <b>Permitir</b> e bipe o patrimônio.</li>
           <li>Importe o <code>coletores-quallit.xlsx</code> em <b>Máquinas → Importar coleta</b>.</li>
         </ol>
-        <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
-        <p class="muted" style="font-size:12.5px;margin-bottom:0">Se a empresa usa MDM (SOTI, Zebra StageNow, Intune…), a Depuração USB pode estar bloqueada: peça a liberação ao responsável pelo MDM.</p>
+        <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><button class="btn btn--sm" id="btn-link-coletor" title="Sem cabo USB: registrar pelo navegador do próprio coletor">Link para o coletor</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+        <p class="muted" style="font-size:12.5px;margin-bottom:0">Depuração USB bloqueada pelo MDM (SOTI, Zebra StageNow, Intune…)? Use o <b>Link para o coletor</b>: abre no navegador do coletor, bipa-se o nº de série e o patrimônio. Sem bateria e memória, mas sem precisar de cabo.</p>
       </div>
       <div class="card card-pad">
         <div class="card-head"><h2>Cobertura</h2></div>
@@ -156,6 +160,7 @@ export async function renderColeta(aba = 'instalacao') {
   };
   $('#btn-kit-zip').onclick = () => baixarZip(montarKitInventLocal, 'Invent_local.zip');
   $('#btn-kit-coletores').onclick = () => baixarZip(montarKitColetores, 'Coletores_Quallit.zip');
+  $('#btn-link-coletor').onclick = () => modalLinkInstalacao({ pagina: 'coletor.html' });
 }
 
 /* ---- Redes e setores: faixa de IP → CD/setor ---- */

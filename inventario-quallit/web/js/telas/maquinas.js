@@ -10,6 +10,7 @@ import { irEtiquetas } from '../telas/etiquetas.js';
 import { modalImportarColeta, modalImportarCompras } from '../telas/importacao.js';
 import { ORDEM_GAR, PALETA, contar, fmtValorHist, reducao } from '../telas/painel.js';
 import { modalSolicitacao, solicitacaoAberta } from '../telas/patrimonio.js';
+import { MOTIVO, carregarPosses, historicoResponsaveis, imprimirTermoPosse, modalDevolucaoPosse, modalPosse } from './termos.js';
 
 /* =====================================================================
    MÁQUINAS (lista)
@@ -638,6 +639,9 @@ export async function abrirMaquina(id, silencioso = false) {
       ${(() => { const s = solicitacaoAberta(m.id); return s ? `<div class="banner banner--warn"><div><strong>${s.tipo === 'baixa' ? '🗑️ Baixa solicitada' : `🚚 Transferência para ${esc(cdCod(s.cd_destino))} solicitada`}</strong>
           <span>Por ${esc(String(s.solicitado_por).split('@')[0])} em ${dataHora(s.solicitado_em)} · ${esc(s.motivo_categoria)} · aguardando aprovação do administrador</span></div>
           <a class="btn btn--sm" href="#patrimonio">Ver pedido</a></div>` : ''; })()}
+      ${m.posse_atual ? `<div class="banner banner--info"><div><strong>👤 Com ${esc(m.posse_atual.colaborador)}${m.posse_atual.matricula ? ' (' + esc(m.posse_atual.matricula) + ')' : ''} · termo de uso</strong>
+          <span>Desde ${dataHora(m.posse_atual.entregue_em)}${m.posse_atual.setor ? ' · ' + esc(m.posse_atual.setor) : ''}${m.posse_atual.cargo ? ' · ' + esc(m.posse_atual.cargo) : ''}</span></div>
+          <button class="btn btn--sm" id="d-posse-termo">Termo</button><button class="btn btn--sm btn--primary" id="d-posse-dev">Devolução</button></div>` : ''}
       ${m.emprestimo_atual ? (() => { const e = m.emprestimo_atual; const atras = e.previsto_devolucao && new Date(e.previsto_devolucao) < new Date();
         return `<div class="banner ${atras ? 'banner--bad' : 'banner--info'}"><div><strong>${atras ? 'Devolução atrasada · ' : ''}Emprestado para ${esc(e.colaborador)}${e.matricula ? ' (' + esc(e.matricula) + ')' : ''}</strong>
           <span>Desde ${dataHora(e.retirado_em)}${e.previsto_devolucao ? ' · devolução prevista ' + dataHora(e.previsto_devolucao) : ''}</span></div>
@@ -736,7 +740,7 @@ export async function abrirMaquina(id, silencioso = false) {
       <button class="btn btn--sm" id="d-etq">Etiqueta</button>
       ${!solicitacaoAberta(m.id) && m.status !== 'descartado' ? '<button class="btn btn--sm" id="d-baixa">Solicitar baixa</button>' : ''}
       ${!solicitacaoAberta(m.id) && m.status !== 'descartado' && state.cds.filter((c) => c.ativo).length > 1 ? '<button class="btn btn--sm" id="d-transf">Transferir de CD</button>' : ''}
-      ${!m.emprestimo_atual && !['descartado', 'extraviado'].includes(m.status) ? '<button class="btn btn--sm" id="d-emprestar">Emprestar</button>' : ''}
+      ${!m.emprestimo_atual && !m.posse_atual && !['descartado', 'extraviado'].includes(m.status) ? '<button class="btn btn--sm" id="d-emprestar">Emprestar</button><button class="btn btn--sm" id="d-posse">Termo de uso</button>' : ''}
       <span class="spacer"></span>
       <button class="btn" id="d-cancelar">Fechar</button>
       <button class="btn btn--primary" id="d-salvar" disabled>Salvar alterações</button>
@@ -757,6 +761,9 @@ export async function abrirMaquina(id, silencioso = false) {
   $('#d-salvar').onclick = salvar;
   $('#d-etq').onclick = () => { fecharDrawer(); irEtiquetas([id]); };
   $('#d-emprestar')?.addEventListener('click', () => modalEmprestimo(m));
+  $('#d-posse')?.addEventListener('click', () => modalPosse(m));
+  $('#d-posse-dev')?.addEventListener('click', async () => { await carregarPosses(); modalDevolucaoPosse([m.posse_atual.id]); });
+  $('#d-posse-termo')?.addEventListener('click', () => imprimirTermoPosse(m.posse_atual.id));
   $('#d-devolver')?.addEventListener('click', () => modalDevolucao(m.emprestimo_atual.id));
   $('#d-verificado')?.addEventListener('click', async () => {
     const { error } = await sb.from('maquinas').update({ hw_verificado_em: new Date().toISOString() }).eq('id', id);
@@ -794,11 +801,21 @@ export async function abrirMaquina(id, silencioso = false) {
     abrirMaquina(id, true); rerender();
   }
 
-  const [{ data: hist }, { data: emps }] = await Promise.all([
+  const [{ data: hist }, { data: emps }, posses] = await Promise.all([
     sb.from('maquinas_historico').select('*').eq('maquina_id', id).order('criado_em', { ascending: false }).limit(100),
     sb.from('emprestimos').select(EMP_COLS).eq('maquina_id', id).order('retirado_em', { ascending: false }).limit(30),
+    historicoResponsaveis(id),
   ]);
   if (state.drawerId !== id) return;
+  if (posses.length) {
+    $('#d-emp-wrap').insertAdjacentHTML('beforebegin', `<div><div class="section-title"><h3>Quem já teve este equipamento (${posses.length})</h3></div>
+      <table class="mini-table"><thead><tr><th>Colaborador</th><th>Entregue</th><th>Devolvido</th><th></th></tr></thead><tbody>
+      ${posses.map((p) => `<tr><td>${esc(p.colaborador)}${p.matricula ? `<br><span class="muted">${esc(p.matricula)}</span>` : ''}</td><td>${dataHora(p.entregue_em)}</td>
+        <td>${p.devolvido_em ? dataHora(p.devolvido_em) + (p.motivo_devolucao ? '<br><span class="muted">' + esc(MOTIVO[p.motivo_devolucao]) + '</span>' : '') : pill('em vigor', 'ok')}</td>
+        <td><button class="btn btn--sm btn--ghost" data-termo-posse="${p.id}">Termo</button></td></tr>`).join('')}
+      </tbody></table></div>`);
+    $$('[data-termo-posse]', $('#drawer')).forEach((b) => (b.onclick = () => imprimirTermoPosse(b.dataset.termoPosse)));
+  }
   if ((emps || []).length) {
     $('#d-emp-wrap').innerHTML = `<div class="section-title"><h3>Empréstimos (${emps.length})</h3></div>
       <table class="mini-table"><thead><tr><th>Colaborador</th><th>Retirada</th><th>Devolução</th><th></th></tr></thead><tbody>
