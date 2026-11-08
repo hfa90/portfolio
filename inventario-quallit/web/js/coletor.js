@@ -9,9 +9,24 @@ const $ = (s) => document.querySelector(s);
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* sem storage */ } } };
 
-const p = new URLSearchParams(location.hash.slice(1));
+// a chave vem depois do "#" (não vai para o servidor); alguns aplicativos de mensagem cortam o "#": aceita "?k=" também
+const p = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
 const link = { token: p.get('k') || '', setor: (p.get('setor') || '').trim(), localizacao: (p.get('loc') || '').trim() };
-if (!/^[a-f0-9]{32,64}$/i.test(link.token)) { $('#sem-link').hidden = false; await new Promise(() => {}); }
+if (!/^[a-f0-9]{32,64}$/i.test(link.token)) {
+  $('#sem-link').hidden = false;
+  // colar o link recebido: pega a chave de qualquer formato (#k=, ?k=, &k=) e reabre a página com ela
+  $('#form-link').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const m = $('#f-link').value.match(/[#?&]k=([a-f0-9]{32,64})(?:[&#]|$)/i);
+    if (!m) { $('#link-erro').hidden = false; $('#link-erro').textContent = 'Não encontrei a chave nesse texto. Copie o link inteiro pelo botão "Copiar link" do painel.'; return; }
+    const resto = new URLSearchParams($('#f-link').value.split(/[#?]/).slice(1).join('&'));
+    resto.set('k', m[1]);
+    location.replace(location.pathname + '#' + resto.toString());
+    location.reload();
+  });
+  await new Promise(() => {});
+}
+if (location.search) history.replaceState(null, '', location.pathname + '#' + p.toString());   // tira a chave do endereço visível/histórico do servidor
 $('#conteudo').hidden = false;
 
 const rpc = (fn, corpo) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
