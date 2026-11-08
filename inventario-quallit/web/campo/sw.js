@@ -1,6 +1,6 @@
 // Service worker do app de conferência: abre sem internet.
 // Os dados (Supabase) não passam por aqui — ficam no IndexedDB e sincronizam ao finalizar.
-const VERSAO = 'campo-v4';
+const VERSAO = 'campo-v5';
 const ESSENCIAIS = [
   './', './index.html', './campo.css', './campo.js', './manifest.webmanifest',
   '../js/config.js', '../js/offline.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../img/logo.svg',

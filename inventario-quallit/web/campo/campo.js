@@ -510,10 +510,12 @@ function folhaLocal() {
 
 /* ------------------------------------------------------------------ câmera contínua */
 let cam = null;
+// impressão digital (SRI) das bibliotecas externas: o navegador recusa o arquivo se ele for alterado no CDN
+const SRI_SCRIPTS = { 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx' };
 function carregarScript(src) {
   return new Promise((res, rej) => {
     if ([...document.scripts].some((s) => s.src === src)) return res();
-    const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('falha ao carregar o leitor'));
+    const s = document.createElement('script'); s.src = src; if (SRI_SCRIPTS[src]) { s.integrity = SRI_SCRIPTS[src]; s.crossOrigin = 'anonymous'; } s.onload = res; s.onerror = () => rej(new Error('falha ao carregar o leitor'));
     document.head.append(s);
   });
 }

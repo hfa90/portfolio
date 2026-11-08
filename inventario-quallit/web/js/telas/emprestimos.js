@@ -312,7 +312,8 @@ export async function imprimirTermo(id, janela) {
     ${e.devolvido_em ? ass(e.assinatura_devolucao, e.colaborador, 'Colaborador — devolução') : ass(null, (e.entregue_por || '').split('@')[0], 'TI — responsável pela entrega')}
   </div>
   <p class="rodape">Documento gerado pelo Inventário Quallit em ${dataHora(new Date().toISOString())}.</p>
-  <script>window.onload = () => setTimeout(() => window.print(), 300);<\/script>
   </body></html>`);
   w.document.close();
+  // imprime pelo código do painel (sem script embutido: a política de segurança CSP bloqueia scripts inline)
+  setTimeout(() => { try { w.focus(); w.print(); } catch { /* janela fechada */ } }, 400);
 }

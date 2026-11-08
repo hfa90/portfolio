@@ -366,10 +366,12 @@ export function abrirRelatorio(titulo, subtitulo, corpo, janela) {
     .tag.bad { background: #fde8e6; color: #cc2b20; } .mono { font-family: Consolas, monospace; } .muted { color: #7a8f93; }
     footer { margin-top: 22px; color: #8a9b9e; font-size: 10px; border-top: 1px solid #e3eaec; padding-top: 6px; }
     @media print { .barra { display: none; } main { padding: 0; max-width: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
-  </style></head><body><div class="barra"><span>${esc(titulo)}</span><button onclick="print()">Imprimir / Salvar PDF</button></div>
+  </style></head><body><div class="barra"><span>${esc(titulo)}</span><button type="button" id="btn-imprimir">Imprimir / Salvar PDF</button></div>
   <main><header>${LOGO_SVG}<div><h1>${esc(titulo)}</h1><p>${subtitulo}</p></div></header>${corpo}
   <footer>Inventário Quallit · gerado em ${dataHora(new Date().toISOString())} por ${esc(state.perfil?.nome || state.user?.email || '')}</footer></main></body></html>`);
   w.document.close();
+  // botão ligado pelo código do painel (a política de segurança CSP bloqueia onclick embutido)
+  w.document.getElementById('btn-imprimir')?.addEventListener('click', () => w.print());
 }
 
 export function relatorioGeralParque(tipo = '') {
