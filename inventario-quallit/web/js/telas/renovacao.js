@@ -25,7 +25,7 @@ async function carregarValores() {
 function planejar(ano, v) {
   const fim = new Date(ano, 11, 31);
   const linhas = [];
-  for (const m of MQ().filter((x) => !['descartado', 'extraviado'].includes(x.status))) {
+  for (const m of MQ().filter((x) => !['descartado', 'extraviado'].includes(x.status) && x.propriedade !== 'alugado')) {   // alugado: a locadora troca
     const al = m.alertas || [];
     const anos = m.data_compra ? (fim - new Date(m.data_compra + 'T12:00:00')) / (365.25 * 864e5) : null;
     const base = { m, anos, semData: !m.data_compra };
@@ -53,7 +53,7 @@ export async function renderRelRenovacao() {
     const todas = planejar(f.ano, v).filter((l) => !f.tipo || l.m.tipo === f.tipo);
     const total = todas.reduce((s, l) => s + l.custo, 0);
     const trocas = todas.filter((l) => l.acao === 'trocar');
-    const semData = MQ().filter((m) => !['descartado', 'extraviado'].includes(m.status) && !m.data_compra && (!f.tipo || m.tipo === f.tipo)).length;
+    const semData = MQ().filter((m) => !['descartado', 'extraviado'].includes(m.status) && m.propriedade !== 'alugado' && !m.data_compra && (!f.tipo || m.tipo === f.tipo)).length;
     const porCD = new Map();
     for (const l of todas) {
       const k = l.m.cd_id; if (!porCD.has(k)) porCD.set(k, { trocas: 0, ctrocas: 0, upgrades: 0, cupgrades: 0 });

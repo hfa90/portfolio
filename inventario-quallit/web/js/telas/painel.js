@@ -121,7 +121,7 @@ export function renderPainel() {
       </div>
       <div class="hero-kpis">
         <button class="card kpi2" data-filtros='{}'><span class="k-rot">Máquinas</span><b>${L.length}</b>
-          <span class="k-sub">${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks${by((m) => m.tipo === 'coletor') ? ` · ${by((m) => m.tipo === 'coletor')} coletores` : ''}</span></button>
+          <span class="k-sub">${by((m) => m.tipo === 'desktop')} desktops · ${by((m) => m.tipo === 'notebook')} notebooks${by((m) => m.tipo === 'coletor') ? ` · ${by((m) => m.tipo === 'coletor')} coletores` : ''}${by((m) => m.propriedade === 'alugado') ? ` · <b>${by((m) => m.propriedade === 'alugado')} alugados</b>` : ''}</span></button>
         <button class="card kpi2" data-filtros='{"situacao":"online"}'><span class="k-rot"><span class="dot dot--online"></span> Coletados em 30 dias</span><b class="t-ok">${online}</b>
           <span class="mini-barra"><i style="width:${Math.round((100 * online) / L.length)}%;background:var(--ok)"></i></span><span class="k-sub">${Math.round((100 * online) / L.length)}% do parque</span></button>
         <button class="card kpi2" data-filtros='{"alerta":"_grave"}'><span class="k-rot">Precisam de atenção</span><b class="${graves ? 't-bad' : ''}">${graves}</b>

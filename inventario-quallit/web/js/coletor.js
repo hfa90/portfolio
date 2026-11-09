@@ -11,12 +11,26 @@ const store = { get(k) { try { return localStorage.getItem(k); } catch { return 
 
 // a chave vem depois do "#" (não vai para o servidor); alguns aplicativos de mensagem cortam o "#": aceita "?k=" também
 const p = new URLSearchParams(location.hash.slice(1) || location.search.slice(1));
+// link curto (QR code / código de barras): #c=CODIGO -> pede o token ao banco
+const curto = (p.get('c') || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+if (!p.get('k') && /^[A-Z0-9]{8,16}$/.test(curto)) {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/abrir_link_curto`, {
+      method: 'POST', headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_codigo: curto }),
+    });
+    const tok = r.ok ? await r.json() : null;
+    if (typeof tok === 'string' && tok) { p.delete('c'); p.set('k', tok); }
+  } catch { /* sem internet: cai na tela "Falta a chave do link" */ }
+}
 const link = { token: p.get('k') || '', setor: (p.get('setor') || '').trim(), localizacao: (p.get('loc') || '').trim() };
 if (!/^[a-f0-9]{32,64}$/i.test(link.token)) {
   $('#sem-link').hidden = false;
   // colar o link recebido: pega a chave de qualquer formato (#k=, ?k=, &k=) e reabre a página com ela
   $('#form-link').addEventListener('submit', (e) => {
     e.preventDefault();
+    const mc = $('#f-link').value.match(/\/iq[#?]([A-Za-z0-9]{8,16})\s*$/) || $('#f-link').value.match(/[#?&]c=([A-Za-z0-9]{8,16})(?:[&#]|$)/);
+    if (mc) { location.replace(location.pathname + '#c=' + mc[1]); location.reload(); return; }
     const m = $('#f-link').value.match(/[#?&]k=([a-f0-9]{32,64})(?:[&#]|$)/i);
     if (!m) { $('#link-erro').hidden = false; $('#link-erro').textContent = 'Não encontrei a chave nesse texto. Copie o link inteiro pelo botão "Copiar link" do painel.'; return; }
     const resto = new URLSearchParams($('#f-link').value.split(/[#?]/).slice(1).join('&'));
@@ -26,7 +40,7 @@ if (!/^[a-f0-9]{32,64}$/i.test(link.token)) {
   });
   await new Promise(() => {});
 }
-if (location.search) history.replaceState(null, '', location.pathname + '#' + p.toString());   // tira a chave do endereço visível/histórico do servidor
+if (location.search || curto) history.replaceState(null, '', location.pathname + '#' + p.toString());   // tira a chave do endereço visível/histórico do servidor
 $('#conteudo').hidden = false;
 
 const rpc = (fn, corpo) => fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {

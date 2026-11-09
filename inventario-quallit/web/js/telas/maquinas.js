@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: maquinas (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
+import { $, $$, PROPRIEDADE, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
 import { criarXlsx } from '../planilha.js';
 import { rerender } from '../rotas.js';
 import { modalLinkInstalacao } from '../telas/coleta.js';
@@ -22,7 +22,7 @@ export const COLS = [
   { k: 'hostname', l: 'Hostname', v: (m) => m.hostname, c: (m) => `<span class="mono">${esc(m.hostname)}</span>`, cls: 'host' },
   { k: 'cd', l: 'CD', soCD: true, v: (m) => cdCod(m.cd_id), c: (m) => `<span class="pill pill--cd" title="${esc(cdNome(m.cd_id))}">${esc(cdCod(m.cd_id))}</span>` },
   { k: 'ativo', l: 'Patrimônio', v: (m) => m.ativo || '', c: (m) => (m.ativo ? `<span class="mono">${esc(m.ativo)}</span>` : '<span class="muted">—</span>') },
-  { k: 'tipo', l: 'Tipo', v: (m) => m.tipo, c: (m) => esc(TIPO[m.tipo]) },
+  { k: 'tipo', l: 'Tipo', v: (m) => m.tipo, c: (m) => esc(TIPO[m.tipo]) + (m.propriedade === 'alugado' ? ' ' + pill('Alugado', 'info') : '') },
   { k: 'modelo', l: 'Modelo', v: (m) => m.modelo || '', c: (m) => `${esc(m.modelo || '—')}<span class="sub">${esc(m.fabricante || '')}</span>` },
   { k: 'so', l: 'Sistema', v: (m) => soLabel(m), c: (m) => `${esc(soLabel(m))}<span class="sub">${esc(m.so_build ? 'build ' + m.so_build : '')}</span>` },
   { k: 'memoria_gb', l: 'RAM', v: (m) => Number(m.memoria_gb) || 0, c: (m) => gb(m.memoria_gb), cls: 'num' },
@@ -50,6 +50,7 @@ export function filtrar() {
     if (f.setor && (f.setor === '_vazio' ? m.setor : m.setor !== f.setor)) return false;
     if (f.idade && idadeFaixa(m) !== f.idade) return false;
     if (f.garantia && garantiaFaixa(m) !== f.garantia) return false;
+    if (f.prop && (m.propriedade || 'proprio') !== f.prop) return false;
     if (f.alerta) {
       const a = m.alertas || [];
       if (f.alerta === '_grave' ? !a.some((x) => ALERTAS[x]?.grave) : !a.includes(f.alerta)) return false;
@@ -99,7 +100,7 @@ export function renderMaquinas() {
           <button type="button" class="btn btn--ghost" id="btn-mais-filtros" aria-expanded="false">Mais filtros</button>
         </div>
         <div class="toolbar toolbar--extra" id="filtros-extra" hidden>
-          <select id="f-status"></select><select id="f-alerta"></select><select id="f-so"></select><select id="f-garantia"></select>
+          <select id="f-status"></select><select id="f-prop"></select><select id="f-alerta"></select><select id="f-so"></select><select id="f-garantia"></select>
         </div>
         <div class="barra-modos"><div class="seg seg--modos" id="modos"></div><span id="modo-opts" class="modo-opts"></span><span class="count" id="count"></span></div>
         <div class="chips" id="chips-wrap" style="padding:0 12px 10px;align-items:center"><span id="chips" style="display:contents"></span></div>
@@ -108,7 +109,7 @@ export function renderMaquinas() {
         <div id="maq-alt" class="maq-alt" hidden></div>
       </div>`;
     $('#f-q').oninput = debounce((e) => { state.f.q = e.target.value; renderTabela(); }, 120);
-    ['tipo', 'status', 'situacao', 'so', 'alerta', 'setor', 'garantia'].forEach((k) => {
+    ['tipo', 'status', 'situacao', 'so', 'alerta', 'setor', 'garantia', 'prop'].forEach((k) => {
       $('#f-' + k).onchange = (e) => { state.f[k] = e.target.value; mostrarFiltrosExtra(); renderTabela(); };
     });
     $('#thead').onclick = (e) => {
@@ -161,13 +162,14 @@ export function syncToolbar() {
   $('#f-so').innerHTML = opts([['', 'Todos os sistemas'], ...sos], f.so);
   $('#f-alerta').innerHTML = opts([['', 'Sem filtro de alerta'], ['_grave', 'Alertas importantes'], ...Object.entries(ALERTAS).map(([k, a]) => [k, a.l])], f.alerta);
   $('#f-garantia').innerHTML = opts([['', 'Qualquer garantia'], ...ORDEM_GAR.map((g) => [g, g])], f.garantia);
+  $('#f-prop').innerHTML = opts([['', 'Próprios e alugados'], ['proprio', 'Só próprios'], ['alugado', 'Só alugados']], f.prop);
   $('#f-setor').innerHTML = opts([['', 'Todos os setores'], ['_vazio', 'Sem setor'], ...setores().map((s) => [s, s])], f.setor);
   mostrarFiltrosExtra();
 }
 // filtros menos usados ficam numa segunda linha: abre sozinha quando algum deles está em uso (ex.: vindo do Painel)
 function mostrarFiltrosExtra() {
   const f = state.f;
-  const ativos = ['status', 'alerta', 'so', 'garantia'].filter((k) => f[k] !== F_PADRAO[k]).length;
+  const ativos = ['status', 'prop', 'alerta', 'so', 'garantia'].filter((k) => f[k] !== F_PADRAO[k]).length;
   const aberto = !!(state.maisFiltros || ativos);
   $('#filtros-extra').hidden = !aberto;
   const b = $('#btn-mais-filtros');
@@ -393,7 +395,9 @@ export function renderSelBar(lista = filtrar()) {
   if (!n) return;
   bar.innerHTML = `<strong>${n} selecionada${n > 1 ? 's' : ''}</strong>
     <button class="btn btn--sm btn--primary" id="sel-etq">Imprimir etiquetas</button>
+    <button class="btn btn--sm" id="sel-prop">Próprio / alugado</button>
     <button class="btn btn--sm" id="sel-limpar">Limpar seleção</button>`;
+  $('#sel-prop').onclick = () => modalPropriedade([...state.sel]);
   $('#sel-etq').onclick = () => irEtiquetas([...state.sel]);
   $('#sel-limpar').onclick = () => { state.sel.clear(); renderTabela(); };
 }
@@ -414,13 +418,14 @@ export function exportarTela() {
   const cab = ['CD', 'Hostname', 'Patrimônio', 'Tipo', 'Status', 'Fabricante', 'Modelo', 'Nº série', 'Processador', 'RAM (GB)', 'Slots RAM',
     'Armazenamento (GB)', 'Livre (GB)', 'Tipo disco', 'Sistema', 'Versão', 'Build', 'Arquitetura', 'IP', 'MAC', 'Domínio', 'Usuário',
     'Setor', 'Localização', 'Responsável', 'Última coleta', 'Situação', 'Alertas', 'Observações',
-    'Data de compra', 'Fornecedor', 'Nota fiscal', 'Valor', 'Fim da garantia', 'Situação garantia', 'Emprestado para', 'Devolução prevista', 'Bateria (coletor)'];
+    'Data de compra', 'Fornecedor', 'Nota fiscal', 'Valor', 'Fim da garantia', 'Situação garantia', 'Emprestado para', 'Devolução prevista', 'Bateria (coletor)', 'Propriedade', 'Locadora', 'Contrato', 'Fim do aluguel'];
   const linhas = ordenar(filtrar()).map((m) => [cdNome(m.cd_id), m.hostname, m.ativo, TIPO[m.tipo], STATUS[m.status], m.fabricante, m.modelo, m.numero_serie,
     m.cpu, numXl(m.memoria_gb), numXl(m.memoria_slots_total), numXl(m.armazenamento_total_gb), numXl(m.armazenamento_livre_gb), tipoDisco(m), m.so_nome,
     m.so_display_version, m.so_build, m.so_arquitetura, m.ip, m.mac, m.dominio, m.usuario_logado, m.setor, m.localizacao,
     m.responsavel, dataHora(m.ultimo_online), SIT[situacao(m)], (m.alertas || []).map((a) => ALERTAS[a]?.l || a).join(', '), m.observacoes,
     dataBR(m.data_compra), m.fornecedor, m.nota_fiscal, numXl(m.valor_compra), dataBR(m.garantia_fim), garantiaFaixa(m),
-    m.emprestimo_atual?.colaborador, m.emprestimo_atual?.previsto_devolucao ? dataHora(m.emprestimo_atual.previsto_devolucao) : '', m.tipo === 'coletor' ? bateriaTxt(m) : '']);
+    m.emprestimo_atual?.colaborador, m.emprestimo_atual?.previsto_devolucao ? dataHora(m.emprestimo_atual.previsto_devolucao) : '', m.tipo === 'coletor' ? bateriaTxt(m) : '',
+    PROPRIEDADE[m.propriedade || 'proprio'], m.locadora, m.contrato, dataBR(m.aluguel_fim)]);
   return { blob: planilhaSimples('Máquinas', [cab, ...linhas]), nome: `maquinas-filtradas-${hojeISO()}.xlsx`, total: linhas.length };
 }
 
@@ -697,6 +702,14 @@ export async function abrirMaquina(id, silencioso = false) {
           ${campo('so_nome', 'Sistema operacional', m.so_nome, 'text', 'list="dl-so"')}
           ${campo('cpu', 'Processador', m.cpu)}
         </div>` : ''}
+        <div class="section-title" style="margin-top:18px"><h3>Propriedade</h3><span>${m.propriedade === 'alugado' ? pill(m.aluguel_fim ? `Alugado até ${dataBR(m.aluguel_fim)}` : 'Alugado', (m.alertas || []).includes('aluguel_vencendo') ? 'bad' : 'info') : pill('Próprio')}</span></div>
+        <div class="form-grid">
+          ${sel('propriedade', 'Próprio ou alugado', PROPRIEDADE, m.propriedade || 'proprio')}
+          ${campo('locadora', 'Locadora', m.locadora, 'text', 'list="dl-locadoras" maxlength="80"')}
+          ${campo('contrato', 'Contrato', m.contrato, 'text', 'class="mono" maxlength="60"')}
+          ${campo('aluguel_fim', 'Fim do aluguel', m.aluguel_fim, 'date')}
+        </div>
+        <datalist id="dl-locadoras">${locadoras().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>
         <div class="section-title" style="margin-top:18px"><h3>Compra e garantia</h3><span>${garantiaPill(m)}</span></div>
         <div class="form-grid">
           ${campo('data_compra', 'Data de compra', m.data_compra, 'date')}
@@ -867,6 +880,7 @@ export function modalNovaMaquina(pre = {}) {
         ${campo('ativo', 'Patrimônio', pre.ativo, 'text', 'class="mono"')}
         ${sel('tipo', 'Tipo', TIPO, pre.tipo || 'desktop')}
         ${sel('status', 'Status', STATUS, pre.status || 'estoque')}
+        ${sel('propriedade', 'Próprio ou alugado', PROPRIEDADE, pre.propriedade || 'proprio')}${campo('locadora', 'Locadora (se alugado)', '', 'text', 'list="dl-loc2" maxlength="80"')}
         ${campo('fabricante', 'Fabricante', '')}${campo('modelo', 'Modelo', '')}
         ${campo('numero_serie', 'Nº de série', pre.numero_serie, 'text', 'class="mono"')}
         ${campo('memoria_gb', 'Memória (GB)', '', 'number', 'step="0.5" min="0"')}
@@ -874,6 +888,7 @@ export function modalNovaMaquina(pre = {}) {
         ${campo('so_nome', 'Sistema operacional', '', 'text', 'list="dl-so2"')}
         ${campo('setor', 'Setor', pre.setor, 'text', 'list="dl-set2"')}${campo('localizacao', 'Localização', pre.localizacao)}
       </div>
+      <datalist id="dl-loc2">${locadoras().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>
       <datalist id="dl-set2">${setores().map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <datalist id="dl-so2"><option value="Microsoft Windows 11 Pro"><option value="Microsoft Windows 10 Pro"></datalist>
       <p class="erro" id="nova-erro"></p></div>
@@ -891,6 +906,41 @@ export function modalNovaMaquina(pre = {}) {
       await recarregarMaquina(d.id);
       rerender(); toast('Máquina cadastrada');
       pre.onDone ? pre.onDone(d.id) : abrirMaquina(d.id);
+    };
+  });
+}
+
+/* ---- Próprio x alugado ---- */
+export const locadoras = () => [...new Set(MQ().map((x) => x.locadora).filter(Boolean))].sort();
+export function modalPropriedade(ids) {
+  if (!ids.length) return;
+  const lista = ids.map((id) => MQ().find((m) => m.id === id)).filter(Boolean);
+  const um = lista.length === 1 ? lista[0] : {};
+  modal(`
+    <form method="dialog" id="prop-form">
+      <div class="modal-head"><h2>Próprio ou alugado</h2><p class="muted" style="margin:4px 0 0">${lista.length} equipamento(s) selecionado(s).</p></div>
+      <div class="modal-body"><div class="form-grid">
+        ${sel('propriedade', 'Propriedade', PROPRIEDADE, um.propriedade || 'alugado')}
+        ${campo('locadora', 'Locadora', um.locadora, 'text', 'list="dl-loc3" maxlength="80"')}
+        ${campo('contrato', 'Contrato', um.contrato, 'text', 'class="mono" maxlength="60"')}
+        ${campo('aluguel_fim', 'Fim do aluguel', um.aluguel_fim, 'date')}
+      </div>
+      <datalist id="dl-loc3">${locadoras().map((l) => `<option value="${esc(l)}">`).join('')}</datalist>
+      <p class="muted" style="margin:0;font-size:12.5px">Alugado não entra no planejamento de renovação nem no alerta de garantia: quem troca é a locadora. O painel avisa 30 dias antes do fim do aluguel.</p>
+      <p class="erro" id="prop-erro"></p></div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" value="ok">Salvar</button></div>
+    </form>`, (dlg) => {
+    const f = $('#prop-form', dlg);
+    const ajustar = () => f.querySelectorAll('[name=locadora],[name=contrato],[name=aluguel_fim]').forEach((i) => { i.closest('label').hidden = f.propriedade.value !== 'alugado'; });
+    f.propriedade.onchange = ajustar; ajustar();
+    f.onsubmit = async (e) => {
+      e.preventDefault();
+      const alugado = f.propriedade.value === 'alugado';
+      const v = (n) => (alugado ? f[n].value.trim() || null : null);
+      const { error } = await sb.from('maquinas').update({ propriedade: f.propriedade.value, locadora: v('locadora'), contrato: v('contrato'), aluguel_fim: v('aluguel_fim') }).in('id', lista.map((m) => m.id));
+      if (error) { $('#prop-erro', dlg).textContent = erroMsg(error); return; }
+      await Promise.all(lista.map((m) => recarregarMaquina(m.id)));
+      dlg.close(); state.sel.clear(); renderTabela(); toast(`${lista.length} equipamento(s) atualizado(s)`);
     };
   });
 }

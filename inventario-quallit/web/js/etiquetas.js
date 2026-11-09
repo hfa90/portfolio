@@ -13,7 +13,7 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 export function codigoDaMaquina(m) { return m.ativo || m.hostname; }
 
-function qrSvg(texto) {
+export function qrSvg(texto) {
   if (!window.qrcode) return '<div class="etq-erro">QR indisponível</div>';
   const q = window.qrcode(0, 'M');
   q.addData(texto);
@@ -21,7 +21,7 @@ function qrSvg(texto) {
   return q.createSvgTag({ cellSize: 2, margin: 0, scalable: true });
 }
 
-function barrasSvg(texto) {
+export function barrasSvg(texto) {
   if (!window.JsBarcode) return '';
   try {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

@@ -1,8 +1,9 @@
 // Inventário Quallit — tela: coleta (gerado a partir do app.js; imports e exports conferidos automaticamente)
-import { URL_PUBLICA } from '../config.js';
+import { URL_CURTA, URL_PUBLICA } from '../config.js';
+import { barrasSvg, qrSvg } from '../etiquetas.js';
 import { carregarMaquinas } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, F_PADRAO, MQ, cdCod, cdNome, cdsAtivos, ehAdmin, erroMsg, esc, mostrarColCD, pill, sb, setores, state, toast, titulo } from '../nucleo.js';
+import { $, $$, F_PADRAO, MQ, cdCod, cdNome, cdsAtivos, ehAdmin, erroMsg, esc, imprimirQuandoPronto, mostrarColCD, pill, sb, setores, state, toast, titulo } from '../nucleo.js';
 import { montarKitColetores, montarKitInventLocal } from '../planilha.js';
 import { modalImportarColeta } from '../telas/importacao.js';
 import { campo, modal, opts } from '../telas/maquinas.js';
@@ -24,7 +25,92 @@ export function baseInstalar(pagina = 'instalar.html') {
   return base + pagina;
 }
 
+/* ---- Link CURTO do coletor: QR code e código de barras na tela, para ler com o próprio coletor ---- */
+async function obterLinkCurto(cd, novo = false) {
+  if (novo) await obterTokenLink(cd, true);   // invalida o token (e o código curto junto)
+  const { data, error } = await sb.rpc('obter_link_curto', { p_cd: cd || null });
+  if (error) throw error;
+  return data;
+}
+async function modalLinkColetor() {
+  let cd = ehAdmin() ? (state.cdAtual || cdsAtivos()[0]?.id) : state.perfil?.cd_id;
+  let cod;
+  try { cod = await obterLinkCurto(cd); } catch (e) {
+    return toast(/obter_link_curto/.test(erroMsg(e)) ? 'Falta aplicar a migração do banco (atualizar-banco). Veja o README.' : erroMsg(e), true);
+  }
+  const urlDe = (c) => `${URL_CURTA}#${c}`;
+  const semEsquema = (u) => u.replace(/^https?:\/\//, '');   // no código de barras: menor = mais fácil de ler
+  modal(`
+    <div class="modal-head"><h2>Link para registrar coletores</h2>
+      <p class="muted" style="margin:4px 0 0">Leia o QR code ou o código de barras <b>com o próprio coletor</b>, na barra de endereço do navegador.</p></div>
+    <div class="modal-body">
+      ${ehAdmin() && cdsAtivos().length > 1 ? `<label>CD onde os coletores serão cadastrados<select id="lc-cd">${opts(cdsAtivos().map((c) => [c.id, `${c.codigo} · ${c.nome}`]), cd)}</select></label>` : ''}
+      <div class="lc-codigos">
+        <div class="lc-qr" id="lc-qr"></div>
+        <div class="lc-lado">
+          <div class="lc-url mono" id="lc-url"></div>
+          <ol class="lc-passos">
+            <li>No coletor, abra o <b>Chrome</b> e toque na <b>barra de endereço</b>.</li>
+            <li>Aperte o gatilho e leia o <b>QR code</b> (ou o código de barras abaixo).</li>
+            <li>Se não abrir sozinho, toque em <b>Ir</b>.</li>
+          </ol>
+        </div>
+      </div>
+      <div class="lc-barras" id="lc-barras"></div>
+      <div class="actions">
+        <button class="btn btn--primary" id="lc-copiar">Copiar link</button>
+        <a class="btn" id="lc-wa" target="_blank" rel="noopener">WhatsApp</a>
+        <button class="btn" id="lc-imprimir">Imprimir</button>
+        <a class="btn btn--ghost" id="lc-abrir" target="_blank" rel="noopener">Abrir página ↗</a>
+      </div>
+    </div>
+    <div class="modal-foot" style="justify-content:space-between">
+      ${ehAdmin() ? '<button class="btn btn--ghost btn--sm" id="lc-rotacionar" title="Links, QR codes e folhas impressas antes deixam de funcionar">Invalidar links antigos deste CD</button>' : '<span></span>'}
+      <button class="btn" data-close>Fechar</button>
+    </div>`, (dlg) => {
+    const desenhar = () => {
+      const url = urlDe(cod);
+      $('#lc-qr', dlg).innerHTML = qrSvg(url);
+      $('#lc-barras', dlg).innerHTML = barrasSvg(semEsquema(url));
+      $('#lc-url', dlg).textContent = semEsquema(url);
+      $('#lc-abrir', dlg).href = url;
+      $('#lc-wa', dlg).href = 'https://wa.me/?text=' + encodeURIComponent(`Registro de coletores no inventário: abra este link NO NAVEGADOR DO COLETOR, bipe a etiqueta do nº de série (S/N) e a do patrimônio e toque em Registrar:\n${url}`);
+    };
+    $('#lc-copiar', dlg).onclick = () => navigator.clipboard.writeText(urlDe(cod)).then(() => toast('Link copiado'));
+    $('#lc-cd', dlg)?.addEventListener('change', async (e) => {
+      cd = e.target.value;
+      try { cod = await obterLinkCurto(cd); desenhar(); } catch (er) { toast(erroMsg(er), true); }
+    });
+    $('#lc-rotacionar', dlg)?.addEventListener('click', async () => {
+      if (!(await confirmar(`Os links, QR codes e folhas impressas do ${cdCod(cd)} param de funcionar (inclusive os links de registro de computadores). Depois, use o novo.`, { titulo: 'Invalidar os links antigos?', ok: 'Invalidar e gerar novo', perigo: true }))) return;
+      try { cod = await obterLinkCurto(cd, true); desenhar(); toast('Novo link gerado'); } catch (e) { toast(erroMsg(e), true); }
+    });
+    // folha para colar perto dos coletores (ou na sala da TI)
+    $('#lc-imprimir', dlg).onclick = () => {
+      const w = window.open('', '_blank');
+      if (!w) return toast('Permita pop-ups deste site para imprimir.', true);
+      const url = urlDe(cod);
+      w.document.open();
+      w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Registrar coletor — ${esc(cdCod(cd))}</title><style>
+        @page { size: A4; margin: 16mm; } body { font: 15px/1.5 "Segoe UI", Arial, sans-serif; color: #111; text-align: center; margin: 0; }
+        h1 { font-size: 26px; margin: 0 0 4px; } .sub { color: #555; margin: 0 0 22px; }
+        .qr svg { width: 85mm; height: 85mm; } .barras svg { width: 170mm; height: 26mm; margin-top: 16mm; display: block; margin-left: auto; margin-right: auto; }
+        .url { font: 600 17px Consolas, monospace; margin: 8px 0 18px; } ol { text-align: left; display: inline-block; margin: 18px 0 0; font-size: 16px; }
+      </style></head><body>
+        <h1>Registrar coletor no inventário</h1><p class="sub">${esc(cdCod(cd))} · ${esc(cdNome(cd))}</p>
+        <div class="qr">${qrSvg(url)}</div><div class="url">${esc(semEsquema(url))}</div>
+        <div class="barras">${barrasSvg(semEsquema(url))}</div>
+        <ol><li>No coletor, abra o <b>Chrome</b> e toque na barra de endereço.</li><li>Leia o <b>QR code</b> (ou o código de barras).</li><li>Bipe a etiqueta do <b>nº de série</b> e a do <b>patrimônio</b> e toque em <b>Registrar coletor</b>.</li></ol>
+      </body></html>`);
+      w.document.close();
+      imprimirQuandoPronto(w);
+    };
+    desenhar();
+  });
+}
+
 export async function modalLinkInstalacao(pre = {}) {
+  if (pre.pagina === 'coletor.html') return modalLinkColetor();
   let cd = ehAdmin() ? (pre.cd_id || state.cdAtual || cdsAtivos()[0]?.id) : state.perfil?.cd_id;
   let token;
   try { token = await obterTokenLink(cd); } catch (e) {

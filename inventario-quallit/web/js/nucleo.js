@@ -19,6 +19,7 @@ export const store = {
 
 export const STATUS = { em_uso: 'Em uso', estoque: 'Estoque', manutencao: 'Manutenção', emprestado: 'Emprestado', descartado: 'Descartado', extraviado: 'Extraviado' };
 export const STATUS_COR = { em_uso: 'ok', estoque: 'info', manutencao: 'warn', emprestado: 'info', descartado: '', extraviado: 'bad' };
+export const PROPRIEDADE = { proprio: 'Próprio', alugado: 'Alugado' };
 export const TIPO = { desktop: 'Desktop', notebook: 'Notebook', coletor: 'Coletor de dados', servidor: 'Servidor', outro: 'Outro' };
 // situação pela ÚLTIMA COLETA (Invent_local / kit dos coletores). As chaves antigas (online, recente…) ficam
 // porque também são as classes de cor (dot--online etc.).
@@ -41,6 +42,7 @@ export const ALERTAS = {
   sem_bitlocker:      { l: 'BitLocker desligado', d: 'Disco do sistema sem criptografia: em caso de perda/roubo os dados ficam expostos (LGPD)', grave: true },
   antivirus_off:      { l: 'Antivírus desligado', d: 'Nenhum antivírus ativo, ou antivírus desatualizado, na última coleta', grave: true },
   windows_desatualizado: { l: 'Windows sem atualização', d: 'Nenhuma atualização do Windows instalada nos 45 dias antes da última coleta', grave: false },
+  aluguel_vencendo:   { l: 'Aluguel vencendo', d: 'Equipamento alugado com contrato terminando nos próximos 30 dias (ou já terminado): renove ou devolva à locadora', grave: true },
   bateria_ruim:       { l: 'Bateria ruim', d: 'Coletor com bateria com defeito ou abaixo de 80% da capacidade original — candidata a troca', grave: true },
 };
 export const CAMPOS_HIST = {
@@ -48,6 +50,7 @@ export const CAMPOS_HIST = {
   fabricante: 'Fabricante', modelo: 'Modelo', cpu: 'Processador', memoria_gb: 'Memória', armazenamento_total_gb: 'Armazenamento',
   so_nome: 'Sistema', so_display_version: 'Versão do SO', so_build: 'Build', setor: 'Setor', localizacao: 'Localização', responsavel: 'Responsável',
   cd_id: 'CD', data_compra: 'Data de compra', fornecedor: 'Fornecedor', nota_fiscal: 'Nota fiscal', garantia_fim: 'Fim da garantia', hw_verificado: 'Verificação',
+  propriedade: 'Propriedade', locadora: 'Locadora', contrato: 'Contrato', aluguel_fim: 'Fim do aluguel',
 };
 export const CAMPOS_HW = ['memoria_gb', 'armazenamento_total_gb', 'cpu', 'numero_serie', 'so_nome', 'so_display_version'];
 
@@ -189,7 +192,7 @@ export function beep(tipo) {
 /* =====================================================================
    Estado
    ===================================================================== */
-export const F_PADRAO = { q: '', tipo: '', status: '_ativos', situacao: '', so: '', alerta: '', ram: '', disco: '', setor: '', idade: '', garantia: '' };
+export const F_PADRAO = { q: '', tipo: '', status: '_ativos', situacao: '', so: '', alerta: '', ram: '', disco: '', setor: '', idade: '', garantia: '', prop: '' };
 export const state = {
   user: null,
   maquinas: [],
