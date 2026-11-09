@@ -135,7 +135,7 @@ export function acharMaquina(bruto) {
 }
 // logo do cliente (RaiaDrogasil) nos documentos impressos: endereço completo porque a janela de impressão é about:blank
 export const LOGO_CLIENTE_URL = new URL('img/cliente-rd.png', location.href).href;
-export const logoClienteDoc = () => `<div class="cliente-doc"><span>Cliente</span><img src="${LOGO_CLIENTE_URL}" alt="RaiaDrogasil S.A."></div>`;
+export const logoClienteDoc = () => `<div class="cliente-doc"><img src="${LOGO_CLIENTE_URL}" alt="RaiaDrogasil S.A."></div>`;
 export const ESTILO_CLIENTE_DOC = '.cliente-doc { float: right; margin: 0 0 8px 16px; text-align: right; } .cliente-doc span { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: #777; } .cliente-doc img { display: block; height: 44px; width: auto; margin-left: auto; }';
 // imprime depois que as imagens (logo, assinaturas) carregarem; pelo código do painel porque a CSP bloqueia script embutido
 export function imprimirQuandoPronto(w) {
