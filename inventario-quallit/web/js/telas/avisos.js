@@ -26,6 +26,8 @@ export function atualizarSininho() {
   const b = $('#badge-avisos'); if (!b) return;
   const n = total();
   b.hidden = !n; b.textContent = n;
+  const t = $('#badge-avisos-topo');
+  if (t) { t.hidden = !n; t.textContent = n; }
   $('#btn-avisos')?.classList.toggle('tem', !!n);
 }
 

@@ -216,7 +216,7 @@ export const state = {
   cacheEm: null,
   pendentes: 0,
   etqIds: null,
-  modo: (() => { try { return localStorage.getItem('maq-modo') || 'tabela'; } catch { return 'tabela'; } })(),
+  modo: (() => { const padrao = matchMedia('(max-width: 820px)').matches ? 'cartoes' : 'tabela'; try { return localStorage.getItem('maq-modo') || padrao; } catch { return padrao; } })(),
   modoOpts: (() => { try { return { agrup: 'status', metrica: 'contato', mosGrupo: '', destaque: '', ...JSON.parse(localStorage.getItem('maq-modo-opts') || '{}') }; } catch { return { agrup: 'status', metrica: 'contato', mosGrupo: '', destaque: '' }; } })(),
   perfil: null,
   cds: [],

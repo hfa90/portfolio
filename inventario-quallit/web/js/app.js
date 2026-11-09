@@ -6,6 +6,7 @@ import { iniciarRelogios } from './prazo.js';
 import { iniciarRealtime, navegar, renderSidebar } from './rotas.js';
 import { atualizarBadge, atualizarPendentes, sincronizar } from './sincronia.js';
 import { fecharDrawer } from './telas/maquinas.js';
+import { dicaVersao, textoVersao } from './versao.js';
 import { carregarSolicitacoes } from './telas/patrimonio.js';
 
 /* =====================================================================
@@ -34,7 +35,44 @@ $('#btn-tema').onclick = () => {
   document.documentElement.dataset.theme = novo; store.set('tema', novo);
 };
 $('#btn-sair').onclick = () => sb.auth.signOut();
-$('#btn-avisos').onclick = () => abrirAvisos();
+$('#btn-avisos').onclick = () => { fecharMenu(); abrirAvisos(); };
+$('#btn-avisos-topo').onclick = () => abrirAvisos();
+
+/* ---- celular: menu lateral deslizante (☰) e título da tela na barra superior ---- */
+function abrirMenu() { $('#app').classList.add('menu-aberto'); $('#menu-fundo').hidden = false; $('#btn-menu').setAttribute('aria-expanded', 'true'); }
+function fecharMenu() { $('#app').classList.remove('menu-aberto'); $('#menu-fundo').hidden = true; $('#btn-menu').setAttribute('aria-expanded', 'false'); }
+$('#btn-menu').onclick = () => ($('#app').classList.contains('menu-aberto') ? fecharMenu() : abrirMenu());
+$('#menu-fundo').onclick = fecharMenu;
+$('#menu-lateral').addEventListener('click', (e) => { if (e.target.closest('.nav-item, #btn-sair')) fecharMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') fecharMenu(); });
+function atualizarTopo() {
+  const ativo = $('.nav-item.active');
+  $('#topo-titulo').textContent = ativo ? ativo.textContent.replace(/\d+$/, '').trim() : 'Inventário';
+}
+window.addEventListener('hashchange', () => setTimeout(atualizarTopo, 0));
+
+/* ---- celular: tabelas viram "cartões" (cada célula ganha o nome da coluna, que o CSS mostra ao lado) ---- */
+function rotularTabelas() {
+  document.querySelectorAll('.view table:not(.heatmap), #modal table').forEach((t) => {
+    if (t.closest('#view-maquinas .table-wrap')) return;   // Máquinas: no celular, use os cartões
+    if (t.closest('.etq-area')) return;                     // folha de etiquetas: é o que vai para a impressora
+    const nomes = [...t.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+    if (!nomes.length) return;
+    t.classList.add('tabela-cartoes');
+    t.querySelectorAll('tbody tr').forEach((tr) => {
+      if (tr.dataset.rotulado === String(tr.cells.length)) return;
+      let col = 0;
+      [...tr.cells].forEach((td) => { if (!td.hasAttribute('data-rotulo')) td.dataset.rotulo = td.colSpan > 1 ? '' : nomes[col] || ''; col += td.colSpan || 1; });
+      tr.dataset.rotulado = String(tr.cells.length);
+    });
+  });
+}
+let rotularPendente = false;
+new MutationObserver(() => {
+  if (rotularPendente) return;
+  rotularPendente = true;
+  requestAnimationFrame(() => { rotularPendente = false; rotularTabelas(); });
+}).observe(document.body, { childList: true, subtree: true });
 $$('.nav-item').forEach((b) => (b.onclick = () => (location.hash = '#' + b.dataset.view)));
 $('#drawer-bg').onclick = fecharDrawer;
 document.addEventListener('click', (e) => {
@@ -111,6 +149,7 @@ async function entrar(session) {
   iniciarRealtime();
   window.addEventListener('hashchange', navegar);
   navegar();
+  atualizarTopo();
   registrarSW();
   iniciarRelogios();
   atualizarBadge();
@@ -120,6 +159,8 @@ async function entrar(session) {
 }
 
 aplicarTema();
+$('#versao').textContent = textoVersao();
+$('#versao').title = dicaVersao();
 sb.auth.onAuthStateChange((ev, session) => {
   if (session) setTimeout(() => entrar(session), 0); // fora do lock de auth do supabase-js
   else {

@@ -10,6 +10,7 @@ import { idbGet, idbSet } from '../js/offline.js';
 import { anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, fmtDuracao } from '../js/prazo.js';
 import { montarResumo, copiarTexto, linkWhatsApp } from '../js/resumo.js';
 import { confirmar } from '../js/dialogos.js';
+import { dicaVersao, textoVersao } from '../js/versao.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -783,6 +784,7 @@ function menu() {
     <button class="menu-item" data-m="painel"><span>🖥</span><span>Abrir o painel completo</span></button>
     <button class="menu-item" data-m="tema"><span>◐</span><span>Alternar tema claro/escuro</span></button>
     <button class="menu-item perigo" data-m="sair"><span>⎋</span><span>Sair (${esc(S.user.email)})</span></button>
+    <div class="versao" title="${esc(dicaVersao())}">${esc(textoVersao())}</div>
   </div>`);
   $$('[data-m]', $('#folha')).forEach((b) => (b.onclick = async () => {
     const m = b.dataset.m;
