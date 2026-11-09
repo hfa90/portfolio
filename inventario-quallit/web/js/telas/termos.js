@@ -4,7 +4,7 @@
 // registra a devolução de tudo de uma vez.
 import { criarAssinatura } from '../assinatura.js';
 import { recarregarMaquina } from '../dados.js';
-import { $, $$, MQ, TIPO, acharMaquina, dataHora, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
+import { $, $$, ESTILO_CLIENTE_DOC, MQ, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
 import { ehErroDeRede } from '../offline.js';
 import { rerender } from '../rotas.js';
 import { lerCamera } from './inventarios.js';
@@ -299,11 +299,10 @@ const estiloDoc = `
   @media screen { body { max-width: 760px; margin: 28px auto; padding: 0 20px; } }`;
 function escreverDoc(w, titulo, corpo) {
   w.document.open();
-  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${estiloDoc}</style></head><body>${corpo}
+  w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${estiloDoc} ${ESTILO_CLIENTE_DOC}</style></head><body>${logoClienteDoc()}${corpo}
     <p class="rodape">Documento gerado pelo Inventário Quallit em ${dataHora(new Date().toISOString())}.</p></body></html>`);
   w.document.close();
-  // imprime pelo código do painel (a política de segurança CSP bloqueia script embutido)
-  setTimeout(() => { try { w.focus(); w.print(); } catch { /* janela fechada */ } }, 400);
+  imprimirQuandoPronto(w);
 }
 const assinatura = (img, nome, legenda) => `<div class="ass">${img ? `<img src="${img}" alt="">` : '<div class="vazio"></div>'}<div class="nome">${esc(nome || '')}</div><div class="leg">${legenda}</div></div>`;
 

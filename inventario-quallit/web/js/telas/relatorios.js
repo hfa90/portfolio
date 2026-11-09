@@ -1,6 +1,6 @@
 // Inventário Quallit — tela: relatorios (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { renderRelRenovacao } from './renovacao.js';
-import { $, $$, ALERTAS, STATUS, TIPO, cdCod, cdDe, cdNome, data, dataBR, dataHora, debounce, ehAdmin, erroMsg, esc, garantiaFaixa, idadeFaixa, noCD, pill, ramFaixa, rel, sb, situacao, soGrupo, state, store, tipoDisco, toast, up } from '../nucleo.js';
+import { $, $$, ALERTAS, LOGO_CLIENTE_URL, STATUS, TIPO, cdCod, cdDe, cdNome, data, dataBR, dataHora, debounce, ehAdmin, erroMsg, esc, garantiaFaixa, idadeFaixa, noCD, pill, ramFaixa, rel, sb, situacao, soGrupo, state, store, tipoDisco, toast, up } from '../nucleo.js';
 import { criarXlsx } from '../planilha.js';
 import { etiquetaPrazo } from '../prazo.js';
 import { irMaquinas, renderSidebar } from '../rotas.js';
@@ -353,7 +353,7 @@ export function abrirRelatorio(titulo, subtitulo, corpo, janela) {
     main { max-width: 1040px; margin: 0 auto; padding: 22px 20px; }
     header { display: flex; align-items: center; gap: 12px; border-bottom: 3px solid #1c9ba9; padding-bottom: 10px; margin-bottom: 14px; position: relative; }
     header::after { content: ""; position: absolute; left: 0; bottom: -3px; width: 70px; height: 3px; background: #ff8221; }
-    header svg { width: 44px; height: 44px; flex: none; } header h1 { font-size: 19px; margin: 0; } header p { margin: 2px 0 0; color: #557276; }
+    header svg { width: 44px; height: 44px; flex: none; } .cli { margin-left: auto; text-align: right; } .cli span { display: block; font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: #7a8f93; } .cli img { display: block; height: 40px; width: auto; margin-left: auto; } header h1 { font-size: 19px; margin: 0; } header p { margin: 2px 0 0; color: #557276; }
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin: 12px 0 6px; }
     .kpi { border: 1px solid #dde6e8; border-radius: 8px; padding: 8px 10px; } .kpi b { display: block; font-size: 19px; } .kpi span { color: #627a7f; font-size: 11px; }
     .kpi.bad b { color: #cc2b20; } .kpi.ok b { color: #127f8b; } .kpi.warn b { color: #b25f00; }
@@ -369,7 +369,7 @@ export function abrirRelatorio(titulo, subtitulo, corpo, janela) {
     footer { margin-top: 22px; color: #8a9b9e; font-size: 10px; border-top: 1px solid #e3eaec; padding-top: 6px; }
     @media print { .barra { display: none; } main { padding: 0; max-width: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
   </style></head><body><div class="barra"><span>${esc(titulo)}</span><button type="button" id="btn-imprimir">Imprimir / Salvar PDF</button></div>
-  <main><header>${LOGO_SVG}<div><h1>${esc(titulo)}</h1><p>${subtitulo}</p></div></header>${corpo}
+  <main><header>${LOGO_SVG}<div><h1>${esc(titulo)}</h1><p>${subtitulo}</p></div><div class="cli"><span>Cliente</span><img src="${LOGO_CLIENTE_URL}" alt="RaiaDrogasil S.A."></div></header>${corpo}
   <footer>Inventário Quallit · gerado em ${dataHora(new Date().toISOString())} por ${esc(state.perfil?.nome || state.user?.email || '')}</footer></main></body></html>`);
   w.document.close();
   // botão ligado pelo código do painel (a política de segurança CSP bloqueia onclick embutido)

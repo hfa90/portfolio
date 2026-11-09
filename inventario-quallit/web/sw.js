@@ -1,6 +1,6 @@
 // Service worker: guarda os arquivos do painel para abrir e conferir sem internet.
 // Os dados (Supabase) não passam por aqui: o app guarda no IndexedDB e sincroniza sozinho.
-const VERSAO = 'iq-v15';
+const VERSAO = 'iq-v16';
 const ESSENCIAIS = [
   './', './index.html', './manifest.webmanifest',
   './css/style.css', './css/prazo.css', './js/prazo.js',
@@ -8,7 +8,7 @@ const ESSENCIAIS = [
   './js/nucleo.js', './js/dados.js', './js/sincronia.js', './js/rotas.js',
   './js/telas/painel.js', './js/telas/maquinas.js', './js/telas/inventarios.js', './js/telas/patrimonio.js', './js/telas/emprestimos.js',
   './js/telas/etiquetas.js', './js/telas/importacao.js', './js/telas/coleta.js', './js/telas/usuarios.js', './js/telas/relatorios.js', './js/telas/resumo-semana.js', './js/telas/termos.js', './js/telas/renovacao.js',
-  './icons/icon-192.png', './icons/icon-512.png', './img/logo.svg',
+  './icons/icon-192.png', './icons/icon-512.png', './img/logo.svg', './img/cliente-rd.png',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
 

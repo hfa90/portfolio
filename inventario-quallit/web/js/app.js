@@ -77,7 +77,7 @@ function semAcesso() {
   $('#app').hidden = true;
   $('#login').hidden = false;
   $('#login-form').innerHTML = `
-    <div class="brand brand--lg"><span class="brand-mark"></span><div><strong>Inventário</strong><small>Quallit · CD</small></div></div>
+    <div class="login-marcas"><div class="brand brand--lg"><span class="brand-mark"></span><div><strong>Inventário</strong><small>Quallit · CD</small></div></div><div class="cliente"><span>Cliente</span><img src="img/cliente-rd.png" alt="RaiaDrogasil S.A." width="62" height="46"></div></div>
     <h2>Acesso não liberado</h2>
     <p class="muted" style="margin:0">O usuário <b>${esc(state.user?.email || '')}</b> ainda não tem permissão ou foi desativado. Peça ao administrador para liberar o seu acesso.</p>
     <button type="button" class="btn btn--block" id="sem-sair">Sair</button>`;

@@ -2,7 +2,7 @@
 import { criarAssinatura } from '../assinatura.js';
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, MQ, STATUS, TIPO, acharMaquina, dataHora, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
+import { $, $$, ESTILO_CLIENTE_DOC, MQ, STATUS, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
 import { ehErroDeRede } from '../offline.js';
 import { rerender } from '../rotas.js';
 import { lerCamera } from '../telas/inventarios.js';
@@ -293,7 +293,9 @@ export async function imprimirTermo(id, janela) {
     .ass .vazio { height: 70px; } .ass .nome { border-top: 1px solid #111; padding-top: 4px; font-weight: 600; } .ass .leg { color: #555; font-size: 11px; }
     .rodape { margin-top: 26px; color: #777; font-size: 10.5px; } pre { font: inherit; white-space: pre-wrap; margin: 0; }
     @media screen { body { max-width: 760px; margin: 28px auto; padding: 0 20px; } }
+    ${ESTILO_CLIENTE_DOC}
   </style></head><body>
+  ${logoClienteDoc()}
   <h1>Termo de responsabilidade — empréstimo de equipamento</h1>
   <p class="sub">TI · Centro de Distribuição · Nº ${esc(e.id.slice(0, 8).toUpperCase())}</p>
   <h2>Equipamento</h2>
@@ -318,6 +320,5 @@ export async function imprimirTermo(id, janela) {
   <p class="rodape">Documento gerado pelo Inventário Quallit em ${dataHora(new Date().toISOString())}.</p>
   </body></html>`);
   w.document.close();
-  // imprime pelo código do painel (sem script embutido: a política de segurança CSP bloqueia scripts inline)
-  setTimeout(() => { try { w.focus(); w.print(); } catch { /* janela fechada */ } }, 400);
+  imprimirQuandoPronto(w);
 }
