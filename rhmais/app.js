@@ -12,6 +12,13 @@ const ROTULO_PARCIAL = { cargo: "Cargo", skills: "Competências", modalidade: "M
 const CFG_PADRAO = { empresa_nome: "Minha Consultoria de RH", paginas_por_fonte: 2, score_minimo_padrao: 40,
   fontes_ativas: FONTES.map((f) => f.id), adzuna_app_id: "", adzuna_app_key: "", jooble_key: "", github_token: "" };
 
+// Retorno de links enviados por e-mail (confirmação de conta, nova senha). Lido ANTES de o
+// supabase-js consumir o hash da URL.
+const RETORNO = (() => {
+  const h = new URLSearchParams(location.hash.replace(/^#\/?/, "")), q = new URLSearchParams(location.search);
+  const g = (k) => h.get(k) || q.get(k) || "";
+  return { tipo: g("type"), erro: g("error_description") || g("error"), codigo: g("error_code") };
+})();
 const sb = window.supabase.createClient(window.RH_CONFIG.supabaseUrl, window.RH_CONFIG.supabaseKey);
 let USUARIO = null;
 let CFG = { ...CFG_PADRAO };
@@ -56,7 +63,18 @@ function carregarScript(url) {
   }));
 }
 
-function modal(html) { $("#modalCorpo").innerHTML = html; $("#modal").showModal(); }
+function modal(html, largo = false) {
+  $("#modal").classList.toggle("largo", largo);
+  $("#modalCorpo").innerHTML = html;
+  if (!$("#modal").open) $("#modal").showModal();
+}
+/** Extrai a mensagem de erro de uma chamada a Edge Function. */
+async function erroFuncao(r, nome) {
+  let msg = r.error?.message || "Erro desconhecido";
+  try { msg = (await r.error.context.json()).erro || msg; } catch { /* sem corpo JSON */ }
+  if (/Failed to send|not found|404/i.test(msg)) msg = `Função ${nome} indisponível (publique a Edge Function no Supabase).`;
+  return msg;
+}
 $("#modal").addEventListener("click", (e) => { if (e.target.id === "modal" || e.target.closest("[data-fechar]")) $("#modal").close(); });
 
 function barras(itens, cor, vazio) {
@@ -91,15 +109,30 @@ function telaLogin(modo = "entrar", msg = "") {
       <button class="btn" type="submit">${modo === "entrar" ? "Entrar" : modo === "criar" ? "Criar conta" : modo === "esqueci" ? "Enviar link" : "Salvar senha"}</button>
       <div class="msg" id="msgLogin">${esc(msg)}</div>
       <div class="alt">${modo === "entrar" ? `<a data-modo="criar">Criar conta</a><a data-modo="esqueci">Esqueci a senha</a>` : modo === "nova" ? "" : `<a data-modo="entrar">← Voltar ao login</a>`}</div>
+      ${modo === "entrar" ? `<div class="alt"><a id="reenviar" hidden>Reenviar e-mail de confirmação</a></div>` : ""}
     </form></div></div>`;
   $$("[data-modo]").forEach((a) => (a.onclick = () => telaLogin(a.dataset.modo)));
+  const reenviar = $("#reenviar");
+  if (reenviar) {
+    reenviar.hidden = !/expir|Confirme seu e-mail/i.test(msg);
+    reenviar.onclick = async () => {
+      const email = $("#fLogin").email.value.trim();
+      if (!email) return ($("#msgLogin").textContent = "Digite seu e-mail acima e clique em reenviar.");
+      try { await q(sb.auth.resend({ type: "signup", email, options: { emailRedirectTo: urlApp() } }));
+        $("#msgLogin").textContent = "Enviamos um novo link de confirmação. Verifique sua caixa de entrada (e o spam)."; }
+      catch (err) { $("#msgLogin").textContent = traduzErro(err); }
+    };
+  }
   $("#fLogin").onsubmit = async (e) => {
     e.preventDefault();
     const f = e.target, btn = $("button", f), msg = $("#msgLogin");
     const email = f.email?.value.trim(), senha = f.senha?.value;
     btn.disabled = true; msg.textContent = "Aguarde…";
     try {
-      if (modo === "entrar") { await q(sb.auth.signInWithPassword({ email, password: senha })); }
+      if (modo === "entrar") {
+        const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+        if (error) { msg.textContent = traduzErro(error); if ($("#reenviar")) $("#reenviar").hidden = !/Confirme seu e-mail/i.test(msg.textContent); return; }
+      }
       else if (modo === "criar") {
         const d = await q(sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: urlApp() } }));
         if (!d.session) return telaLogin("entrar", "Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.");
@@ -129,11 +162,39 @@ async function iniciarApp() {
   rotear();
 }
 
+function limparUrl() { history.replaceState(null, "", location.pathname + "#/painel"); }
+
+function telaConfirmada() {
+  document.body.classList.add("sem-sessao");
+  main.innerHTML = `<div class="login"><div class="card" style="text-align:center">
+    <div class="brand" style="justify-content:center"><span class="logo" style="color:#fff">R+</span><div style="text-align:left"><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
+    <div style="font-size:44px;line-height:1">✅</div>
+    <h2 style="margin:10px 0 6px;font-size:20px">E-mail confirmado!</h2>
+    <p class="muted" style="margin:0 0 18px">Sua conta <b>${esc(USUARIO?.email || "")}</b> está ativa e pronta para uso.</p>
+    <button class="btn" id="btnAcessar" style="width:100%">Acessar minha conta</button>
+  </div></div>`;
+  $("#btnAcessar").onclick = () => { location.hash = "#/painel"; iniciarApp(); };
+}
+
+let retornoTratado = false;
 sb.auth.onAuthStateChange((evento, sessao) => {
-  if (evento === "PASSWORD_RECOVERY") { USUARIO = sessao?.user || null; telaLogin("nova"); return; }
+  if (evento === "PASSWORD_RECOVERY") { USUARIO = sessao?.user || null; limparUrl(); telaLogin("nova"); return; }
   const novo = sessao?.user || null;
   const mudou = (novo?.id || null) !== (USUARIO?.id || null);
   USUARIO = novo;
+  if (!retornoTratado && (RETORNO.tipo || RETORNO.erro)) {
+    retornoTratado = true;
+    limparUrl();
+    if (RETORNO.erro && !USUARIO) {
+      const expirado = /expir|invalid/i.test(RETORNO.erro + RETORNO.codigo);
+      return telaLogin("entrar", expirado ? "Este link de confirmação expirou ou já foi usado. Se sua conta já foi confirmada, basta entrar. Se não, peça um novo link abaixo."
+        : "Não foi possível validar o link: " + RETORNO.erro);
+    }
+    if (["signup", "email", "email_change", "invite"].includes(RETORNO.tipo)) {
+      if (USUARIO) return setTimeout(telaConfirmada, 0);
+      return telaLogin("entrar", "E-mail confirmado! Agora é só entrar com seu e-mail e senha.");
+    }
+  }
   if (!USUARIO) { appIniciado = false; Object.assign(estado, { busca: null, candSel: null, candidatoBusca: null, pipeSel: null }); telaLogin(); }
   else if (mudou || !appIniciado) setTimeout(iniciarApp, 0);
 });
@@ -422,9 +483,11 @@ function detalharVaga() {
     ${d.skills_ok?.length ? `<h4>Competências que o candidato tem</h4>${d.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
     ${d.skills_faltam?.length ? `<h4>Pedidas na vaga e ausentes no perfil</h4>${d.skills_faltam.map((s) => `<span class="chip gap">${esc(s)}</span>`).join("")}` : ""}
     <h4>Descrição</h4><div class="desc">${esc((v.descricao || "Descrição completa no anúncio.").slice(0, 2500))}</div>
+    <button class="btn ia" id="btnAdaptar" style="width:100%;margin-top:14px">✨ Adaptar currículo para esta vaga</button>
     <div class="det-acoes"><a class="btn neutro" href="${esc(v.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a>
       <button class="btn" id="btnPipe">+ Adicionar ao pipeline</button></div></div>`;
   $("#btnPipe").onclick = () => adicionarPipeline(v).catch(falha);
+  $("#btnAdaptar").onclick = () => abrirAdaptador(v, estado.busca.candidato);
 }
 
 function renderStatus() {
@@ -460,12 +523,7 @@ async function iniciarBusca(cands) {
       const r = await sb.functions.invoke("buscar-vagas", {
         body: { fonte: f.id, termos, cidade: candidato.cidade || "", uf: candidato.uf || "", skills, paginas: CFG.paginas_por_fonte },
       });
-      if (r.error) {
-        let msg = r.error.message;
-        try { msg = (await r.error.context.json()).erro || msg; } catch { /* sem corpo */ }
-        if (/Failed to send|not found|404/i.test(msg)) msg = "Função de busca indisponível (publique a Edge Function buscar-vagas).";
-        throw new Error(msg);
-      }
+      if (r.error) throw new Error(await erroFuncao(r, "buscar-vagas"));
       const vagas = r.data?.vagas || [];
       if (!vagas.length && r.data?.erro) throw new Error(r.data.erro);
       b.brutas.push(...vagas);
@@ -599,6 +657,102 @@ ${linhas}<footer>Gerado pelo RH+ Match · Os links levam ao anúncio original de
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+/* ============================================================= CURRÍCULO ADAPTADO COM IA */
+const slugArq = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
+
+function abrirAdaptador(vaga, candidato) {
+  modal(`<h3 style="margin:0 0 2px">✨ Adaptar currículo para esta vaga</h3>
+    <p class="muted" style="margin:0 0 12px"><b>${esc(vaga.titulo)}</b> · ${esc(vaga.empresa || "Empresa não divulgada")}</p>
+    <p style="margin:0 0 10px;font-size:13px">Anexe o currículo do candidato. A IA reescreve o resumo, reorganiza as competências e destaca nas experiências o que mais conta para esta vaga. <b>Empresas, cargos e datas não são alterados</b> e nada é inventado: os acréscimos aparecem marcados para você revisar.</p>
+    <label class="btn sec" style="display:inline-block;cursor:pointer">📎 Anexar currículo (PDF, DOCX ou TXT)<input type="file" id="cvArq" accept=".pdf,.docx,.txt" hidden></label>
+    <span class="muted" id="cvNome" style="margin-left:8px;font-size:13px"></span>
+    <label class="campo" style="margin-top:12px">Texto do currículo (pode revisar ou colar aqui)
+      <textarea id="cvTexto" style="min-height:220px;font-size:13px" placeholder="O texto extraído do arquivo aparece aqui."></textarea></label>
+    <div class="msg muted" id="cvMsg" style="font-size:13px;min-height:18px;margin-top:6px"></div>
+    <div class="rodape"><button class="btn neutro" data-fechar>Cancelar</button><button class="btn ia" id="cvGerar">Gerar currículo adaptado</button></div>`, true);
+  $("#cvArq").onchange = async (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    $("#cvNome").textContent = "Lendo " + f.name + "…";
+    try { $("#cvTexto").value = (await lerCurriculo(f)).trim(); $("#cvNome").textContent = f.name; }
+    catch (err) { $("#cvNome").textContent = ""; $("#cvMsg").textContent = "⚠ " + traduzErro(err); }
+  };
+  $("#cvGerar").onclick = async () => {
+    const curriculo = $("#cvTexto").value.trim();
+    if (curriculo.length < 200) return ($("#cvMsg").textContent = "Anexe o currículo (ou cole o texto completo) antes de gerar.");
+    const btn = $("#cvGerar"); btn.disabled = true; btn.textContent = "Gerando…";
+    $("#cvMsg").textContent = "A IA está adaptando o currículo. Isso costuma levar de 30 segundos a 2 minutos.";
+    try {
+      const r = await sb.functions.invoke("adaptar-curriculo", { body: {
+        curriculo,
+        vaga: { titulo: vaga.titulo, empresa: vaga.empresa, descricao: String(vaga.descricao || "").slice(0, 15000), local: localVaga(vaga),
+          modalidade: vaga.modalidade, senioridade: vaga.senioridade, contrato: vaga.contrato, tags: (vaga.tags || []).slice(0, 20) },
+        candidato: candidato ? { cargo_desejado: candidato.cargo_desejado, skills: candidato.skills } : null,
+      } });
+      if (r.error) throw new Error(await erroFuncao(r, "adaptar-curriculo"));
+      mostrarAdaptado(r.data.curriculo, vaga);
+    } catch (err) {
+      btn.disabled = false; btn.textContent = "Gerar currículo adaptado";
+      $("#cvMsg").textContent = "⚠ " + traduzErro(err);
+    }
+  };
+}
+
+function htmlCurriculo(cv, destacar) {
+  const novo = (t, ehNovo) => ehNovo && destacar ? `<span class="novo">${esc(t)}</span>` : esc(t);
+  const lista = (titulo, itens) => itens?.length ? `<h2>${titulo}</h2><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
+  return `<div class="cv">
+    <h1>${esc(cv.nome)}</h1>
+    ${cv.titulo_profissional ? `<p class="titulo">${esc(cv.titulo_profissional)}</p>` : ""}
+    ${cv.contato?.length ? `<p class="contato">${cv.contato.map(esc).join(" · ")}</p>` : ""}
+    ${cv.resumo ? `<h2>Resumo profissional</h2><p>${esc(cv.resumo)}</p>` : ""}
+    ${cv.competencias?.length ? `<h2>Competências</h2><p class="skills">${cv.competencias.map((s) => novo(s.nome, s.nova)).join(" · ")}</p>` : ""}
+    ${cv.experiencias?.length ? `<h2>Experiência profissional</h2>${cv.experiencias.map((x) => `
+      <div class="exp"><div class="exp-topo"><b>${esc(x.cargo)}</b>${x.empresa ? ` — ${esc(x.empresa)}` : ""}<span>${esc([x.periodo, x.local].filter(Boolean).join(" · "))}</span></div>
+      <ul>${(x.itens || []).map((i) => `<li>${novo(i.texto, i.novo)}</li>`).join("")}</ul></div>`).join("")}` : ""}
+    ${lista("Formação", cv.formacao)}${lista("Certificações e cursos", cv.certificacoes)}${lista("Idiomas", cv.idiomas)}
+    ${(cv.outras_secoes || []).map((s) => lista(esc(s.titulo), s.itens)).join("")}
+  </div>`;
+}
+const CSS_CV = `.cv{font-family:Calibri,Segoe UI,Arial,sans-serif;color:#1d2433;font-size:11pt;line-height:1.45;max-width:780px;margin:auto}
+.cv h1{font-size:22pt;margin:0;color:#111633}.cv .titulo{font-size:12.5pt;color:#4F46E5;margin:2px 0 4px;font-weight:600}
+.cv .contato{color:#5B6478;margin:0 0 6px;font-size:10pt}.cv h2{font-size:11.5pt;text-transform:uppercase;letter-spacing:.06em;color:#111633;border-bottom:1.5px solid #4F46E5;padding-bottom:2px;margin:16px 0 6px}
+.cv p{margin:0 0 6px}.cv ul{margin:2px 0 8px;padding-left:18px}.cv li{margin:2px 0}.cv .exp{margin-bottom:8px}
+.cv .exp-topo span{float:right;color:#5B6478;font-size:10pt}.cv .skills{line-height:1.7}
+.cv .novo{background:#E3F7EF;color:#0B6B4C;border-radius:3px;padding:0 2px}`;
+
+function documentoCurriculo(cv, paraWord = false) {
+  const cab = paraWord ? `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">` : `<!doctype html><html lang="pt-BR">`;
+  return `${cab}<head><meta charset="utf-8"><title>Currículo – ${esc(cv.nome)}</title><style>body{margin:24px}${CSS_CV}
+    .cv .exp-topo span{float:none;display:block}@page{margin:18mm}</style></head><body>${htmlCurriculo(cv, false)}</body></html>`;
+}
+
+function mostrarAdaptado(cv, vaga) {
+  const novos = (cv.competencias || []).filter((s) => s.nova).length + (cv.experiencias || []).reduce((a, x) => a + (x.itens || []).filter((i) => i.novo).length, 0);
+  modal(`<style>${CSS_CV}</style>
+    <div class="topo" style="align-items:center;margin-bottom:10px"><div><h3 style="margin:0">Currículo adaptado</h3>
+      <p class="muted" style="margin:2px 0 0">${esc(vaga.titulo)} · ${esc(vaga.empresa || "")}</p></div>
+      <div class="acoes"><button class="btn neutro peq" id="cvWord">⬇ Word (.doc)</button><button class="btn neutro peq" id="cvPdf">🖨 Imprimir / PDF</button></div></div>
+    <div class="cv-layout">
+      <div class="cv-folha">${htmlCurriculo(cv, true)}</div>
+      <aside class="cv-notas">
+        <p><b>O que mudou</b><br>${esc(cv.observacoes || "")}</p>
+        ${novos ? `<p><span class="novo-tag">verde</span> = ${novos} acréscimo(s) da IA. Confira se são verdadeiros antes de enviar.</p>` : ""}
+        ${(cv.competencias || []).some((s) => s.nova) ? `<p><b>Competências acrescentadas</b></p><ul>${cv.competencias.filter((s) => s.nova).map((s) => `<li><b>${esc(s.nome)}</b>: ${esc(s.justificativa)}</li>`).join("")}</ul>` : ""}
+        ${cv.lacunas?.length ? `<p><b>Pedido na vaga e não comprovado no currículo</b> (não foi incluído)</p><ul>${cv.lacunas.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
+        ${cv.palavras_chave?.length ? `<p><b>Palavras-chave da vaga presentes</b><br>${cv.palavras_chave.map((p) => `<span class="chip">${esc(p)}</span>`).join("")}</p>` : ""}
+      </aside>
+    </div>
+    <div class="rodape"><span class="muted" style="font-size:12px">Gerado com IA (Claude, da Anthropic). Revise antes de enviar.</span><button class="btn" data-fechar>Fechar</button></div>`, true);
+  const nomeArq = `curriculo_${slugArq(cv.nome)}_${slugArq(vaga.empresa || vaga.titulo)}`;
+  $("#cvWord").onclick = () => baixarBlob(new Blob(["﻿" + documentoCurriculo(cv, true)], { type: "application/msword" }), nomeArq + ".doc");
+  $("#cvPdf").onclick = () => {
+    const html = documentoCurriculo(cv).replace("</body>", "<script>onload=()=>setTimeout(()=>print(),300)<\/script></body>");
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
+    if (!window.open(url, "_blank")) baixarBlob(new Blob([html], { type: "text/html" }), nomeArq + ".html");
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+}
+
 /* ============================================================= PIPELINE */
 async function pgPipeline() {
   const cands = await listarCandidatos();
@@ -612,7 +766,7 @@ async function pgPipeline() {
       <div class="card detalhe" id="detPipe"></div></div>`;
   let itens = [];
   const carregar = async () => {
-    let r = sb.from("pipeline").select("id, score, status, notas, detalhes, atualizado_em, candidato_id, candidatos(nome), vagas(titulo, empresa, url, fonte, cidade, uf, modalidade, salario, contrato, senioridade)")
+    let r = sb.from("pipeline").select("id, score, status, notas, detalhes, atualizado_em, candidato_id, candidatos(nome), vagas(titulo, empresa, url, fonte, cidade, uf, modalidade, salario, contrato, senioridade, descricao, tags)")
       .order("atualizado_em", { ascending: false }).order("score", { ascending: false });
     if (estado.pipeCand) r = r.eq("candidato_id", +estado.pipeCand);
     itens = (await q(r)).map((i) => ({ ...i.vagas, ...i, candidato: i.candidatos?.nome || "" }));
@@ -644,8 +798,12 @@ async function pgPipeline() {
       ${det.skills_ok?.length ? `<h4>Competências que batem</h4>${det.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
       <h4>Etapa</h4><select id="pStatus">${STATUS_PIPELINE.map((s) => `<option ${s === it.status ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
       <h4>Notas do recrutador</h4><textarea id="pNotas" placeholder="Retorno da empresa, datas de entrevista, feedback…">${esc(it.notas || "")}</textarea>
+      <button class="btn ia" id="pAdaptar" style="width:100%;margin-top:14px">✨ Adaptar currículo para esta vaga</button>
       <div class="det-acoes"><button class="btn perigo" id="pRem">Remover</button>
         <div class="acoes"><a class="btn neutro" href="${esc(it.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a><button class="btn" id="pSalvar">Salvar</button></div></div></div>`;
+    $("#pAdaptar").onclick = async () => {
+      try { abrirAdaptador(it, await obterCandidato(it.candidato_id)); } catch (e) { falha(e); }
+    };
     $("#pSalvar").onclick = async () => {
       try { await q(sb.from("pipeline").update({ status: $("#pStatus").value, notas: $("#pNotas").value.trim() }).eq("id", it.id));
         toast("Pipeline atualizado."); await carregar(); } catch (e) { falha(e); }

@@ -30,7 +30,15 @@ Arquitetura:
    npx supabase functions deploy buscar-vagas --project-ref dpquyrvphongvqjpqxea
    ```
 3. **Login por e-mail:** Authentication → URL Configuration → *Site URL* = `https://haydenfernandes.com.br/rhmais/` e inclua o mesmo endereço em *Redirect URLs*, para que os links de confirmação e de nova senha voltem ao sistema.
-4. (Opcional) Authentication → Sign In / Providers → desative *Allow new users to sign up* depois de criar as contas da equipe, se o sistema não deve aceitar cadastros abertos.
+4. **Currículo adaptado com IA (Claude, da Anthropic):**
+   - SQL Editor → cole `supabase/ia.sql` → Run (cria o limite de 30 adaptações por conta a cada 24 h).
+   - Crie uma chave em https://console.anthropic.com/settings/keys e guarde-a como secret do Supabase:
+     ```
+     npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-... --project-ref dpquyrvphongvqjpqxea
+     npx supabase functions deploy adaptar-curriculo --project-ref dpquyrvphongvqjpqxea --use-api
+     ```
+   - A chave fica só no servidor (nunca no site). Modelo: `claude-opus-5-5`. As regras da IA estão em `supabase/functions/adaptar-curriculo/adaptar.js`: mantém empresas, cargos e datas; só acrescenta o que o currículo comprova; marca os acréscimos em verde; lista à parte os requisitos da vaga que o candidato não comprova.
+5. (Opcional) Authentication → Sign In / Providers → desative *Allow new users to sign up* depois de criar as contas da equipe, se o sistema não deve aceitar cadastros abertos.
 
 Para trocar de projeto Supabase, edite `config.js` (URL + chave *anon/publishable*, que é pública por natureza; a proteção vem do login + RLS).
 
