@@ -67,11 +67,26 @@ function rotularTabelas() {
     });
   });
 }
+/* ---- filtros em uso ficam em evidência (campo destacado e botão "Limpar" chamativo) ---- */
+function marcarFiltros() {
+  document.querySelectorAll('.toolbar').forEach((tb) => {
+    let algum = false;
+    tb.querySelectorAll('select, .search input, input[type=date]').forEach((el) => {
+      const on = el.tagName === 'SELECT' ? el.selectedIndex > 0 : !!el.value.trim();
+      el.classList.toggle('filtro-on', on);
+      algum ||= on;
+    });
+    tb.querySelectorAll('[id$="limpar"]').forEach((b) => b.classList.toggle('btn-limpar-on', algum));
+  });
+}
+document.addEventListener('input', (e) => { if (e.target.closest?.('.toolbar')) marcarFiltros(); });
+document.addEventListener('change', (e) => { if (e.target.closest?.('.toolbar')) marcarFiltros(); });
+
 let rotularPendente = false;
 new MutationObserver(() => {
   if (rotularPendente) return;
   rotularPendente = true;
-  requestAnimationFrame(() => { rotularPendente = false; rotularTabelas(); });
+  requestAnimationFrame(() => { rotularPendente = false; rotularTabelas(); marcarFiltros(); });
 }).observe(document.body, { childList: true, subtree: true });
 $$('.nav-item').forEach((b) => (b.onclick = () => (location.hash = '#' + b.dataset.view)));
 $('#drawer-bg').onclick = fecharDrawer;

@@ -175,6 +175,7 @@ function mostrarFiltrosExtra() {
   const b = $('#btn-mais-filtros');
   b.textContent = (aberto ? 'Menos filtros' : 'Mais filtros') + (ativos ? ` (${ativos})` : '');
   b.setAttribute('aria-expanded', aberto);
+  b.classList.toggle('filtro-on', ativos > 0);
 }
 export function renderTabela() {
   if (!state.maqMontada || state.view !== 'maquinas') return;
@@ -192,7 +193,7 @@ export function renderTabela() {
   if (state.f.idade) chips.push(['idade', 'Idade', state.f.idade]);
   const algum = Object.keys(F_PADRAO).some((k) => state.f[k] !== F_PADRAO[k]);
   $('#chips').innerHTML = chips.map(([k, l, v]) => `<button class="chip" data-k="${k}">${l}: <b>${esc(v)}</b><span>×</span></button>`).join('')
-    + (algum ? '<button class="btn btn--ghost btn--sm" id="limpar">Limpar filtros</button>' : '');
+    + (algum ? '<button class="btn btn--sm btn-limpar-on" id="limpar" title="Voltar todos os filtros e a busca ao padrão">✕ Limpar filtros</button>' : '');
   $$('#chips .chip').forEach((c) => (c.onclick = () => { state.f[c.dataset.k] = ''; renderTabela(); }));
   $('#limpar')?.addEventListener('click', () => { state.f = { ...F_PADRAO }; state.maisFiltros = false; syncToolbar(); renderTabela(); });
   $('#count').textContent = `${lista.length} de ${MQ().length} máquinas`;
@@ -866,8 +867,29 @@ export function modal(html, onOpen) {
   dlg.innerHTML = html;
   dlg.showModal();
   $$('[data-close]', dlg).forEach((b) => (b.onclick = () => dlg.close()));
+  fecharAoClicarFora(dlg);
   onOpen?.(dlg);
   return dlg;
+}
+
+// Clique no fundo escuro (fora da janela) fecha. Em formulário já preenchido não fecha, para não perder o que foi digitado.
+// Só conta se o clique começou e terminou fora: arrastar uma seleção de texto até a borda não fecha.
+export function fecharAoClicarFora(dlg) {
+  dlg.dataset.mexeu = '';
+  if (dlg.dataset.foraLigado) return;
+  dlg.dataset.foraLigado = '1';
+  const fora = (e) => {
+    if (e.target !== dlg) return false;
+    const r = dlg.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  };
+  let comecouFora = false;
+  dlg.addEventListener('pointerdown', (e) => { comecouFora = fora(e); });
+  dlg.addEventListener('input', () => { dlg.dataset.mexeu = '1'; });
+  dlg.addEventListener('click', (e) => {
+    if (comecouFora && fora(e) && !dlg.dataset.mexeu) dlg.close();
+    comecouFora = false;
+  });
 }
 
 export function modalNovaMaquina(pre = {}) {

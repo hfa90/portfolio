@@ -38,6 +38,11 @@ export function confirmar(mensagem, { titulo = 'Confirmar', ok = 'Confirmar', ca
     if (inp) inp.oninput = () => { bSim.disabled = inp.value.trim().toUpperCase() !== String(digitar).toUpperCase(); };
     bNao.onclick = () => d.close();
     d.querySelector('form').onsubmit = (e) => { e.preventDefault(); if (!bSim.disabled) { res = true; d.close(); } };
+    // clique no fundo escuro (fora da janela) = Cancelar
+    let comecouFora = false;
+    const fora = (e) => { if (e.target !== d) return false; const r = d.getBoundingClientRect(); return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom; };
+    d.addEventListener('pointerdown', (e) => { comecouFora = fora(e); });
+    d.addEventListener('click', (e) => { if (comecouFora && fora(e)) d.close(); comecouFora = false; });
     d.addEventListener('close', () => { d.remove(); resolve(res); });
     d.showModal();
     (inp || bSim).focus();

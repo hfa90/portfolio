@@ -7,7 +7,7 @@ import { DIAS_SEMANA, anelPrazo, descreverAgendamento, estadoPrazo, etiquetaPraz
 import { copiarTexto, linkWhatsApp, montarResumo } from '../resumo.js';
 import { atualizarPendentes, definirOffline } from '../sincronia.js';
 import { baseIndex } from '../telas/etiquetas.js';
-import { abrirMaquina, baixarBlob, campo, hojeISO, modal, modalNovaMaquina, opts, planilhaSimples } from '../telas/maquinas.js';
+import { abrirMaquina, baixarBlob, campo, fecharAoClicarFora, hojeISO, modal, modalNovaMaquina, opts, planilhaSimples } from '../telas/maquinas.js';
 import { relatorioInventario } from '../telas/relatorios.js';
 
 /* =====================================================================
@@ -606,6 +606,7 @@ export function lerCamera() {
       <div class="modal-foot"><button class="btn" data-close>Fechar</button></div>`;
     dlg.showModal();
     $('[data-close]', dlg).onclick = () => dlg.close();
+    fecharAoClicarFora(dlg);
     dlg.addEventListener('close', () => { rodando = false; stream?.getTracks().forEach((t) => t.stop()); resolve(resultado); }, { once: true });
     (async () => {
       try {
