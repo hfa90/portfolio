@@ -1,5 +1,5 @@
 /* RH+ Match — currículos: modelos de layout, adaptação por vaga com IA (salva por vaga), currículo base e padrão. */
-import { localVaga } from "../supabase/functions/_shared/nucleo.js";
+import { localVaga } from "../../supabase/functions/_shared/nucleo.js";
 import {
   $, baixarBlob, ctx, dataHora, ehAdmin, erroFuncao, esc, estado, falha, ligarSegmentados, lerCurriculo,
   main, modal, q, sb, segmentado, slugArq, toast, topo, traduzErro,

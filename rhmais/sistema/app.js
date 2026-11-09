@@ -3,7 +3,7 @@
 import {
   FONTES, MODALIDADES, SENIORIDADES, STATUS_PIPELINE, UFS, analisarCurriculo, classificar, consolidar, extrairSkills,
   linksBusca, localVaga, termosDoCandidato,
-} from "./supabase/functions/_shared/nucleo.js";
+} from "../supabase/functions/_shared/nucleo.js";
 import {
   $, $$, CFG_PADRAO, RETORNO, ROTULO_PARCIAL, abrirSheet, alternarTema, atualizarCorBarra, barras, baixarBlob,
   cabecalhoPlanilha, carimbo, cartaoConta, corParcial, ctx, dataCurta, dataHora, ehAdmin, ehMaster, erroFuncao, esc,
@@ -74,7 +74,8 @@ function telaLogin(modo = "entrar", msg = "") {
       <div class="msg" id="msgLogin">${esc(msg)}</div>
       <div class="alt">${modo === "entrar" ? `<a data-modo="criar">Criar conta</a><a data-modo="esqueci">Esqueci a senha</a>` : modo === "nova" ? "" : `<a data-modo="entrar">← Voltar ao login</a>`}</div>
       ${modo === "entrar" ? `<div class="alt"><a id="reenviar" hidden>Reenviar e-mail de confirmação</a></div>` : ""}
-    </form></div></div>`;
+    </form></div>
+    <p style="text-align:center;margin-top:16px;font-size:14px"><a href="../" style="color:var(--texto2);text-decoration:none">← Conheça o RH+ Match</a></p></div>`;
   $$("[data-modo]").forEach((a) => (a.onclick = () => telaLogin(a.dataset.modo)));
   let tipo = tipoInicial;
   $("#tipoConta")?.addEventListener("click", (e) => {

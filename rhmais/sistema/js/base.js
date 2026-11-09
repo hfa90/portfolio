@@ -1,5 +1,5 @@
 /* RH+ Match — base compartilhada entre os módulos: cliente Supabase, estado, utilidades de interface. */
-import { FONTES } from "../supabase/functions/_shared/nucleo.js";
+import { FONTES } from "../../supabase/functions/_shared/nucleo.js";
 
 export const $ = (s, el = document) => el.querySelector(s);
 export const $$ = (s, el = document) => [...el.querySelectorAll(s)];

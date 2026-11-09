@@ -1,5 +1,5 @@
 /* RH+ Match — telas de administração: Ajustes (admin/master), chaves da plataforma e Usuários (master). */
-import { FONTES } from "../supabase/functions/_shared/nucleo.js";
+import { FONTES } from "../../supabase/functions/_shared/nucleo.js";
 import {
   $, $$, CFG_PADRAO, cartaoConta, ctx, dataHora, ehMaster, esc, estado, falha, fonteDisponivel, ligarCartaoConta,
   ligarSegmentados, main, q, sb, segmentado, toast, topo,

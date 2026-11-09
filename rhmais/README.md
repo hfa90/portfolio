@@ -12,7 +12,11 @@ Executável `.exe` para distribuir: rode `gerar_executavel.bat`.
 
 ## Versão online (GitHub Pages + Supabase)
 
-**Endereço:** https://haydenfernandes.com.br/rhmais/
+**Página inicial:** https://haydenfernandes.com.br/rhmais/ (apresentação para candidatos e empresas, números ao vivo)
+**Sistema:** https://haydenfernandes.com.br/rhmais/sistema/
+
+Arquivos: `index.html` (página inicial) · `sistema/` (o sistema: `index.html`, `app.js`, `js/`, `style.css`, `manifest.webmanifest`, `sw.js`) · `config.js`, `icons/` e `supabase/` são compartilhados. A pasta `app/` é o pacote Python da versão desktop.
+Links de e-mail e rotas antigas (`/rhmais/#/...`) que chegam na página inicial são encaminhados automaticamente para o sistema.
 
 Papéis de acesso:
 - **Master** (`haydenfernandes.ti@gmail.com`): tudo, mais a tela **Usuários** (aprova pedidos de empresas/RH, promove ou rebaixa administradores) e as **chaves de API** da plataforma em Ajustes.
@@ -39,7 +43,7 @@ Arquitetura:
    npx supabase login
    npx supabase functions deploy buscar-vagas --project-ref dpquyrvphongvqjpqxea
    ```
-3. **Login por e-mail:** Authentication → URL Configuration → *Site URL* = `https://haydenfernandes.com.br/rhmais/` e inclua o mesmo endereço em *Redirect URLs*, para que os links de confirmação e de nova senha voltem ao sistema.
+3. **Login por e-mail:** Authentication → URL Configuration → *Site URL* = `https://haydenfernandes.com.br/rhmais/` e, em *Redirect URLs*, inclua `https://haydenfernandes.com.br/rhmais/` e `https://haydenfernandes.com.br/rhmais/sistema/`, para que os links de confirmação e de nova senha voltem ao sistema (a página inicial também encaminha esses links).
 4. **Currículo adaptado com IA (Claude, da Anthropic):**
    - SQL Editor → cole `supabase/ia.sql` → Run (cria o limite de 30 adaptações por conta a cada 24 h).
    - Crie uma chave em https://console.anthropic.com/settings/keys e guarde-a como secret do Supabase:

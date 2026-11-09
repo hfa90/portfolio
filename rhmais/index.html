@@ -3,43 +3,436 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>RH+ Match</title>
-  <meta name="description" content="RH+ Match — busca de vagas em vários portais com ranking de compatibilidade para consultorias de RH.">
-  <link rel="manifest" href="manifest.webmanifest">
+  <script>
+    // Links de e-mail (confirmação de conta, nova senha), rotas antigas do sistema (#/painel…) e o app instalado
+    // na versão anterior seguem direto para o sistema, preservando o que vem depois do endereço.
+    (function () {
+      var h = location.hash, s = location.search;
+      var instalado = window.matchMedia && matchMedia("(display-mode: standalone)").matches;
+      if (/access_token|refresh_token|type=|error_description|error=|code=/.test(h + s) || /^#\//.test(h) || instalado) {
+        location.replace("sistema/" + s + (h || (instalado ? "#/painel" : "")));
+      }
+      try { document.documentElement.dataset.theme = localStorage.getItem("rh_tema") || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); } catch (e) {}
+    })();
+  </script>
+  <title>RH+ Match · Vagas certas, currículo certo, com inteligência</title>
+  <meta name="description" content="Busque vagas em vários portais de uma só vez, veja a compatibilidade de cada uma com seu perfil e adapte seu currículo para cada vaga com IA. Para candidatos, empresas, RH e headhunters.">
+  <link rel="canonical" href="https://haydenfernandes.com.br/rhmais/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:title" content="RH+ Match · Vagas certas, currículo certo, com inteligência">
+  <meta property="og:description" content="Vagas de vários portais em uma só busca, score de compatibilidade explicado e currículo adaptado por IA para cada vaga.">
+  <meta property="og:url" content="https://haydenfernandes.com.br/rhmais/">
+  <meta property="og:image" content="https://haydenfernandes.com.br/rhmais/icons/icon-512.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="theme-color" content="#0B0F24">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <meta name="theme-color" content="#111633">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="RH+ Match">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="format-detection" content="telephone=no">
-  <link rel="stylesheet" href="style.css">
-  <script>try{document.documentElement.dataset.theme=localStorage.getItem("rh_tema")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}</script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebApplication","name":"RH+ Match","url":"https://haydenfernandes.com.br/rhmais/",
+   "applicationCategory":"BusinessApplication","operatingSystem":"Web, Android, iOS","inLanguage":"pt-BR",
+   "description":"Busca de vagas em vários portais com score de compatibilidade e currículo adaptado por IA para cada vaga.",
+   "offers":{"@type":"Offer","price":"0","priceCurrency":"BRL"}}
+  </script>
+  <style>
+    :root {
+      --bg: #F6F7FC; --bg2: #FFFFFF; --card: #FFFFFF; --borda: #E4E7F2; --texto: #0F1430; --texto2: #576079;
+      --prim: #4F46E5; --prim2: #7C3AED; --prim-s: #EEF0FF; --verde: #0E9F6E; --verde-s: #E3F7EF; --lar: #D97706; --lar-s: #FDF1DE;
+      --hero1: #0B0F24; --hero2: #1B1F52; --sombra: 0 1px 2px rgba(15,20,48,.05), 0 12px 32px rgba(15,20,48,.07);
+      color-scheme: light;
+    }
+    :root[data-theme="dark"] {
+      --bg: #0B0E1C; --bg2: #10142A; --card: #151A32; --borda: #252B48; --texto: #ECEEF8; --texto2: #A0A8C2;
+      --prim: #7A73F5; --prim2: #A78BFA; --prim-s: #23265A; --verde: #34D399; --verde-s: #123329; --lar: #F59E0B; --lar-s: #3A2A0E;
+      --sombra: 0 12px 32px rgba(0,0,0,.35); color-scheme: dark;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { margin: 0; font: 16px/1.6 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--texto); background: var(--bg); }
+    h1, h2, h3 { font-family: "Plus Jakarta Sans", Inter, system-ui, sans-serif; line-height: 1.15; margin: 0; letter-spacing: -.02em; }
+    a { color: inherit; }
+    .wrap { width: min(1160px, 100% - 40px); margin: 0 auto; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 12px;
+      font-weight: 600; text-decoration: none; border: 0; cursor: pointer; font-size: 16px; transition: transform .15s, box-shadow .15s, background .15s; white-space: nowrap; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn.prim { background: linear-gradient(135deg, var(--prim), var(--prim2)); color: #fff; box-shadow: 0 8px 22px rgba(79,70,229,.35); }
+    .btn.claro { background: #fff; color: #0F1430; }
+    .btn.vidro { background: rgba(255,255,255,.1); color: #fff; border: 1px solid rgba(255,255,255,.22); }
+    .btn.borda { background: transparent; color: var(--texto); border: 1px solid var(--borda); }
+    .selo { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
+
+    /* topo */
+    header.topo { position: sticky; top: 0; z-index: 50; background: rgba(11,15,36,.78); backdrop-filter: saturate(1.6) blur(14px); -webkit-backdrop-filter: saturate(1.6) blur(14px); border-bottom: 1px solid rgba(255,255,255,.08); }
+    header.topo .wrap { display: flex; align-items: center; gap: 24px; height: 68px; }
+    .marca { display: flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font-family: "Plus Jakarta Sans"; font-weight: 800; font-size: 19px; }
+    .marca img { width: 34px; height: 34px; border-radius: 9px; }
+    header nav { display: flex; gap: 22px; margin-left: 12px; }
+    header nav a { color: rgba(255,255,255,.75); text-decoration: none; font-size: 15px; font-weight: 500; }
+    header nav a:hover { color: #fff; }
+    header .acoes { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    header .acoes .btn { min-height: 40px; padding: 0 16px; font-size: 15px; }
+    header .entrar { color: #fff; text-decoration: none; font-weight: 600; font-size: 15px; padding: 0 6px; }
+
+    /* hero */
+    .hero { position: relative; overflow: hidden; color: #fff; background: radial-gradient(1000px 520px at 85% -10%, rgba(124,58,237,.55), transparent 60%),
+      radial-gradient(800px 500px at -10% 110%, rgba(14,159,110,.32), transparent 60%), linear-gradient(160deg, var(--hero1), var(--hero2)); }
+    .hero::after { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,.08) 1px, transparent 1px); background-size: 26px 26px;
+      mask-image: linear-gradient(to bottom, #000 40%, transparent); -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent); pointer-events: none; }
+    .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; padding: 84px 0 96px; }
+    .hero .selo { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18); color: #E9E7FF; }
+    .hero .selo i { width: 8px; height: 8px; border-radius: 50%; background: #34D399; box-shadow: 0 0 0 4px rgba(52,211,153,.25); }
+    .hero h1 { font-size: clamp(36px, 4.6vw, 58px); font-weight: 800; margin: 18px 0 18px; }
+    .hero h1 em { font-style: normal; background: linear-gradient(90deg, #A5B4FC, #C4B5FD 45%, #6EE7B7); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p.lead { font-size: clamp(17px, 1.6vw, 20px); color: rgba(255,255,255,.78); margin: 0 0 30px; max-width: 560px; }
+    .hero .ctas { display: flex; gap: 12px; flex-wrap: wrap; }
+    .hero .garantias { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 26px; font-size: 14px; color: rgba(255,255,255,.7); }
+    .hero .garantias span::before { content: "✓"; color: #6EE7B7; font-weight: 700; margin-right: 6px; }
+
+    /* vitrine (mock do sistema) */
+    .vitrine { position: relative; }
+    .tela { background: #fff; color: #0F1430; border-radius: 20px; padding: 18px; box-shadow: 0 30px 80px rgba(0,0,0,.45); transform: rotate(-1.2deg); }
+    .tela .barra { display: flex; gap: 6px; margin-bottom: 14px; } .tela .barra i { width: 10px; height: 10px; border-radius: 50%; background: #E4E7F2; }
+    .vaga-mock { display: flex; gap: 14px; align-items: center; padding: 12px; border: 1px solid #E4E7F2; border-radius: 14px; margin-bottom: 10px; background: #fff; }
+    .vaga-mock .sc { width: 54px; height: 54px; flex: none; border-radius: 13px; display: grid; place-items: center; color: #fff; font-weight: 800; font-size: 20px; font-family: "Plus Jakarta Sans"; }
+    .vaga-mock b { display: block; font-size: 15px; } .vaga-mock small { color: #576079; font-size: 13px; }
+    .vaga-mock .tag { margin-left: auto; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+    .porque { padding: 12px 14px; background: #F6F7FC; border-radius: 14px; }
+    .porque h4 { margin: 0 0 8px; font-size: 13px; color: #576079; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+    .bar { display: grid; grid-template-columns: 96px 1fr 38px; gap: 10px; align-items: center; font-size: 13px; margin: 6px 0; }
+    .bar div { height: 8px; border-radius: 4px; background: #E4E7F2; overflow: hidden; } .bar div span { display: block; height: 100%; border-radius: 4px; background: #0E9F6E; width: 0; transition: width 1.2s cubic-bezier(.2,.8,.2,1); }
+    .bar b { text-align: right; font-size: 12px; }
+    .flutua { position: absolute; background: #fff; color: #0F1430; border-radius: 14px; padding: 10px 14px; box-shadow: 0 16px 40px rgba(0,0,0,.35); font-size: 13px; display: flex; gap: 10px; align-items: center; animation: flutuar 5s ease-in-out infinite; }
+    .flutua b { display: block; font-size: 14px; }
+    .tela { position: relative; z-index: 1; } .flutua { z-index: 3; }
+    .flutua.f1 { right: -18px; top: -30px; } .flutua.f2 { left: -30px; bottom: -46px; animation-delay: -2.5s; }
+    .flutua .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 18px; }
+    @keyframes flutuar { 50% { transform: translateY(-8px); } }
+
+    /* canais */
+    .canais { background: var(--bg2); border-bottom: 1px solid var(--borda); }
+    .canais .wrap { display: flex; align-items: center; gap: 28px; padding: 22px 0; overflow-x: auto; scrollbar-width: none; }
+    .canais .wrap::-webkit-scrollbar { display: none; }
+    .canais small { color: var(--texto2); font-weight: 600; white-space: nowrap; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
+    .canais span { white-space: nowrap; font-family: "Plus Jakarta Sans"; font-weight: 700; color: var(--texto2); opacity: .85; font-size: 17px; }
+
+    section { padding: 92px 0; }
+    .titulo-sec { text-align: center; max-width: 720px; margin: 0 auto 52px; }
+    .titulo-sec .selo { background: var(--prim-s); color: var(--prim); }
+    .titulo-sec h2 { font-size: clamp(30px, 3.6vw, 44px); margin: 14px 0 12px; font-weight: 800; }
+    .titulo-sec p { color: var(--texto2); font-size: 18px; margin: 0; }
+
+    /* números */
+    .numeros { padding: 0; margin-top: -46px; position: relative; z-index: 2; }
+    .numeros .grade { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--card); border: 1px solid var(--borda); border-radius: 20px; box-shadow: var(--sombra); }
+    .numeros .n { padding: 26px 24px; border-left: 1px solid var(--borda); } .numeros .n:first-child { border-left: 0; }
+    .numeros b { display: block; font-family: "Plus Jakarta Sans"; font-size: 36px; font-weight: 800; letter-spacing: -.02em; }
+    .numeros span { color: var(--texto2); font-size: 14px; }
+
+    /* cartões */
+    .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+    .card { background: var(--card); border: 1px solid var(--borda); border-radius: 18px; padding: 26px; box-shadow: var(--sombra); }
+    .card .ic { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; margin-bottom: 16px; }
+    .card h3 { font-size: 19px; margin-bottom: 8px; } .card p { color: var(--texto2); margin: 0; font-size: 15px; }
+    .ic.a { background: var(--prim-s); } .ic.b { background: var(--verde-s); } .ic.c { background: var(--lar-s); } .ic.d { background: #FCE7F3; }
+    :root[data-theme="dark"] .ic.d { background: #3B1530; }
+
+    /* passos */
+    .passos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; counter-reset: p; }
+    .passo { position: relative; padding: 30px 26px 26px; border-radius: 18px; background: var(--card); border: 1px solid var(--borda); }
+    .passo::before { counter-increment: p; content: counter(p); position: absolute; top: -18px; left: 26px; width: 38px; height: 38px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--prim), var(--prim2)); color: #fff; display: grid; place-items: center; font-weight: 800; font-family: "Plus Jakarta Sans"; }
+    .passo h3 { font-size: 19px; margin: 6px 0 8px; } .passo p { margin: 0; color: var(--texto2); }
+
+    /* IA */
+    .ia { background: linear-gradient(180deg, var(--bg2), var(--bg)); border-top: 1px solid var(--borda); border-bottom: 1px solid var(--borda); }
+    .ia .wrap { display: grid; grid-template-columns: .9fr 1.1fr; gap: 56px; align-items: center; }
+    .ia h2 { font-size: clamp(30px, 3.4vw, 42px); font-weight: 800; margin: 14px 0 14px; }
+    .ia .selo { background: linear-gradient(135deg, var(--prim), var(--prim2)); color: #fff; }
+    .ia .lista { list-style: none; padding: 0; margin: 22px 0 28px; }
+    .ia .lista li { padding-left: 32px; position: relative; margin: 12px 0; color: var(--texto2); }
+    .ia .lista li b { color: var(--texto); }
+    .ia .lista li::before { content: "✓"; position: absolute; left: 0; top: 1px; width: 22px; height: 22px; border-radius: 7px; background: var(--verde-s); color: var(--verde); display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+    .folha { background: #fff; color: #1d2433; border-radius: 16px; padding: 28px 30px; box-shadow: var(--sombra); border: 1px solid var(--borda); font-size: 14px; position: relative; }
+    .folha h4 { margin: 0; font-family: "Plus Jakarta Sans"; font-size: 22px; color: #111633; } .folha .t { color: #4F46E5; font-weight: 600; margin: 2px 0 14px; }
+    .folha h5 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #111633; border-bottom: 1.5px solid #4F46E5; padding-bottom: 3px; }
+    .folha p, .folha li { margin: 4px 0; } .folha ul { padding-left: 18px; margin: 0; }
+    .folha mark { background: #E3F7EF; color: #0B6B4C; border-radius: 3px; padding: 0 3px; }
+    .folha .carimbo { position: absolute; top: -14px; right: 18px; background: #0E9F6E; color: #fff; font-weight: 700; font-size: 12px; padding: 6px 12px; border-radius: 999px; box-shadow: 0 8px 20px rgba(14,159,110,.35); }
+
+    /* empresas */
+    .empresas { background: linear-gradient(160deg, var(--hero1), var(--hero2)); color: #fff; position: relative; overflow: hidden; }
+    .empresas::before { content: ""; position: absolute; width: 700px; height: 700px; right: -220px; top: -260px; background: radial-gradient(circle, rgba(124,58,237,.45), transparent 65%); }
+    .empresas .wrap { position: relative; }
+    .empresas .titulo-sec .selo { background: rgba(255,255,255,.12); color: #E9E7FF; } .empresas .titulo-sec p { color: rgba(255,255,255,.75); }
+    .empresas .card { background: rgba(255,255,255,.06); border-color: rgba(255,255,255,.14); box-shadow: none; color: #fff; backdrop-filter: blur(6px); }
+    .empresas .card p { color: rgba(255,255,255,.72); }
+    .empresas .card .ic { background: rgba(255,255,255,.12); }
+    .breve { display: inline-block; margin-left: 6px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(251,191,36,.18); color: #FCD34D; vertical-align: middle; }
+    .patrocinio { margin-top: 22px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 22px; align-items: center; padding: 28px; border-radius: 20px;
+      background: linear-gradient(135deg, rgba(79,70,229,.35), rgba(14,159,110,.25)); border: 1px solid rgba(255,255,255,.18); }
+    .patrocinio h3 { font-size: 24px; margin-bottom: 8px; } .patrocinio p { margin: 0; color: rgba(255,255,255,.78); }
+    .alcances { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+    .alcances span { background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2); padding: 7px 12px; border-radius: 999px; font-size: 14px; font-weight: 600; }
+    .empresas .cta-emp { text-align: center; margin-top: 34px; }
+
+    /* mercado */
+    .mercado .grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .mercado .card h3 { font-size: 18px; margin-bottom: 14px; }
+    .mbar { display: grid; grid-template-columns: 150px 1fr 54px; gap: 12px; align-items: center; margin: 9px 0; font-size: 14px; }
+    .mbar div { height: 10px; border-radius: 5px; background: var(--prim-s); overflow: hidden; } .mbar div span { display: block; height: 100%; border-radius: 5px; background: linear-gradient(90deg, var(--prim), var(--prim2)); width: 0; transition: width 1.2s; }
+    .mbar.v div span { background: linear-gradient(90deg, #0E9F6E, #34D399); }
+    .mbar b { text-align: right; font-size: 13px; color: var(--texto2); }
+    .mercado .nota { text-align: center; color: var(--texto2); font-size: 13px; margin-top: 14px; }
+
+    /* faq */
+    .faq { max-width: 820px; margin: 0 auto; }
+    details { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; margin-bottom: 10px; padding: 0 22px; }
+    summary { cursor: pointer; list-style: none; padding: 18px 0; font-weight: 600; font-size: 17px; display: flex; justify-content: space-between; gap: 16px; }
+    summary::-webkit-details-marker { display: none; }
+    summary::after { content: "+"; font-size: 22px; color: var(--prim); line-height: 1; transition: transform .2s; } details[open] summary::after { transform: rotate(45deg); }
+    details p { margin: 0 0 18px; color: var(--texto2); }
+
+    /* final */
+    .final { padding: 0 0 92px; }
+    .final .caixa { text-align: center; padding: 64px 28px; border-radius: 28px; color: #fff; background: radial-gradient(600px 300px at 20% 0%, rgba(124,58,237,.6), transparent 70%), linear-gradient(135deg, var(--hero1), var(--hero2)); }
+    .final h2 { font-size: clamp(30px, 4vw, 46px); font-weight: 800; margin-bottom: 12px; } .final p { color: rgba(255,255,255,.78); font-size: 18px; margin: 0 auto 28px; max-width: 620px; }
+    .final .ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    footer { border-top: 1px solid var(--borda); padding: 28px 0 calc(28px + env(safe-area-inset-bottom)); color: var(--texto2); font-size: 14px; }
+    footer .wrap { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+    footer a { text-decoration: none; } footer a:hover { color: var(--texto); }
+
+    .revelar { opacity: 0; transform: translateY(18px); transition: opacity .7s, transform .7s; } .revelar.visto { opacity: 1; transform: none; }
+    @media (prefers-reduced-motion: reduce) { .revelar { opacity: 1; transform: none; transition: none; } .flutua { animation: none; } html { scroll-behavior: auto; } }
+
+    @media (max-width: 1000px) {
+      .hero .wrap, .ia .wrap { grid-template-columns: 1fr; }
+      .hero .wrap { padding: 56px 0 86px; } .vitrine { max-width: 520px; margin: 10px auto 0; width: 100%; }
+      .cards { grid-template-columns: 1fr 1fr; } .numeros .grade { grid-template-columns: 1fr 1fr; }
+      .numeros .n:nth-child(3) { border-left: 0; } .numeros .n:nth-child(n+3) { border-top: 1px solid var(--borda); }
+      header nav { display: none; } .patrocinio { grid-template-columns: 1fr; } .alcances { justify-content: flex-start; }
+    }
+    @media (max-width: 640px) {
+      .wrap { width: calc(100% - 32px); } section { padding: 64px 0; }
+      .cards, .passos, .mercado .grade2 { grid-template-columns: 1fr; } .passos { gap: 30px; }
+      .hero .ctas .btn, .final .ctas .btn { width: 100%; } header .acoes .criar { display: none; }
+      .numeros b { font-size: 28px; } .numeros .n { padding: 20px 18px; }
+      .mbar { grid-template-columns: 110px 1fr 46px; } .flutua.f1 { right: -6px; } .flutua.f2 { left: -6px; }
+      .titulo-sec { margin-bottom: 36px; } .folha { padding: 22px 20px; }
+    }
+  </style>
 </head>
-<body class="sem-sessao">
-  <aside class="sidebar">
-    <div class="brand"><span class="logo">R+</span><div><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
-    <nav aria-label="Navegação principal">
-      <a href="#/painel" data-page="painel"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg><span>Painel</span></a>
-      <a href="#/candidatos" data-page="candidatos"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.6c2.6.1 4.4 1.8 5 4.9"/></svg><span>Candidatos</span></a>
-      <a href="#/busca" data-page="busca"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Buscar vagas</span></a>
-      <a href="#/pipeline" data-page="pipeline"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg><span>Pipeline</span></a>
-      <a href="#/config" data-page="config"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Ajustes</span></a>
-    </nav>
-    <div class="side-foot">
-      <span class="usuario" id="usuario"></span>
-      <button id="btnTema" class="btn-ghost" type="button">◐ Alternar tema</button>
-      <button id="btnSair" class="btn-ghost" type="button">Sair</button>
+<body>
+  <header class="topo">
+    <div class="wrap">
+      <a class="marca" href="./"><img src="icons/icon-192.png" alt="" width="34" height="34">RH+ Match</a>
+      <nav aria-label="Seções"><a href="#candidatos">Para candidatos</a><a href="#empresas">Para empresas</a><a href="#como">Como funciona</a><a href="#faq">Dúvidas</a></nav>
+      <div class="acoes"><a class="entrar" href="sistema/">Entrar</a><a class="btn prim criar" href="sistema/#/criar">Criar conta grátis</a></div>
     </div>
-  </aside>
-  <main id="conteudo"><div class="vazio">Carregando…</div></main>
-  <div id="sheetBarra" hidden><button id="sheetVoltar" type="button" aria-label="Voltar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg><span>Voltar</span></button><b id="sheetTitulo"></b></div>
-  <div id="toast" role="status" aria-live="polite"></div>
-  <dialog id="modal"><div id="modalCorpo"></div></dialog>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
-  <script src="config.js"></script>
-  <script type="module" src="app.js"></script>
-  <script>if ("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));</script>
+  </header>
+
+  <main>
+    <section class="hero" style="padding:0">
+      <div class="wrap">
+        <div>
+          <span class="selo"><i></i>Vagas de vários portais, atualizadas a cada busca</span>
+          <h1>A vaga certa encontra <em>quem está pronto</em> para ela.</h1>
+          <p class="lead">O RH+ Match varre os principais sites de emprego do Brasil de uma só vez, mostra o quanto cada vaga combina com você e adapta seu currículo para cada oportunidade com inteligência artificial.</p>
+          <div class="ctas">
+            <a class="btn prim" href="sistema/#/criar?tipo=candidato">Encontrar minha vaga →</a>
+            <a class="btn vidro" href="sistema/#/criar?tipo=empresa">Sou empresa / RH</a>
+          </div>
+          <div class="garantias"><span>Grátis para candidatos</span><span>Funciona no celular como app</span><span>Seus dados protegidos</span></div>
+        </div>
+        <div class="vitrine" aria-hidden="true">
+          <div class="flutua f1"><span class="ic" style="background:#E3F7EF">✨</span><div><b>Currículo adaptado</b>para esta vaga em 1 clique</div></div>
+          <div class="tela">
+            <div class="barra"><i></i><i></i><i></i></div>
+            <div class="vaga-mock"><span class="sc" style="background:#0E9F6E">94</span><div><b>Analista de RH Pleno</b><small>Híbrido · São Paulo/SP · via Gupy</small></div><span class="tag" style="background:#E3F7EF;color:#0E7A55">Excelente</span></div>
+            <div class="vaga-mock"><span class="sc" style="background:#4F46E5">81</span><div><b>Business Partner de RH</b><small>Remoto · via Jooble</small></div><span class="tag" style="background:#EEF0FF;color:#4338CA">Alta</span></div>
+            <div class="porque"><h4>Por que combina</h4>
+              <div class="bar"><span>Cargo</span><div><span data-w="96"></span></div><b>96%</b></div>
+              <div class="bar"><span>Competências</span><div><span data-w="88"></span></div><b>88%</b></div>
+              <div class="bar"><span>Localização</span><div><span data-w="100"></span></div><b>100%</b></div>
+              <div class="bar"><span>Senioridade</span><div><span data-w="100"></span></div><b>100%</b></div>
+            </div>
+          </div>
+          <div class="flutua f2"><span class="ic" style="background:#EEF0FF">🔎</span><div><b>9 canais</b>pesquisados ao mesmo tempo</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="numeros">
+      <div class="wrap"><div class="grade revelar">
+        <div class="n"><b data-num="vagas_analisadas">—</b><span>vagas analisadas pela plataforma</span></div>
+        <div class="n"><b>9+</b><span>canais de vagas em uma só busca</span></div>
+        <div class="n"><b>0–100</b><span>score de compatibilidade explicado</span></div>
+        <div class="n"><b>27</b><span>estados, por cidade, região ou remoto</span></div>
+      </div></div>
+    </section>
+
+    <div class="canais" style="margin-top:56px"><div class="wrap"><small>Vagas de</small>
+      <span>Gupy</span><span>Vagas.com</span><span>InfoJobs</span><span>Adzuna</span><span>Jooble</span><span>Programathor</span><span>Remotive</span><span>Himalayas</span><span>Comunidades GitHub BR</span>
+    </div></div>
+
+    <section id="candidatos">
+      <div class="wrap">
+        <div class="titulo-sec revelar"><span class="selo">Para candidatos</span>
+          <h2>Pare de procurar vaga em dez sites diferentes.</h2>
+          <p>Cadastre seu perfil uma vez. O RH+ Match faz a busca, organiza e mostra primeiro o que tem mais a ver com você.</p></div>
+        <div class="cards">
+          <div class="card revelar"><div class="ic a">🔎</div><h3>Uma busca, vários portais</h3><p>Gupy, Vagas.com, InfoJobs, Adzuna, Jooble e outros pesquisados ao mesmo tempo, sem vagas repetidas.</p></div>
+          <div class="card revelar"><div class="ic b">🎯</div><h3>Compatibilidade explicada</h3><p>Cada vaga ganha uma nota de 0 a 100 e você vê o porquê: cargo, competências, cidade, modalidade e nível.</p></div>
+          <div class="card revelar"><div class="ic c">✨</div><h3>Currículo sob medida</h3><p>A IA adapta seu currículo para cada vaga e guarda a versão, pronta para baixar em Word ou PDF.</p></div>
+          <div class="card revelar"><div class="ic d">📱</div><h3>No bolso, como app</h3><p>Instale no celular e acompanhe as vagas que você está seguindo, etapa por etapa.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="como" style="padding-top:0">
+      <div class="wrap">
+        <div class="titulo-sec revelar"><span class="selo">Como funciona</span><h2>Do cadastro à entrevista em três passos.</h2></div>
+        <div class="passos">
+          <div class="passo revelar"><h3>Conte quem você é</h3><p>Cargo desejado, competências, cidade e modalidade, ou importe seu currículo e deixe a IA organizar.</p></div>
+          <div class="passo revelar"><h3>Receba as vagas certas</h3><p>Filtre por cidade, região, modalidade e nota mínima. As mais compatíveis aparecem primeiro.</p></div>
+          <div class="passo revelar"><h3>Candidate-se mais preparado</h3><p>Adapte o currículo para a vaga, baixe e acompanhe cada processo em “Minhas vagas”.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ia">
+      <div class="wrap">
+        <div class="revelar">
+          <span class="selo">✨ Inteligência artificial</span>
+          <h2>Seu currículo, reescrito para a vaga. Sem inventar nada.</h2>
+          <p style="color:var(--texto2);font-size:18px;margin:0">A IA destaca o que você já fez com a linguagem que o recrutador procura e mostra o que a vaga pede e você ainda não tem.</p>
+          <ul class="lista">
+            <li><b>Empresas, cargos e datas intactos.</b> As experiências continuam exatamente as suas.</li>
+            <li><b>Acréscimos marcados em verde</b> para você revisar antes de enviar.</li>
+            <li><b>Salvo para cada vaga:</b> abriu de novo, está lá, pronto para baixar.</li>
+            <li><b>5 modelos visuais</b>: Clássico, Moderno, Executivo, Compacto e Criativo.</li>
+          </ul>
+          <a class="btn prim" href="sistema/#/criar?tipo=candidato">Adaptar meu currículo</a>
+        </div>
+        <div class="folha revelar" aria-hidden="true">
+          <span class="carimbo">Adaptado para: Analista de RH Pleno</span>
+          <h4>Mariana Souza</h4><p class="t">Analista de RH · Recrutamento e Seleção</p>
+          <h5>Resumo</h5><p>Analista com 5 anos em recrutamento e seleção de ponta a ponta, <mark>com foco em indicadores e experiência do candidato</mark>.</p>
+          <h5>Competências</h5><p>Recrutamento e Seleção · Entrevistas por competência · <mark>Power BI</mark> · Excel avançado · Inglês</p>
+          <h5>Experiência</h5><p><b>Analista de RH</b> — ACME · 2020 – atual</p>
+          <ul><li>Conduzi processos seletivos para áreas administrativas e comerciais.</li><li><mark>Acompanhei indicadores de recrutamento (tempo de fechamento e aderência) em Power BI.</mark></li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="empresas" id="empresas">
+      <div class="wrap">
+        <div class="titulo-sec revelar"><span class="selo">Para empresas, RH e headhunters</span>
+          <h2>Encontre e apresente os melhores candidatos mais rápido.</h2>
+          <p>Uma central para o seu banco de talentos, com a mesma inteligência de compatibilidade usada pelos candidatos.</p></div>
+        <div class="cards">
+          <div class="card revelar"><div class="ic">👥</div><h3>Banco de talentos</h3><p>Cadastre candidatos ou importe currículos. Cada perfil já sai pronto para buscar vagas e ser comparado.</p></div>
+          <div class="card revelar"><div class="ic">📊</div><h3>Ranking e pipeline</h3><p>Compatibilidade de 0 a 100 e acompanhamento de cada indicação até a contratação, com exportação para Excel.</p></div>
+          <div class="card revelar"><div class="ic">📄</div><h3>Relatório para o cliente</h3><p>Monte em segundos um relatório com as melhores oportunidades para cada candidato, pronto para enviar.</p></div>
+          <div class="card revelar"><div class="ic">📣</div><h3>Publique suas vagas <span class="breve">em breve</span></h3><p>Receba candidaturas pela plataforma, com o currículo do candidato e a nota de compatibilidade.</p></div>
+        </div>
+        <div class="patrocinio revelar">
+          <div><h3>Vagas em destaque, onde importa <span class="breve">em breve</span></h3>
+            <p>Patrocine uma vaga para aparecer no topo das buscas de quem procura naquela cidade, região, área ou modalidade, pelo tempo que você escolher.</p></div>
+          <div class="alcances"><span>Nacional</span><span>Por região</span><span>Por estado</span><span>Por cidade</span><span>Por área</span><span>CLT · PJ · Estágio</span></div>
+        </div>
+        <div class="cta-emp revelar"><a class="btn claro" href="sistema/#/criar?tipo=empresa">Solicitar acesso de empresa →</a></div>
+      </div>
+    </section>
+
+    <section class="mercado">
+      <div class="wrap">
+        <div class="titulo-sec revelar"><span class="selo">O mercado agora</span><h2>O que as vagas estão pedindo.</h2>
+          <p>Calculado ao vivo a partir das vagas analisadas pela plataforma.</p></div>
+        <div class="grade2">
+          <div class="card revelar"><h3>Competências mais pedidas</h3><div id="mSkills"><p class="nota">Carregando…</p></div></div>
+          <div class="card revelar"><h3>Onde estão as vagas</h3><div id="mRegioes"><p class="nota">Carregando…</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" style="padding-top:0">
+      <div class="wrap">
+        <div class="titulo-sec revelar"><span class="selo">Dúvidas</span><h2>Perguntas frequentes</h2></div>
+        <div class="faq">
+          <details><summary>O RH+ Match é gratuito para candidatos?</summary><p>Sim. Criar conta, buscar vagas, ver a compatibilidade e acompanhar suas candidaturas não custa nada.</p></details>
+          <details><summary>De onde vêm as vagas?</summary><p>De portais e agregadores como Gupy, Vagas.com, InfoJobs, Adzuna, Jooble, Programathor, Remotive, Himalayas e comunidades de tecnologia no GitHub. Cada vaga leva ao anúncio original. Para sites que não permitem busca automática, como LinkedIn, Indeed e Catho, o sistema abre a pesquisa já pronta.</p></details>
+          <details><summary>A IA inventa experiências no meu currículo?</summary><p>Não. Empresas, cargos, datas e formação ficam como estão. A IA só reorganiza e destaca o que o seu currículo já comprova, e marca em verde tudo o que acrescentou para você revisar. O que a vaga pede e você não tem aparece separado, fora do currículo.</p></details>
+          <details><summary>Meus dados ficam visíveis para qualquer pessoa?</summary><p>Não. Seu perfil e seus currículos são só seus. Você escolhe, nas configurações do perfil, se quer que recrutadores da plataforma possam encontrar você.</p></details>
+          <details><summary>Sou empresa, RH ou headhunter. Como começo?</summary><p>Clique em “Sou empresa / RH”, crie sua conta e envie o pedido de acesso. Depois da aprovação você passa a ter o banco de talentos, o pipeline e os relatórios.</p></details>
+          <details><summary>Funciona no celular?</summary><p>Sim. O sistema se adapta ao celular e ao tablet e pode ser instalado na tela inicial como um aplicativo, no Android e no iPhone.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final">
+      <div class="wrap"><div class="caixa revelar">
+        <h2>Sua próxima oportunidade pode estar na primeira busca.</h2>
+        <p>Crie sua conta em menos de um minuto e veja hoje quais vagas mais combinam com você.</p>
+        <div class="ctas"><a class="btn claro" href="sistema/#/criar?tipo=candidato">Criar conta grátis</a><a class="btn vidro" href="sistema/">Já tenho conta</a></div>
+      </div></div>
+    </section>
+  </main>
+
+  <footer><div class="wrap">
+    <span>© <span id="ano"></span> RH+ Match · Inteligência em recolocação</span>
+    <span><a href="sistema/">Entrar</a> · <a href="sistema/#/criar?tipo=empresa">Para empresas</a> · <a href="#faq">Dúvidas</a> · <a href="#" id="tema">Tema claro/escuro</a></span>
+  </div></footer>
+
+  <script>
+    (function () {
+      document.getElementById("ano").textContent = new Date().getFullYear();
+      document.getElementById("tema").onclick = function (e) {
+        e.preventDefault();
+        var t = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        document.documentElement.dataset.theme = t; try { localStorage.setItem("rh_tema", t); } catch (x) {}
+      };
+      // animação de entrada ao rolar
+      var io = "IntersectionObserver" in window ? new IntersectionObserver(function (es) {
+        es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("visto"); io.unobserve(e.target); } });
+      }, { threshold: .12 }) : null;
+      document.querySelectorAll(".revelar").forEach(function (el) { io ? io.observe(el) : el.classList.add("visto"); });
+      setTimeout(function () { document.querySelectorAll(".bar span[data-w]").forEach(function (s) { s.style.width = s.dataset.w + "%"; }); }, 400);
+
+      // números ao vivo (agregados, sem dados pessoais)
+      var esc = function (v) { return String(v).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+      var fmt = function (n) { return Number(n).toLocaleString("pt-BR"); };
+      var barras = function (el, itens, cls) {
+        if (!itens || !itens.length) { el.innerHTML = '<p class="nota">Os dados aparecem conforme as buscas acontecem.</p>'; return; }
+        var max = Math.max.apply(null, itens.map(function (i) { return i[1]; }));
+        el.innerHTML = itens.map(function (i) { return '<div class="mbar ' + cls + '"><span>' + esc(i[0]) + '</span><div><span data-w="' + Math.round(i[1] / max * 100) + '"></span></div><b>' + fmt(i[1]) + "</b></div>"; }).join("");
+        setTimeout(function () { el.querySelectorAll("span[data-w]").forEach(function (s) { s.style.width = s.dataset.w + "%"; }); }, 120);
+      };
+      var contar = function (el, alvo) {
+        var t0 = performance.now(), dur = 1400;
+        (function passo(t) { var p = Math.min(1, (t - t0) / dur); el.textContent = fmt(Math.round(alvo * (1 - Math.pow(1 - p, 3)))); if (p < 1) requestAnimationFrame(passo); })(t0);
+      };
+      fetch("config.js").then(function (r) { return r.text(); }).then(function (txt) {
+        var url = (txt.match(/supabaseUrl:\s*"([^"]+)"/) || [])[1], key = (txt.match(/supabaseKey:\s*"([^"]+)"/) || [])[1];
+        if (!url || !key) throw new Error("config");
+        return fetch(url + "/rest/v1/rpc/estatisticas_publicas", { method: "POST", headers: { apikey: key, Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: "{}" });
+      }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(function (d) {
+        var el = document.querySelector('[data-num="vagas_analisadas"]');
+        if (d.vagas_analisadas) contar(el, d.vagas_analisadas); else el.textContent = "Novas";
+        barras(document.getElementById("mSkills"), d.skills, "");
+        barras(document.getElementById("mRegioes"), d.regioes, "v");
+      }).catch(function () {
+        document.querySelector('[data-num="vagas_analisadas"]').textContent = "Milhares";
+        document.getElementById("mSkills").innerHTML = document.getElementById("mRegioes").innerHTML = '<p class="nota">Indisponível no momento.</p>';
+      });
+
+      // remove o service worker antigo que controlava /rhmais/
+      if ("serviceWorker" in navigator) navigator.serviceWorker.getRegistration("./").then(function (r) {
+        if (r && new URL(r.scope).pathname === new URL("./", location.href).pathname) r.update().catch(function () {});
+      }).catch(function () {});
+    })();
+  </script>
 </body>
 </html>
