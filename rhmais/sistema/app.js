@@ -1,8 +1,8 @@
 /* RH+ Match Web — frontend estático (GitHub Pages) + Supabase (Auth, Postgres com RLS, Edge Functions).
    Papéis: master (dono da plataforma) · admin (empresas, RH, headhunters) · candidato. */
 import {
-  FONTES, MODALIDADES, SENIORIDADES, STATUS_PIPELINE, UFS, analisarCurriculo, classificar, consolidar, extrairSkills,
-  linksBusca, localVaga, termosDoCandidato,
+  FONTES, MODALIDADES, REGIMES, REGIOES, SENIORIDADES, STATUS_PIPELINE, UFS, analisarCurriculo, classificar, consolidar,
+  extrairSkills, extrairValorSalario, linksBusca, localVaga, normalizar, regiaoDe, termosDoCandidato,
 } from "../supabase/functions/_shared/nucleo.js";
 import {
   $, $$, CFG_PADRAO, RETORNO, ROTULO_PARCIAL, abrirSheet, alternarTema, atualizarCorBarra, barras, baixarBlob,
@@ -12,6 +12,7 @@ import {
 } from "./js/base.js";
 import { abrirAdaptador, importarCurriculoBase, pgCurriculos } from "./js/curriculos.js";
 import { carregarStatusChaves, pgConfig, pgUsuarios } from "./js/admin.js";
+import { abasCandidato, buscarVagasPlataforma, candidatar, pgCandidaturas, pgVagaPublica, pgVagas } from "./js/vagas.js";
 
 const scoreTag = (s) => `<span class="score f-${classificar(s || 0).toLowerCase()}">${Math.round(s || 0)}</span>`;
 
@@ -26,12 +27,16 @@ const ICONES = {
   config: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
   usuarios: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/>',
   mais: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+  vagas: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/>',
+  candidaturas: '<path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
 };
 const MENUS = {
-  candidato: [["painel", "Início"], ["busca", "Buscar vagas"], ["curriculos", "Currículos"], ["pipeline", "Minhas vagas"], ["perfil", "Meu perfil"]],
-  admin: [["painel", "Painel"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["config", "Ajustes"]],
-  master: [["painel", "Painel"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["usuarios", "Usuários"], ["config", "Ajustes"]],
+  candidato: [["painel", "Início"], ["busca", "Buscar vagas"], ["candidaturas", "Candidaturas"], ["curriculos", "Currículos"], ["perfil", "Meu perfil"]],
+  admin: [["painel", "Painel"], ["vagas", "Minhas vagas"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["config", "Ajustes"]],
+  master: [["painel", "Painel"], ["vagas", "Minhas vagas"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["usuarios", "Usuários"], ["config", "Ajustes"]],
 };
+// páginas acessíveis sem estar no menu
+const EXTRAS = { candidato: ["pipeline", "vaga"], admin: ["vaga"], master: ["vaga"] };
 const svg = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>`;
 function montarMenu() {
   const itens = MENUS[ctx.papel] || MENUS.candidato;
@@ -44,7 +49,7 @@ function montarMenu() {
       `<a href="#/${id}" data-fechar>${rot}</a>`).join("")}</div>`);
   });
 }
-const paginaPermitida = (p) => (MENUS[ctx.papel] || MENUS.candidato).some(([id]) => id === p);
+const paginaPermitida = (p) => (MENUS[ctx.papel] || MENUS.candidato).some(([id]) => id === p) || (EXTRAS[ctx.papel] || []).includes(p);
 
 /* ============================================================= autenticação */
 $("#btnTema").onclick = alternarTema;
@@ -175,22 +180,36 @@ sb.auth.onAuthStateChange((evento, sessao) => {
   }
   if (!ctx.usuario) {
     appIniciado = false; Object.assign(estado, { busca: null, candSel: null, candidatoBusca: null, pipeSel: null, cvFiltro: "" });
+    if (vagaDaUrl()) return abrirVagaSemLogin();
     telaLogin(location.hash.startsWith("#/criar") ? "criar" : "entrar");
   } else if (mudou || !appIniciado) setTimeout(iniciarApp, 0);
 });
+
+/* página pública da vaga: abre mesmo sem login (para divulgação) */
+const vagaDaUrl = () => (location.hash.match(/^#\/vaga\/(\d+)/) || [])[1];
+function abrirVagaSemLogin() {
+  document.body.classList.add("sem-sessao"); atualizarCorBarra();
+  pgVagaPublica(+vagaDaUrl(), { logado: false, irLogin: () => telaLogin("entrar", "Entre ou crie sua conta para se candidatar a esta vaga.") }).catch(falha);
+}
+window.addEventListener("hashchange", () => { if (!ctx.usuario && vagaDaUrl()) abrirVagaSemLogin(); });
 
 /* ============================================================= roteador */
 const PAGINAS = {
   painel: () => (ehAdmin() ? pgPainel() : pgInicio()), candidatos: pgCandidatos, perfil: pgPerfil, busca: pgBusca, pipeline: pgPipeline,
   curriculos: () => pgCurriculos({ meuPerfil }), config: pgConfig, usuarios: pgUsuarios,
+  vagas: pgVagas, candidaturas: pgCandidaturas,
+  vaga: () => pgVagaPublica(+vagaDaUrl(), { logado: true, meuPerfil }),
 };
 async function rotear() {
   fecharSheet(); atualizarCorBarra();
   if (!ctx.usuario || !appIniciado) return;
+  let destino = null; try { destino = sessionStorage.getItem("rh_destino"); sessionStorage.removeItem("rh_destino"); } catch { /* ok */ }
+  if (destino && destino !== location.hash) { location.hash = destino; return; }   // volta para a vaga que a pessoa abriu antes de entrar
   const [, nome = "painel"] = location.hash.split("?")[0].split("/");
   const pg = PAGINAS[nome] && paginaPermitida(nome) ? nome : "painel";
   if (pg !== nome && nome && nome !== "painel" && PAGINAS[nome]) toast("Esta área é restrita a administradores.");
-  $$("nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.page === pg));
+  const realce = !ehAdmin() && pg === "pipeline" ? "candidaturas" : pg;
+  $$("nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.page === realce));
   try { await PAGINAS[pg](); } catch (e) { main.innerHTML = `<div class="card vazio">⚠ ${esc(traduzErro(e))}</div>`; }
   window.scrollTo(0, 0);
 }
@@ -198,17 +217,21 @@ window.addEventListener("hashchange", rotear);
 
 /* ============================================================= PAINEL (admin) */
 async function pgPainel() {
-  const [d, buscas, pend] = await Promise.all([
+  const [d, buscas, pend, resumoVagas] = await Promise.all([
     q(sb.rpc("painel_resumo")),
     q(sb.from("buscas").select("termos, compativeis, criada_em, candidatos(nome)").order("criada_em", { ascending: false }).limit(6)),
     ehMaster() ? q(sb.from("solicitacoes_admin").select("id", { count: "exact", head: false }).eq("status", "pendente")) : Promise.resolve([]),
+    q(sb.rpc("resumo_minhas_vagas")),
   ]);
+  const novasCand = resumoVagas.reduce((a, r) => a + Number(r.novas || 0), 0);
+  const naoLidas = resumoVagas.reduce((a, r) => a + Number(r.nao_lidas || 0), 0);
   const st = d.status || {};
   const ativos = Object.entries(st).filter(([s]) => s !== "Descartada" && s !== "Contratado").reduce((a, [, n]) => a + n, 0);
   const kpi = (rot, val, sub, ico, cor) => `<div class="card kpi"><i style="background:color-mix(in srgb, ${cor} 14%, transparent);color:${cor}">${ico}</i>
     <small>${rot}</small><b>${val}</b><span>${sub}</span></div>`;
   main.innerHTML = topo(`Olá, ${esc(ctx.cfg.empresa_nome || ctx.perfil?.organizacao || ctx.perfil?.nome || "equipe")} 👋`, "Visão geral da operação de recrutamento") + `
     ${pend.length ? `<a class="card aviso" href="#/usuarios">🔔 <b>${pend.length} pedido(s) de acesso de administrador</b> aguardando sua aprovação →</a>` : ""}
+    ${novasCand || naoLidas ? `<a class="card aviso" href="#/vagas">📨 ${novasCand ? `<b>${novasCand} candidatura(s) nova(s)</b>` : ""}${novasCand && naoLidas ? " e " : ""}${naoLidas ? `<b>${naoLidas} mensagem(ns) não lida(s)</b>` : ""} nas suas vagas →</a>` : ""}
     <div class="kpis">
       ${kpi("CANDIDATOS", d.candidatos, "perfis cadastrados", "●", "var(--prim)")}
       ${kpi("VAGAS MAPEADAS", d.vagas, "vagas salvas no banco", "◆", "var(--verde)")}
@@ -231,11 +254,12 @@ async function pgPainel() {
 
 /* ============================================================= INÍCIO (candidato) */
 async function pgInicio() {
-  const [eu, cvs, pipe, buscas] = await Promise.all([
+  const [eu, cvs, pipe, buscas, cands] = await Promise.all([
     meuPerfil(),
     q(sb.from("curriculos").select("id, tipo, padrao, vaga_titulo, vaga_empresa, atualizado_em").order("atualizado_em", { ascending: false }).limit(5)),
     q(sb.from("pipeline").select("status")),
     q(sb.from("buscas").select("termos, compativeis, criada_em").order("criada_em", { ascending: false }).limit(4)),
+    q(sb.from("candidaturas").select("status").eq("candidato", ctx.usuario.id)),
   ]);
   const campos = eu ? ["nome", "cargo_desejado", "skills", "cidade", "uf", "senioridade"].filter((k) => eu[k]).length : 0;
   const completo = Math.round((campos / 6) * 100);
@@ -249,8 +273,8 @@ async function pgInicio() {
     <div class="kpis">
       <div class="card kpi"><small>PERFIL</small><b>${completo}%</b><span>completo</span></div>
       <div class="card kpi"><small>CURRÍCULOS</small><b>${cvs.length}</b><span>salvos</span></div>
-      <div class="card kpi"><small>VAGAS ACOMPANHADAS</small><b>${pipe.length}</b><span>em “Minhas vagas”</span></div>
-      <div class="card kpi"><small>ENTREVISTAS</small><b>${pipe.filter((p) => p.status === "Entrevista").length}</b><span>em andamento</span></div>
+      <div class="card kpi"><small>CANDIDATURAS</small><b>${cands.length}</b><span>pela plataforma</span></div>
+      <div class="card kpi"><small>ENTREVISTAS</small><b>${cands.filter((c) => c.status === "entrevista").length + pipe.filter((p) => p.status === "Entrevista").length}</b><span>em andamento</span></div>
     </div>
     <div class="grid2">
       <div class="card"><h3>Próximos passos</h3>${passos.map(([ok, tit, txt, href, rot]) => `<div class="passo ${ok ? "ok" : ""}">
@@ -450,9 +474,11 @@ async function pgBusca() {
         ${ehAdmin() ? `<label class="campo">Candidato<select id="selCand">${cands.length ? cands.map((c) => `<option value="${c.id}" ${c.id === estado.candidatoBusca ? "selected" : ""}>${esc(c.nome)} · ${esc(c.cargo_desejado)}</option>`).join("") : `<option value="">Cadastre um candidato primeiro</option>`}</select></label>`
           : `<input type="hidden" id="selCand" value="${cands[0].id}">`}
         <label class="campo">Cargos a pesquisar<input type="text" id="termos" placeholder="Cargos separados por vírgula"></label>
+        <label class="campo campo-local">Pesquisar em<span class="local-busca"><input type="text" id="locCidade" placeholder="Cidade"><select id="locUf"><option value="">UF</option>${UFS.map((u) => `<option>${u}</option>`).join("")}</select></span></label>
         <button class="btn" id="btnBuscar" style="height:38px">${buscando ? "■ Cancelar" : "🔎 Buscar vagas"}</button>
       </div>
       <div class="canais"><b class="muted" style="font-size:12px">Canais</b>
+        <label title="Vagas publicadas diretamente por empresas na plataforma; aceitam candidatura pelo sistema"><input type="checkbox" value="plataforma" checked><b class="selo-rh">RH+ Match</b></label>
         ${FONTES.map((f) => { const d = fonteDisponivel(f); return `<label class="${d ? "" : "off"}" title="${esc(f.descricao)}"><input type="checkbox" value="${f.id}" ${d && ctx.cfg.fontes_ativas.includes(f.id) ? "checked" : ""} ${d ? "" : "disabled"}>${esc(f.nome)}${d ? "" : " (indisponível)"}</label>`; }).join("")}
         <button class="btn neutro peq" id="btnPortais" style="margin-left:auto">Mais portais ↗</button></div>
       <div id="statusFontes" class="canais" style="margin-top:8px"></div>
@@ -462,9 +488,24 @@ async function pgBusca() {
       <div class="card">
         <div class="filtros">
           <div class="seg" id="fMod">${["Todas", ...MODALIDADES].map((m) => `<button data-v="${m}" class="${estado.filtros.mod === m ? "on" : ""}">${m}</button>`).join("")}</div>
-          <span class="muted">Score mín.</span><input type="range" id="fScore" min="0" max="90" step="5" value="${estado.filtros.score}"><b id="lblScore">${estado.filtros.score}</b>
-          <input type="search" id="fTexto" placeholder="Filtrar por empresa, cidade…" value="${esc(estado.filtros.texto)}">
+          <button class="btn neutro peq" id="fMais">⚙ Filtros<span id="fQtd"></span></button>
+          <select id="fOrdem" title="Ordenar"><option value="score">Mais compatíveis</option><option value="data">Mais recentes</option><option value="salario">Maior salário</option></select>
+          <input type="search" id="fTexto" placeholder="Filtrar por palavra, empresa…" value="${esc(estado.filtros.texto)}">
         </div>
+        <div class="painel-filtros" id="fPainel" ${estado.filtrosAbertos ? "" : "hidden"}>
+          <label class="campo">Cidade<input type="text" id="fCidade" list="fCidades" placeholder="Qualquer" value="${esc(estado.filtros.cidade)}"><datalist id="fCidades"></datalist></label>
+          <label class="campo">Estado<select id="fUf"><option value="">Todos</option>${UFS.map((u) => `<option ${estado.filtros.uf === u ? "selected" : ""}>${u}</option>`).join("")}</select></label>
+          <label class="campo">Região<select id="fRegiao"><option value="">Todas</option>${Object.keys(REGIOES).map((r) => `<option ${estado.filtros.regiao === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+          <label class="campo">Regime<select id="fRegime"><option value="">Todos</option>${REGIMES.map((r) => `<option ${estado.filtros.regime === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+          <label class="campo">Nível<select id="fSen"><option value="">Todos</option>${SENIORIDADES.map((s) => `<option ${estado.filtros.senioridade === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
+          <label class="campo">Salário a partir de (R$)<input type="number" id="fSal" min="0" step="500" placeholder="Qualquer" value="${esc(estado.filtros.salMin)}"></label>
+          <label class="campo">Publicada<select id="fDias"><option value="">Qualquer data</option>${[["1", "Últimas 24 h"], ["7", "Últimos 7 dias"], ["15", "Últimos 15 dias"], ["30", "Últimos 30 dias"]].map(([v, r]) => `<option value="${v}" ${estado.filtros.dias === v ? "selected" : ""}>${r}</option>`).join("")}</select></label>
+          <label class="campo">Canal<select id="fCanal"><option value="">Todos</option>${["RH+ Match", ...FONTES.map((f) => f.nome)].map((n) => `<option ${estado.filtros.canal === n ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+          <label class="campo">Score mínimo: <b id="lblScore">${estado.filtros.score}</b><input type="range" id="fScore" min="0" max="90" step="5" value="${estado.filtros.score}"></label>
+          <label class="checks" style="align-self:end"><input type="checkbox" id="fPlat" ${estado.filtros.soPlataforma ? "checked" : ""}>Só vagas com candidatura pelo RH+ Match</label>
+          <div class="acoes" style="grid-column:1/-1;justify-content:flex-end"><button class="btn neutro peq" id="fLimpar">Limpar filtros</button></div>
+        </div>
+        <div class="chips-filtro" id="fChips"></div>
         <div class="tabela-wrap" style="max-height:calc(100vh - 330px);min-height:260px"><table>
           <thead><tr><th class="c">SCORE</th><th>CARGO</th><th>EMPRESA</th><th>LOCAL</th><th>MODALIDADE</th><th>CANAL</th><th class="c">DATA</th></tr></thead>
           <tbody id="tbVagas"></tbody></table></div>
@@ -477,7 +518,10 @@ async function pgBusca() {
   const preencherTermos = () => {
     const c = cands.find((x) => x.id === +$("#selCand").value);
     if (!c) { $("#termos").value = ""; return; }
-    $("#termos").value = estado.busca?.candidato.id === c.id ? estado.busca.termos.join(", ") : termosDoCandidato(c).join(", ");
+    const mesma = estado.busca?.candidato.id === c.id;
+    $("#termos").value = mesma ? estado.busca.termos.join(", ") : termosDoCandidato(c).join(", ");
+    $("#locCidade").value = mesma ? estado.busca.local.cidade : c.cidade || "";
+    $("#locUf").value = mesma ? estado.busca.local.uf : c.uf || "";
   };
   $("#selCand").onchange = () => { estado.candidatoBusca = +$("#selCand").value || null; preencherTermos(); };
   preencherTermos();
@@ -485,8 +529,18 @@ async function pgBusca() {
   $("#btnBuscar").onclick = () => iniciarBusca(cands);
   $("#btnPortais").onclick = () => abrirPortais(cands);
   $("#fMod").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; estado.filtros.mod = b.dataset.v; $$("#fMod button").forEach((x) => x.classList.toggle("on", x === b)); renderVagas(); };
+  $("#fOrdem").value = estado.filtros.ordem;
+  $("#fMais").onclick = () => { estado.filtrosAbertos = !estado.filtrosAbertos; $("#fPainel").hidden = !estado.filtrosAbertos; };
+  const ligar = (id, chave, ev = "change", conv = (v) => v) => { $(id).addEventListener(ev, (e) => { estado.filtros[chave] = conv(e.target.type === "checkbox" ? e.target.checked : e.target.value); renderVagas(); }); };
+  ligar("#fTexto", "texto", "input"); ligar("#fOrdem", "ordem"); ligar("#fCidade", "cidade", "input"); ligar("#fUf", "uf"); ligar("#fRegiao", "regiao");
+  ligar("#fRegime", "regime"); ligar("#fSen", "senioridade"); ligar("#fSal", "salMin", "input"); ligar("#fDias", "dias"); ligar("#fCanal", "canal"); ligar("#fPlat", "soPlataforma");
   $("#fScore").oninput = (e) => { estado.filtros.score = +e.target.value; $("#lblScore").textContent = e.target.value; renderVagas(); };
-  $("#fTexto").oninput = (e) => { estado.filtros.texto = e.target.value; renderVagas(); };
+  $("#fLimpar").onclick = () => { Object.assign(estado.filtros, FILTROS_VAZIOS, { score: ctx.cfg.score_minimo_padrao }); pgBusca(); };
+  $("#fChips").onclick = (e) => {
+    const b = e.target.closest("[data-limpa]"); if (!b) return;
+    const k = b.dataset.limpa; estado.filtros[k] = k === "mod" ? "Todas" : k === "soPlataforma" ? false : k === "score" ? 0 : "";
+    pgBusca();
+  };
   $("#tbVagas").onclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) { estado.vagaSel = +tr.dataset.idx; marcarSel(); detalharVaga(); abrirSheet($("#detVaga"), "Vaga"); } };
   $("#tbVagas").ondblclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) window.open(estado.busca.vagas[+tr.dataset.idx].url, "_blank", "noopener"); };
   $("#btnExcel").onclick = () => exportarExcel(vagasVisiveis(), estado.busca?.candidato).catch(falha);
@@ -494,20 +548,50 @@ async function pgBusca() {
   renderStatus(); renderVagas();
 }
 
+const FILTROS_VAZIOS = { mod: "Todas", texto: "", cidade: "", uf: "", regiao: "", regime: "", senioridade: "", salMin: "", dias: "", canal: "", soPlataforma: false, ordem: "score" };
+const diasDesde = (iso) => (iso ? (Date.now() - new Date(iso + "T12:00").getTime()) / 864e5 : Infinity);
 const vagasVisiveis = () => {
-  const vs = estado.busca?.vagas || []; const f = estado.filtros; const t = f.texto.trim().toLowerCase();
-  return vs.filter((v) => v.score >= f.score && (f.mod === "Todas" || v.modalidade === f.mod)
-    && (!t || `${v.titulo} ${v.empresa} ${localVaga(v)} ${v.fonte}`.toLowerCase().includes(t)));
+  const vs = estado.busca?.vagas || []; const f = estado.filtros;
+  const t = normalizar(f.texto), cid = normalizar(f.cidade), sal = Number(f.salMin) || 0, dias = Number(f.dias) || 0;
+  const lista = vs.filter((v) => v.score >= f.score
+    && (f.mod === "Todas" || v.modalidade === f.mod)
+    && (!t || normalizar(`${v.titulo} ${v.empresa} ${localVaga(v)} ${v.fonte} ${v.descricao}`).includes(t))
+    && (!cid || normalizar(v.cidade).includes(cid))
+    && (!f.uf || v.uf === f.uf)
+    && (!f.regiao || regiaoDe(v.uf) === f.regiao)
+    && (!f.regime || normalizar(v.contrato).includes(normalizar(f.regime)))
+    && (!f.senioridade || v.senioridade === f.senioridade)
+    && (!sal || extrairValorSalario(v.salario) >= sal)
+    && (!dias || diasDesde(v.publicada_em) <= dias)
+    && (!f.canal || v.fonte === f.canal)
+    && (!f.soPlataforma || v.plataforma_id));
+  if (f.ordem === "data") lista.sort((a, b) => String(b.publicada_em).localeCompare(String(a.publicada_em)) || b.score - a.score);
+  else if (f.ordem === "salario") lista.sort((a, b) => extrairValorSalario(b.salario) - extrairValorSalario(a.salario) || b.score - a.score);
+  return lista;
 };
+
+function renderChipsFiltro() {
+  const f = estado.filtros;
+  const ativos = [["mod", f.mod !== "Todas" && f.mod], ["cidade", f.cidade && "Cidade: " + f.cidade], ["uf", f.uf && "Estado: " + f.uf], ["regiao", f.regiao && "Região: " + f.regiao],
+    ["regime", f.regime], ["senioridade", f.senioridade], ["salMin", f.salMin && `A partir de R$ ${Number(f.salMin).toLocaleString("pt-BR")}`],
+    ["dias", f.dias && (f.dias === "1" ? "Últimas 24 h" : `Últimos ${f.dias} dias`)], ["canal", f.canal], ["soPlataforma", f.soPlataforma && "Candidatura pelo RH+ Match"],
+    ["score", f.score > 0 && `Score ≥ ${f.score}`], ["texto", f.texto && `“${f.texto}”`]].filter(([, r]) => r);
+  if ($("#fChips")) $("#fChips").innerHTML = ativos.map(([k, r]) => `<button class="chip prim" data-limpa="${k}">${esc(r)} ✕</button>`).join("");
+  const n = ativos.filter(([k]) => !["mod", "texto"].includes(k)).length;
+  if ($("#fQtd")) $("#fQtd").textContent = n ? ` · ${n}` : "";
+  const cidades = [...new Set((estado.busca?.vagas || []).map((v) => v.cidade).filter(Boolean))].sort().slice(0, 200);
+  if ($("#fCidades")) $("#fCidades").innerHTML = cidades.map((c) => `<option value="${esc(c)}">`).join("");
+}
 
 function renderVagas() {
   if (!$("#tbVagas")) return;
+  renderChipsFiltro();
   const vs = vagasVisiveis(), b = estado.busca;
   $("#tbVagas").innerHTML = vs.map((v) => `<tr data-idx="${v.idx}">
     <td class="c">${scoreTag(v.score)}</td><td class="trunc" title="${esc(v.titulo)}"><b>${esc(v.titulo)}</b></td>
     <td class="trunc">${esc(v.empresa || "—")}</td><td class="trunc">${esc(localVaga(v))}</td><td>${esc(v.modalidade || "—")}</td>
-    <td class="muted">${esc(v.fonte)}</td><td class="c muted">${dataCurta(v.publicada_em)}</td></tr>`).join("")
-    || `<tr><td colspan="7" class="vazio">${b?.estado === "buscando" ? "Buscando nos canais…" : b?.vagas?.length ? "Nenhuma vaga com esses filtros. Reduza o score mínimo." : b ? "Nenhuma vaga encontrada." : "Os resultados aparecem aqui."}</td></tr>`;
+    <td class="muted">${v.plataforma_id ? '<b class="selo-rh">RH+ Match</b>' : esc(v.fonte)}</td><td class="c muted">${dataCurta(v.publicada_em)}</td></tr>`).join("")
+    || `<tr><td colspan="7" class="vazio">${b?.estado === "buscando" ? "Buscando nos canais…" : b?.vagas?.length ? "Nenhuma vaga com esses filtros. Remova algum filtro ou reduza o score mínimo." : b ? "Nenhuma vaga encontrada." : "Os resultados aparecem aqui."}</td></tr>`;
   if (b && b.estado !== "buscando") {
     let txt = `${vs.length} vagas exibidas · ${vs.filter((v) => v.score >= 75).length} excelentes · ${b.vagas.length} analisadas no total`;
     const ne = Object.values(b.progresso).filter((p) => p.status === "erro").length;
@@ -536,11 +620,14 @@ function detalharVaga() {
     ${d.skills_ok?.length ? `<h4>Competências que ${ehAdmin() ? "o candidato tem" : "você tem"}</h4>${d.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
     ${d.skills_faltam?.length ? `<h4>Pedidas na vaga e ausentes no perfil</h4>${d.skills_faltam.map((s) => `<span class="chip gap">${esc(s)}</span>`).join("")}` : ""}
     <h4>Descrição</h4><div class="desc">${esc((v.descricao || "Descrição completa no anúncio.").slice(0, 2500))}</div>
-    <button class="btn ia" id="btnAdaptar" style="width:100%;margin-top:14px">✨ Adaptar currículo para esta vaga</button>
-    <div class="det-acoes"><a class="btn neutro" href="${esc(v.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a>
-      <button class="btn" id="btnPipe">+ ${ehAdmin() ? "Adicionar ao pipeline" : "Acompanhar esta vaga"}</button></div></div>`;
-  $("#btnPipe").onclick = () => adicionarPipeline(v).catch(falha);
+    ${v.plataforma_id && !ehAdmin() ? `<button class="btn" id="btnCandidatar" style="width:100%;margin-top:14px">📨 Candidatar-se pelo RH+ Match</button>` : ""}
+    <button class="btn ia" id="btnAdaptar" style="width:100%;margin-top:${v.plataforma_id && !ehAdmin() ? 8 : 14}px">✨ Adaptar currículo para esta vaga</button>
+    <div class="det-acoes">${v.plataforma_id ? `<a class="btn neutro" href="#/vaga/${v.plataforma_id}" style="text-decoration:none">Ver vaga</a>`
+      : `<a class="btn neutro" href="${esc(v.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a>`}
+      ${v.plataforma_id && !ehAdmin() ? "" : `<button class="btn" id="btnPipe">+ ${ehAdmin() ? "Adicionar ao pipeline" : "Acompanhar esta vaga"}</button>`}</div></div>`;
+  $("#btnPipe")?.addEventListener("click", () => adicionarPipeline(v).catch(falha));
   $("#btnAdaptar").onclick = () => abrirAdaptador(v, estado.busca.candidato);
+  $("#btnCandidatar")?.addEventListener("click", () => candidatar(v, estado.busca.candidato).catch(falha));
 }
 
 function renderStatus() {
@@ -561,20 +648,29 @@ async function iniciarBusca(cands) {
   if (estado.busca?.estado === "buscando") { estado.busca.cancelada = true; finalizarBusca(estado.busca); return; }
   const candidato = cands.find((c) => c.id === +$("#selCand").value);
   if (!candidato) return toast(ehAdmin() ? "Cadastre e selecione um candidato para buscar vagas." : "Complete seu perfil para buscar vagas.");
-  const fontes = $$(".canais input[type=checkbox]:checked").map((x) => FONTES.find((f) => f.id === x.value));
+  const marcados = $$(".canais input[type=checkbox]:checked").map((x) => x.value);
+  const plataforma = marcados.includes("plataforma");
+  const fontes = marcados.map((id) => FONTES.find((f) => f.id === id)).filter(Boolean);
   const termos = $("#termos").value.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 5);
-  if (!fontes.length || !termos.length) return toast("Selecione ao menos um canal e informe um cargo para pesquisar.");
+  if ((!fontes.length && !plataforma) || !termos.length) return toast("Selecione ao menos um canal e informe um cargo para pesquisar.");
+  const local = { cidade: $("#locCidade").value.trim(), uf: $("#locUf").value };
 
-  const b = { id: Date.now(), estado: "buscando", candidato, termos, progresso: {}, brutas: [], vagas: [], cancelada: false };
+  const b = { id: Date.now(), estado: "buscando", candidato, termos, local, progresso: {}, brutas: [], vagas: [], cancelada: false };
+  if (plataforma) b.progresso["RH+ Match"] = { status: "buscando", qtd: 0 };
   fontes.forEach((f) => (b.progresso[f.nome] = { status: "buscando", qtd: 0 }));
   estado.busca = b; estado.vagaSel = null;
   btn.textContent = "■ Cancelar";
   renderStatus(); renderVagas();
   const skills = String(candidato.skills || "").split(",").map((s) => s.trim()).filter(Boolean);
-  await Promise.all(fontes.map(async (f) => {
+  const tarefaPlataforma = plataforma ? (async () => {
+    try { const vs = await buscarVagasPlataforma(termos); b.brutas.push(...vs); b.progresso["RH+ Match"] = { status: "ok", qtd: vs.length }; }
+    catch (e) { b.progresso["RH+ Match"] = { status: "erro", qtd: 0, erro: traduzErro(e) }; }
+    if (estado.busca === b && b.estado === "buscando") renderStatus();
+  })() : null;
+  await Promise.all([tarefaPlataforma, ...fontes.map(async (f) => {
     try {
       const r = await sb.functions.invoke("buscar-vagas", {
-        body: { fonte: f.id, termos, cidade: candidato.cidade || "", uf: candidato.uf || "", skills, paginas: ctx.cfg.paginas_por_fonte },
+        body: { fonte: f.id, termos, cidade: local.cidade, uf: local.uf, skills, paginas: ctx.cfg.paginas_por_fonte },
       });
       if (r.error) throw new Error(await erroFuncao(r, "buscar-vagas"));
       const vagas = r.data?.vagas || [];
@@ -583,13 +679,14 @@ async function iniciarBusca(cands) {
       b.progresso[f.nome] = { status: "ok", qtd: vagas.length };
     } catch (e) { b.progresso[f.nome] = { status: "erro", qtd: 0, erro: e.message }; }
     if (estado.busca === b && b.estado === "buscando") renderStatus();
-  }));
+  })]);
   if (b.estado === "buscando") finalizarBusca(b);
 }
 
 async function finalizarBusca(b) {
   b.estado = "concluida";
-  b.vagas = consolidar(b.candidato, b.brutas).map((v, idx) => ({ ...v, idx }));
+  // vagas da plataforma primeiro entre as de mesma nota (aceitam candidatura direta)
+  b.vagas = consolidar(b.candidato, b.brutas).sort((x, y) => y.score - x.score || (y.plataforma_id ? 1 : 0) - (x.plataforma_id ? 1 : 0)).map((v, idx) => ({ ...v, idx }));
   const btn = $("#btnBuscar"); if (btn && estado.busca === b) { btn.disabled = false; btn.textContent = "🔎 Buscar vagas"; }
   if (estado.busca === b) { renderStatus(); renderVagas(); }
   toast(b.cancelada ? `Busca cancelada: ${b.vagas.length} vagas até aqui.` : `Busca concluída: ${b.vagas.length} vagas analisadas.`);
@@ -701,9 +798,9 @@ ${linhas}<footer>Gerado pelo RH+ Match · Os links levam ao anúncio original de
 async function pgPipeline() {
   const admin = ehAdmin();
   const cands = admin ? await listarCandidatos() : [];
-  main.innerHTML = topo(admin ? "Pipeline" : "Minhas vagas", admin ? "Acompanhe cada indicação até a contratação" : "As vagas que você está acompanhando e em que etapa está cada uma", `
+  main.innerHTML = topo(admin ? "Pipeline" : "Candidaturas", admin ? "Acompanhe cada indicação até a contratação" : "Vagas de outros portais que você está acompanhando", `
       ${admin ? `<select id="pCand" style="width:240px"><option value="">Todos os candidatos</option>${cands.map((c) => `<option value="${c.id}" ${String(c.id) === estado.pipeCand ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>` : ""}
-      <button class="btn neutro" id="pExcel">Exportar Excel</button>`) + `
+      <button class="btn neutro" id="pExcel">Exportar Excel</button>`) + (admin ? "" : abasCandidato("p")) + `
     <div class="funil" id="funil"></div>
     <div class="split"><div class="card"><div class="tabela-wrap" style="max-height:calc(100vh - 290px);min-height:260px"><table>
       <thead><tr><th>${admin ? "CANDIDATO" : "PERFIL"}</th><th>VAGA</th><th>EMPRESA</th><th class="c">SCORE</th><th>ETAPA</th><th class="c">ATUALIZADO</th></tr></thead>

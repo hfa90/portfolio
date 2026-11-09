@@ -7,6 +7,18 @@ export const ORDEM_SENIORIDADE = SENIORIDADES;
 export const STATUS_PIPELINE = ["Sugerida", "Enviada ao candidato", "Candidatura feita", "Entrevista", "Proposta", "Contratado", "Descartada"];
 export const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 
+export const REGIOES = {
+  "Norte": ["AC", "AM", "AP", "PA", "RO", "RR", "TO"],
+  "Nordeste": ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"],
+  "Centro-Oeste": ["DF", "GO", "MT", "MS"],
+  "Sudeste": ["ES", "MG", "RJ", "SP"],
+  "Sul": ["PR", "RS", "SC"],
+};
+export const regiaoDe = (uf) => Object.keys(REGIOES).find((r) => REGIOES[r].includes(String(uf || "").toUpperCase())) || "";
+export const REGIMES = ["CLT", "PJ", "Estágio", "Temporário", "Jovem aprendiz", "Freelancer", "Trainee"];
+export const AREAS = ["Administrativo", "Atendimento", "Comercial e Vendas", "Educação", "Engenharia", "Financeiro e Contábil", "Jurídico",
+  "Logística", "Marketing e Comunicação", "Operações e Produção", "Recursos Humanos", "Saúde", "Tecnologia", "Outra"];
+
 export const FONTES = [
   { id: "gupy", nome: "Gupy", descricao: "Maior plataforma de recrutamento do Brasil (milhares de empresas).", cobertura: "Brasil · todas as áreas" },
   { id: "vagas_com", nome: "Vagas.com", descricao: "Portal tradicional com vagas de todos os níveis, do operacional à diretoria.", cobertura: "Brasil · todas as áreas" },

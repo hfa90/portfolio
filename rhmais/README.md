@@ -24,6 +24,14 @@ Papéis de acesso:
 - **Candidato**: Início, Meu perfil, Buscar vagas, Currículos e Minhas vagas. Não acessa Ajustes.
 - Quem se cadastra como "Sou empresa / RH" entra como candidato e gera um pedido de acesso, que o master aprova em Usuários.
 
+Vagas e candidaturas (Fase 2): administradores publicam vagas em **Minhas vagas** (pausar, encerrar, link público para divulgar); as vagas aparecem na busca dos candidatos com o selo **RH+ Match** e aceitam **candidatura direta** com o currículo escolhido. Empresa e candidato trocam **mensagens** e cada mudança de etapa pode avisar por **e-mail** (função `notificar`, via Resend). Página pública da vaga: `sistema/#/vaga/<id>` (abre sem login). Busca com filtros por cidade, estado, região, regime, nível, salário, data, canal e ordenação.
+
+E-mails (Resend): crie a conta em https://resend.com, gere uma API key e rode
+```
+npx supabase secrets set RESEND_API_KEY=re_... --project-ref dpquyrvphongvqjpqxea
+```
+Sem domínio verificado, o Resend só entrega para o e-mail dono da conta Resend. Para enviar a qualquer pessoa, verifique o domínio (ex.: haydenfernandes.com.br) no Resend e defina também `RESEND_FROM="RH+ Match <avisos@haydenfernandes.com.br>"`.
+
 Currículos: cada adaptação feita pela IA fica **salva para aquela vaga** (reabrir não gasta IA de novo); há currículo base (importado e organizado pela IA), currículo **padrão** e 5 **modelos** de layout (Clássico, Moderno, Executivo, Compacto, Criativo).
 
 Banco: as migrações ficam em `supabase/migrations/` (aplicadas em ordem). `schema.sql` e `ia.sql` são a base inicial.

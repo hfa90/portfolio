@@ -28,7 +28,8 @@ export const ehAdmin = () => ctx.papel === "admin" || ctx.papel === "master";
 export const ehMaster = () => ctx.papel === "master";
 
 export const estado = {
-  candidatoBusca: null, busca: null, filtros: { mod: "Todas", score: 40, texto: "" }, vagaSel: null,
+  candidatoBusca: null, busca: null, vagaSel: null, filtrosAbertos: false,
+  filtros: { mod: "Todas", score: 40, texto: "", cidade: "", uf: "", regiao: "", regime: "", senioridade: "", salMin: "", dias: "", canal: "", soPlataforma: false, ordem: "score" },
   pipeCand: "", pipeStatus: "", pipeSel: null, candSel: null, cvFiltro: "",
 };
 

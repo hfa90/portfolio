@@ -2,8 +2,8 @@
    - Arquivos do app (inclui ../config.js, ../icons e ../supabase/.../nucleo.js): rede primeiro, cache como reserva offline.
    - Bibliotecas do CDN (URLs com versão fixa): cache primeiro.
    - Supabase (dados, login, funções) nunca passa pelo cache. */
-const VERSAO = "rhmais-sistema-v1";
-const SHELL = ["./", "./index.html", "./app.js", "./js/base.js", "./js/curriculos.js", "./js/admin.js", "./style.css", "./manifest.webmanifest",
+const VERSAO = "rhmais-sistema-v2";
+const SHELL = ["./", "./index.html", "./app.js", "./js/base.js", "./js/curriculos.js", "./js/admin.js", "./js/vagas.js", "./style.css", "./manifest.webmanifest",
   "../config.js", "../supabase/functions/_shared/nucleo.js", "../icons/icon-192.png", "../icons/apple-touch-icon.png"];
 // pasta do site como um todo (/rhmais/): o sistema usa arquivos de fora do próprio escopo
 const RAIZ = new URL("../", self.registration.scope).pathname;
