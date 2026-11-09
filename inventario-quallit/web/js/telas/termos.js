@@ -4,7 +4,7 @@
 // registra a devolução de tudo de uma vez.
 import { criarAssinatura } from '../assinatura.js';
 import { recarregarMaquina } from '../dados.js';
-import { $, $$, ESTILO_CLIENTE_DOC, MQ, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
+import { $, $$, ESTILO_CLIENTE_DOC, MQ, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up, titulo } from '../nucleo.js';
 import { ehErroDeRede } from '../offline.js';
 import { rerender } from '../rotas.js';
 import { lerCamera } from './inventarios.js';
@@ -38,7 +38,7 @@ export function renderTermos() {
   const busca = $('#ps-busca')?.value || '';
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Empréstimos e termos</h1><p>Equipamento fixo de cada colaborador, com termo de responsabilidade assinado na tela. Diferente do empréstimo, não tem data de devolução.</p></div>
+      ${titulo('Empréstimos e termos', '', `Equipamento fixo de cada colaborador, com termo de responsabilidade assinado na tela. Diferente do empréstimo, não tem data de devolução.`)}
       <div class="actions"><button class="btn btn--primary" id="btn-nova-posse">+ Entregar com termo</button></div>
     </div>
     ${abasEmprestimos('termos')}
@@ -99,7 +99,7 @@ export function renderColaboradores() {
   const lista = pessoas();
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Empréstimos e termos</h1><p>Tudo o que está com cada colaborador (termos de uso e empréstimos). No <b>desligamento</b>, gere a lista de recolhimento e registre a devolução de tudo de uma vez.</p></div>
+      ${titulo('Empréstimos e termos', '', `Tudo o que está com cada colaborador (termos de uso e empréstimos). No <b>desligamento</b>, gere a lista de recolhimento e registre a devolução de tudo de uma vez.`)}
     </div>
     ${abasEmprestimos('colaboradores')}
     <div class="card">

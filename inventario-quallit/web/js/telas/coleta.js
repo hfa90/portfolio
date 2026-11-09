@@ -2,7 +2,7 @@
 import { URL_PUBLICA } from '../config.js';
 import { carregarMaquinas } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, F_PADRAO, MQ, cdCod, cdNome, cdsAtivos, ehAdmin, erroMsg, esc, mostrarColCD, pill, sb, setores, state, toast } from '../nucleo.js';
+import { $, $$, F_PADRAO, MQ, cdCod, cdNome, cdsAtivos, ehAdmin, erroMsg, esc, mostrarColCD, pill, sb, setores, state, toast, titulo } from '../nucleo.js';
 import { montarKitColetores, montarKitInventLocal } from '../planilha.js';
 import { modalImportarColeta } from '../telas/importacao.js';
 import { campo, modal, opts } from '../telas/maquinas.js';
@@ -98,7 +98,7 @@ export const ABAS_COLETA = [['instalacao', 'Como coletar'], ['redes', 'Redes e s
 export async function renderColeta(aba = 'instalacao') {
   if (!ABAS_COLETA.some(([k]) => k === aba)) aba = 'instalacao';
   const el = $('#view-coleta');
-  const abas = `<div class="tabs tabs--page">${ABAS_COLETA.map(([k, l]) => `<a class="tab ${aba === k ? 'active' : ''}" href="#coleta/${k}">${l}</a>`).join('')}</div>`;
+  const abas = !ehAdmin() ? '' : `<div class="tabs tabs--page">${ABAS_COLETA.map(([k, l]) => `<a class="tab ${aba === k ? 'active' : ''}" href="#coleta/${k}">${l}</a>`).join('')}</div>`;
   if (aba === 'redes') return renderRedes(el, abas);
   const L = MQ().filter((m) => m.status !== 'descartado');
   const porPlanilha = L.filter((m) => m.origem === 'planilha').length;
@@ -107,36 +107,41 @@ export async function renderColeta(aba = 'instalacao') {
   const desatualizadas = L.filter((m) => !m.ultimo_online || Date.now() - new Date(m.ultimo_online) > 180 * 864e5).length;
 
   el.innerHTML = `
-    <div class="view-head"><div><h1>Coleta</h1>
-      <p>Os dados técnicos são lidos pelo <b>Invent_local</b> (computadores) e pelo <b>kit dos coletores</b> (Android pelo cabo USB). Nada é instalado: cada leitura gera uma planilha do Excel que entra no inventário sozinha ou pela importação.</p></div></div>
+    <div class="view-head">${titulo('Coleta', 'Como trazer os dados técnicos dos computadores e coletores.', 'Os dados técnicos são lidos pelo <b>Invent_local</b> (computadores) e pelo <b>kit dos coletores</b> (Android). Nada é instalado: cada leitura gera uma planilha do Excel que entra no inventário sozinha ou pela importação.')}</div>
     ${abas}
     <div class="card card-pad" style="margin-bottom:16px;display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)">
       <div style="flex:1 1 320px"><h2>Mais fácil: envie um link para o colaborador</h2>
-        <p class="muted" style="margin:4px 0 0">Ele abre no computador, informa patrimônio e setor, baixa o <b>Invent_local</b> e dá dois cliques no <b>COLETAR.bat</b>. Os dados vão sozinhos para o inventário e a página mostra o computador registrado. Não instala nada e não precisa de administrador.</p></div>
+        <p class="muted" style="margin:4px 0 0">Ele abre no computador e segue os passos da página. Não instala nada.</p></div>
       <button class="btn btn--primary" id="btn-link-agente">Gerar link de registro</button>
     </div>
     <div class="card card-pad" style="margin-bottom:16px">
       <div class="card-head"><h2>Invent_local: vários computadores pela pasta de rede</h2><button class="btn btn--sm btn--primary" id="btn-coleta-agente">Importar planilha</button></div>
-      <p class="muted" style="margin-top:0">Executa-se o <b>COLETAR.bat</b>, informa-se patrimônio e setor, e os dados completos (série, RAM e módulos, discos, SO, IP, usuário) vão para a planilha do Excel <code>inventario-quallit.xlsx</code>.</p>
+      <p class="muted" style="margin-top:0">O <b>COLETAR.bat</b> grava série, memória, discos, Windows, IP e usuário na planilha <code>inventario-quallit.xlsx</code>.</p>
+      <div class="actions"><button class="btn btn--sm" id="btn-kit-zip">Baixar Invent_local.zip</button></div>
+      <details class="mais-recolhido"><summary>Como fazer, passo a passo</summary>
       <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
         <li>Baixe o <b>Invent_local.zip</b> e extraia numa pasta de rede (ex.: <code>&#92;&#92;servidor&#92;TI&#92;Inventario</code>), com permissão de gravação para quem vai coletar.</li>
         <li>Em cada computador: abra a pasta e dê duplo clique em <b>COLETAR.bat</b>. Executar de novo atualiza a mesma linha (não duplica).</li>
-        <li>No painel: <b>Máquinas → Importar coleta</b> e escolha o <code>inventario-quallit.xlsx</code>. Pode importar quantas vezes quiser.</li>
+        <li>Aqui: botão <b>Importar planilha</b> e escolha o <code>inventario-quallit.xlsx</code>. Pode importar quantas vezes quiser.</li>
       </ol>
-      <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-zip">Baixar Invent_local.zip</button><a class="btn btn--sm btn--ghost" href="agente/planilha/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+      <p><a class="btn btn--sm btn--ghost" href="agente/planilha/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></p>
       <p class="muted" style="font-size:12.5px;margin-bottom:0">Automático, sem perguntas: use como script de logon da GPO <code>powershell -NoProfile -ExecutionPolicy Bypass -File &#92;&#92;servidor&#92;TI&#92;Inventario&#92;coletar.ps1 -Silencioso</code>. Se a planilha estiver aberta no Excel, os dados ficam salvos na pasta <code>dados</code> e a planilha é refeita na próxima execução.</p>
+      </details>
     </div>
     <div class="grid-2">
       <div class="card card-pad">
         <div class="card-head"><h2>📟 Coletores de dados Android (cabo USB)</h2><button class="btn btn--sm btn--primary" id="btn-coleta-coletores">Importar planilha</button></div>
-        <p class="muted" style="margin-top:0">Num computador, o <b>COLETAR-COLETORES.bat</b> lê pelo cabo USB cada coletor conectado: nº de série, modelo, Android e patch, RAM, memória, <b>saúde e capacidade da bateria</b>, IP e MAC. Nada é instalado no coletor. Os dados vão para <code>coletores-quallit.xlsx</code>.</p>
+        <p class="muted" style="margin-top:0">Pelo cabo USB (completo, com <b>saúde da bateria</b>) ou pelo <b>link no navegador do coletor</b> (sem cabo).</p>
+        <div class="actions"><button class="btn btn--sm" id="btn-link-coletor" title="Sem cabo USB: registrar pelo navegador do próprio coletor">Link para o coletor</button><button class="btn btn--sm" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button></div>
+        <details class="mais-recolhido"><summary>Como fazer, passo a passo</summary>
         <ol class="muted" style="font-size:13px;margin:0 0 10px;padding-left:18px">
           <li>Em cada coletor (uma vez): <i>Sobre o telefone</i> → 7 toques em <b>Número da versão</b> → <i>Opções do desenvolvedor</i> → ative <b>Depuração USB</b>.</li>
           <li>Execute o <b>COLETAR-COLETORES.bat</b> no computador, conecte o coletor, toque em <b>Permitir</b> e bipe o patrimônio.</li>
-          <li>Importe o <code>coletores-quallit.xlsx</code> em <b>Máquinas → Importar coleta</b>.</li>
+          <li>Importe o <code>coletores-quallit.xlsx</code> pelo botão <b>Importar planilha</b> acima.</li>
         </ol>
-        <div class="actions"><button class="btn btn--sm btn--primary" id="btn-kit-coletores">Baixar Coletores_Quallit.zip</button><button class="btn btn--sm" id="btn-link-coletor" title="Sem cabo USB: registrar pelo navegador do próprio coletor">Link para o coletor</button><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></div>
+        <p><a class="btn btn--sm btn--ghost" href="agente/coletores/LEIA-ME.txt" target="_blank" rel="noopener">LEIA-ME</a></p>
         <p class="muted" style="font-size:12.5px;margin-bottom:0">Depuração USB bloqueada pelo MDM (SOTI, Zebra StageNow, Intune…)? Use o <b>Link para o coletor</b>: abre no navegador do coletor, bipa-se o nº de série e o patrimônio. Sem bateria e memória, mas sem precisar de cabo.</p>
+        </details>
       </div>
       <div class="card card-pad">
         <div class="card-head"><h2>Cobertura</h2></div>
@@ -175,8 +180,7 @@ export function cidrOk(c) {
 export const ipNaRede = (ip, c) => { const n = ipNum(ip), r = cidrOk(c); return n != null && r && ((n & r.mask) >>> 0) === r.base; };
 
 export async function renderRedes(el, abas) {
-  el.innerHTML = `<div class="view-head"><div><h1>Coleta</h1>
-      <p>Cadastre as faixas de IP de cada CD e setor. A máquina que aparece numa faixa recebe o setor automaticamente, e o painel avisa quando ela surge na rede de outro CD.</p></div>
+  el.innerHTML = `<div class="view-head">${titulo('Coleta', '', 'Cadastre as faixas de IP de cada CD e setor. A máquina que aparece numa faixa recebe o setor automaticamente, e o painel avisa quando ela surge na rede de outro CD.')}
       <div class="actions">${ehAdmin() ? '<button class="btn" id="rd-aplicar" title="Reaplica as faixas usando o último IP de cada máquina">Aplicar agora</button><button class="btn btn--primary" id="rd-nova">+ Nova rede</button>' : ''}</div></div>
     ${abas}<div id="rd-corpo"><div class="skeleton">Carregando…</div></div>`;
   const { data: redes, error } = await sb.from('redes').select('*').order('cidr');

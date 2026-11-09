@@ -143,6 +143,11 @@ export function imprimirQuandoPronto(w) {
   Promise.race([Promise.all(espera), new Promise((r) => setTimeout(r, 3000))])
     .then(() => setTimeout(() => { try { w.focus(); w.print(); } catch { /* janela fechada */ } }, 250));
 }
+// título de tela: frase curta (opcional) e a explicação completa escondida no ⓘ
+export const ajuda = (txt) => `<details class="ajuda"><summary title="O que é esta tela?" aria-label="Ajuda">ⓘ</summary><div class="ajuda-txt">${txt}</div></details>`;
+export const titulo = (h, curto, txtAjuda) => `<div><div class="titulo-linha"><h1>${h}</h1>${txtAjuda ? ajuda(txtAjuda) : ''}</div>${curto ? `<p>${curto}</p>` : ''}</div>`;
+// menu "Mais ▾": ações menos usadas ficam guardadas aqui
+export const menuMais = (itens, rotulo = 'Mais') => `<details class="menu-mais"><summary class="btn">${rotulo} ▾</summary><div class="menu-lista">${itens}</div></details>`;
 export const dataHora = (ts) => (ts ? new Date(ts).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '—');
 export const data = (ts) => (ts ? new Date(ts).toLocaleDateString('pt-BR') : '—');
 export const pill = (txt, cor = '') => `<span class="pill ${cor ? 'pill--' + cor : ''}">${esc(txt)}</span>`;

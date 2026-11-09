@@ -4,7 +4,6 @@ import { anelPrazo, etiquetaPrazo, fmtDuracao } from '../prazo.js';
 import { irMaquinas } from '../rotas.js';
 import { resumoConf } from '../telas/inventarios.js';
 import { abrirMaquina, campo } from '../telas/maquinas.js';
-import { modalResumoSemana } from './resumo-semana.js';
 
 /* =====================================================================
    PAINEL
@@ -109,7 +108,6 @@ export function renderPainel() {
   el.innerHTML = `
     <div class="view-head">
       <div><h1>Painel</h1><p>${escopo ? esc(escopo) + ' · ' : ''}atualizado ao vivo</p></div>
-      <div class="actions"><button class="btn" id="btn-resumo-semana">📨 Resumo da semana</button><button class="btn" data-go="maquinas">Ver máquinas →</button></div>
     </div>
 
     <div class="hero">
@@ -150,6 +148,8 @@ export function renderPainel() {
       </div>
     </div>
 
+    <details class="mais-recolhido painel-mais" id="painel-mais" ${store.get('painel-mais') === '1' ? 'open' : ''}>
+    <summary>Composição do parque e atividade recente</summary>
     <div class="grid-painel">
       <div class="card card-pad">
         <div class="card-head"><h2>Composição do parque</h2></div>
@@ -160,12 +160,12 @@ export function renderPainel() {
         <div class="card-head"><h2>Atividade recente</h2></div>
         <div class="feed">${(() => { const hs = state.hist.filter((h) => !state.cdAtual || h.maquinas?.cd_id === state.cdAtual).slice(0, 7); return hs.length ? hs.map(feedItem).join('') : '<p class="muted">Nenhuma alteração registrada.</p>'; })()}</div>
       </div>
-    </div>`;
+    </div>
+    </details>`;
 
+  $('#painel-mais', el).ontoggle = (e) => store.set('painel-mais', e.target.open ? '1' : '0');
   $$('.kpi2[data-filtros]', el).forEach((b) => (b.onclick = () => irMaquinas(JSON.parse(b.dataset.filtros))));
   $('[data-go-inv]', el).onclick = () => (location.hash = '#conferencia');
-  $$('[data-go]', el).forEach((b) => (b.onclick = () => irMaquinas()));
-  $('#btn-resumo-semana', el)?.addEventListener('click', () => modalResumoSemana());
   $$('.acao-item', el).forEach((b) => (b.onclick = () => irMaquinas({ alerta: b.dataset.alerta })));
   $('#mais-problemas')?.addEventListener('click', () => irMaquinas({ alerta: '_grave' }));
   $$('.feed a', el).forEach((a) => (a.onclick = () => abrirMaquina(a.dataset.id)));

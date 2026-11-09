@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: inventarios (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { carregarMaquinas, recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, STATUS, TIPO, acharMaquina, beep, cdCod, cdNome, cdsAtivos, data, dataHora, debounce, dot, ehAdmin, erroMsg, esc, extrairCodigo, gb, mostrarColCD, noCD, pill, rel, sb, soFamilia, state, store, toast, up } from '../nucleo.js';
+import { $, $$, STATUS, TIPO, acharMaquina, beep, cdCod, cdNome, cdsAtivos, data, dataHora, debounce, dot, ehAdmin, erroMsg, esc, extrairCodigo, gb, mostrarColCD, noCD, pill, rel, sb, soFamilia, state, store, toast, up, titulo } from '../nucleo.js';
 import { ehErroDeRede, filaAdicionar, filaListar, idbGet, idbSet } from '../offline.js';
 import { DIAS_SEMANA, anelPrazo, descreverAgendamento, estadoPrazo, etiquetaPrazo, fmtDuracao, proximasExecucoes, relogioCompleto } from '../prazo.js';
 import { copiarTexto, linkWhatsApp, montarResumo } from '../resumo.js';
@@ -23,7 +23,7 @@ export const abasInventario = (aba) => `<div class="tabs tabs--page"><a class="t
 export async function renderAgendados() {
   state.conf = null;
   const el = $('#view-conferencia');
-  el.innerHTML = `<div class="view-head"><div><h1>Inventários</h1><p>Inventários programados: no horário, cada CD recebe um inventário aberto com prazo para concluir.</p></div>
+  el.innerHTML = `<div class="view-head">${titulo('Inventários', '', `Inventários programados: no horário, cada CD recebe um inventário aberto com prazo para concluir.`)}
       <div class="actions">${ehAdmin() ? '<button class="btn btn--primary" id="btn-novo-ag">+ Programar inventário</button>' : ''}</div></div>
     ${abasInventario('agendados')}<div id="ag-corpo"><div class="skeleton">Carregando…</div></div>`;
   $('#btn-novo-ag')?.addEventListener('click', () => modalAgendamento());
@@ -183,8 +183,8 @@ export async function renderConferencias() {
 
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Inventários</h1><p>Contagem física com leitor ou câmera: bipe as etiquetas e veja na hora o que foi encontrado, o que falta e o que não está cadastrado.${ehAdmin() ? ' Como administrador, você vê os inventários de todos os CDs e pode editar, reabrir e excluir.' : ''}</p></div>
-      <div class="actions"><button class="btn" id="btn-app-campo">📱 App do celular</button>${ehAdmin() ? '<a class="btn" href="#relatorios/inventarios">Relatório de inventários</a>' : ''}<button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
+      ${titulo('Inventários', '', `Contagem física com leitor ou câmera: bipe as etiquetas e veja na hora o que foi encontrado, o que falta e o que não está cadastrado.${ehAdmin() ? ' Como administrador, você vê os inventários de todos os CDs e pode editar, reabrir e excluir.' : ''}`)}
+      <div class="actions"><button class="btn" id="btn-app-campo">📱 App do celular</button><button class="btn btn--primary" id="btn-nova-conf">+ Novo inventário</button></div>
     </div>
     ${abasInventario('lista')}
     <div class="card" style="margin-bottom:14px"><div class="toolbar">

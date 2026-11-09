@@ -3,6 +3,7 @@ import { carregarPosses } from './telas/termos.js';
 import { carregarHist, recarregarMaquina } from './dados.js';
 import { $, $$, F_PADRAO, acharMaquina, cdCod, cdNome, debounce, ehAdmin, esc, noCD, sb, state, store, toast } from './nucleo.js';
 import { atualizarBadge } from './sincronia.js';
+import { atualizarSininho } from './telas/avisos.js';
 import { renderColeta } from './telas/coleta.js';
 import { carregarEmprestimos, renderEmprestimos } from './telas/emprestimos.js';
 import { renderEtiquetas } from './telas/etiquetas.js';
@@ -17,7 +18,7 @@ import { renderUsuarios } from './telas/usuarios.js';
    Realtime
    ===================================================================== */
 export const rerender = debounce(() => {
-  atualizarBadge();
+  atualizarBadge(); atualizarSininho();
   if (state.view === 'emprestimos') renderEmprestimos(false);
   if (state.view === 'painel') renderPainel();
   if (state.view === 'maquinas') renderTabela();
@@ -80,7 +81,8 @@ export function navegar() {
     return;
   }
   state.view = ['painel', 'maquinas', 'emprestimos', 'etiquetas', 'conferencia', 'patrimonio', 'coleta', 'relatorios', 'usuarios'].includes(view) ? view : 'painel';
-  if (state.view === 'usuarios' && !ehAdmin()) { history.replaceState(null, '', '#painel'); state.view = 'painel'; }
+  // Field: menu enxuto (Relatórios e Redes e setores são do administrador)
+  if (['usuarios', 'relatorios'].includes(state.view) && !ehAdmin()) { history.replaceState(null, '', '#painel'); state.view = 'painel'; }
   if (state.view !== 'etiquetas') $('#view-etiquetas').innerHTML = ''; // remove o @page das etiquetas
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
   $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + state.view));
@@ -88,7 +90,7 @@ export function navegar() {
   if (state.view === 'painel') renderPainel();
   if (state.view === 'maquinas') renderMaquinas();
   if (state.view === 'conferencia') arg === 'agendados' ? renderAgendados() : arg ? abrirConferencia(arg) : renderConferencias();
-  if (state.view === 'coleta') renderColeta(arg || 'instalacao');
+  if (state.view === 'coleta') renderColeta(arg === 'redes' && ehAdmin() ? 'redes' : 'instalacao');
   if (state.view === 'emprestimos') { state.empAba = arg || 'emprestimos'; Promise.all([carregarEmprestimos(), carregarPosses()]).then(() => renderEmprestimos(true)); }
   if (state.view === 'etiquetas') renderEtiquetas();
   if (state.view === 'relatorios') renderRelatorios(arg || 'parque');

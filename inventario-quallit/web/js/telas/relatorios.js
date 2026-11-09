@@ -1,6 +1,6 @@
 // Inventário Quallit — tela: relatorios (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { renderRelRenovacao } from './renovacao.js';
-import { $, $$, ALERTAS, LOGO_CLIENTE_URL, STATUS, TIPO, cdCod, cdDe, cdNome, data, dataBR, dataHora, debounce, ehAdmin, erroMsg, esc, garantiaFaixa, idadeFaixa, noCD, pill, ramFaixa, rel, sb, situacao, soGrupo, state, store, tipoDisco, toast, up } from '../nucleo.js';
+import { $, $$, ALERTAS, LOGO_CLIENTE_URL, STATUS, TIPO, cdCod, cdDe, cdNome, data, dataBR, dataHora, debounce, ehAdmin, erroMsg, esc, garantiaFaixa, idadeFaixa, noCD, pill, ramFaixa, rel, sb, situacao, soGrupo, state, store, tipoDisco, toast, up, titulo } from '../nucleo.js';
 import { criarXlsx } from '../planilha.js';
 import { etiquetaPrazo } from '../prazo.js';
 import { irMaquinas, renderSidebar } from '../rotas.js';
@@ -135,7 +135,7 @@ export async function renderRelatorios(aba = 'parque') {
   const el = $('#view-relatorios');
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Relatórios</h1><p>${ehAdmin() ? (state.cdAtual ? `CD selecionado: <b>${esc(cdCod(state.cdAtual))} · ${esc(cdNome(state.cdAtual))}</b>. Escolha "Todos os CDs" no menu lateral para o consolidado.` : 'Visão consolidada de todos os CDs. Clique em um número para abrir a lista de máquinas.') : `Relatórios do ${esc(cdNome(state.cdAtual))}.`}</p></div>
+      ${titulo('Relatórios', state.cdAtual ? `${esc(cdCod(state.cdAtual))} · ${esc(cdNome(state.cdAtual))}` : 'Todos os CDs', 'Clique em um número para abrir a lista de máquinas. Para ver só um CD ou o consolidado de todos, troque o CD no menu lateral.')}
       <div class="actions" id="rel-acoes"></div>
     </div>
     <div class="tabs tabs--page"><a class="tab ${aba === 'parque' ? 'active' : ''}" href="#relatorios/parque">Parque de máquinas</a><a class="tab ${aba === 'inventarios' ? 'active' : ''}" href="#relatorios/inventarios">Inventários</a><a class="tab ${aba === 'indicadores' ? 'active' : ''}" href="#relatorios/indicadores">Indicadores mês a mês</a><a class="tab ${aba === 'renovacao' ? 'active' : ''}" href="#relatorios/renovacao">Renovação</a></div>

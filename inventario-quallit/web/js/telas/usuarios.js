@@ -1,6 +1,6 @@
 // Inventário Quallit — tela: usuarios (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { confirmar } from '../dialogos.js';
-import { $, $$, cdCod, cdNome, cdsAtivos, dataHora, debounce, erroMsg, esc, pill, rel, sb, state, toast, up } from '../nucleo.js';
+import { $, $$, cdCod, cdNome, cdsAtivos, dataHora, debounce, erroMsg, esc, pill, rel, sb, state, toast, up, titulo } from '../nucleo.js';
 import { renderSidebar } from '../rotas.js';
 import { baseIndex } from '../telas/etiquetas.js';
 import { campo, modal, opts } from '../telas/maquinas.js';
@@ -36,7 +36,7 @@ export async function renderUsuarios(aba = 'usuarios') {
   const el = $('#view-usuarios');
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Usuários e CDs</h1><p>Crie acessos para os Fields de cada CD e para outros administradores. Fields enxergam apenas o próprio CD.</p></div>
+      ${titulo('Usuários e CDs', '', `Crie acessos para os Fields de cada CD e para outros administradores. Fields enxergam apenas o próprio CD.`)}
       <div class="actions" id="us-acoes"></div>
     </div>
     <div class="tabs tabs--page"><a class="tab ${aba === 'usuarios' ? 'active' : ''}" href="#usuarios/usuarios">Usuários</a><a class="tab ${aba === 'cds' ? 'active' : ''}" href="#usuarios/cds">CDs</a></div>

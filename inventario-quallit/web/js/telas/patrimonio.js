@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: patrimonio (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, TIPO, cdCod, cdNome, cdsAtivos, dataBR, dataHora, ehAdmin, erroMsg, esc, noCD, pill, sb, state, toast } from '../nucleo.js';
+import { $, $$, TIPO, cdCod, cdNome, cdsAtivos, dataBR, dataHora, ehAdmin, erroMsg, esc, noCD, pill, sb, state, toast, titulo } from '../nucleo.js';
 import { rerender } from '../rotas.js';
 import { abrirMaquina, modal, opts } from '../telas/maquinas.js';
 import { abrirRelatorio } from '../telas/relatorios.js';
@@ -75,7 +75,7 @@ export async function renderPatrimonio(aba = 'pendentes') {
   const lista = aba === 'pendentes' ? todas.filter((s) => s.status === 'pendente') : todas.filter((s) => s.status !== 'pendente');
   const nome = (e) => esc(String(e || '—').split('@')[0]);
   el.innerHTML = `
-    <div class="view-head"><div><h1>Patrimônio</h1><p>Baixas e transferências entre CDs: quem pede informa motivo e laudo, o administrador aprova e o sistema aplica sozinho. Cada pedido tem um <b>termo</b> para imprimir e assinar.</p></div></div>
+    <div class="view-head">${titulo('Patrimônio', '', `Baixas e transferências entre CDs: quem pede informa motivo e laudo, o administrador aprova e o sistema aplica sozinho. Cada pedido tem um <b>termo</b> para imprimir e assinar.`)}</div>
     <div class="tabs tabs--page"><a class="tab ${aba === 'pendentes' ? 'active' : ''}" href="#patrimonio/pendentes">Aguardando aprovação (${todas.filter((s) => s.status === 'pendente').length})</a><a class="tab ${aba === 'historico' ? 'active' : ''}" href="#patrimonio/historico">Histórico</a></div>
     <div class="card">${lista.length ? `<div class="table-wrap"><table><thead><tr><th>Pedido</th><th>Equipamento</th><th>Motivo</th><th>Solicitado</th><th>Situação</th><th></th></tr></thead><tbody>
       ${lista.map((s) => { const mq = s.maquina || {}; const [stTxt, stCor] = SOL_STATUS[s.status] || [s.status, '']; return `<tr>

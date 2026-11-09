@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: maquinas (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, toast, up } from '../nucleo.js';
+import { $, $$, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
 import { criarXlsx } from '../planilha.js';
 import { rerender } from '../rotas.js';
 import { modalLinkInstalacao } from '../telas/coleta.js';
@@ -81,13 +81,13 @@ export function renderMaquinas() {
   if (!state.maqMontada) {
     el.innerHTML = `
       <div class="view-head">
-        <div><h1>Máquinas</h1><p>Veja em tabela, cartões, quadro ou mosaico. Clique numa máquina para detalhes, edição e histórico.</p></div>
+        ${titulo('Máquinas', '', 'Veja em tabela, cartões, quadro ou mosaico. Clique numa máquina para ver detalhes, editar e ver o histórico. Selecione várias pela caixinha para imprimir etiquetas. O link de registro de computadores e coletores fica em <b>Coleta</b>.')}
         <div class="actions">
-          <button class="btn" id="btn-link">Link de registro</button>
-          <button class="btn" id="btn-etq">Etiquetas</button>
-          <button class="btn" id="btn-coleta" title="Planilha gerada pelo COLETAR.bat (sem instalação)">Importar coleta</button>
-          <button class="btn" id="btn-programa" title="Auditoria de software: quem tem um programa instalado">Programas</button>
-          <button class="btn" id="btn-import">Importar compras</button>
+          ${menuMais(`
+            <button type="button" id="btn-etq">Etiquetas</button>
+            <button type="button" id="btn-programa">Programas instalados <small>quem tem um programa</small></button>
+            <button type="button" id="btn-coleta">Importar coleta <small>planilha do COLETAR.bat</small></button>
+            <button type="button" id="btn-import">Importar compras <small>notas e garantias</small></button>`)}
           <button class="btn" id="btn-exportar" title="Planilha do Excel: o que está na tela ou o inventário completo">Exportar</button>
           <button class="btn btn--primary" id="btn-nova">+ Nova máquina</button>
         </div>
@@ -95,8 +95,11 @@ export function renderMaquinas() {
       <div class="card">
         <div class="toolbar">
           <div class="search"><input id="f-q" type="search" placeholder="Buscar hostname, patrimônio, série, usuário, IP, modelo…" autocomplete="off"></div>
-          <select id="f-tipo"></select><select id="f-status"></select><select id="f-situacao"></select>
-          <select id="f-so"></select><select id="f-alerta"></select><select id="f-setor"></select><select id="f-garantia"></select>
+          <select id="f-tipo"></select><select id="f-situacao"></select><select id="f-setor"></select>
+          <button type="button" class="btn btn--ghost" id="btn-mais-filtros" aria-expanded="false">Mais filtros</button>
+        </div>
+        <div class="toolbar toolbar--extra" id="filtros-extra" hidden>
+          <select id="f-status"></select><select id="f-alerta"></select><select id="f-so"></select><select id="f-garantia"></select>
         </div>
         <div class="barra-modos"><div class="seg seg--modos" id="modos"></div><span id="modo-opts" class="modo-opts"></span><span class="count" id="count"></span></div>
         <div class="chips" id="chips-wrap" style="padding:0 12px 10px;align-items:center"><span id="chips" style="display:contents"></span></div>
@@ -106,7 +109,7 @@ export function renderMaquinas() {
       </div>`;
     $('#f-q').oninput = debounce((e) => { state.f.q = e.target.value; renderTabela(); }, 120);
     ['tipo', 'status', 'situacao', 'so', 'alerta', 'setor', 'garantia'].forEach((k) => {
-      $('#f-' + k).onchange = (e) => { state.f[k] = e.target.value; renderTabela(); };
+      $('#f-' + k).onchange = (e) => { state.f[k] = e.target.value; mostrarFiltrosExtra(); renderTabela(); };
     });
     $('#thead').onclick = (e) => {
       const th = e.target.closest('th'); if (!th) return;
@@ -139,7 +142,7 @@ export function renderMaquinas() {
     $('#btn-coleta').onclick = modalImportarColeta;
     $('#btn-programa').onclick = modalBuscarPrograma;
     $('#btn-exportar').onclick = () => modalExportar([{ v: 'tela', rotulo: `Só o que está na tela (${filtrar().length} máquinas)`, sub: 'com os filtros e a busca atuais, todas as colunas do painel', gerar: exportarTela }]);
-    $('#btn-link').onclick = () => modalLinkInstalacao();
+    $('#btn-mais-filtros').onclick = () => { state.maisFiltros = $('#filtros-extra').hidden; mostrarFiltrosExtra(); };
     $('#btn-nova').onclick = () => modalNovaMaquina();
     state.maqMontada = true;
   }
@@ -159,6 +162,17 @@ export function syncToolbar() {
   $('#f-alerta').innerHTML = opts([['', 'Sem filtro de alerta'], ['_grave', 'Alertas importantes'], ...Object.entries(ALERTAS).map(([k, a]) => [k, a.l])], f.alerta);
   $('#f-garantia').innerHTML = opts([['', 'Qualquer garantia'], ...ORDEM_GAR.map((g) => [g, g])], f.garantia);
   $('#f-setor').innerHTML = opts([['', 'Todos os setores'], ['_vazio', 'Sem setor'], ...setores().map((s) => [s, s])], f.setor);
+  mostrarFiltrosExtra();
+}
+// filtros menos usados ficam numa segunda linha: abre sozinha quando algum deles está em uso (ex.: vindo do Painel)
+function mostrarFiltrosExtra() {
+  const f = state.f;
+  const ativos = ['status', 'alerta', 'so', 'garantia'].filter((k) => f[k] !== F_PADRAO[k]).length;
+  const aberto = !!(state.maisFiltros || ativos);
+  $('#filtros-extra').hidden = !aberto;
+  const b = $('#btn-mais-filtros');
+  b.textContent = (aberto ? 'Menos filtros' : 'Mais filtros') + (ativos ? ` (${ativos})` : '');
+  b.setAttribute('aria-expanded', aberto);
 }
 export function renderTabela() {
   if (!state.maqMontada || state.view !== 'maquinas') return;
@@ -178,7 +192,7 @@ export function renderTabela() {
   $('#chips').innerHTML = chips.map(([k, l, v]) => `<button class="chip" data-k="${k}">${l}: <b>${esc(v)}</b><span>×</span></button>`).join('')
     + (algum ? '<button class="btn btn--ghost btn--sm" id="limpar">Limpar filtros</button>' : '');
   $$('#chips .chip').forEach((c) => (c.onclick = () => { state.f[c.dataset.k] = ''; renderTabela(); }));
-  $('#limpar')?.addEventListener('click', () => { state.f = { ...F_PADRAO }; syncToolbar(); renderTabela(); });
+  $('#limpar')?.addEventListener('click', () => { state.f = { ...F_PADRAO }; state.maisFiltros = false; syncToolbar(); renderTabela(); });
   $('#count').textContent = `${lista.length} de ${MQ().length} máquinas`;
   renderSelBar(lista);
   $('#modos').innerHTML = MODOS.map(([k, i, l]) => `<button class="${state.modo === k ? 'on' : ''}" data-modo="${k}" title="${l}"><span class="seg-ico">${i}</span><span class="seg-txt">${l}</span></button>`).join('');

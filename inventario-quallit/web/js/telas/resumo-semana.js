@@ -1,5 +1,5 @@
 // Inventário Quallit — resumo da semana por CD (texto montado no banco: função resumo_semanal).
-// Copiar, mandar no WhatsApp ou abrir pronto no e-mail. O administrador vê sozinho uma vez por semana.
+// Copiar, mandar no WhatsApp ou abrir pronto no e-mail. Fica no sininho de avisos (com "novo" uma vez por semana).
 import { $, cdCod, erroMsg, esc, sb, state, store, toast } from '../nucleo.js';
 import { copiarTexto, linkWhatsApp } from '../resumo.js';
 import { modal, opts } from './maquinas.js';
@@ -46,8 +46,5 @@ export async function modalResumoSemana({ automatico = false } = {}) {
   });
 }
 
-// administrador: mostra sozinho uma vez por semana (a partir de segunda), se houver pendência
-export function talvezMostrarResumoSemana() {
-  if (store.get('resumo-semana-visto') === semanaAtual()) return;
-  setTimeout(() => { if (!$('#modal')?.open) modalResumoSemana({ automatico: true }); }, 1500);
-}
+// resumo desta semana ainda não aberto: o sininho mostra "novo" (antes abria sozinho ao entrar)
+export const resumoSemanaPendente = () => store.get('resumo-semana-visto') !== semanaAtual();

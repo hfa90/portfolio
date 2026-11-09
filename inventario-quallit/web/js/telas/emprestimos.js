@@ -2,7 +2,7 @@
 import { criarAssinatura } from '../assinatura.js';
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, ESTILO_CLIENTE_DOC, MQ, STATUS, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up } from '../nucleo.js';
+import { $, $$, ESTILO_CLIENTE_DOC, MQ, STATUS, TIPO, acharMaquina, dataHora, imprimirQuandoPronto, logoClienteDoc, debounce, erroMsg, esc, extrairCodigo, noCD, pill, rel, sb, setores, state, statusPill, toast, up, titulo } from '../nucleo.js';
 import { ehErroDeRede } from '../offline.js';
 import { rerender } from '../rotas.js';
 import { lerCamera } from '../telas/inventarios.js';
@@ -56,7 +56,7 @@ export function renderEmprestimos() {
 
   el.innerHTML = `
     <div class="view-head">
-      <div><h1>Empréstimos e termos</h1><p>Empréstimos têm prazo de devolução; o equipamento fixo de cada colaborador fica em <b>Termos de uso</b>.</p></div>
+      ${titulo('Empréstimos e termos', '', `Empréstimos têm prazo de devolução; o equipamento fixo de cada colaborador fica em <b>Termos de uso</b>.`)}
       <div class="actions"><button class="btn btn--primary" id="btn-novo-emp">+ Novo empréstimo</button></div>
     </div>
     ${abasEmprestimos('emprestimos')}

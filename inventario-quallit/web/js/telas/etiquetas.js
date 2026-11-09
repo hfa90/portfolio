@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: etiquetas (gerado a partir do app.js; imports e exports conferidos automaticamente)
 import { URL_PUBLICA } from '../config.js';
 import { MODELOS, montarFolhas } from '../etiquetas.js';
-import { $, ativas, esc, state, store } from '../nucleo.js';
+import { $, ativas, esc, state, store, titulo } from '../nucleo.js';
 import { opts } from '../telas/maquinas.js';
 
 /* =====================================================================
@@ -26,7 +26,7 @@ export function renderEtiquetas() {
 
   el.innerHTML = `
     <div class="view-head no-print">
-      <div><h1>Etiquetas</h1><p>${lista.length} etiqueta(s)${ids ? ' selecionada(s)' : ' (todas as máquinas ativas)'}. O QR code abre a ficha da máquina pela câmera do celular e é lido na conferência; o código de barras serve para leitores comuns.</p></div>
+      ${titulo('Etiquetas', `${lista.length} etiqueta(s)${ids ? ' selecionada(s)' : ' (todas as máquinas ativas)'}`, 'O QR code abre a ficha da máquina pela câmera do celular e é lido no inventário; o código de barras serve para leitores comuns.')}
       <div class="actions"><a class="btn" href="#maquinas">← Máquinas</a><button class="btn btn--primary" id="etq-imprimir" ${lista.length ? '' : 'disabled'}>Imprimir</button></div>
     </div>
     <div class="card etq-toolbar no-print">
