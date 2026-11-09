@@ -77,7 +77,7 @@ const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
 
 export function normalizar(texto) {
   if (!texto) return "";
-  return String(texto).normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return String(texto).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 const ENTIDADES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", hellip: "…", bull: "•",
@@ -94,7 +94,7 @@ export function decodificarEntidades(t) {
 export function limparHtml(texto) {
   if (!texto) return "";
   let t = String(texto).replace(/<(br|\/p|\/li|\/div|\/h\d)[^>]*>/gi, "\n").replace(/<[^>]+>/g, " ");
-  t = decodificarEntidades(t).replace(/ /g, " ").replace(/[ \t]+/g, " ");
+  t = decodificarEntidades(t).replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
   return t.replace(/\n\s*\n+/g, "\n").trim();
 }
 

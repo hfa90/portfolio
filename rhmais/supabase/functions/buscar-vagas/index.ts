@@ -1,6 +1,7 @@
 // Edge Function "buscar-vagas": consulta UM canal de vagas e devolve as vagas normalizadas.
 // O navegador chama uma vez por canal (em paralelo) — assim mostra o progresso canal a canal.
-// Requer usuário autenticado (verify_jwt). As chaves de API vêm da tabela `configuracoes` do próprio usuário (RLS).
+// Requer usuário autenticado (verify_jwt). As chaves de API (Adzuna, Jooble, GitHub) são da plataforma:
+// ficam em `config_plataforma`, gravadas só pelo master e lidas aqui com a service role.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { parseHTML } from "npm:linkedom@0.18.5";
 import { CONECTORES, FonteErro } from "./fontes.js";
@@ -32,8 +33,15 @@ Deno.serve(async (req) => {
   const termos = (Array.isArray(corpo.termos) ? corpo.termos : [corpo.termo]).map((t) => String(t ?? "").trim()).filter(Boolean).slice(0, 5);
   if (!termos.length) return json({ erro: "Informe um termo" }, 400);
 
-  const { data: cfg } = await sb.from("configuracoes").select("adzuna_app_id, adzuna_app_key, jooble_key, github_token, paginas_por_fonte").maybeSingle();
-  const chaves = cfg ?? {};
+  // preferências da conta (RLS) + chaves de API da plataforma (só a service role lê)
+  const { data: cfg } = await sb.from("configuracoes").select("paginas_por_fonte").maybeSingle();
+  let chaves: Record<string, string> = {};
+  const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (service && (fonte === "adzuna" || fonte === "jooble" || fonte === "github_br")) {
+    const adm = createClient(Deno.env.get("SUPABASE_URL")!, service, { auth: { persistSession: false } });
+    const { data } = await adm.from("config_plataforma").select("adzuna_app_id, adzuna_app_key, jooble_key, github_token").eq("id", 1).maybeSingle();
+    chaves = data ?? {};
+  }
   const paginas = Math.max(1, Math.min(5, Number(corpo.paginas ?? cfg?.paginas_por_fonte ?? 2)));
   const base = {
     cidade: String(corpo.cidade ?? ""), uf: String(corpo.uf ?? ""), paginas,

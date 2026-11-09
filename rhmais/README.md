@@ -14,6 +14,16 @@ Executável `.exe` para distribuir: rode `gerar_executavel.bat`.
 
 **Endereço:** https://haydenfernandes.com.br/rhmais/
 
+Papéis de acesso:
+- **Master** (`haydenfernandes.ti@gmail.com`): tudo, mais a tela **Usuários** (aprova pedidos de empresas/RH, promove ou rebaixa administradores) e as **chaves de API** da plataforma em Ajustes.
+- **Administrador** (empresas, RH, headhunters): banco de candidatos, busca, pipeline, currículos e **Ajustes** (canais e preferências).
+- **Candidato**: Início, Meu perfil, Buscar vagas, Currículos e Minhas vagas. Não acessa Ajustes.
+- Quem se cadastra como "Sou empresa / RH" entra como candidato e gera um pedido de acesso, que o master aprova em Usuários.
+
+Currículos: cada adaptação feita pela IA fica **salva para aquela vaga** (reabrir não gasta IA de novo); há currículo base (importado e organizado pela IA), currículo **padrão** e 5 **modelos** de layout (Clássico, Moderno, Executivo, Compacto, Criativo).
+
+Banco: as migrações ficam em `supabase/migrations/` (aplicadas em ordem). `schema.sql` e `ia.sql` são a base inicial.
+
 Arquitetura:
 - **Frontend estático** (`index.html`, `app.js`, `style.css`, `config.js`) publicado pelo GitHub Pages.
 - **Supabase Auth**: login por e-mail e senha. Cada conta (consultoria) tem seus próprios dados.

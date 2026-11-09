@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
   if (invalido) return json({ erro: invalido }, 400);
 
   // conta o uso (e bloqueia acima do limite diário) antes de chamar a IA
-  const { error: eLim } = await sb.rpc("registrar_uso_ia", { p_recurso: "adaptar_curriculo" });
+  const { error: eLim } = await sb.rpc("registrar_uso_ia", { p_recurso: corpo.modo === "estruturar" ? "estruturar_curriculo" : "adaptar_curriculo" });
   if (eLim) return json({ erro: eLim.message.includes("Limite") ? eLim.message : "Não foi possível registrar o uso." }, 429);
 
   try {

@@ -1,155 +1,73 @@
-/* RH+ Match Web — frontend estático (GitHub Pages) + Supabase (Auth, Postgres com RLS, Edge Function de busca). */
+/* RH+ Match Web — frontend estático (GitHub Pages) + Supabase (Auth, Postgres com RLS, Edge Functions).
+   Papéis: master (dono da plataforma) · admin (empresas, RH, headhunters) · candidato. */
 import {
   FONTES, MODALIDADES, SENIORIDADES, STATUS_PIPELINE, UFS, analisarCurriculo, classificar, consolidar, extrairSkills,
   linksBusca, localVaga, termosDoCandidato,
 } from "./supabase/functions/_shared/nucleo.js";
+import {
+  $, $$, CFG_PADRAO, RETORNO, ROTULO_PARCIAL, abrirSheet, alternarTema, atualizarCorBarra, barras, baixarBlob,
+  cabecalhoPlanilha, carimbo, cartaoConta, corParcial, ctx, dataCurta, dataHora, ehAdmin, ehMaster, erroFuncao, esc,
+  estado, falha, fecharSheet, fonteDisponivel, lerCurriculo, ligarCartaoConta, main, modal, novaPlanilha, q,
+  salvarPlanilha, sb, temSheet, toast, topo, traduzErro, voltarSheet,
+} from "./js/base.js";
+import { abrirAdaptador, importarCurriculoBase, pgCurriculos } from "./js/curriculos.js";
+import { carregarStatusChaves, pgConfig, pgUsuarios } from "./js/admin.js";
 
-const $ = (s, el = document) => el.querySelector(s);
-const $$ = (s, el = document) => [...el.querySelectorAll(s)];
-const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const main = $("#conteudo");
-const ROTULO_PARCIAL = { cargo: "Cargo", skills: "Competências", modalidade: "Modalidade", local: "Localização", senioridade: "Senioridade" };
-const CFG_PADRAO = { empresa_nome: "Minha Consultoria de RH", paginas_por_fonte: 2, score_minimo_padrao: 40,
-  fontes_ativas: FONTES.map((f) => f.id), adzuna_app_id: "", adzuna_app_key: "", jooble_key: "", github_token: "" };
-
-// Retorno de links enviados por e-mail (confirmação de conta, nova senha). Lido ANTES de o
-// supabase-js consumir o hash da URL.
-const RETORNO = (() => {
-  const h = new URLSearchParams(location.hash.replace(/^#\/?/, "")), q = new URLSearchParams(location.search);
-  const g = (k) => h.get(k) || q.get(k) || "";
-  return { tipo: g("type"), erro: g("error_description") || g("error"), codigo: g("error_code") };
-})();
-const sb = window.supabase.createClient(window.RH_CONFIG.supabaseUrl, window.RH_CONFIG.supabaseKey);
-let USUARIO = null;
-let CFG = { ...CFG_PADRAO };
-const estado = {
-  candidatoBusca: null, busca: null, filtros: { mod: "Todas", score: 40, texto: "" }, vagaSel: null,
-  pipeCand: "", pipeStatus: "", pipeSel: null, candSel: null,
-};
-
-/* ------------------------------------------------------------- utilidades */
-let toastTimer;
-function toast(msg) {
-  const t = $("#toast"); t.textContent = msg; t.classList.add("on");
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("on"), 3400);
-}
-const falha = (e) => toast("⚠ " + traduzErro(e));
-function traduzErro(e) {
-  const m = e?.message || String(e);
-  if (/Invalid login credentials/i.test(m)) return "E-mail ou senha incorretos.";
-  if (/Email not confirmed/i.test(m)) return "Confirme seu e-mail pelo link enviado antes de entrar.";
-  if (/User already registered/i.test(m)) return "Este e-mail já tem cadastro. Faça login.";
-  if (/Password should be/i.test(m)) return "A senha precisa ter pelo menos 6 caracteres.";
-  if (/schema cache|does not exist/i.test(m)) return "Banco ainda não configurado: execute supabase/schema.sql no Supabase.";
-  if (/Failed to fetch|NetworkError/i.test(m)) return "Sem conexão com o servidor.";
-  return m;
-}
-/** Desembrulha {data, error} do supabase-js. */
-async function q(p) { const { data, error } = await p; if (error) throw error; return data; }
-
-function baixarBlob(blob, nome) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob); a.download = nome;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
-}
-const carimbo = () => { const d = new Date(), p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`; };
-const scripts = {};
-function carregarScript(url) {
-  return (scripts[url] ||= new Promise((ok, erro) => {
-    const s = document.createElement("script"); s.src = url; s.onload = ok;
-    s.onerror = () => { delete scripts[url]; erro(new Error("Não foi possível carregar " + url)); };
-    document.head.appendChild(s);
-  }));
-}
-
-function modal(html, largo = false) {
-  $("#modal").classList.toggle("largo", largo);
-  $("#modalCorpo").innerHTML = html;
-  if (!$("#modal").open) { $("#modal").showModal(); history.pushState({ ...(history.state || {}), modal: true }, ""); }
-}
-// fechar o diálogo (botão, Esc ou toque fora) também desfaz a entrada no histórico, para o "voltar" do Android funcionar
-$("#modal").addEventListener("close", () => { if (history.state?.modal) history.back(); });
-
-/* ------------------------------------------------------------- telas cheias no celular/tablet */
-const mqCompacto = matchMedia("(max-width: 899px)");
-let sheetAtual = null;
-function abrirSheet(el, titulo) {
-  if (!mqCompacto.matches || !el) return;
-  if (sheetAtual && sheetAtual !== el) sheetAtual.classList.remove("sheet-aberta");
-  sheetAtual = el;
-  el.classList.add("sheet-aberta"); el.scrollTop = 0;
-  document.body.classList.add("sheet-on");
-  $("#sheetBarra").hidden = false; $("#sheetTitulo").textContent = titulo || "";
-  if (!history.state?.sheet) history.pushState({ sheet: true }, "");
-}
-function fecharSheet() {
-  sheetAtual?.classList.remove("sheet-aberta"); sheetAtual = null;
-  document.body.classList.remove("sheet-on"); $("#sheetBarra").hidden = true;
-}
-const voltarSheet = () => (history.state?.sheet ? history.back() : fecharSheet());
-$("#sheetVoltar").onclick = voltarSheet;
-addEventListener("popstate", (e) => {
-  if (!e.state?.modal && $("#modal").open) $("#modal").close();
-  if (!e.state?.sheet && sheetAtual) fecharSheet();
-});
-mqCompacto.addEventListener("change", () => { if (!mqCompacto.matches) fecharSheet(); });
-
-/* ------------------------------------------------------------- instalação (PWA) */
-let pedidoInstalacao = null;
-addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalacao = e; $("#cInstalar")?.removeAttribute("hidden"); });
-addEventListener("appinstalled", () => { pedidoInstalacao = null; toast("RH+ Match instalado. Abra pelo ícone na tela inicial."); });
-const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
-const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-/** Extrai a mensagem de erro de uma chamada a Edge Function. */
-async function erroFuncao(r, nome) {
-  let msg = r.error?.message || "Erro desconhecido";
-  try { msg = (await r.error.context.json()).erro || msg; } catch { /* sem corpo JSON */ }
-  if (/Failed to send|not found|404/i.test(msg)) msg = `Função ${nome} indisponível (publique a Edge Function no Supabase).`;
-  return msg;
-}
-$("#modal").addEventListener("click", (e) => { if (e.target.id === "modal" || e.target.closest("[data-fechar]")) $("#modal").close(); });
-
-function barras(itens, cor, vazio) {
-  if (!itens.length) return `<div class="vazio">${esc(vazio)}</div>`;
-  const max = Math.max(...itens.map((i) => i[1]), 1);
-  return `<div class="barras">${itens.map(([n, v]) => `<div class="barra"><span class="trunc" title="${esc(n)}">${esc(n)}</span>
-      <div class="trilho"><div style="width:${(v / max) * 100}%;background:${cor}"></div></div><b>${v}</b></div>`).join("")}</div>`;
-}
-const corParcial = (v) => (v >= 70 ? "var(--verde)" : v >= 40 ? "var(--lar)" : "var(--verm)");
 const scoreTag = (s) => `<span class="score f-${classificar(s || 0).toLowerCase()}">${Math.round(s || 0)}</span>`;
-const dataCurta = (iso) => (iso ? String(iso).slice(0, 10).split("-").slice(1).reverse().join("/") : "—");
-const dataHora = (ts) => { if (!ts) return ""; const d = new Date(ts); return isNaN(d) ? "" : d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); };
-const topo = (titulo, sub, acoes = "") => `<div class="topo"><div><h1>${titulo}</h1><p>${sub}</p></div><div class="acoes">${acoes}</div></div>`;
-const fonteDisponivel = (f) => !f.chaves || f.chaves.every((k) => CFG[k]);
 
-/* ------------------------------------------------------------- tema */
-function aplicarTema(t) {
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem("rh_tema", t); } catch { /* ok */ }
-  atualizarCorBarra();
+/* ============================================================= navegação por papel */
+const ICONES = {
+  painel: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  candidatos: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16.5 14.6c2.6.1 4.4 1.8 5 4.9"/>',
+  perfil: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.2-6.5 8-6.5s7 2.3 8 6.5"/>',
+  busca: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>',
+  pipeline: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
+  curriculos: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/>',
+  config: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>',
+  usuarios: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="m9 12 2 2 4-4"/>',
+  mais: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
+};
+const MENUS = {
+  candidato: [["painel", "Início"], ["busca", "Buscar vagas"], ["curriculos", "Currículos"], ["pipeline", "Minhas vagas"], ["perfil", "Meu perfil"]],
+  admin: [["painel", "Painel"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["config", "Ajustes"]],
+  master: [["painel", "Painel"], ["candidatos", "Candidatos"], ["busca", "Buscar vagas"], ["pipeline", "Pipeline"], ["curriculos", "Currículos"], ["usuarios", "Usuários"], ["config", "Ajustes"]],
+};
+const svg = (id) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONES[id]}</svg>`;
+function montarMenu() {
+  const itens = MENUS[ctx.papel] || MENUS.candidato;
+  const extras = itens.length > 5;   // no celular cabem 5 abas: as demais vão para "Mais"
+  $("nav").innerHTML = itens.map(([id, rot], i) => `<a href="#/${id}" data-page="${id}" class="${extras && i >= 4 ? "extra" : ""}">${svg(id)}<span>${rot}</span></a>`).join("")
+    + (extras ? `<a href="#" class="mais" id="navMais">${svg("mais")}<span>Mais</span></a>` : "");
+  $("#navMais")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    modal(`<h3 style="margin:0 0 10px">Mais opções</h3><div class="links">${itens.slice(4).map(([id, rot]) =>
+      `<a href="#/${id}" data-fechar>${rot}</a>`).join("")}</div>`);
+  });
 }
-// cor da barra de status / navegador acompanha o tema (no celular a área do topo é o fundo da página)
-function atualizarCorBarra() {
-  const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  const escuro = document.documentElement.dataset.theme === "dark";
-  meta.content = matchMedia("(max-width: 767px)").matches && !document.body.classList.contains("sem-sessao")
-    ? (escuro ? "#0E1220" : "#F4F6FB") : (escuro ? "#0A0D1A" : "#111633");
-}
-matchMedia("(max-width: 767px)").addEventListener("change", atualizarCorBarra);
-$("#btnTema").onclick = () => aplicarTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+const paginaPermitida = (p) => (MENUS[ctx.papel] || MENUS.candidato).some(([id]) => id === p);
 
-/* ------------------------------------------------------------- autenticação */
+/* ============================================================= autenticação */
+$("#btnTema").onclick = alternarTema;
+$("#btnSair").onclick = async () => { await sb.auth.signOut(); };
 const urlApp = () => location.origin + location.pathname;
+const TIPOS_ORG = ["Empresa", "RH interno", "Headhunter", "Consultoria de RH", "Agência de empregos"];
 
 function telaLogin(modo = "entrar", msg = "") {
   document.body.classList.add("sem-sessao"); atualizarCorBarra();
   const titulos = { entrar: "Entrar", criar: "Criar conta", esqueci: "Recuperar senha", nova: "Definir nova senha" };
+  const tipoInicial = new URLSearchParams(location.hash.split("?")[1] || "").get("tipo") === "empresa" ? "empresa" : "candidato";
   main.innerHTML = `<div class="login"><div class="card">
     <div class="brand"><span class="logo" style="color:#fff">R+</span><div><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
     <h2 style="margin:0 0 14px;font-size:18px">${titulos[modo]}</h2>
     <form id="fLogin">
+      ${modo === "criar" ? `<div class="seg tipo-conta" id="tipoConta"><button type="button" data-v="candidato" class="${tipoInicial === "candidato" ? "on" : ""}">Sou candidato</button><button type="button" data-v="empresa" class="${tipoInicial === "empresa" ? "on" : ""}">Sou empresa / RH</button></div>
+        <label class="campo">Seu nome<input type="text" name="nome" required autocomplete="name"></label>
+        <div id="camposEmpresa" ${tipoInicial === "empresa" ? "" : "hidden"}>
+          <label class="campo">Empresa / consultoria<input type="text" name="organizacao" autocomplete="organization"></label>
+          <label class="campo" style="margin-top:12px">Tipo<select name="tipo_org">${TIPOS_ORG.map((t) => `<option>${t}</option>`).join("")}</select></label>
+          <label class="campo" style="margin-top:12px">Telefone / WhatsApp<input type="text" name="telefone" autocomplete="tel"></label>
+          <p class="muted" style="font-size:12px;margin:8px 0 0">Contas de empresa passam por aprovação. Enquanto isso, você já pode entrar e usar a conta.</p>
+        </div>` : ""}
       ${modo !== "nova" ? `<label class="campo">E-mail<input type="email" name="email" required autocomplete="email"></label>` : ""}
       ${modo !== "esqueci" ? `<label class="campo">${modo === "nova" ? "Nova senha" : "Senha"}<input type="password" name="senha" required minlength="6" autocomplete="${modo === "entrar" ? "current-password" : "new-password"}"></label>` : ""}
       <button class="btn" type="submit">${modo === "entrar" ? "Entrar" : modo === "criar" ? "Criar conta" : modo === "esqueci" ? "Enviar link" : "Salvar senha"}</button>
@@ -158,6 +76,12 @@ function telaLogin(modo = "entrar", msg = "") {
       ${modo === "entrar" ? `<div class="alt"><a id="reenviar" hidden>Reenviar e-mail de confirmação</a></div>` : ""}
     </form></div></div>`;
   $$("[data-modo]").forEach((a) => (a.onclick = () => telaLogin(a.dataset.modo)));
+  let tipo = tipoInicial;
+  $("#tipoConta")?.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    tipo = b.dataset.v; $$("#tipoConta button").forEach((x) => x.classList.toggle("on", x === b));
+    $("#camposEmpresa").hidden = tipo !== "empresa";
+  });
   const reenviar = $("#reenviar");
   if (reenviar) {
     reenviar.hidden = !/expir|Confirme seu e-mail/i.test(msg);
@@ -171,16 +95,18 @@ function telaLogin(modo = "entrar", msg = "") {
   }
   $("#fLogin").onsubmit = async (e) => {
     e.preventDefault();
-    const f = e.target, btn = $("button", f), msg = $("#msgLogin");
+    const f = e.target, btn = $("button[type=submit]", f), msg = $("#msgLogin");
     const email = f.email?.value.trim(), senha = f.senha?.value;
     btn.disabled = true; msg.textContent = "Aguarde…";
     try {
       if (modo === "entrar") {
         const { error } = await sb.auth.signInWithPassword({ email, password: senha });
         if (error) { msg.textContent = traduzErro(error); if ($("#reenviar")) $("#reenviar").hidden = !/Confirme seu e-mail/i.test(msg.textContent); return; }
-      }
-      else if (modo === "criar") {
-        const d = await q(sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: urlApp() } }));
+      } else if (modo === "criar") {
+        if (tipo === "empresa" && !f.organizacao.value.trim()) { msg.textContent = "Informe o nome da empresa ou consultoria."; return; }
+        const data = { tipo, nome: f.nome.value.trim() };
+        if (tipo === "empresa") Object.assign(data, { organizacao: f.organizacao.value.trim(), tipo_org: f.tipo_org.value, telefone: f.telefone.value.trim() });
+        const d = await q(sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: urlApp(), data } }));
         if (!d.session) return telaLogin("entrar", "Conta criada. Confirme pelo link enviado ao seu e-mail e depois entre.");
       } else if (modo === "esqueci") {
         await q(sb.auth.resetPasswordForEmail(email, { redirectTo: urlApp() }));
@@ -193,31 +119,35 @@ function telaLogin(modo = "entrar", msg = "") {
   };
 }
 
-$("#btnSair").onclick = async () => { await sb.auth.signOut(); };
-
 let appIniciado = false;
 async function iniciarApp() {
   document.body.classList.remove("sem-sessao");
   atualizarCorBarra();
-  $("#usuario").textContent = USUARIO?.email || "";
+  $("#usuario").textContent = ctx.usuario?.email || "";
   try {
-    const c = await q(sb.from("configuracoes").select("*").maybeSingle());
-    CFG = { ...CFG_PADRAO, ...(c || {}) };
-  } catch (e) { CFG = { ...CFG_PADRAO }; falha(e); }
-  estado.filtros.score = CFG.score_minimo_padrao;
+    const [perfil, cfg] = await Promise.all([
+      q(sb.from("perfis").select("*").eq("id", ctx.usuario.id).maybeSingle()),
+      q(sb.from("configuracoes").select("empresa_nome, paginas_por_fonte, score_minimo_padrao, fontes_ativas").maybeSingle()),
+      carregarStatusChaves(),
+    ]);
+    ctx.perfil = perfil || { id: ctx.usuario.id, papel: "candidato", modelo_curriculo: "classico" };
+    ctx.papel = ctx.perfil.papel || "candidato";
+    ctx.cfg = { ...CFG_PADRAO, ...(cfg || {}) };
+  } catch (e) { ctx.perfil = { papel: "candidato" }; ctx.papel = "candidato"; ctx.cfg = { ...CFG_PADRAO }; falha(e); }
+  estado.filtros.score = ctx.cfg.score_minimo_padrao;
+  montarMenu();
   appIniciado = true;
   rotear();
 }
 
 function limparUrl() { history.replaceState(null, "", location.pathname + "#/painel"); }
-
 function telaConfirmada() {
   document.body.classList.add("sem-sessao"); atualizarCorBarra();
   main.innerHTML = `<div class="login"><div class="card" style="text-align:center">
     <div class="brand" style="justify-content:center"><span class="logo" style="color:#fff">R+</span><div style="text-align:left"><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
     <div style="font-size:44px;line-height:1">✅</div>
     <h2 style="margin:10px 0 6px;font-size:20px">E-mail confirmado!</h2>
-    <p class="muted" style="margin:0 0 18px">Sua conta <b>${esc(USUARIO?.email || "")}</b> está ativa e pronta para uso.</p>
+    <p class="muted" style="margin:0 0 18px">Sua conta <b>${esc(ctx.usuario?.email || "")}</b> está ativa e pronta para uso.</p>
     <button class="btn" id="btnAcessar" style="width:100%">Acessar minha conta</button>
   </div></div>`;
   $("#btnAcessar").onclick = () => { location.hash = "#/painel"; iniciarApp(); };
@@ -225,51 +155,59 @@ function telaConfirmada() {
 
 let retornoTratado = false;
 sb.auth.onAuthStateChange((evento, sessao) => {
-  if (evento === "PASSWORD_RECOVERY") { USUARIO = sessao?.user || null; limparUrl(); telaLogin("nova"); return; }
+  if (evento === "PASSWORD_RECOVERY") { ctx.usuario = sessao?.user || null; limparUrl(); telaLogin("nova"); return; }
   const novo = sessao?.user || null;
-  const mudou = (novo?.id || null) !== (USUARIO?.id || null);
-  USUARIO = novo;
+  const mudou = (novo?.id || null) !== (ctx.usuario?.id || null);
+  ctx.usuario = novo;
   if (!retornoTratado && (RETORNO.tipo || RETORNO.erro)) {
     retornoTratado = true;
     limparUrl();
-    if (RETORNO.erro && !USUARIO) {
+    if (RETORNO.erro && !ctx.usuario) {
       const expirado = /expir|invalid/i.test(RETORNO.erro + RETORNO.codigo);
       return telaLogin("entrar", expirado ? "Este link de confirmação expirou ou já foi usado. Se sua conta já foi confirmada, basta entrar. Se não, peça um novo link abaixo."
         : "Não foi possível validar o link: " + RETORNO.erro);
     }
     if (["signup", "email", "email_change", "invite"].includes(RETORNO.tipo)) {
-      if (USUARIO) return setTimeout(telaConfirmada, 0);
+      if (ctx.usuario) return setTimeout(telaConfirmada, 0);
       return telaLogin("entrar", "E-mail confirmado! Agora é só entrar com seu e-mail e senha.");
     }
   }
-  if (!USUARIO) { appIniciado = false; Object.assign(estado, { busca: null, candSel: null, candidatoBusca: null, pipeSel: null }); telaLogin(); }
-  else if (mudou || !appIniciado) setTimeout(iniciarApp, 0);
+  if (!ctx.usuario) {
+    appIniciado = false; Object.assign(estado, { busca: null, candSel: null, candidatoBusca: null, pipeSel: null, cvFiltro: "" });
+    telaLogin(location.hash.startsWith("#/criar") ? "criar" : "entrar");
+  } else if (mudou || !appIniciado) setTimeout(iniciarApp, 0);
 });
 
-/* ------------------------------------------------------------- roteador */
-const PAGINAS = { painel: pgPainel, candidatos: pgCandidatos, busca: pgBusca, pipeline: pgPipeline, config: pgConfig };
+/* ============================================================= roteador */
+const PAGINAS = {
+  painel: () => (ehAdmin() ? pgPainel() : pgInicio()), candidatos: pgCandidatos, perfil: pgPerfil, busca: pgBusca, pipeline: pgPipeline,
+  curriculos: () => pgCurriculos({ meuPerfil }), config: pgConfig, usuarios: pgUsuarios,
+};
 async function rotear() {
   fecharSheet(); atualizarCorBarra();
-  if (!USUARIO || !appIniciado) return;
-  const [, nome = "painel"] = location.hash.split("/");
-  const pg = PAGINAS[nome] ? nome : "painel";
+  if (!ctx.usuario || !appIniciado) return;
+  const [, nome = "painel"] = location.hash.split("?")[0].split("/");
+  const pg = PAGINAS[nome] && paginaPermitida(nome) ? nome : "painel";
+  if (pg !== nome && nome && nome !== "painel" && PAGINAS[nome]) toast("Esta área é restrita a administradores.");
   $$("nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.page === pg));
   try { await PAGINAS[pg](); } catch (e) { main.innerHTML = `<div class="card vazio">⚠ ${esc(traduzErro(e))}</div>`; }
   window.scrollTo(0, 0);
 }
 window.addEventListener("hashchange", rotear);
 
-/* ============================================================= PAINEL */
+/* ============================================================= PAINEL (admin) */
 async function pgPainel() {
-  const [d, buscas] = await Promise.all([
+  const [d, buscas, pend] = await Promise.all([
     q(sb.rpc("painel_resumo")),
     q(sb.from("buscas").select("termos, compativeis, criada_em, candidatos(nome)").order("criada_em", { ascending: false }).limit(6)),
+    ehMaster() ? q(sb.from("solicitacoes_admin").select("id", { count: "exact", head: false }).eq("status", "pendente")) : Promise.resolve([]),
   ]);
   const st = d.status || {};
   const ativos = Object.entries(st).filter(([s]) => s !== "Descartada" && s !== "Contratado").reduce((a, [, n]) => a + n, 0);
   const kpi = (rot, val, sub, ico, cor) => `<div class="card kpi"><i style="background:color-mix(in srgb, ${cor} 14%, transparent);color:${cor}">${ico}</i>
     <small>${rot}</small><b>${val}</b><span>${sub}</span></div>`;
-  main.innerHTML = topo(`Olá, ${esc(CFG.empresa_nome || "equipe")} 👋`, "Visão geral da operação de recrutamento") + `
+  main.innerHTML = topo(`Olá, ${esc(ctx.cfg.empresa_nome || ctx.perfil?.organizacao || ctx.perfil?.nome || "equipe")} 👋`, "Visão geral da operação de recrutamento") + `
+    ${pend.length ? `<a class="card aviso" href="#/usuarios">🔔 <b>${pend.length} pedido(s) de acesso de administrador</b> aguardando sua aprovação →</a>` : ""}
     <div class="kpis">
       ${kpi("CANDIDATOS", d.candidatos, "perfis cadastrados", "●", "var(--prim)")}
       ${kpi("VAGAS MAPEADAS", d.vagas, "vagas salvas no banco", "◆", "var(--verde)")}
@@ -290,18 +228,59 @@ async function pgPainel() {
     </div>`;
 }
 
-/* ============================================================= CANDIDATOS */
-const COLS_CAND = "id, nome, email, telefone, cargo_desejado, cargos_alternativos, skills, senioridade, cidade, uf, modalidades, pretensao_salarial, aceita_mudanca, resumo";
+/* ============================================================= INÍCIO (candidato) */
+async function pgInicio() {
+  const [eu, cvs, pipe, buscas] = await Promise.all([
+    meuPerfil(),
+    q(sb.from("curriculos").select("id, tipo, padrao, vaga_titulo, vaga_empresa, atualizado_em").order("atualizado_em", { ascending: false }).limit(5)),
+    q(sb.from("pipeline").select("status")),
+    q(sb.from("buscas").select("termos, compativeis, criada_em").order("criada_em", { ascending: false }).limit(4)),
+  ]);
+  const campos = eu ? ["nome", "cargo_desejado", "skills", "cidade", "uf", "senioridade"].filter((k) => eu[k]).length : 0;
+  const completo = Math.round((campos / 6) * 100);
+  const temBase = cvs.some((c) => c.tipo === "base" || c.padrao);
+  const passos = [
+    [completo >= 100, "Complete seu perfil", "Cargo, competências e cidade deixam o ranking das vagas muito mais preciso.", "#/perfil", "Completar perfil"],
+    [temBase, "Importe seu currículo", "Ele vira o ponto de partida das adaptações por vaga, e você não precisa anexar toda vez.", "#/curriculos", "Importar currículo"],
+    [buscas.length > 0, "Busque vagas", "O sistema varre vários portais de uma vez e mostra as mais compatíveis com você.", "#/busca", "Buscar vagas"],
+  ];
+  main.innerHTML = topo(`Olá, ${esc((eu?.nome || ctx.perfil?.nome || "").split(" ")[0] || "bem-vindo")} 👋`, "Seu painel para encontrar a próxima oportunidade") + `
+    <div class="kpis">
+      <div class="card kpi"><small>PERFIL</small><b>${completo}%</b><span>completo</span></div>
+      <div class="card kpi"><small>CURRÍCULOS</small><b>${cvs.length}</b><span>salvos</span></div>
+      <div class="card kpi"><small>VAGAS ACOMPANHADAS</small><b>${pipe.length}</b><span>em “Minhas vagas”</span></div>
+      <div class="card kpi"><small>ENTREVISTAS</small><b>${pipe.filter((p) => p.status === "Entrevista").length}</b><span>em andamento</span></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Próximos passos</h3>${passos.map(([ok, tit, txt, href, rot]) => `<div class="passo ${ok ? "ok" : ""}">
+        <span class="bolinha">${ok ? "✓" : ""}</span><div style="flex:1"><b>${tit}</b><div class="muted" style="font-size:13px">${txt}</div></div>
+        ${ok ? "" : `<a class="btn sec peq" href="${href}" style="text-decoration:none">${rot}</a>`}</div>`).join("")}</div>
+      <div class="card"><div class="topo" style="margin:0 0 6px;align-items:center"><h3 style="margin:0">Currículos recentes</h3><a class="btn neutro peq" href="#/curriculos" style="text-decoration:none">Ver todos</a></div>
+        ${cvs.length ? cvs.map((c) => `<div class="linha-busca"><div class="trunc"><b>${esc(c.tipo === "base" ? "Currículo base" : c.vaga_titulo)}</b>
+          <span class="muted"> ${esc(c.vaga_empresa || "")}</span></div><div style="white-space:nowrap">${c.padrao ? '<span class="chip ok">Padrão</span>' : ""}<span class="muted">${dataHora(c.atualizado_em)}</span></div></div>`).join("")
+          : `<div class="vazio">Nenhum currículo salvo. Importe o seu em “Currículos”.</div>`}</div>
+    </div>`;
+}
+
+/* ============================================================= CANDIDATOS / MEU PERFIL */
+const COLS_CAND = "id, nome, email, telefone, cargo_desejado, cargos_alternativos, skills, senioridade, cidade, uf, modalidades, pretensao_salarial, aceita_mudanca, resumo, proprio";
 const listarCandidatos = (filtro = "") => {
-  let r = sb.from("candidatos").select(COLS_CAND).order("nome");
+  let r = sb.from("candidatos").select(COLS_CAND).eq("proprio", false).order("nome");
   const f = filtro.replace(/[%,()*]/g, " ").trim();
   if (f) r = r.or(["nome", "cargo_desejado", "skills", "cidade"].map((c) => `${c}.ilike.%${f}%`).join(","));
   return q(r);
 };
 const obterCandidato = async (id) => q(sb.from("candidatos").select(COLS_CAND).eq("id", id).maybeSingle());
+/** Para o candidato: o registro dele mesmo em "candidatos" (proprio = true). */
+async function meuPerfil() { return q(sb.from("candidatos").select(COLS_CAND).eq("proprio", true).maybeSingle()); }
+/** Candidatos selecionáveis na busca/pipeline: os do admin, ou o próprio perfil do candidato. */
+async function candidatosDisponiveis() {
+  if (ehAdmin()) return listarCandidatos();
+  const eu = await meuPerfil(); return eu ? [eu] : [];
+}
 
 async function pgCandidatos() {
-  main.innerHTML = topo("Candidatos", "Perfis que o sistema usa para encontrar as vagas certas", `
+  main.innerHTML = topo("Candidatos", "Seu banco de talentos: perfis usados para encontrar as vagas certas", `
       <button class="btn sec" id="btnImportar">⬆ Importar currículo</button>
       <button class="btn" id="btnNovo">+ Novo candidato</button>
       <input type="file" id="arqCv" accept=".pdf,.docx,.txt" hidden>`) + `
@@ -334,7 +313,7 @@ async function pgCandidatos() {
       toast("Lendo currículo…");
       const dados = analisarCurriculo(await lerCurriculo(f));
       estado.candSel = null;
-      formCandidato({ modalidades: MODALIDADES.join(","), ...dados }, carregar, true);
+      formCandidato({ modalidades: MODALIDADES.join(","), ...dados }, carregar, { importado: true });
       abrirSheet($("#formCand"), "Novo candidato");
       toast("Currículo lido. Revise os campos e salve.");
     } catch (err) { falha(err); }
@@ -343,47 +322,59 @@ async function pgCandidatos() {
   formCandidato(estado.candSel ? (await obterCandidato(estado.candSel)) || {} : {}, carregar);
 }
 
-async function lerCurriculo(arq) {
-  if (arq.size > 10 * 1024 * 1024) throw new Error("Arquivo maior que 10 MB.");
-  const ext = arq.name.toLowerCase().split(".").pop();
-  if (ext === "pdf") {
-    await carregarScript("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js");
-    const pdfjs = window.pdfjsLib;
-    pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-    const doc = await pdfjs.getDocument({ data: new Uint8Array(await arq.arrayBuffer()) }).promise;
-    const paginas = [];
-    for (let i = 1; i <= doc.numPages; i++) {
-      const c = await (await doc.getPage(i)).getTextContent();
-      let linha = "", out = [], y = null;
-      for (const it of c.items) {
-        const yy = it.transform?.[5];
-        if (y !== null && yy !== undefined && Math.abs(yy - y) > 2) { out.push(linha); linha = ""; }
-        linha += (linha && !linha.endsWith(" ") && !it.str.startsWith(" ") ? " " : "") + it.str;
-        if (it.hasEOL) { out.push(linha); linha = ""; }
-        y = yy ?? y;
-      }
-      out.push(linha); paginas.push(out.join("\n"));
-    }
-    return paginas.join("\n");
-  }
-  if (ext === "docx") {
-    await carregarScript("https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js");
-    return (await window.mammoth.extractRawText({ arrayBuffer: await arq.arrayBuffer() })).value;
-  }
-  if (ext === "txt") return arq.text();
-  throw new Error("Envie um arquivo PDF, DOCX ou TXT.");
+async function pgPerfil() {
+  const eu = await meuPerfil();
+  main.innerHTML = topo("Meu perfil", "Estas informações definem quais vagas combinam com você") + `
+    <div class="card" id="formCand" style="margin-bottom:14px"></div>
+    <div class="card" style="margin-bottom:14px"><h3>Visibilidade para recrutadores</h3>
+      <label class="checks" style="font-size:14px"><span class="switch"><input type="checkbox" id="pVisivel" ${ctx.perfil?.visivel_recrutadores ? "checked" : ""}><span></span></span>
+        Permitir que empresas e recrutadores da plataforma encontrem meu perfil e meu currículo padrão</label>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Você pode desligar a qualquer momento. Seus dados nunca são exibidos publicamente na internet.</p></div>
+    <div class="card" style="margin-bottom:14px" id="cardEmpresa"></div>
+    ${cartaoConta()}`;
+  formCandidato(eu || { nome: ctx.perfil?.nome || "", email: ctx.usuario.email, modalidades: MODALIDADES.join(",") }, async () => {}, { proprio: true });
+  ligarCartaoConta();
+  $("#pVisivel").onchange = async (e) => {
+    try { await q(sb.from("perfis").update({ visivel_recrutadores: e.target.checked, atualizado_em: new Date().toISOString() }).eq("id", ctx.usuario.id));
+      ctx.perfil.visivel_recrutadores = e.target.checked; toast(e.target.checked ? "Seu perfil está visível para recrutadores." : "Seu perfil está oculto para recrutadores."); }
+    catch (err) { e.target.checked = !e.target.checked; falha(err); }
+  };
+  const sol = await q(sb.from("solicitacoes_admin").select("status, organizacao, criado_em").order("criado_em", { ascending: false }).limit(1));
+  const ult = sol[0];
+  $("#cardEmpresa").innerHTML = `<h3>Recruta ou contrata?</h3>` + (ult?.status === "pendente"
+    ? `<p style="margin:0">⏳ Seu pedido de acesso como empresa/RH (<b>${esc(ult.organizacao)}</b>) está em análise.</p>`
+    : `<p class="muted" style="margin:-4px 0 10px;font-size:13px">Empresas, RHs e headhunters podem cadastrar candidatos, acompanhar processos e, em breve, publicar vagas na plataforma.${ult?.status === "recusada" ? " Seu último pedido foi recusado; você pode enviar outro." : ""}</p>
+       <button class="btn sec" id="pPedir">Pedir acesso de empresa / RH</button>`);
+  $("#pPedir")?.addEventListener("click", () => {
+    modal(`<h3 style="margin:0 0 10px">Acesso de empresa / RH</h3><form class="form" id="fSol" style="grid-template-columns:1fr">
+      <label class="campo">Empresa / consultoria *<input type="text" name="organizacao" required value="${esc(ctx.perfil?.organizacao || "")}"></label>
+      <label class="campo">Tipo<select name="tipo_org">${TIPOS_ORG.map((t) => `<option>${t}</option>`).join("")}</select></label>
+      <label class="campo">Telefone / WhatsApp<input type="text" name="telefone" value="${esc(ctx.perfil?.telefone || "")}"></label>
+      <label class="campo">Conte rapidamente como vai usar a plataforma<textarea name="mensagem" style="min-height:80px"></textarea></label></form>
+      <div class="rodape"><button class="btn neutro" data-fechar>Cancelar</button><button class="btn" id="solEnviar">Enviar pedido</button></div>`);
+    $("#solEnviar").onclick = async () => {
+      const f = $("#fSol");
+      if (!f.organizacao.value.trim()) return toast("Informe o nome da empresa.");
+      try {
+        await q(sb.from("solicitacoes_admin").insert({ usuario: ctx.usuario.id, organizacao: f.organizacao.value.trim(), tipo_org: f.tipo_org.value,
+          telefone: f.telefone.value.trim(), mensagem: f.mensagem.value.trim() }));
+        $("#modal").close(); toast("Pedido enviado. Você será avisado quando for aprovado."); pgPerfil();
+      } catch (err) { falha(err); }
+    };
+  });
 }
 
-function formCandidato(c, recarregar, importado = false) {
+function formCandidato(c, recarregar, { importado = false, proprio = false } = {}) {
   const mods = (c.modalidades ?? MODALIDADES.join(",")).split(",").map((s) => s.trim());
   const campo = (k, rot, dica = "", cls = "", tipo = "text") => `<label class="campo ${cls}">${rot}
     <input type="${tipo}" name="${k}" value="${esc(c[k] ?? "")}" placeholder="${esc(dica)}"></label>`;
   const sel = (k, rot, ops, vazio) => `<label class="campo">${rot}<select name="${k}"><option value="">${vazio}</option>
     ${ops.map((o) => `<option ${c[k] === o ? "selected" : ""}>${o}</option>`).join("")}</select></label>`;
   const novo = !c.id;
+  const titulo = proprio ? "Meus dados profissionais" : novo ? (importado ? "Novo candidato (do currículo)" : "Novo candidato") : esc(c.nome);
   $("#formCand").innerHTML = `
-    <div class="topo" style="align-items:center;margin-bottom:12px"><h3 style="margin:0;font-size:17px">${novo ? (importado ? "Novo candidato (do currículo)" : "Novo candidato") : esc(c.nome)}</h3>
-      ${novo ? "" : `<button class="btn sucesso" id="btnBuscarPerfil">Buscar vagas para este perfil →</button>`}</div>
+    <div class="topo" style="align-items:center;margin-bottom:12px"><h3 style="margin:0;font-size:17px">${titulo}</h3>
+      <div class="acoes">${novo ? "" : `<button class="btn neutro peq" id="btnCvBase">📄 Currículo base</button><button class="btn sucesso" id="btnBuscarPerfil">Buscar vagas para este perfil →</button>`}</div></div>
     <form class="form" id="fCand" autocomplete="off">
       ${campo("nome", "Nome completo *", "Ex.: Mariana Souza")}
       ${campo("email", "E-mail", "nome@email.com", "", "email")}
@@ -398,10 +389,10 @@ function formCandidato(c, recarregar, importado = false) {
       <div class="campo full"><span style="font-size:12px;font-weight:600;color:var(--texto2)">Modalidades aceitas</span>
         <div class="checks">${MODALIDADES.map((m) => `<label><input type="checkbox" name="mod" value="${m}" ${mods.includes(m) ? "checked" : ""}>${m}</label>`).join("")}
           <label style="margin-left:10px"><span class="switch"><input type="checkbox" name="aceita_mudanca" ${c.aceita_mudanca ? "checked" : ""}><span></span></span>Aceita mudança de cidade</label></div></div>
-      <label class="campo full">Resumo profissional / observações do recrutador<textarea name="resumo">${esc(c.resumo || "")}</textarea></label>
+      <label class="campo full">${proprio ? "Resumo profissional" : "Resumo profissional / observações do recrutador"}<textarea name="resumo">${esc(c.resumo || "")}</textarea></label>
     </form>
     <div class="rodape" style="margin-top:16px">
-      ${novo ? "<span></span>" : `<button class="btn perigo" id="btnExcluir">Excluir</button>`}
+      ${novo || proprio ? "<span></span>" : `<button class="btn perigo" id="btnExcluir">Excluir</button>`}
       <button class="btn" id="btnSalvar">Salvar</button></div>`;
   if (!Number(c.pretensao_salarial)) $("#fCand [name=pretensao_salarial]").value = "";
 
@@ -418,19 +409,24 @@ function formCandidato(c, recarregar, importado = false) {
     };
     if (!dados.nome || !dados.cargo_desejado) return toast("Informe pelo menos o nome e o cargo desejado.");
     try {
-      const salvo = await q(novo ? sb.from("candidatos").insert(dados).select(COLS_CAND).single()
+      const salvo = await q(novo ? sb.from("candidatos").insert({ ...dados, proprio }).select(COLS_CAND).single()
         : sb.from("candidatos").update(dados).eq("id", c.id).select(COLS_CAND).single());
-      estado.candSel = salvo.id; toast("Candidato salvo.");
-      await recarregar(); formCandidato(salvo, recarregar);
+      if (proprio) {   // mantém o perfil da conta em sincronia
+        await sb.from("perfis").update({ nome: dados.nome, telefone: dados.telefone, cidade: dados.cidade, uf: dados.uf, atualizado_em: new Date().toISOString() }).eq("id", ctx.usuario.id);
+        Object.assign(ctx.perfil, { nome: dados.nome, telefone: dados.telefone, cidade: dados.cidade, uf: dados.uf });
+      }
+      estado.candSel = salvo.id; toast(proprio ? "Perfil salvo." : "Candidato salvo.");
+      await recarregar(); formCandidato(salvo, recarregar, { proprio });
     } catch (e) { falha(e); }
   };
   if (!novo) {
-    $("#btnExcluir").onclick = async () => {
+    $("#btnExcluir")?.addEventListener("click", async () => {
       if (!confirm(`Excluir ${c.nome}? O pipeline desse candidato também será removido. Não é possível desfazer.`)) return;
-      try { await q(sb.from("candidatos").delete().eq("id", c.id)); estado.candSel = null; toast("Candidato excluído."); await recarregar(); formCandidato({}, recarregar); if (sheetAtual) voltarSheet(); }
+      try { await q(sb.from("candidatos").delete().eq("id", c.id)); estado.candSel = null; toast("Candidato excluído."); await recarregar(); formCandidato({}, recarregar); if (temSheet()) voltarSheet(); }
       catch (e) { falha(e); }
-    };
+    });
     $("#btnBuscarPerfil").onclick = () => irBusca(c.id);
+    $("#btnCvBase").onclick = () => importarCurriculoBase(c);
   }
 }
 
@@ -438,18 +434,25 @@ function irBusca(cid) { estado.candidatoBusca = cid; location.hash = "#/busca"; 
 
 /* ============================================================= BUSCA */
 async function pgBusca() {
-  const cands = await listarCandidatos();
+  const cands = await candidatosDisponiveis();
+  if (!ehAdmin() && !cands.length) {
+    main.innerHTML = topo("Buscar vagas", "Varre os canais de vagas do Brasil e ranqueia pela aderência ao seu perfil") + `
+      <div class="card vazio"><div class="ico">🧭</div><b>Primeiro, complete seu perfil</b><br>Com seu cargo, competências e cidade o sistema encontra as vagas certas para você.
+        <div style="margin-top:14px"><a class="btn" href="#/perfil" style="text-decoration:none">Completar meu perfil</a></div></div>`;
+    return;
+  }
   if (!estado.candidatoBusca || !cands.some((c) => c.id === estado.candidatoBusca)) estado.candidatoBusca = cands[0]?.id ?? null;
   const buscando = estado.busca?.estado === "buscando";
-  main.innerHTML = topo("Buscar vagas", "Varre os canais de vagas do Brasil e ranqueia pela aderência ao perfil") + `
+  main.innerHTML = topo("Buscar vagas", ehAdmin() ? "Varre os canais de vagas do Brasil e ranqueia pela aderência ao perfil" : "Varre os canais de vagas do Brasil e ranqueia pela aderência ao seu perfil") + `
     <div class="card" style="margin-bottom:14px">
-      <div class="barra-busca">
-        <label class="campo">Candidato<select id="selCand">${cands.length ? cands.map((c) => `<option value="${c.id}" ${c.id === estado.candidatoBusca ? "selected" : ""}>${esc(c.nome)} · ${esc(c.cargo_desejado)}</option>`).join("") : `<option value="">Cadastre um candidato primeiro</option>`}</select></label>
-        <label class="campo">Termos<input type="text" id="termos" placeholder="Cargos a pesquisar, separados por vírgula"></label>
+      <div class="barra-busca ${ehAdmin() ? "" : "sem-cand"}">
+        ${ehAdmin() ? `<label class="campo">Candidato<select id="selCand">${cands.length ? cands.map((c) => `<option value="${c.id}" ${c.id === estado.candidatoBusca ? "selected" : ""}>${esc(c.nome)} · ${esc(c.cargo_desejado)}</option>`).join("") : `<option value="">Cadastre um candidato primeiro</option>`}</select></label>`
+          : `<input type="hidden" id="selCand" value="${cands[0].id}">`}
+        <label class="campo">Cargos a pesquisar<input type="text" id="termos" placeholder="Cargos separados por vírgula"></label>
         <button class="btn" id="btnBuscar" style="height:38px">${buscando ? "■ Cancelar" : "🔎 Buscar vagas"}</button>
       </div>
       <div class="canais"><b class="muted" style="font-size:12px">Canais</b>
-        ${FONTES.map((f) => { const d = fonteDisponivel(f); return `<label class="${d ? "" : "off"}" title="${esc(f.descricao)}"><input type="checkbox" value="${f.id}" ${d && CFG.fontes_ativas.includes(f.id) ? "checked" : ""} ${d ? "" : "disabled"}>${esc(f.nome)}${d ? "" : " (sem chave)"}</label>`; }).join("")}
+        ${FONTES.map((f) => { const d = fonteDisponivel(f); return `<label class="${d ? "" : "off"}" title="${esc(f.descricao)}"><input type="checkbox" value="${f.id}" ${d && ctx.cfg.fontes_ativas.includes(f.id) ? "checked" : ""} ${d ? "" : "disabled"}>${esc(f.nome)}${d ? "" : " (indisponível)"}</label>`; }).join("")}
         <button class="btn neutro peq" id="btnPortais" style="margin-left:auto">Mais portais ↗</button></div>
       <div id="statusFontes" class="canais" style="margin-top:8px"></div>
       <div class="progresso" id="prog" hidden><div style="width:3%"></div></div>
@@ -464,8 +467,8 @@ async function pgBusca() {
         <div class="tabela-wrap" style="max-height:calc(100vh - 330px);min-height:260px"><table>
           <thead><tr><th class="c">SCORE</th><th>CARGO</th><th>EMPRESA</th><th>LOCAL</th><th>MODALIDADE</th><th>CANAL</th><th class="c">DATA</th></tr></thead>
           <tbody id="tbVagas"></tbody></table></div>
-        <div class="rodape"><span class="muted" id="lblTotal">Selecione um candidato e clique em Buscar.</span>
-          <div class="acoes"><button class="btn neutro peq" id="btnExcel">Exportar Excel</button><button class="btn sec peq" id="btnRelatorio">Relatório p/ cliente</button></div></div>
+        <div class="rodape"><span class="muted" id="lblTotal">${ehAdmin() ? "Selecione um candidato e clique em Buscar." : "Confira os cargos e clique em Buscar."}</span>
+          <div class="acoes"><button class="btn neutro peq" id="btnExcel">Exportar Excel</button>${ehAdmin() ? `<button class="btn sec peq" id="btnRelatorio">Relatório p/ cliente</button>` : ""}</div></div>
       </div>
       <div class="card detalhe" id="detVaga"></div>
     </div>`;
@@ -486,7 +489,7 @@ async function pgBusca() {
   $("#tbVagas").onclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) { estado.vagaSel = +tr.dataset.idx; marcarSel(); detalharVaga(); abrirSheet($("#detVaga"), "Vaga"); } };
   $("#tbVagas").ondblclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) window.open(estado.busca.vagas[+tr.dataset.idx].url, "_blank", "noopener"); };
   $("#btnExcel").onclick = () => exportarExcel(vagasVisiveis(), estado.busca?.candidato).catch(falha);
-  $("#btnRelatorio").onclick = () => abrirRelatorio(vagasVisiveis(), estado.busca?.candidato);
+  $("#btnRelatorio")?.addEventListener("click", () => abrirRelatorio(vagasVisiveis(), estado.busca?.candidato));
   renderStatus(); renderVagas();
 }
 
@@ -518,7 +521,7 @@ function marcarSel() { $$("#tbVagas tr").forEach((tr) => tr.classList.toggle("se
 function detalharVaga() {
   const el = $("#detVaga"); if (!el) return;
   const v = estado.vagaSel != null ? estado.busca?.vagas[estado.vagaSel] : null;
-  if (!v) { el.innerHTML = `<div class="vazio"><div class="ico">🎯</div><b>Selecione uma vaga</b><br>para ver por que ela combina com o candidato.</div>`; return; }
+  if (!v) { el.innerHTML = `<div class="vazio"><div class="ico">🎯</div><b>Selecione uma vaga</b><br>para ver por que ela combina com o perfil.</div>`; return; }
   const d = v.detalhes_score || {}, faixa = classificar(v.score);
   const obs = [d.cargo, d.local, d.senioridade, d.salario, d.alerta].filter(Boolean).join(" · ");
   el.innerHTML = `<div class="det">
@@ -529,12 +532,12 @@ function detalharVaga() {
     <div class="barras">${Object.entries(d.parciais || {}).map(([k, val]) => `<div class="barra"><span>${ROTULO_PARCIAL[k] || k}</span>
       <div class="trilho"><div style="width:${val}%;background:${corParcial(val)}"></div></div><b>${val}%</b></div>`).join("")}</div>
     <p class="muted" style="font-size:12px">${esc(obs)}</p>
-    ${d.skills_ok?.length ? `<h4>Competências que o candidato tem</h4>${d.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
+    ${d.skills_ok?.length ? `<h4>Competências que ${ehAdmin() ? "o candidato tem" : "você tem"}</h4>${d.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
     ${d.skills_faltam?.length ? `<h4>Pedidas na vaga e ausentes no perfil</h4>${d.skills_faltam.map((s) => `<span class="chip gap">${esc(s)}</span>`).join("")}` : ""}
     <h4>Descrição</h4><div class="desc">${esc((v.descricao || "Descrição completa no anúncio.").slice(0, 2500))}</div>
     <button class="btn ia" id="btnAdaptar" style="width:100%;margin-top:14px">✨ Adaptar currículo para esta vaga</button>
     <div class="det-acoes"><a class="btn neutro" href="${esc(v.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a>
-      <button class="btn" id="btnPipe">+ Adicionar ao pipeline</button></div></div>`;
+      <button class="btn" id="btnPipe">+ ${ehAdmin() ? "Adicionar ao pipeline" : "Acompanhar esta vaga"}</button></div></div>`;
   $("#btnPipe").onclick = () => adicionarPipeline(v).catch(falha);
   $("#btnAdaptar").onclick = () => abrirAdaptador(v, estado.busca.candidato);
 }
@@ -556,10 +559,10 @@ async function iniciarBusca(cands) {
   const btn = $("#btnBuscar");
   if (estado.busca?.estado === "buscando") { estado.busca.cancelada = true; finalizarBusca(estado.busca); return; }
   const candidato = cands.find((c) => c.id === +$("#selCand").value);
-  if (!candidato) return toast("Cadastre e selecione um candidato para buscar vagas.");
+  if (!candidato) return toast(ehAdmin() ? "Cadastre e selecione um candidato para buscar vagas." : "Complete seu perfil para buscar vagas.");
   const fontes = $$(".canais input[type=checkbox]:checked").map((x) => FONTES.find((f) => f.id === x.value));
   const termos = $("#termos").value.split(",").map((t) => t.trim()).filter(Boolean).slice(0, 5);
-  if (!fontes.length || !termos.length) return toast("Selecione ao menos um canal e informe um termo de busca.");
+  if (!fontes.length || !termos.length) return toast("Selecione ao menos um canal e informe um cargo para pesquisar.");
 
   const b = { id: Date.now(), estado: "buscando", candidato, termos, progresso: {}, brutas: [], vagas: [], cancelada: false };
   fontes.forEach((f) => (b.progresso[f.nome] = { status: "buscando", qtd: 0 }));
@@ -570,7 +573,7 @@ async function iniciarBusca(cands) {
   await Promise.all(fontes.map(async (f) => {
     try {
       const r = await sb.functions.invoke("buscar-vagas", {
-        body: { fonte: f.id, termos, cidade: candidato.cidade || "", uf: candidato.uf || "", skills, paginas: CFG.paginas_por_fonte },
+        body: { fonte: f.id, termos, cidade: candidato.cidade || "", uf: candidato.uf || "", skills, paginas: ctx.cfg.paginas_por_fonte },
       });
       if (r.error) throw new Error(await erroFuncao(r, "buscar-vagas"));
       const vagas = r.data?.vagas || [];
@@ -592,14 +595,14 @@ async function finalizarBusca(b) {
   try {
     const okFontes = Object.entries(b.progresso).filter(([, p]) => p.status === "ok").map(([n]) => n);
     await q(sb.from("buscas").insert({ candidato_id: b.candidato.id, termos: b.termos.join(", "), total: b.vagas.length,
-      compativeis: b.vagas.filter((v) => v.score >= CFG.score_minimo_padrao).length, fontes: okFontes.join(", ") }));
+      compativeis: b.vagas.filter((v) => v.score >= ctx.cfg.score_minimo_padrao).length, fontes: okFontes.join(", ") }));
     const salvar = b.vagas.filter((v) => v.score >= 30);
     for (let i = 0; i < salvar.length; i += 200) await salvarVagas(salvar.slice(i, i + 200));
   } catch (e) { falha(e); }
 }
 
 const linhaVaga = (v) => ({
-  owner: USUARIO.id, url: v.url, titulo: v.titulo, empresa: v.empresa || "", fonte: v.fonte, cidade: v.cidade || "", uf: v.uf || "",
+  owner: ctx.usuario.id, url: v.url, titulo: v.titulo, empresa: v.empresa || "", fonte: v.fonte, cidade: v.cidade || "", uf: v.uf || "",
   modalidade: v.modalidade || "", senioridade: v.senioridade || "", salario: v.salario || "", contrato: v.contrato || "",
   descricao: (v.descricao || "").slice(0, 20000), tags: v.tags || [], skills: extrairSkills([v.titulo, (v.tags || []).join(" "), v.descricao].join(" ")),
   publicada_em: /^\d{4}-\d{2}-\d{2}$/.test(v.publicada_em || "") ? v.publicada_em : null,
@@ -613,9 +616,9 @@ async function salvarVagas(vagas) {
 async function adicionarPipeline(v) {
   const [salva] = await salvarVagas([v]);
   const { error } = await sb.from("pipeline").insert({ candidato_id: estado.busca.candidato.id, vaga_id: salva.id, score: v.score, detalhes: v.detalhes_score });
-  if (error && error.code === "23505") return toast("Essa vaga já está no pipeline do candidato.");
+  if (error && error.code === "23505") return toast(ehAdmin() ? "Essa vaga já está no pipeline do candidato." : "Você já acompanha esta vaga.");
   if (error) throw error;
-  toast("Vaga adicionada ao pipeline.");
+  toast(ehAdmin() ? "Vaga adicionada ao pipeline." : "Vaga adicionada a “Minhas vagas”.");
 }
 
 function abrirPortais(cands) {
@@ -629,23 +632,10 @@ function abrirPortais(cands) {
 }
 
 /* ---------------------------------------------------------------- exportações */
-async function novaPlanilha() {
-  await carregarScript("https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js");
-  return new window.ExcelJS.Workbook();
-}
-function cabecalho(ws, cols, larguras) {
-  ws.columns = cols.map((h, i) => ({ header: h, width: larguras[i] }));
-  ws.getRow(1).eachCell((c) => { c.font = { bold: true, color: { argb: "FFFFFFFF" } }; c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } }; });
-  ws.views = [{ state: "frozen", ySplit: 1 }];
-}
-async function salvarPlanilha(wb, nome) {
-  baixarBlob(new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), nome);
-}
-
 async function exportarExcel(vagas, candidato) {
   if (!vagas.length) return toast("Faça uma busca primeiro.");
   const wb = await novaPlanilha(), ws = wb.addWorksheet("Vagas compatíveis");
-  cabecalho(ws, ["Score", "Compatibilidade", "Cargo", "Empresa", "Local", "Modalidade", "Nível", "Contrato", "Salário", "Skills que batem",
+  cabecalhoPlanilha(ws, ["Score", "Compatibilidade", "Cargo", "Empresa", "Local", "Modalidade", "Nível", "Contrato", "Salário", "Skills que batem",
     "Skills a desenvolver", "Fonte", "Publicada", "Link"], [8, 15, 45, 28, 22, 13, 12, 12, 16, 35, 35, 18, 12, 12]);
   const cores = { Excelente: "FFD1FAE5", Alta: "FFE0E7FF", Média: "FFFEF3C7", Baixa: "FFF3F4F6" };
   for (const v of vagas) {
@@ -670,7 +660,7 @@ async function exportarExcel(vagas, candidato) {
 
 function abrirRelatorio(vagas, c) {
   if (!vagas.length || !c) return toast("Faça uma busca primeiro.");
-  const empresa = esc(CFG.empresa_nome || "RH+ Match");
+  const empresa = esc(ctx.cfg.empresa_nome || ctx.perfil?.organizacao || "RH+ Match");
   const linhas = vagas.slice(0, 25).map((v) => {
     const d = v.detalhes_score || {}, faixa = classificar(v.score);
     return `<article class="vaga"><div class="score s-${faixa.toLowerCase()}"><b>${Math.round(v.score)}</b><small>${faixa}</small></div>
@@ -706,118 +696,23 @@ ${linhas}<footer>Gerado pelo RH+ Match · Os links levam ao anúncio original de
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-/* ============================================================= CURRÍCULO ADAPTADO COM IA */
-const slugArq = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 30);
-
-function abrirAdaptador(vaga, candidato) {
-  modal(`<h3 style="margin:0 0 2px">✨ Adaptar currículo para esta vaga</h3>
-    <p class="muted" style="margin:0 0 12px"><b>${esc(vaga.titulo)}</b> · ${esc(vaga.empresa || "Empresa não divulgada")}</p>
-    <p style="margin:0 0 10px;font-size:13px">Anexe o currículo do candidato. A IA reescreve o resumo, reorganiza as competências e destaca nas experiências o que mais conta para esta vaga. <b>Empresas, cargos e datas não são alterados</b> e nada é inventado: os acréscimos aparecem marcados para você revisar.</p>
-    <label class="btn sec" style="display:inline-block;cursor:pointer">📎 Anexar currículo (PDF, DOCX ou TXT)<input type="file" id="cvArq" accept=".pdf,.docx,.txt" hidden></label>
-    <span class="muted" id="cvNome" style="margin-left:8px;font-size:13px"></span>
-    <label class="campo" style="margin-top:12px">Texto do currículo (pode revisar ou colar aqui)
-      <textarea id="cvTexto" style="min-height:220px;font-size:13px" placeholder="O texto extraído do arquivo aparece aqui."></textarea></label>
-    <div class="msg muted" id="cvMsg" style="font-size:13px;min-height:18px;margin-top:6px"></div>
-    <div class="rodape"><button class="btn neutro" data-fechar>Cancelar</button><button class="btn ia" id="cvGerar">Gerar currículo adaptado</button></div>`, true);
-  $("#cvArq").onchange = async (e) => {
-    const f = e.target.files[0]; if (!f) return;
-    $("#cvNome").textContent = "Lendo " + f.name + "…";
-    try { $("#cvTexto").value = (await lerCurriculo(f)).trim(); $("#cvNome").textContent = f.name; }
-    catch (err) { $("#cvNome").textContent = ""; $("#cvMsg").textContent = "⚠ " + traduzErro(err); }
-  };
-  $("#cvGerar").onclick = async () => {
-    const curriculo = $("#cvTexto").value.trim();
-    if (curriculo.length < 200) return ($("#cvMsg").textContent = "Anexe o currículo (ou cole o texto completo) antes de gerar.");
-    const btn = $("#cvGerar"); btn.disabled = true; btn.textContent = "Gerando…";
-    $("#cvMsg").textContent = "A IA está adaptando o currículo. Isso costuma levar de 30 segundos a 2 minutos.";
-    try {
-      const r = await sb.functions.invoke("adaptar-curriculo", { body: {
-        curriculo,
-        vaga: { titulo: vaga.titulo, empresa: vaga.empresa, descricao: String(vaga.descricao || "").slice(0, 15000), local: localVaga(vaga),
-          modalidade: vaga.modalidade, senioridade: vaga.senioridade, contrato: vaga.contrato, tags: (vaga.tags || []).slice(0, 20) },
-        candidato: candidato ? { cargo_desejado: candidato.cargo_desejado, skills: candidato.skills } : null,
-      } });
-      if (r.error) throw new Error(await erroFuncao(r, "adaptar-curriculo"));
-      mostrarAdaptado(r.data.curriculo, vaga);
-    } catch (err) {
-      btn.disabled = false; btn.textContent = "Gerar currículo adaptado";
-      $("#cvMsg").textContent = "⚠ " + traduzErro(err);
-    }
-  };
-}
-
-function htmlCurriculo(cv, destacar) {
-  const novo = (t, ehNovo) => ehNovo && destacar ? `<span class="novo">${esc(t)}</span>` : esc(t);
-  const lista = (titulo, itens) => itens?.length ? `<h2>${titulo}</h2><ul>${itens.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>` : "";
-  return `<div class="cv">
-    <h1>${esc(cv.nome)}</h1>
-    ${cv.titulo_profissional ? `<p class="titulo">${esc(cv.titulo_profissional)}</p>` : ""}
-    ${cv.contato?.length ? `<p class="contato">${cv.contato.map(esc).join(" · ")}</p>` : ""}
-    ${cv.resumo ? `<h2>Resumo profissional</h2><p>${esc(cv.resumo)}</p>` : ""}
-    ${cv.competencias?.length ? `<h2>Competências</h2><p class="skills">${cv.competencias.map((s) => novo(s.nome, s.nova)).join(" · ")}</p>` : ""}
-    ${cv.experiencias?.length ? `<h2>Experiência profissional</h2>${cv.experiencias.map((x) => `
-      <div class="exp"><div class="exp-topo"><b>${esc(x.cargo)}</b>${x.empresa ? ` — ${esc(x.empresa)}` : ""}<span>${esc([x.periodo, x.local].filter(Boolean).join(" · "))}</span></div>
-      <ul>${(x.itens || []).map((i) => `<li>${novo(i.texto, i.novo)}</li>`).join("")}</ul></div>`).join("")}` : ""}
-    ${lista("Formação", cv.formacao)}${lista("Certificações e cursos", cv.certificacoes)}${lista("Idiomas", cv.idiomas)}
-    ${(cv.outras_secoes || []).map((s) => lista(esc(s.titulo), s.itens)).join("")}
-  </div>`;
-}
-const CSS_CV = `.cv{font-family:Calibri,Segoe UI,Arial,sans-serif;color:#1d2433;font-size:11pt;line-height:1.45;max-width:780px;margin:auto}
-.cv h1{font-size:22pt;margin:0;color:#111633}.cv .titulo{font-size:12.5pt;color:#4F46E5;margin:2px 0 4px;font-weight:600}
-.cv .contato{color:#5B6478;margin:0 0 6px;font-size:10pt}.cv h2{font-size:11.5pt;text-transform:uppercase;letter-spacing:.06em;color:#111633;border-bottom:1.5px solid #4F46E5;padding-bottom:2px;margin:16px 0 6px}
-.cv p{margin:0 0 6px}.cv ul{margin:2px 0 8px;padding-left:18px}.cv li{margin:2px 0}.cv .exp{margin-bottom:8px}
-.cv .exp-topo span{float:right;color:#5B6478;font-size:10pt}.cv .skills{line-height:1.7}
-.cv .novo{background:#E3F7EF;color:#0B6B4C;border-radius:3px;padding:0 2px}`;
-
-function documentoCurriculo(cv, paraWord = false) {
-  const cab = paraWord ? `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">` : `<!doctype html><html lang="pt-BR">`;
-  return `${cab}<head><meta charset="utf-8"><title>Currículo – ${esc(cv.nome)}</title><style>body{margin:24px}${CSS_CV}
-    .cv .exp-topo span{float:none;display:block}@page{margin:18mm}</style></head><body>${htmlCurriculo(cv, false)}</body></html>`;
-}
-
-function mostrarAdaptado(cv, vaga) {
-  const novos = (cv.competencias || []).filter((s) => s.nova).length + (cv.experiencias || []).reduce((a, x) => a + (x.itens || []).filter((i) => i.novo).length, 0);
-  modal(`<style>${CSS_CV}</style>
-    <div class="topo" style="align-items:center;margin-bottom:10px"><div><h3 style="margin:0">Currículo adaptado</h3>
-      <p class="muted" style="margin:2px 0 0">${esc(vaga.titulo)} · ${esc(vaga.empresa || "")}</p></div>
-      <div class="acoes"><button class="btn neutro peq" id="cvWord">⬇ Word (.doc)</button><button class="btn neutro peq" id="cvPdf">🖨 Imprimir / PDF</button></div></div>
-    <div class="cv-layout">
-      <div class="cv-folha">${htmlCurriculo(cv, true)}</div>
-      <aside class="cv-notas">
-        <p><b>O que mudou</b><br>${esc(cv.observacoes || "")}</p>
-        ${novos ? `<p><span class="novo-tag">verde</span> = ${novos} acréscimo(s) da IA. Confira se são verdadeiros antes de enviar.</p>` : ""}
-        ${(cv.competencias || []).some((s) => s.nova) ? `<p><b>Competências acrescentadas</b></p><ul>${cv.competencias.filter((s) => s.nova).map((s) => `<li><b>${esc(s.nome)}</b>: ${esc(s.justificativa)}</li>`).join("")}</ul>` : ""}
-        ${cv.lacunas?.length ? `<p><b>Pedido na vaga e não comprovado no currículo</b> (não foi incluído)</p><ul>${cv.lacunas.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>` : ""}
-        ${cv.palavras_chave?.length ? `<p><b>Palavras-chave da vaga presentes</b><br>${cv.palavras_chave.map((p) => `<span class="chip">${esc(p)}</span>`).join("")}</p>` : ""}
-      </aside>
-    </div>
-    <div class="rodape"><span class="muted" style="font-size:12px">Gerado com IA (Claude, da Anthropic). Revise antes de enviar.</span><button class="btn" data-fechar>Fechar</button></div>`, true);
-  const nomeArq = `curriculo_${slugArq(cv.nome)}_${slugArq(vaga.empresa || vaga.titulo)}`;
-  $("#cvWord").onclick = () => baixarBlob(new Blob(["﻿" + documentoCurriculo(cv, true)], { type: "application/msword" }), nomeArq + ".doc");
-  $("#cvPdf").onclick = () => {
-    const html = documentoCurriculo(cv).replace("</body>", "<script>onload=()=>setTimeout(()=>print(),300)<\/script></body>");
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html;charset=utf-8" }));
-    if (!window.open(url, "_blank")) baixarBlob(new Blob([html], { type: "text/html" }), nomeArq + ".html");
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-  };
-}
-
-/* ============================================================= PIPELINE */
+/* ============================================================= PIPELINE / MINHAS VAGAS */
 async function pgPipeline() {
-  const cands = await listarCandidatos();
-  main.innerHTML = topo("Pipeline", "Acompanhe cada indicação até a contratação", `
-      <select id="pCand" style="width:240px"><option value="">Todos os candidatos</option>${cands.map((c) => `<option value="${c.id}" ${String(c.id) === estado.pipeCand ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>
+  const admin = ehAdmin();
+  const cands = admin ? await listarCandidatos() : [];
+  main.innerHTML = topo(admin ? "Pipeline" : "Minhas vagas", admin ? "Acompanhe cada indicação até a contratação" : "As vagas que você está acompanhando e em que etapa está cada uma", `
+      ${admin ? `<select id="pCand" style="width:240px"><option value="">Todos os candidatos</option>${cands.map((c) => `<option value="${c.id}" ${String(c.id) === estado.pipeCand ? "selected" : ""}>${esc(c.nome)}</option>`).join("")}</select>` : ""}
       <button class="btn neutro" id="pExcel">Exportar Excel</button>`) + `
     <div class="funil" id="funil"></div>
     <div class="split"><div class="card"><div class="tabela-wrap" style="max-height:calc(100vh - 290px);min-height:260px"><table>
-      <thead><tr><th>CANDIDATO</th><th>VAGA</th><th>EMPRESA</th><th class="c">SCORE</th><th>ETAPA</th><th class="c">ATUALIZADO</th></tr></thead>
+      <thead><tr><th>${admin ? "CANDIDATO" : "PERFIL"}</th><th>VAGA</th><th>EMPRESA</th><th class="c">SCORE</th><th>ETAPA</th><th class="c">ATUALIZADO</th></tr></thead>
       <tbody id="tbPipe"></tbody></table></div></div>
       <div class="card detalhe" id="detPipe"></div></div>`;
   let itens = [];
   const carregar = async () => {
     let r = sb.from("pipeline").select("id, score, status, notas, detalhes, atualizado_em, candidato_id, candidatos(nome), vagas(titulo, empresa, url, fonte, cidade, uf, modalidade, salario, contrato, senioridade, descricao, tags)")
       .order("atualizado_em", { ascending: false }).order("score", { ascending: false });
-    if (estado.pipeCand) r = r.eq("candidato_id", +estado.pipeCand);
+    if (admin && estado.pipeCand) r = r.eq("candidato_id", +estado.pipeCand);
     itens = (await q(r)).map((i) => ({ ...i.vagas, ...i, candidato: i.candidatos?.nome || "" }));
     const cont = {}; itens.forEach((i) => { cont[i.status] = (cont[i.status] || 0) + 1; });
     $("#funil").innerHTML = [["", "Todas", itens.length], ...STATUS_PIPELINE.map((s) => [s, s, cont[s] || 0])].map(([v, rot, n]) =>
@@ -831,7 +726,7 @@ async function pgPipeline() {
       <td class="trunc">${esc(i.candidato)}</td><td class="trunc" title="${esc(i.titulo)}"><b>${esc(i.titulo)}</b></td><td class="trunc">${esc(i.empresa || "—")}</td>
       <td class="c">${scoreTag(i.score)}</td><td><span class="chip ${i.status === "Contratado" ? "ok" : i.status === "Descartada" ? "" : "prim"}">${esc(i.status)}</span></td>
       <td class="c muted">${dataHora(i.atualizado_em)}</td></tr>`).join("")
-      || `<tr><td colspan="6" class="vazio">Nenhuma vaga no pipeline. Adicione a partir da tela de busca.</td></tr>`;
+      || `<tr><td colspan="6" class="vazio">${admin ? "Nenhuma vaga no pipeline. Adicione a partir da tela de busca." : "Você ainda não acompanha nenhuma vaga. Em “Buscar vagas”, toque em “Acompanhar esta vaga”."}</td></tr>`;
     if (!vs.some((i) => i.id === estado.pipeSel)) estado.pipeSel = vs[0]?.id ?? null;
     $$("#tbPipe tr").forEach((tr) => tr.classList.toggle("sel", +tr.dataset.id === estado.pipeSel));
     detalhe();
@@ -842,11 +737,11 @@ async function pgPipeline() {
     const det = it.detalhes || {}, faixa = classificar(it.score || 0);
     $("#detPipe").innerHTML = `<div class="det">
       <div class="det-topo"><div class="bola f-${faixa.toLowerCase()}"><b>${Math.round(it.score || 0)}</b><small>${faixa}</small></div>
-        <div><h2>${esc(it.titulo)}</h2><p>${esc(it.empresa || "Empresa não divulgada")} · para <b>${esc(it.candidato)}</b></p></div></div>
+        <div><h2>${esc(it.titulo)}</h2><p>${esc(it.empresa || "Empresa não divulgada")}${admin ? ` · para <b>${esc(it.candidato)}</b>` : ""}</p></div></div>
       <div>${[localVaga(it), it.modalidade, it.senioridade, it.contrato, it.salario, it.fonte].filter(Boolean).map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>
       ${det.skills_ok?.length ? `<h4>Competências que batem</h4>${det.skills_ok.map((s) => `<span class="chip ok">${esc(s)}</span>`).join("")}` : ""}
       <h4>Etapa</h4><select id="pStatus">${STATUS_PIPELINE.map((s) => `<option ${s === it.status ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
-      <h4>Notas do recrutador</h4><textarea id="pNotas" placeholder="Retorno da empresa, datas de entrevista, feedback…">${esc(it.notas || "")}</textarea>
+      <h4>${admin ? "Notas do recrutador" : "Minhas anotações"}</h4><textarea id="pNotas" placeholder="Retorno da empresa, datas de entrevista, feedback…">${esc(it.notas || "")}</textarea>
       <button class="btn ia" id="pAdaptar" style="width:100%;margin-top:14px">✨ Adaptar currículo para esta vaga</button>
       <div class="det-acoes"><button class="btn perigo" id="pRem">Remover</button>
         <div class="acoes"><a class="btn neutro" href="${esc(it.url)}" target="_blank" rel="noopener" style="text-decoration:none">Abrir vaga ↗</a><button class="btn" id="pSalvar">Salvar</button></div></div></div>`;
@@ -855,95 +750,24 @@ async function pgPipeline() {
     };
     $("#pSalvar").onclick = async () => {
       try { await q(sb.from("pipeline").update({ status: $("#pStatus").value, notas: $("#pNotas").value.trim() }).eq("id", it.id));
-        toast("Pipeline atualizado."); await carregar(); } catch (e) { falha(e); }
+        toast("Atualizado."); await carregar(); } catch (e) { falha(e); }
     };
     $("#pRem").onclick = async () => {
-      if (!confirm("Remover esta vaga do pipeline? Não é possível desfazer.")) return;
-      try { await q(sb.from("pipeline").delete().eq("id", it.id)); estado.pipeSel = null; toast("Removida do pipeline."); await carregar(); } catch (e) { falha(e); }
+      if (!confirm("Remover esta vaga da lista? Não é possível desfazer.")) return;
+      try { await q(sb.from("pipeline").delete().eq("id", it.id)); estado.pipeSel = null; toast("Removida."); await carregar(); } catch (e) { falha(e); }
     };
   };
-  $("#pCand").onchange = (e) => { estado.pipeCand = e.target.value; carregar().catch(falha); };
+  $("#pCand")?.addEventListener("change", (e) => { estado.pipeCand = e.target.value; carregar().catch(falha); });
   $("#funil").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; estado.pipeStatus = b.dataset.v; $$("#funil button").forEach((x) => x.classList.toggle("on", x === b)); render(); };
   $("#tbPipe").onclick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { estado.pipeSel = +tr.dataset.id; render(); abrirSheet($("#detPipe"), "Oportunidade"); } };
   $("#pExcel").onclick = async () => {
-    if (!itens.length) return toast("O pipeline está vazio.");
+    if (!itens.length) return toast("A lista está vazia.");
     try {
-      const wb = await novaPlanilha(), ws = wb.addWorksheet("Pipeline");
-      cabecalho(ws, ["Candidato", "Vaga", "Empresa", "Local", "Modalidade", "Score", "Status", "Notas", "Atualizado", "Fonte", "Link"], [24, 42, 26, 20, 12, 8, 18, 40, 16, 18, 50]);
+      const wb = await novaPlanilha(), ws = wb.addWorksheet(admin ? "Pipeline" : "Minhas vagas");
+      cabecalhoPlanilha(ws, ["Candidato", "Vaga", "Empresa", "Local", "Modalidade", "Score", "Status", "Notas", "Atualizado", "Fonte", "Link"], [24, 42, 26, 20, 12, 8, 18, 40, 16, 18, 50]);
       itens.forEach((i) => ws.addRow([i.candidato, i.titulo, i.empresa, localVaga(i), i.modalidade, i.score, i.status, i.notas, dataHora(i.atualizado_em), i.fonte, i.url]));
-      await salvarPlanilha(wb, `pipeline_${carimbo()}.xlsx`);
+      await salvarPlanilha(wb, `${admin ? "pipeline" : "minhas_vagas"}_${carimbo()}.xlsx`);
     } catch (e) { falha(e); }
   };
   await carregar();
-}
-
-/* ============================================================= CONFIG */
-async function pgConfig() {
-  const chaves = [["adzuna_app_id", "Adzuna – App ID", "https://developer.adzuna.com/signup"], ["adzuna_app_key", "Adzuna – App Key", "https://developer.adzuna.com/signup"],
-    ["jooble_key", "Jooble – API Key", "https://br.jooble.org/api/about"], ["github_token", "GitHub – token pessoal", "https://github.com/settings/tokens"]];
-  const seg = (id, ops, val) => `<div class="seg" id="${id}">${ops.map((o) => `<button type="button" data-v="${o}" class="${String(val) === String(o) ? "on" : ""}">${o}</button>`).join("")}</div>`;
-  main.innerHTML = topo("Canais & Configurações", "Escolha onde buscar e ajuste o sistema", `<button class="btn" id="cSalvar">Salvar configurações</button>`) + `
-    <div class="card" style="margin-bottom:14px"><div class="topo" style="align-items:center;margin-bottom:10px"><h3 style="margin:0">Canais de vagas integrados</h3>
-      <button class="btn sec peq" id="cTestar">Testar conexões</button></div>
-      ${FONTES.map((f) => `<div class="fonte-linha"><label class="switch"><input type="checkbox" data-fonte="${f.id}" ${CFG.fontes_ativas.includes(f.id) ? "checked" : ""}><span></span></label>
-        <div class="txt"><b>${esc(f.nome)}</b><small>${esc(f.descricao)}</small></div>
-        <span class="muted" id="st-${f.id}" style="font-size:12px;font-weight:600"></span><span class="chip">${esc(f.cobertura)}</span></div>`).join("")}
-    </div>
-    <div class="card" style="margin-bottom:14px"><h3>Chaves de API (opcionais, gratuitas) — ampliam a cobertura</h3>
-      <p class="muted" style="margin-top:-4px">Adzuna e Jooble agregam vagas de centenas de sites brasileiros. O token do GitHub aumenta o limite de consultas às comunidades. As chaves ficam salvas na sua conta e só você tem acesso.</p>
-      <div class="form">${chaves.map(([k, rot, url]) => `<label class="campo"><span style="display:flex;justify-content:space-between">${rot}<a href="${url}" target="_blank" rel="noopener" style="font-weight:400">obter chave ↗</a></span>
-        <input type="password" data-chave="${k}" value="${esc(CFG[k] || "")}" autocomplete="off"></label>`).join("")}</div>
-    </div>
-    <div class="card" style="margin-bottom:14px"><h3>Conta e aplicativo</h3>
-      <p class="muted" style="margin:-4px 0 12px">Conectado como <b>${esc(USUARIO?.email || "")}</b></p>
-      <div class="acoes">
-        <button class="btn sec" id="cInstalar" ${pedidoInstalacao || (ehIOS() && !instalado()) ? "" : "hidden"}>📲 Instalar no aparelho</button>
-        <button class="btn neutro" id="cTema">◐ Tema claro/escuro</button>
-        <button class="btn perigo" id="cSair">Sair da conta</button>
-      </div>
-      ${instalado() ? `<p class="muted" style="margin:10px 0 0;font-size:13px">✓ Você está usando o app instalado.</p>` : ""}
-    </div>
-    <div class="card"><h3>Preferências</h3><div class="form">
-      <label class="campo full">Nome da consultoria (aparece nos relatórios)<input type="text" id="cEmpresa" value="${esc(CFG.empresa_nome || "")}"></label>
-      <div class="campo">Páginas lidas por canal ${seg("cPag", [1, 2, 3, 5], CFG.paginas_por_fonte)}</div>
-      <div class="campo">Score mínimo padrão ${seg("cScore", [30, 40, 50, 60], CFG.score_minimo_padrao)}</div>
-    </div></div>`;
-  $$(".seg").forEach((s) => (s.onclick = (e) => { const b = e.target.closest("button"); if (b) $$("button", s).forEach((x) => x.classList.toggle("on", x === b)); }));
-  $("#cTema").onclick = () => $("#btnTema").click();
-  $("#cSair").onclick = () => { if (confirm("Sair da sua conta neste aparelho?")) sb.auth.signOut(); };
-  $("#cInstalar").onclick = async () => {
-    if (pedidoInstalacao) { pedidoInstalacao.prompt(); await pedidoInstalacao.userChoice; pedidoInstalacao = null; $("#cInstalar").hidden = true; return; }
-    modal(`<h3 style="margin:0 0 8px">Instalar no iPhone / iPad</h3>
-      <ol style="margin:0 0 14px;padding-left:20px;line-height:1.8">
-        <li>No Safari, toque em <b>Compartilhar</b> (o quadrado com a seta para cima).</li>
-        <li>Escolha <b>Adicionar à Tela de Início</b>.</li>
-        <li>Toque em <b>Adicionar</b>. O RH+ Match passa a abrir em tela cheia, como um app.</li></ol>
-      <div class="rodape"><span></span><button class="btn" data-fechar>Entendi</button></div>`);
-  };
-  $("#cSalvar").onclick = async () => {
-    const dados = {
-      owner: USUARIO.id, empresa_nome: $("#cEmpresa").value.trim(), paginas_por_fonte: +($("#cPag .on")?.dataset.v || 2),
-      score_minimo_padrao: +($("#cScore .on")?.dataset.v || 40), fontes_ativas: $$("[data-fonte]:checked").map((x) => x.dataset.fonte),
-      atualizado_em: new Date().toISOString(),
-    };
-    $$("[data-chave]").forEach((i) => { dados[i.dataset.chave] = i.value.trim(); });
-    try {
-      CFG = { ...CFG_PADRAO, ...(await q(sb.from("configuracoes").upsert(dados).select("*").single())) };
-      estado.filtros.score = CFG.score_minimo_padrao; toast("Configurações salvas.");
-    } catch (e) { falha(e); }
-  };
-  $("#cTestar").onclick = async () => {
-    const btn = $("#cTestar"); btn.disabled = true; btn.textContent = "Testando…";
-    await Promise.all(FONTES.map(async (f) => {
-      const el = $("#st-" + f.id); el.textContent = "…"; el.style.color = ""; el.title = "";
-      if (!fonteDisponivel(f)) { el.textContent = "sem chave"; return; }
-      try {
-        const r = await sb.functions.invoke("buscar-vagas", { body: { fonte: f.id, termo: "analista", paginas: 1, skills: ["Python"] } });
-        if (r.error) throw r.error;
-        if (r.data?.erro && !r.data.vagas?.length) throw new Error(r.data.erro);
-        el.textContent = `✓ online · ${r.data.vagas.length}`; el.style.color = "var(--verde)";
-      } catch (e) { el.textContent = "✕ indisponível"; el.title = e.message || ""; el.style.color = "var(--lar)"; }
-    }));
-    btn.disabled = false; btn.textContent = "Testar conexões";
-  };
 }
