@@ -2,7 +2,7 @@
    - Arquivos do app: rede primeiro (sempre a versão mais nova), cache como reserva offline.
    - Bibliotecas do CDN (URLs com versão fixa): cache primeiro.
    - Supabase (dados, login, funções) nunca passa pelo cache. */
-const VERSAO = "rhmais-v3";
+const VERSAO = "rhmais-v4";
 const SHELL = ["./", "./index.html", "./app.js", "./js/base.js", "./js/curriculos.js", "./js/admin.js", "./style.css", "./config.js", "./manifest.webmanifest",
   "./supabase/functions/_shared/nucleo.js", "./icons/icon-192.png", "./icons/apple-touch-icon.png"];
 

@@ -12,6 +12,14 @@ const CHAVES = [
   ["github_token", "GitHub – token pessoal", "https://github.com/settings/tokens"],
 ];
 
+// formatos esperados de cada chave (para avisar antes de salvar algo trocado, como um e-mail preenchido pelo navegador)
+const FORMATOS = {
+  adzuna_app_id: [/^[0-9a-f]{8}$/i, "Adzuna – App ID: são 8 letras/números (ex.: a1b2c3d4), não um e-mail ou usuário."],
+  adzuna_app_key: [/^[0-9a-f]{32}$/i, "Adzuna – App Key: são 32 letras/números."],
+  jooble_key: [/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "Jooble – API Key: formato xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx."],
+  github_token: [/^(ghp_|github_pat_)\w+$/, "GitHub: o token começa com ghp_ ou github_pat_."],
+};
+
 export async function carregarStatusChaves() {
   try { ctx.chaves = (await q(sb.rpc("chaves_plataforma_status"))) || {}; } catch { ctx.chaves = {}; }
 }
@@ -37,7 +45,9 @@ export async function pgConfig() {
         As chaves valem para <b>todos os usuários</b>, ficam guardadas no servidor e nunca são exibidas de volta. Deixe um campo em branco para manter a chave atual.</p>
       <div class="form">${CHAVES.map(([k, rot, url]) => `<label class="campo"><span style="display:flex;justify-content:space-between;gap:8px">${rot}
           <span>${ctx.chaves[k] ? `<span class="chip ok">✓ configurada</span> <a data-remover="${k}" style="font-weight:400;cursor:pointer">remover</a> ·` : '<span class="chip">não configurada</span>'} <a href="${url}" target="_blank" rel="noopener" style="font-weight:400">obter ↗</a></span></span>
-        <input type="password" data-chave="${k}" placeholder="${ctx.chaves[k] ? "•••••••• (manter a atual)" : "Cole a chave aqui"}" autocomplete="off"></label>`).join("")}</div>
+        <input type="text" class="campo-chave" data-chave="${k}" name="rh-chave-${k}" placeholder="${ctx.chaves[k] ? "•••••••• (manter a atual)" : "Cole a chave aqui"}"
+          autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-form-type="other"></label>`).join("")}</div>
+      <label class="checks" style="font-size:13px;margin-top:8px"><input type="checkbox" id="kMostrar">Mostrar o que estou digitando</label>
       <div class="barra-salvar"><span class="muted" id="kMsg"></span><button class="btn" id="kSalvar">Salvar chaves</button></div></div>` : ""}
     ${cartaoConta()}`;
   ligarSegmentados(main);
@@ -63,8 +73,11 @@ export async function pgConfig() {
       const chaves = {};
       for (const i of $$("[data-chave]")) if (i.value.trim()) chaves[i.dataset.chave] = i.value.trim();
       if (!Object.keys(chaves).length) return ($("#kMsg").textContent = "Nada para salvar: cole ao menos uma chave.");
+      const invalidas = Object.entries(chaves).filter(([k, v]) => FORMATOS[k] && !FORMATOS[k][0].test(v)).map(([k]) => FORMATOS[k][1]);
+      if (invalidas.length && !confirm("Atenção, o formato parece errado:\n\n• " + invalidas.join("\n• ") + "\n\nSalvar mesmo assim?")) return;
       await salvarChaves(chaves, "Chaves de API salvas.");
     };
+    $("#kMostrar").onchange = (e) => $$(".campo-chave").forEach((i) => i.classList.toggle("visivel", e.target.checked));
     $$("[data-remover]").forEach((a) => (a.onclick = async () => {
       if (!confirm("Remover esta chave? O canal deixa de funcionar até uma nova chave ser salva.")) return;
       await salvarChaves({ [a.dataset.remover]: "" }, "Chave removida.");
