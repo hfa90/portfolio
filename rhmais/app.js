@@ -66,8 +66,41 @@ function carregarScript(url) {
 function modal(html, largo = false) {
   $("#modal").classList.toggle("largo", largo);
   $("#modalCorpo").innerHTML = html;
-  if (!$("#modal").open) $("#modal").showModal();
+  if (!$("#modal").open) { $("#modal").showModal(); history.pushState({ ...(history.state || {}), modal: true }, ""); }
 }
+// fechar o diálogo (botão, Esc ou toque fora) também desfaz a entrada no histórico, para o "voltar" do Android funcionar
+$("#modal").addEventListener("close", () => { if (history.state?.modal) history.back(); });
+
+/* ------------------------------------------------------------- telas cheias no celular/tablet */
+const mqCompacto = matchMedia("(max-width: 899px)");
+let sheetAtual = null;
+function abrirSheet(el, titulo) {
+  if (!mqCompacto.matches || !el) return;
+  if (sheetAtual && sheetAtual !== el) sheetAtual.classList.remove("sheet-aberta");
+  sheetAtual = el;
+  el.classList.add("sheet-aberta"); el.scrollTop = 0;
+  document.body.classList.add("sheet-on");
+  $("#sheetBarra").hidden = false; $("#sheetTitulo").textContent = titulo || "";
+  if (!history.state?.sheet) history.pushState({ sheet: true }, "");
+}
+function fecharSheet() {
+  sheetAtual?.classList.remove("sheet-aberta"); sheetAtual = null;
+  document.body.classList.remove("sheet-on"); $("#sheetBarra").hidden = true;
+}
+const voltarSheet = () => (history.state?.sheet ? history.back() : fecharSheet());
+$("#sheetVoltar").onclick = voltarSheet;
+addEventListener("popstate", (e) => {
+  if (!e.state?.modal && $("#modal").open) $("#modal").close();
+  if (!e.state?.sheet && sheetAtual) fecharSheet();
+});
+mqCompacto.addEventListener("change", () => { if (!mqCompacto.matches) fecharSheet(); });
+
+/* ------------------------------------------------------------- instalação (PWA) */
+let pedidoInstalacao = null;
+addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalacao = e; $("#cInstalar")?.removeAttribute("hidden"); });
+addEventListener("appinstalled", () => { pedidoInstalacao = null; toast("RH+ Match instalado. Abra pelo ícone na tela inicial."); });
+const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 /** Extrai a mensagem de erro de uma chamada a Edge Function. */
 async function erroFuncao(r, nome) {
   let msg = r.error?.message || "Erro desconhecido";
@@ -91,14 +124,27 @@ const topo = (titulo, sub, acoes = "") => `<div class="topo"><div><h1>${titulo}<
 const fonteDisponivel = (f) => !f.chaves || f.chaves.every((k) => CFG[k]);
 
 /* ------------------------------------------------------------- tema */
-function aplicarTema(t) { document.documentElement.dataset.theme = t; try { localStorage.setItem("rh_tema", t); } catch { /* ok */ } }
+function aplicarTema(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("rh_tema", t); } catch { /* ok */ }
+  atualizarCorBarra();
+}
+// cor da barra de status / navegador acompanha o tema (no celular a área do topo é o fundo da página)
+function atualizarCorBarra() {
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) return;
+  const escuro = document.documentElement.dataset.theme === "dark";
+  meta.content = matchMedia("(max-width: 767px)").matches && !document.body.classList.contains("sem-sessao")
+    ? (escuro ? "#0E1220" : "#F4F6FB") : (escuro ? "#0A0D1A" : "#111633");
+}
+matchMedia("(max-width: 767px)").addEventListener("change", atualizarCorBarra);
 $("#btnTema").onclick = () => aplicarTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 
 /* ------------------------------------------------------------- autenticação */
 const urlApp = () => location.origin + location.pathname;
 
 function telaLogin(modo = "entrar", msg = "") {
-  document.body.classList.add("sem-sessao");
+  document.body.classList.add("sem-sessao"); atualizarCorBarra();
   const titulos = { entrar: "Entrar", criar: "Criar conta", esqueci: "Recuperar senha", nova: "Definir nova senha" };
   main.innerHTML = `<div class="login"><div class="card">
     <div class="brand"><span class="logo" style="color:#fff">R+</span><div><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
@@ -152,6 +198,7 @@ $("#btnSair").onclick = async () => { await sb.auth.signOut(); };
 let appIniciado = false;
 async function iniciarApp() {
   document.body.classList.remove("sem-sessao");
+  atualizarCorBarra();
   $("#usuario").textContent = USUARIO?.email || "";
   try {
     const c = await q(sb.from("configuracoes").select("*").maybeSingle());
@@ -165,7 +212,7 @@ async function iniciarApp() {
 function limparUrl() { history.replaceState(null, "", location.pathname + "#/painel"); }
 
 function telaConfirmada() {
-  document.body.classList.add("sem-sessao");
+  document.body.classList.add("sem-sessao"); atualizarCorBarra();
   main.innerHTML = `<div class="login"><div class="card" style="text-align:center">
     <div class="brand" style="justify-content:center"><span class="logo" style="color:#fff">R+</span><div style="text-align:left"><b>RH+ Match</b><small>Inteligência em recolocação</small></div></div>
     <div style="font-size:44px;line-height:1">✅</div>
@@ -202,6 +249,7 @@ sb.auth.onAuthStateChange((evento, sessao) => {
 /* ------------------------------------------------------------- roteador */
 const PAGINAS = { painel: pgPainel, candidatos: pgCandidatos, busca: pgBusca, pipeline: pgPipeline, config: pgConfig };
 async function rotear() {
+  fecharSheet(); atualizarCorBarra();
   if (!USUARIO || !appIniciado) return;
   const [, nome = "painel"] = location.hash.split("/");
   const pg = PAGINAS[nome] ? nome : "painel";
@@ -275,10 +323,10 @@ async function pgCandidatos() {
     const tr = e.target.closest("tr[data-id]"); if (!tr) return;
     estado.candSel = +tr.dataset.id;
     $$("#listaCand tr").forEach((x) => x.classList.toggle("sel", x === tr));
-    try { formCandidato(await obterCandidato(estado.candSel) || {}, carregar); } catch (err) { falha(err); }
+    try { const c = await obterCandidato(estado.candSel) || {}; formCandidato(c, carregar); abrirSheet($("#formCand"), c.nome || "Candidato"); } catch (err) { falha(err); }
   };
   $("#listaCand").ondblclick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) irBusca(+tr.dataset.id); };
-  $("#btnNovo").onclick = () => { estado.candSel = null; $$("#listaCand tr").forEach((x) => x.classList.remove("sel")); formCandidato({}, carregar); };
+  $("#btnNovo").onclick = () => { estado.candSel = null; $$("#listaCand tr").forEach((x) => x.classList.remove("sel")); formCandidato({}, carregar); abrirSheet($("#formCand"), "Novo candidato"); };
   $("#btnImportar").onclick = () => $("#arqCv").click();
   $("#arqCv").onchange = async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
@@ -287,6 +335,7 @@ async function pgCandidatos() {
       const dados = analisarCurriculo(await lerCurriculo(f));
       estado.candSel = null;
       formCandidato({ modalidades: MODALIDADES.join(","), ...dados }, carregar, true);
+      abrirSheet($("#formCand"), "Novo candidato");
       toast("Currículo lido. Revise os campos e salve.");
     } catch (err) { falha(err); }
   };
@@ -378,7 +427,7 @@ function formCandidato(c, recarregar, importado = false) {
   if (!novo) {
     $("#btnExcluir").onclick = async () => {
       if (!confirm(`Excluir ${c.nome}? O pipeline desse candidato também será removido. Não é possível desfazer.`)) return;
-      try { await q(sb.from("candidatos").delete().eq("id", c.id)); estado.candSel = null; toast("Candidato excluído."); await recarregar(); formCandidato({}, recarregar); }
+      try { await q(sb.from("candidatos").delete().eq("id", c.id)); estado.candSel = null; toast("Candidato excluído."); await recarregar(); formCandidato({}, recarregar); if (sheetAtual) voltarSheet(); }
       catch (e) { falha(e); }
     };
     $("#btnBuscarPerfil").onclick = () => irBusca(c.id);
@@ -434,7 +483,7 @@ async function pgBusca() {
   $("#fMod").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; estado.filtros.mod = b.dataset.v; $$("#fMod button").forEach((x) => x.classList.toggle("on", x === b)); renderVagas(); };
   $("#fScore").oninput = (e) => { estado.filtros.score = +e.target.value; $("#lblScore").textContent = e.target.value; renderVagas(); };
   $("#fTexto").oninput = (e) => { estado.filtros.texto = e.target.value; renderVagas(); };
-  $("#tbVagas").onclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) { estado.vagaSel = +tr.dataset.idx; marcarSel(); detalharVaga(); } };
+  $("#tbVagas").onclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) { estado.vagaSel = +tr.dataset.idx; marcarSel(); detalharVaga(); abrirSheet($("#detVaga"), "Vaga"); } };
   $("#tbVagas").ondblclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) window.open(estado.busca.vagas[+tr.dataset.idx].url, "_blank", "noopener"); };
   $("#btnExcel").onclick = () => exportarExcel(vagasVisiveis(), estado.busca?.candidato).catch(falha);
   $("#btnRelatorio").onclick = () => abrirRelatorio(vagasVisiveis(), estado.busca?.candidato);
@@ -815,7 +864,7 @@ async function pgPipeline() {
   };
   $("#pCand").onchange = (e) => { estado.pipeCand = e.target.value; carregar().catch(falha); };
   $("#funil").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; estado.pipeStatus = b.dataset.v; $$("#funil button").forEach((x) => x.classList.toggle("on", x === b)); render(); };
-  $("#tbPipe").onclick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { estado.pipeSel = +tr.dataset.id; render(); } };
+  $("#tbPipe").onclick = (e) => { const tr = e.target.closest("tr[data-id]"); if (tr) { estado.pipeSel = +tr.dataset.id; render(); abrirSheet($("#detPipe"), "Oportunidade"); } };
   $("#pExcel").onclick = async () => {
     if (!itens.length) return toast("O pipeline está vazio.");
     try {
@@ -845,12 +894,32 @@ async function pgConfig() {
       <div class="form">${chaves.map(([k, rot, url]) => `<label class="campo"><span style="display:flex;justify-content:space-between">${rot}<a href="${url}" target="_blank" rel="noopener" style="font-weight:400">obter chave ↗</a></span>
         <input type="password" data-chave="${k}" value="${esc(CFG[k] || "")}" autocomplete="off"></label>`).join("")}</div>
     </div>
+    <div class="card" style="margin-bottom:14px"><h3>Conta e aplicativo</h3>
+      <p class="muted" style="margin:-4px 0 12px">Conectado como <b>${esc(USUARIO?.email || "")}</b></p>
+      <div class="acoes">
+        <button class="btn sec" id="cInstalar" ${pedidoInstalacao || (ehIOS() && !instalado()) ? "" : "hidden"}>📲 Instalar no aparelho</button>
+        <button class="btn neutro" id="cTema">◐ Tema claro/escuro</button>
+        <button class="btn perigo" id="cSair">Sair da conta</button>
+      </div>
+      ${instalado() ? `<p class="muted" style="margin:10px 0 0;font-size:13px">✓ Você está usando o app instalado.</p>` : ""}
+    </div>
     <div class="card"><h3>Preferências</h3><div class="form">
       <label class="campo full">Nome da consultoria (aparece nos relatórios)<input type="text" id="cEmpresa" value="${esc(CFG.empresa_nome || "")}"></label>
       <div class="campo">Páginas lidas por canal ${seg("cPag", [1, 2, 3, 5], CFG.paginas_por_fonte)}</div>
       <div class="campo">Score mínimo padrão ${seg("cScore", [30, 40, 50, 60], CFG.score_minimo_padrao)}</div>
     </div></div>`;
   $$(".seg").forEach((s) => (s.onclick = (e) => { const b = e.target.closest("button"); if (b) $$("button", s).forEach((x) => x.classList.toggle("on", x === b)); }));
+  $("#cTema").onclick = () => $("#btnTema").click();
+  $("#cSair").onclick = () => { if (confirm("Sair da sua conta neste aparelho?")) sb.auth.signOut(); };
+  $("#cInstalar").onclick = async () => {
+    if (pedidoInstalacao) { pedidoInstalacao.prompt(); await pedidoInstalacao.userChoice; pedidoInstalacao = null; $("#cInstalar").hidden = true; return; }
+    modal(`<h3 style="margin:0 0 8px">Instalar no iPhone / iPad</h3>
+      <ol style="margin:0 0 14px;padding-left:20px;line-height:1.8">
+        <li>No Safari, toque em <b>Compartilhar</b> (o quadrado com a seta para cima).</li>
+        <li>Escolha <b>Adicionar à Tela de Início</b>.</li>
+        <li>Toque em <b>Adicionar</b>. O RH+ Match passa a abrir em tela cheia, como um app.</li></ol>
+      <div class="rodape"><span></span><button class="btn" data-fechar>Entendi</button></div>`);
+  };
   $("#cSalvar").onclick = async () => {
     const dados = {
       owner: USUARIO.id, empresa_nome: $("#cEmpresa").value.trim(), paginas_por_fonte: +($("#cPag .on")?.dataset.v || 2),
