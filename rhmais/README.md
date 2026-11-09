@@ -10,9 +10,35 @@ Sistema desktop (Python) para consultorias de RH: cadastra o perfil do candidato
 Manual: `pip install -r requirements.txt` e `python main.py`.
 Executável `.exe` para distribuir: rode `gerar_executavel.bat`.
 
-## Versão web
+## Versão online (GitHub Pages + Supabase)
 
-Mesmas telas e mesmo banco (`dados/rhmais.db`), no navegador.
+**Endereço:** https://haydenfernandes.com.br/rhmais/
+
+Arquitetura:
+- **Frontend estático** (`index.html`, `app.js`, `style.css`, `config.js`) publicado pelo GitHub Pages.
+- **Supabase Auth**: login por e-mail e senha. Cada conta (consultoria) tem seus próprios dados.
+- **Supabase Postgres** (`supabase/schema.sql`): candidatos, vagas, pipeline, buscas e configurações, com **Row Level Security**: um usuário nunca enxerga os dados de outro.
+- **Edge Function `buscar-vagas`** (`supabase/functions/buscar-vagas/`): consulta os portais (Gupy, Vagas.com, InfoJobs, Programathor, GitHub BR, Remotive, Himalayas, Adzuna, Jooble). O navegador chama um canal por vez, em paralelo, para mostrar o progresso.
+- `supabase/functions/_shared/nucleo.js`: motor de compatibilidade (mesmas notas da versão desktop), leitura de currículo e utilidades. É usado pelo navegador e pela função.
+- Currículos (PDF/DOCX) são lidos no próprio navegador e não são enviados a nenhum servidor. Excel e relatório também são gerados no navegador.
+
+### Configuração do Supabase (uma vez)
+1. **Banco:** Dashboard → SQL Editor → cole `supabase/schema.sql` → Run.
+2. **Função de busca:** no terminal, dentro desta pasta:
+   ```
+   npx supabase login
+   npx supabase functions deploy buscar-vagas --project-ref dpquyrvphongvqjpqxea
+   ```
+3. **Login por e-mail:** Authentication → URL Configuration → *Site URL* = `https://haydenfernandes.com.br/rhmais/` e inclua o mesmo endereço em *Redirect URLs*, para que os links de confirmação e de nova senha voltem ao sistema.
+4. (Opcional) Authentication → Sign In / Providers → desative *Allow new users to sign up* depois de criar as contas da equipe, se o sistema não deve aceitar cadastros abertos.
+
+Para trocar de projeto Supabase, edite `config.js` (URL + chave *anon/publishable*, que é pública por natureza; a proteção vem do login + RLS).
+
+> ⚠️ `dados/` e `exportacoes/` contêm dados pessoais de candidatos e estão no `.gitignore`. Não envie esses arquivos para o GitHub.
+
+## Versão web local (FastAPI)
+
+Mesmas telas e mesmo banco local (`dados/rhmais.db`), no navegador.
 
 - Windows: dois cliques em **`iniciar_web.bat`** (abre `http://localhost:8000`).
 - Manual: `pip install -r requirements.txt` e `python -m web.server`.
