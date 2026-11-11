@@ -646,7 +646,8 @@ export async function abrirMaquina(id, silencioso = false) {
       <div class="muted">${esc(TIPO[m.tipo])} · ${esc(m.modelo || 'modelo não informado')} ·
         Última coleta: <strong style="color:var(--ink)">${rel(m.ultimo_online)}</strong>
         ${m.origem === 'agente' ? '· dados do agente antigo (passe o Invent_local para atualizar)' : m.origem === 'planilha' ? '· via Invent_local' : '· cadastro manual'}</div>
-      ${(m.alertas || []).length ? `<div>${tags(m, 9)}</div>` : ''}
+      ${(m.alertas || []).length ? `<div class="d-alertas">${ehAdmin() ? m.alertas.map((k) => `<span class="tag ${ALERTAS[k]?.grave ? 'tag--bad' : ''} tag--x" title="${esc(ALERTAS[k]?.d)}">${esc(ALERTAS[k]?.l || k)}<button type="button" data-ocultar="${esc(k)}" title="Ocultar este alerta nesta máquina (dá para mostrar de novo)" aria-label="Ocultar alerta ${esc(ALERTAS[k]?.l || k)}">×</button></span>`).join('') : tags(m, 9)}</div>` : ''}
+      ${ehAdmin() && (m.alertas_ocultos || []).length ? `<div class="d-ocultos"><span class="muted">Ocultos:</span>${m.alertas_ocultos.map((k) => `<button type="button" class="tag tag--oculto" data-mostrar="${esc(k)}" title="Mostrar este alerta de novo">↺ ${esc(ALERTAS[k]?.l || k)}</button>`).join('')}</div>` : ''}
     </div>
     <div class="drawer-body">
       ${(m.alertas || []).includes('fora_do_cd') && m.rede ? `<div class="banner banner--bad"><div><strong>🌐 Na rede de outro CD</strong>
@@ -798,6 +799,20 @@ export async function abrirMaquina(id, silencioso = false) {
     if (error) return toast(erroMsg(error), true);
     await recarregarMaquina(id); toast('Alerta marcado como verificado'); abrirMaquina(id, true); rerender();
   });
+  // administrador: ocultar um alerta desta máquina (×) e mostrar de novo (↺)
+  const mudarOcultos = async (lista, msg) => {
+    const { error } = await sb.from('maquinas').update({ alertas_ocultos: lista }).eq('id', id);
+    if (error) return toast(/alertas_ocultos/.test(error.message || '') ? 'Falta atualizar o banco para ocultar alertas (migração 20261113000001).' : erroMsg(error), true);
+    await recarregarMaquina(id); toast(msg); abrirMaquina(id, true); rerender();
+  };
+  $$('[data-ocultar]', d).forEach((b) => (b.onclick = () => {
+    const k = b.dataset.ocultar;
+    mudarOcultos([...new Set([...(m.alertas_ocultos || []), k])], `Alerta "${ALERTAS[k]?.l || k}" oculto nesta máquina`);
+  }));
+  $$('[data-mostrar]', d).forEach((b) => (b.onclick = () => {
+    const k = b.dataset.mostrar;
+    mudarOcultos((m.alertas_ocultos || []).filter((x) => x !== k), `Alerta "${ALERTAS[k]?.l || k}" voltou a aparecer`);
+  }));
   $('#d-baixa')?.addEventListener('click', () => modalSolicitacao(m, 'baixa'));
   $('#d-transf')?.addEventListener('click', () => modalSolicitacao(m, 'transferencia'));
   $('#d-link')?.addEventListener('click', () => modalLinkInstalacao({ ativo: m.ativo, setor: m.setor, localizacao: m.localizacao, responsavel: m.responsavel }));

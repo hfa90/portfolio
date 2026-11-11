@@ -213,6 +213,7 @@ export function fmtValorHist(campo, v) {
   if (campo === 'tipo') return TIPO[v] || v;
   if (campo === 'data_compra' || campo === 'garantia_fim') return dataBR(v);
   if (campo === 'cd_id') return cdNome(v);
+  if (campo === 'alertas_ocultos') return v.split(',').map((k) => ALERTAS[k]?.l || k).join(', ');
   return v;
 }
 export function feedItem(h) {
