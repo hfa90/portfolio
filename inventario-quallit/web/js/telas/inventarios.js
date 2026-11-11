@@ -2,7 +2,7 @@
 import { carregarMaquinas, recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
 import { $, $$, STATUS, TIPO, acharMaquina, beep, cdCod, cdNome, cdsAtivos, data, dataHora, debounce, dot, ehAdmin, erroMsg, esc, extrairCodigo, gb, mostrarColCD, noCD, pill, rel, sb, soFamilia, state, store, toast, up, titulo } from '../nucleo.js';
-import { ehErroDeRede, filaAdicionar, filaListar, idbGet, idbSet } from '../offline.js';
+import { ehErroDeRede, filaAdicionar, filaListar, idAleatorio, idbGet, idbSet } from '../offline.js';
 import { DIAS_SEMANA, anelPrazo, descreverAgendamento, estadoPrazo, etiquetaPrazo, fmtDuracao, proximasExecucoes, relogioCompleto } from '../prazo.js';
 import { copiarTexto, linkWhatsApp, montarResumo } from '../resumo.js';
 import { atualizarPendentes, definirOffline } from '../sincronia.js';
@@ -552,7 +552,7 @@ export async function processarLeitura(bruto) {
     if (res.error.code === '23505') return mostrarResultado('warn', 'Já lida', esc(codigo));
     if (!ehErroDeRede(res.error)) return mostrarResultado('bad', 'Erro ao gravar', esc(erroMsg(res.error)));
     // sem internet: guarda no aparelho e envia depois
-    item = { ...novo, id: 'local-' + crypto.randomUUID(), lido_por: state.user?.email, lido_em: new Date().toISOString(), pendente: true };
+    item = { ...novo, id: 'local-' + idAleatorio(), lido_por: state.user?.email, lido_em: new Date().toISOString(), pendente: true };
     await filaAdicionar(item);
     offline = true;
     definirOffline(true);

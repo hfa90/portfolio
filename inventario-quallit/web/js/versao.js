@@ -1,7 +1,7 @@
 // Versão do sistema, mostrada discretamente no rodapé do menu (painel) e no menu do app do celular.
 // NÃO edite à mão: ao publicar (PUBLICAR-SITE.bat ou publicação automática do GitHub), este arquivo é
 // regravado no site com a data e o código do commit publicado. No repositório ele fica vazio ("desenvolvimento").
-export const VERSAO = { data: '2026.11.11', commit: 'a0a2911' };
+export const VERSAO = { data: '2026.11.11', commit: '53c68c7' };
 
 // "v2026.11.09 · a1b2c3d" (ou "versão de desenvolvimento" fora do site publicado)
 export const textoVersao = () => (VERSAO.data ? `v${VERSAO.data} · ${VERSAO.commit}` : 'versão de desenvolvimento');

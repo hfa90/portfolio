@@ -2,6 +2,7 @@
 import { recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
 import { $, $$, PROPRIEDADE, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
+import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../fotos.js';
 import { criarXlsx } from '../planilha.js';
 import { rerender } from '../rotas.js';
 import { modalLinkInstalacao } from '../telas/coleta.js';
@@ -760,6 +761,7 @@ export async function abrirMaquina(id, silencioso = false) {
 
       ${m.tipo !== 'coletor' && m.seguranca && Object.keys(m.seguranca).length ? secaoSeguranca(m) : ''}
       ${m.programas_qtd ? `<div><div class="section-title"><h3>Programas instalados (${m.programas_qtd})</h3><button class="btn btn--sm btn--ghost" id="d-prog-ver">Ver lista</button></div><div id="d-prog"></div></div>` : ''}
+      <div id="d-fotos"></div>
       <div id="d-emp-wrap"></div>
       <div><div class="section-title"><h3>Histórico</h3></div><div class="timeline" id="d-hist"><p class="muted">Carregando…</p></div></div>
     </div>
@@ -844,6 +846,7 @@ export async function abrirMaquina(id, silencioso = false) {
     abrirMaquina(id, true); rerender();
   }
 
+  desenharFotos(m);
   const [{ data: hist }, { data: emps }, posses] = await Promise.all([
     sb.from('maquinas_historico').select('*').eq('maquina_id', id).order('criado_em', { ascending: false }).limit(100),
     sb.from('emprestimos').select(EMP_COLS).eq('maquina_id', id).order('retirado_em', { ascending: false }).limit(30),
@@ -870,8 +873,60 @@ export async function abrirMaquina(id, silencioso = false) {
   }
   $('#d-hist').innerHTML = (hist || []).length ? hist.map((h) => `
     <div class="tl ${reducao(h) ? 'bad' : CAMPOS_HW.includes(h.campo) ? 'hw' : ''}"><span class="b"></span><div>
-      ${h.campo === 'cadastro' ? '<strong>Cadastrada no inventário</strong>' : h.campo === 'hw_verificado' ? '<strong>Alerta de peça verificado</strong>' : `<strong>${esc(CAMPOS_HIST[h.campo] || h.campo)}</strong>: <span class="chg-old">${esc(fmtValorHist(h.campo, h.valor_anterior))}</span> → <span class="chg-new">${esc(fmtValorHist(h.campo, h.valor_novo))}</span>`}
+      ${h.campo === 'cadastro' ? '<strong>Cadastrada no inventário</strong>' : h.campo === 'hw_verificado' ? '<strong>Alerta de peça verificado</strong>' : h.campo === 'foto' ? `<strong>📷 Foto adicionada</strong>${h.valor_novo && h.valor_novo !== 'Foto adicionada' ? ': ' + esc(h.valor_novo) : ''}` : `<strong>${esc(CAMPOS_HIST[h.campo] || h.campo)}</strong>: <span class="chg-old">${esc(fmtValorHist(h.campo, h.valor_anterior))}</span> → <span class="chg-new">${esc(fmtValorHist(h.campo, h.valor_novo))}</span>`}
       <small>${dataHora(h.criado_em)} · ${esc(h.origem)}</small></div></div>`).join('') : '<p class="muted">Sem registros.</p>';
+}
+
+/* ---- fotos da máquina (tiradas no celular ou enviadas daqui) ---- */
+async function desenharFotos(m) {
+  const el = $('#d-fotos');
+  if (!el) return;
+  let fotos = [];
+  let erro = '';
+  try { fotos = await listarFotos(sb, m.id); } catch (e) { erro = erroFoto(e); }
+  if (state.drawerId !== m.id || !$('#d-fotos')) return;
+  const podeApagar = (f) => ehAdmin() || f.criado_por === state.user?.id;
+  el.innerHTML = `<div class="section-title"><h3>Fotos${fotos.length ? ` (${fotos.length})` : ''}</h3>
+      <label class="btn btn--sm" ${erro ? 'hidden' : ''}>＋ Adicionar foto<input type="file" accept="image/*" id="d-foto-arq" hidden></label></div>
+    ${erro ? `<p class="muted">${esc(erro)}</p>` : fotos.length ? `<div class="fotos-grade">${fotos.map((f) => `
+      <button type="button" class="foto-mini" data-ver-foto="${f.id}" title="${esc(f.legenda || 'Ver foto')}"><img data-foto="${esc(f.caminho)}" alt="${esc(f.legenda || 'Foto da máquina')}"></button>`).join('')}</div>`
+      : '<p class="muted">Nenhuma foto. No celular, o app de conferência tira a foto direto pela câmera.</p>'}`;
+  carregarMiniaturas(sb, el);
+  $('#d-foto-arq')?.addEventListener('change', async (e) => {
+    const arq = e.target.files?.[0];
+    e.target.value = '';
+    if (!arq) return;
+    const previa = URL.createObjectURL(arq);
+    modal(`<form method="dialog" id="foto-form">
+      <div class="modal-head"><h2>Adicionar foto</h2><p class="muted" style="margin:4px 0 0">${esc(m.hostname)}</p></div>
+      <div class="modal-body"><img class="foto-grande" src="${previa}" alt="Prévia da foto">
+        <label>Legenda (opcional)<input name="legenda" maxlength="200" placeholder="Ex.: tela trincada, etiqueta, mesa da recepção" autocomplete="off"></label></div>
+      <div class="modal-foot"><button type="button" class="btn" data-close>Cancelar</button><button class="btn btn--primary" id="foto-enviar">Enviar foto</button></div></form>`, (dlg) => {
+      dlg.addEventListener('close', () => URL.revokeObjectURL(previa), { once: true });
+      $('#foto-form', dlg).onsubmit = async (ev) => {
+        ev.preventDefault();
+        const b = $('#foto-enviar', dlg); b.disabled = true; b.textContent = 'Enviando…';
+        try {
+          await enviarFoto(sb, m.id, arq, new FormData(ev.target).get('legenda'));
+          dlg.close(); toast('Foto adicionada');
+          if (state.drawerId === m.id) desenharFotos(m);
+        } catch (er) { b.disabled = false; b.textContent = 'Enviar foto'; toast(erroFoto(er), true); }
+      };
+      $('[name=legenda]', dlg).focus();
+    });
+  });
+  $$('[data-ver-foto]', el).forEach((b) => (b.onclick = async () => {
+    const f = fotos.find((x) => String(x.id) === b.dataset.verFoto);
+    modal(`<div class="modal-head"><h2>${esc(f.legenda || 'Foto')}</h2><p class="muted" style="margin:4px 0 0">${esc(m.hostname)} · ${dataHora(f.criado_em)}${f.criado_por_email ? ' · ' + esc(f.criado_por_email.split('@')[0]) : ''}</p></div>
+      <div class="modal-body"><img class="foto-grande" data-foto="${esc(f.caminho)}" alt="${esc(f.legenda || 'Foto da máquina')}"></div>
+      <div class="modal-foot">${podeApagar(f) ? '<button class="btn btn--danger" id="foto-apagar">Apagar</button>' : ''}<button class="btn btn--primary" data-close>Fechar</button></div>`, (dlg) => {
+      carregarMiniaturas(sb, dlg);
+      $('#foto-apagar', dlg)?.addEventListener('click', async () => {
+        if (!(await confirmar('A foto será apagada definitivamente.', { titulo: 'Apagar foto?', ok: 'Apagar', perigo: true }))) return;
+        try { await apagarFoto(sb, f); dlg.close(); toast('Foto apagada'); desenharFotos(m); } catch (er) { toast(erroFoto(er), true); }
+      });
+    });
+  }));
 }
 
 /* =====================================================================
