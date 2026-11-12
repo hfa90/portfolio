@@ -5,6 +5,7 @@ import { $, MQ, cdCod, dataHora, ehAdmin, erroMsg, esc, sb, toast } from '../nuc
 import { irMaquinas } from '../rotas.js';
 import { modal } from './maquinas.js';
 import { modalResumoSemana, resumoSemanaPendente } from './resumo-semana.js';
+import { naoLidas } from '../notificacoes.js';
 
 let admin = { inventarios: [], pendentes: 0, desde: null };   // vindo do banco (avisos_admin), só para o administrador
 
@@ -16,7 +17,7 @@ const contarLocais = () => {
   };
 };
 
-function total() {
+export function total() {
   const { atrasados, pecas } = contarLocais();
   return admin.inventarios.length + (admin.pendentes ? 1 : 0) + (atrasados ? 1 : 0) + (pecas ? 1 : 0) + (ehAdmin() && resumoSemanaPendente() ? 1 : 0);
 }
@@ -24,10 +25,11 @@ function total() {
 // número no sininho (chamado ao entrar e a cada atualização ao vivo)
 export function atualizarSininho() {
   const b = $('#badge-avisos'); if (!b) return;
-  const n = total();
-  b.hidden = !n; b.textContent = n;
+  // número do sininho: notificações não lidas + pendências do sistema (empréstimos atrasados, pedidos…)
+  const n = naoLidas() + total();
+  b.hidden = !n; b.textContent = n > 99 ? '99+' : n;
   const t = $('#badge-avisos-topo');
-  if (t) { t.hidden = !n; t.textContent = n; }
+  if (t) { t.hidden = !n; t.textContent = n > 99 ? '99+' : n; }
   $('#btn-avisos')?.classList.toggle('tem', !!n);
 }
 

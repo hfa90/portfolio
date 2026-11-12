@@ -14,6 +14,7 @@ import { dicaVersao, textoVersao } from '../js/versao.js';
 import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../js/fotos.js';
 import { VIDEO, ajustarFoco, criarDetector } from '../js/leitor-qr.js';
 import { cartaoAppAndroid, verificarAtualizacaoApp } from '../js/app-android.js';
+import { abrirCentral, iniciarNotificacoes } from '../js/notificacoes.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1146,6 +1147,24 @@ async function entrar(session) {
   sincronizarPendentes();
   setInterval(sincronizarPendentes, 30_000);
   guardarBibliotecas();
+  iniciarNotificacoes({
+    sb, userId: session.user.id, escopo: 'campo',
+    aoMudar: (n) => { const b = $('#sino-num'); b.hidden = !n; b.textContent = n > 99 ? '99+' : n; },
+    aoAbrir: abrirNotificacao,
+    avisar: (t, erro) => aviso(t, erro),
+  }).catch(() => { /* sem a tabela de notificações ainda: o sininho fica sem número */ });
+}
+$('#btn-sino').onclick = () => abrirCentral();
+
+// tocou num aviso: inventário aberto → leitura; máquinas → pendências do CD; o resto abre no painel completo
+function abrirNotificacao(n) {
+  if (n.tipo?.startsWith('inventario') && n.ref_id) {
+    const c = S.confs?.find((x) => x.id === n.ref_id);
+    if (c && c.status === 'aberta') { location.hash = '#conf/' + n.ref_id; return; }
+    if (n.tipo !== 'inventario_finalizado' && !c) { location.hash = '#inicio'; return; }
+  }
+  if (n.tipo === 'maquina_problema' || n.tipo === 'maquinas_novas') { location.hash = '#pend'; return; }
+  if (n.link) location.href = '../' + n.link;
 }
 
 function guardarBibliotecas() {

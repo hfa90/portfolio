@@ -1,6 +1,7 @@
-import { abrirAvisos, carregarAvisos } from './telas/avisos.js';
+import { abrirAvisos, atualizarSininho, carregarAvisos, total as totalPendencias } from './telas/avisos.js';
+import { abrirCentral, iniciarNotificacoes } from './notificacoes.js';
 import { carregarHist, carregarMaquinas } from './dados.js';
-import { $, $$, ehAdmin, erroMsg, esc, sb, state, store } from './nucleo.js';
+import { $, $$, ehAdmin, erroMsg, esc, sb, state, store, toast } from './nucleo.js';
 import { ehErroDeRede, idbGet, idbSet } from './offline.js';
 import { iniciarRelogios } from './prazo.js';
 import { iniciarRealtime, navegar, renderSidebar } from './rotas.js';
@@ -36,8 +37,9 @@ $('#btn-tema').onclick = () => {
   document.documentElement.dataset.theme = novo; store.set('tema', novo);
 };
 $('#btn-sair').onclick = () => sb.auth.signOut();
-$('#btn-avisos').onclick = () => { fecharMenu(); abrirAvisos(); };
-$('#btn-avisos-topo').onclick = () => abrirAvisos();
+// o sininho abre a central de notificações; as pendências do sistema ficam num botão dentro dela
+$('#btn-avisos').onclick = () => { fecharMenu(); abrirCentral(); };
+$('#btn-avisos-topo').onclick = () => abrirCentral();
 
 /* ---- celular: menu lateral deslizante (☰) e título da tela na barra superior ---- */
 function abrirMenu() { $('#app').classList.add('menu-aberto'); $('#menu-fundo').hidden = false; $('#btn-menu').setAttribute('aria-expanded', 'true'); }
@@ -172,6 +174,13 @@ async function entrar(session) {
   atualizarPendentes().then(sincronizar);
   setInterval(sincronizar, 20_000);
   carregarAvisos();   // só o número no sininho: nada abre sozinho ao entrar
+  iniciarNotificacoes({
+    sb, userId: session.user.id, escopo: 'painel',
+    aoMudar: atualizarSininho,
+    aoAbrir: (n) => { if (n.link) { if (location.hash === n.link) navegar(); else location.hash = n.link; } },
+    avisar: (t, erro) => toast(t, erro),
+    extra: { rotulo: 'Pendências do sistema', contar: totalPendencias, abrir: abrirAvisos },
+  }).catch(() => { /* sem a tabela de notificações (migração 20261116000001): o sininho segue só com as pendências */ });
 }
 
 aplicarTema();

@@ -1,9 +1,9 @@
 // Service worker do app de conferência: abre sem internet.
 // Os dados (Supabase) não passam por aqui — ficam no IndexedDB e sincronizam ao finalizar.
-const VERSAO = 'campo-v13';
+const VERSAO = 'campo-v14';
 const ESSENCIAIS = [
   './', './index.html', './campo.css', './campo.js', './manifest.webmanifest',
-  '../js/config.js', '../js/versao.js', '../js/offline.js', '../js/fotos.js', '../js/leitor-qr.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../css/app-android.css', '../js/app-android.js', '../img/logo.svg', '../img/cliente-rd.png',
+  '../js/config.js', '../js/versao.js', '../js/offline.js', '../js/fotos.js', '../js/leitor-qr.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../css/app-android.css', '../js/app-android.js', '../css/notificacoes.css', '../js/notificacoes.js', '../img/logo.svg', '../img/cliente-rd.png',
   '../icons/icon-192.png', '../icons/icon-512.png', '../icons/apple-touch-icon.png',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
@@ -42,4 +42,29 @@ self.addEventListener('fetch', (e) => {
     }).catch(async () => (await caches.match(req, { ignoreSearch: true }))
       || (req.mode === 'navigate' ? caches.match('./index.html') : Response.error())));
   }
+});
+
+// ---------- notificações push (função notificar-push no Supabase) ----------
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch { d = { titulo: 'Inventário Quallit', corpo: e.data?.text() || '' }; }
+  const icone = new URL('/inventario-quallit/web/icons/icon-192.png', self.location.origin).href;
+  e.waitUntil((async () => {
+    if (navigator.setAppBadge && typeof d.naoLidas === 'number') navigator.setAppBadge(d.naoLidas).catch(() => {});
+    await self.registration.showNotification(d.titulo || 'Inventário Quallit', {
+      body: d.corpo || '', icon: icone, badge: icone, tag: d.tag, renotify: !!d.tag,
+      requireInteraction: d.prioridade >= 3, data: { url: d.url, id: d.id },
+    });
+  })());
+});
+// tocou na notificação: se o app já está aberto, mostra lá; senão abre no endereço do aviso
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const { url, id } = e.notification.data || {};
+  e.waitUntil((async () => {
+    const abertas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const daqui = abertas.find((c) => c.url.startsWith(self.registration.scope));
+    if (daqui) { await daqui.focus(); daqui.postMessage({ tipo: 'notificacao-aberta', id }); return; }
+    await self.clients.openWindow(url || self.registration.scope);
+  })());
 });
