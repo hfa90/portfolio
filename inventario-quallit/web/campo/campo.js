@@ -13,7 +13,7 @@ import { confirmar } from '../js/dialogos.js';
 import { dicaVersao, textoVersao } from '../js/versao.js';
 import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../js/fotos.js';
 import { VIDEO, ajustarFoco, criarDetector } from '../js/leitor-qr.js';
-import { cartaoAppAndroid } from '../js/app-android.js';
+import { cartaoAppAndroid, verificarAtualizacaoApp } from '../js/app-android.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1169,3 +1169,6 @@ function guardarBibliotecas() {
     }, 0);
   });
 })();
+
+// dentro do app Android: avisa quando há uma versão nova do app para instalar (motivo, botão e passo a passo)
+verificarAtualizacaoApp();
