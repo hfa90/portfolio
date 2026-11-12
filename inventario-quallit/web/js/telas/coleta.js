@@ -92,10 +92,10 @@ async function modalLinkColetor() {
       const url = urlDe(cod);
       w.document.open();
       w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Registrar coletor — ${esc(cdCod(cd))}</title><style>
-        @page { size: A4; margin: 16mm; } body { font: 15px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Arial, sans-serif; color: #111; text-align: center; margin: 0; }
+        @page { size: A4; margin: 16mm; } body { font: 15px/1.5 "Segoe UI", Arial, sans-serif; color: #111; text-align: center; margin: 0; }
         h1 { font-size: 26px; margin: 0 0 4px; } .sub { color: #555; margin: 0 0 22px; }
         .qr svg { width: 85mm; height: 85mm; } .barras svg { width: 170mm; height: 26mm; margin-top: 16mm; display: block; margin-left: auto; margin-right: auto; }
-        .url { font: 600 17px ui-monospace, "SF Mono", Menlo, Consolas, monospace; margin: 8px 0 18px; } ol { text-align: left; display: inline-block; margin: 18px 0 0; font-size: 16px; }
+        .url { font: 600 17px Consolas, monospace; margin: 8px 0 18px; } ol { text-align: left; display: inline-block; margin: 18px 0 0; font-size: 16px; }
       </style></head><body>
         <h1>Registrar coletor no inventário</h1><p class="sub">${esc(cdCod(cd))} · ${esc(cdNome(cd))}</p>
         <div class="qr">${qrSvg(url)}</div><div class="url">${esc(semEsquema(url))}</div>

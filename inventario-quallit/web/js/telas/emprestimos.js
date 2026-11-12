@@ -273,7 +273,7 @@ export async function modalDevolucao(empId) {
 export async function imprimirTermo(id, janela) {
   const w = janela || window.open('', '_blank');
   if (!w) return toast('Permita pop-ups deste site para imprimir o termo.', true);
-  w.document.write('<p style="font:16px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;padding:24px">Gerando termo…</p>');
+  w.document.write('<p style="font:16px sans-serif;padding:24px">Gerando termo…</p>');
   const { data: e, error } = await sb.from('emprestimos').select('*, maquinas(hostname, ativo, modelo, fabricante, numero_serie, tipo)').eq('id', id).single();
   if (error) { w.close(); return toast(erroMsg(error), true); }
   const m = e.maquinas || {};
@@ -283,7 +283,7 @@ export async function imprimirTermo(id, janela) {
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Termo de responsabilidade — ${esc(m.hostname)}</title>
   <style>
     @page { size: A4; margin: 18mm 16mm; }
-    body { font: 12.5px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Arial, sans-serif; color: #111; margin: 0; }
+    body { font: 12.5px/1.5 "Segoe UI", Arial, sans-serif; color: #111; margin: 0; }
     h1 { font-size: 18px; margin: 0 0 2px; } .sub { color: #555; margin: 0 0 18px; }
     h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 6px; color: #333; border-bottom: 1px solid #ccc; padding-bottom: 3px; }
     table { width: 100%; border-collapse: collapse; } th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #eee; vertical-align: top; }

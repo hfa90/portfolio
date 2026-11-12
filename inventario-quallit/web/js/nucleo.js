@@ -179,12 +179,11 @@ export let audioCtx;
 export function beep(tipo) {
   try {
     audioCtx ||= new (window.AudioContext || window.webkitAudioContext)();
-    // "novo": duas notas suaves subindo (dó–mi), para máquinas novas na lista; os outros são os bipes de leitura
-    const seq = { ok: [[880, 0.09]], warn: [[660, 0.08], [660, 0.08]], bad: [[220, 0.28]], novo: [[1047, 0.11], [1319, 0.2]] }[tipo];
+    const seq = { ok: [[880, 0.09]], warn: [[660, 0.08], [660, 0.08]], bad: [[220, 0.28]] }[tipo];
     let t = audioCtx.currentTime;
     for (const [f, d] of seq) {
       const o = audioCtx.createOscillator(); const g = audioCtx.createGain();
-      o.frequency.value = f; o.type = tipo === 'novo' ? 'sine' : 'square'; g.gain.value = tipo === 'novo' ? 0.14 : 0.05;
+      o.frequency.value = f; o.type = 'square'; g.gain.value = 0.05;
       o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t + d); t += d + 0.05;
     }
   } catch { /* sem áudio */ }

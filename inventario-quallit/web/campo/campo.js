@@ -6,13 +6,11 @@
 // =====================================================================
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../js/config.js';
-import { idAleatorio, idbGet, idbSet } from '../js/offline.js';
+import { idbGet, idbSet } from '../js/offline.js';
 import { anelPrazo, etiquetaPrazo, relogioCompleto, iniciarRelogios, estadoPrazo, fmtDuracao } from '../js/prazo.js';
 import { montarResumo, copiarTexto, linkWhatsApp } from '../js/resumo.js';
 import { confirmar } from '../js/dialogos.js';
 import { dicaVersao, textoVersao } from '../js/versao.js';
-import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../js/fotos.js';
-import { VIDEO, ajustarFoco, criarDetector } from '../js/leitor-qr.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -132,7 +130,7 @@ async function carregarPerfil() {
 }
 
 async function carregarMaquinas() {
-  const cols = 'id, hostname, ativo, numero_serie, tipo, modelo, fabricante, setor, localizacao, responsavel, status, cd_id, ultimo_online';
+  const cols = 'id, hostname, ativo, numero_serie, tipo, modelo, fabricante, setor, localizacao, status, cd_id, ultimo_online';
   const todas = [];
   try {
     for (let from = 0; ; from += 1000) {
@@ -205,14 +203,10 @@ async function rotear() {
   if (tela !== 'conf') liberarTela();
   if (tela === 'conf' && id) return abrirConf(id);
   if (tela === 'final' && id) return telaFinal(id);
-  if (tela === 'pend') return telaPendencias();
-  if (tela === 'mudar') return telaMudanca();
-  if (tela === 'procurar') return telaProcurar();
   return telaInicio();
 }
 function mostrar(tela, { titulo, sub, voltar }) {
-  // telas escondidas são esvaziadas: os ids do leitor (#ler, #res…) existem só na tela atual
-  $$('#app .tela').forEach((t) => { t.hidden = t.id !== tela; if (t.hidden) t.innerHTML = ''; });
+  $$('.tela').forEach((t) => (t.hidden = t.id !== tela));
   $('#barra-titulo').textContent = titulo;
   $('#barra-sub').textContent = sub || '';
   $('#btn-voltar').hidden = !voltar;
@@ -246,14 +240,9 @@ async function telaInicio() {
       <h2>Olá, ${esc(primeiroNome)}</h2>
       <p>${S.cd ? `<button class="chip-cd" id="trocar-cd" ${ehAdmin() && S.cds.length > 1 ? '' : 'disabled'}><b>${esc(cdInfo(S.cd)?.codigo || '')}</b> ${esc(cdInfo(S.cd)?.nome || '')}${ehAdmin() && S.cds.length > 1 ? ' ▾' : ''}</button>` : 'Escolha um inventário para conferir.'}</p>
     </div>
-    <div class="atalhos">
-      <button class="atalho" id="at-pend"><span class="atalho-ico">📋</span><b>Pendências</b>${(() => { const n = listaPendencias().length; return n ? `<span class="atalho-num">${n}</span>` : '<small>nada a fazer</small>'; })()}</button>
-      <button class="atalho" id="at-mudar"><span class="atalho-ico">🚚</span><b>Mudança</b><small>setor ou mesa</small></button>
-      <button class="atalho" id="at-procurar"><span class="atalho-ico">🔎</span><b>Máquina</b><small>ficha e fotos</small></button>
-    </div>
     ${pendentes.length ? `<div class="cartao" style="padding:14px 16px;border-color:var(--lar);background:var(--lar-soft)">
       <strong style="color:var(--lar)">${pendentes.length} inventário(s) aguardando internet</strong>
-      <div class="muted" style="font-size:15px">Foram finalizados sem conexão e serão sincronizados automaticamente.</div>
+      <div class="muted" style="font-size:14px">Foram finalizados sem conexão e serão sincronizados automaticamente.</div>
       <button class="btn btn--lar btn--bloco" style="margin-top:10px" id="sinc-agora">Sincronizar agora</button></div>` : ''}
     <div class="sec-titulo"><span>Em andamento</span><button class="btn--texto btn" id="atualizar" style="min-height:36px">↻ Atualizar</button></div>
     ${abertos.length ? abertos.map((c) => { const p = progresso(c); return `
@@ -275,10 +264,7 @@ async function telaInicio() {
 
   $$('[data-conf]', el).forEach((b) => (b.onclick = () => ir('#conf/' + b.dataset.conf)));
   $('#novo-inv').onclick = folhaNovoInventario;
-  $('#atualizar').onclick = async () => { await Promise.all([carregarMaquinas(), carregarConfs(), carregarPendencias()]); telaInicio(); aviso(navigator.onLine ? 'Atualizado' : 'Sem internet: mostrando dados salvos'); };
-  $('#at-pend').onclick = () => ir('#pend');
-  $('#at-mudar').onclick = () => ir('#mudar');
-  $('#at-procurar').onclick = () => ir('#procurar');
+  $('#atualizar').onclick = async () => { await Promise.all([carregarMaquinas(), carregarConfs()]); telaInicio(); aviso(navigator.onLine ? 'Atualizado' : 'Sem internet: mostrando dados salvos'); };
   $('#sinc-agora')?.addEventListener('click', () => sincronizarPendentes(true));
   $('#trocar-cd')?.addEventListener('click', folhaTrocarCD);
 }
@@ -288,7 +274,7 @@ function folhaTrocarCD() {
     <div class="pilha">${S.cds.map((c) => `<button class="menu-item" data-cd="${c.id}"><span>${c.id === S.cd ? '●' : '○'}</span><span><b>${esc(c.codigo)}</b> · ${esc(c.nome)}</span></button>`).join('')}</div>`);
   $$('[data-cd]', $('#folha')).forEach((b) => (b.onclick = async () => {
     S.cd = b.dataset.cd; store.set('campo-cd', S.cd); fecharFolha();
-    await Promise.all([carregarMaquinas(), carregarConfs(), carregarPendencias()]); telaInicio();
+    await Promise.all([carregarMaquinas(), carregarConfs()]); telaInicio();
   }));
 }
 
@@ -373,7 +359,7 @@ function telaConf() {
     <div class="rodape-fixo"><div><button class="btn btn--lar btn--grande" id="btn-finalizar">Finalizar inventário</button></div></div>`;
 
   $('#f-ler').onsubmit = (e) => { e.preventDefault(); const v = $('#ler').value; $('#ler').value = ''; registrar(v); };
-  $('#btn-cam')?.addEventListener('click', () => abrirCamera(registrar));
+  $('#btn-cam')?.addEventListener('click', abrirCamera);
   $('#btn-local').onclick = folhaLocal;
   $('#btn-finalizar').onclick = () => ir('#final/' + c.id);
   $('#busca').oninput = debounce((e) => { S.busca = e.target.value; desenharLista(); }, 120);
@@ -447,7 +433,7 @@ function mostrarResultado(cls, titulo, detalhe, acoes = '') {
     void r.offsetWidth;
   }
   const cu = $('#cam-ultimo');
-  if (!$('#camera').hidden) { cu.hidden = false; cu.className = `cam-ultimo ${cls}`; cu.innerHTML = `${titulo}<div style="font-weight:400;font-size:15px">${detalhe}</div>`; }
+  if (!$('#camera').hidden) { cu.hidden = false; cu.className = `cam-ultimo ${cls}`; cu.innerHTML = `${titulo}<div style="font-weight:400;font-size:14px">${detalhe}</div>`; }
 }
 
 async function registrar(bruto, { manual = false, maquina = null } = {}) {
@@ -457,7 +443,7 @@ async function registrar(bruto, { manual = false, maquina = null } = {}) {
   const m = maquina || acharMaquina(codigo);
   const ja = sess.leituras.find((l) => (m && l.maquina_id === m.id) || up(l.codigo_lido) === up(codigo));
   if (ja) return mostrarResultado('warn', `Já lida — ${esc(m?.ativo || m?.hostname || codigo)}`, `Registrada às ${hora(ja.lido_em)}${ja.lido_por && ja.lido_por !== S.user.email ? ' por ' + esc(ja.lido_por.split('@')[0]) : ''}.`);
-  const leitura = { lid: idAleatorio(), maquina_id: m?.id || null, codigo_lido: codigo, localizacao: S.local || null, lido_em: new Date().toISOString(), lido_por: S.user.email, manual, enviado: false };
+  const leitura = { lid: crypto.randomUUID(), maquina_id: m?.id || null, codigo_lido: codigo, localizacao: S.local || null, lido_em: new Date().toISOString(), lido_por: S.user.email, manual, enviado: false };
   sess.leituras.push(leitura);
   await salvarSessao();
   if (!m) {
@@ -523,329 +509,61 @@ function folhaLocal() {
   };
 }
 
-/* ------------------------------------------------------------------ leitor reaproveitável (mudança, procurar) */
-function leitorHTML(placeholder = 'Bipe ou digite o patrimônio') {
-  return `<div class="cartao leitor">
-      <form class="leitor-linha" id="f-ler" autocomplete="off">
-        <input class="leitor-input" id="ler" placeholder="${esc(placeholder)}" autocapitalize="characters" autocorrect="off" spellcheck="false" enterkeyhint="go" inputmode="text">
-        <button class="btn btn--pri leitor-ok" aria-label="OK">OK</button>
-      </form>
-      <div class="resultado" id="res"><span class="muted">Leia a etiqueta com o leitor ou a câmera, ou digite patrimônio / hostname / série.</span></div>
-      ${navigator.mediaDevices?.getUserMedia ? `<button class="btn btn-camera btn--bloco" id="btn-cam"><svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>Ler etiquetas com a câmera</button>` : ''}
-    </div>`;
-}
-function ligarLeitor(aoLer) {
-  $('#f-ler').onsubmit = (e) => { e.preventDefault(); const v = $('#ler').value; $('#ler').value = ''; aoLer(v); };
-  $('#btn-cam')?.addEventListener('click', () => abrirCamera(aoLer));
-}
-const fecharCamera = () => { if (!$('#camera').hidden) cam?.fechar?.(); };
-
-/* ------------------------------------------------------------------ PENDÊNCIAS do CD */
-// Só o que o field resolve na prática. Compra, renovação, memória e HDD ficam com a gestão, no painel.
-// Alertas que o administrador ocultou numa máquina já não vêm do banco.
-const PEND = {
-  hw_reduzido:           { l: 'Peça removida?', g: 1, dica: 'A memória ou o disco diminuiu. Confira a máquina: pente ou disco retirado ou com defeito.', acao: 'verificar' },
-  estoque_online:        { l: 'Estoque sendo usado?', g: 1, dica: 'Está como estoque ou descartada, mas foi coletada nos últimos dias. Veja onde ela está e avise a TI para corrigir o status.' },
-  fora_do_cd:            { l: 'Na rede de outro CD', g: 1, dica: 'Apareceu na rede de outro CD. Confira se foi transferida.' },
-  hostname_duplicado:    { l: 'Nome repetido', g: 1, dica: 'Há outra máquina com o mesmo nome neste CD. Confira as duas etiquetas e avise a TI.' },
-  emprestimo_atrasado:   { l: 'Devolução atrasada', g: 1, dica: 'O empréstimo passou da data de devolução. Cobre o colaborador.' },
-  bateria_ruim:          { l: 'Bateria ruim', g: 1, dica: 'Coletor com bateria fraca ou com defeito. Separe para troca.' },
-  disco_cheio:           { l: 'Disco cheio', g: 1, dica: 'Pouco espaço livre. Limpe arquivos temporários ou chame a TI.' },
-  sem_bitlocker:         { l: 'BitLocker desligado', g: 1, dica: 'Disco sem criptografia. Chame a TI para ligar.' },
-  antivirus_off:         { l: 'Antivírus desligado', g: 1, dica: 'Antivírus desligado ou desatualizado. Chame a TI.' },
-  sem_ativo:             { l: 'Sem patrimônio', g: 0, dica: 'Sem número de patrimônio no sistema. Bipe ou digite a etiqueta de patrimônio da máquina.', acao: 'patrimonio' },
-  sem_contato:           { l: 'Coleta desatualizada', g: 0, dica: 'Sem coleta há mais de 6 meses. Passe o Invent_local (ou o kit dos coletores) nesta máquina.' },
-  windows_desatualizado: { l: 'Windows sem atualização', g: 0, dica: 'Mais de 45 dias sem atualizar o Windows. Deixe a máquina ligada na rede ou chame a TI.' },
-};
-S.pend = [];
-async function carregarPendencias() {
-  const chave = 'campo:pend:' + (S.cd || 'todos');
-  try {
-    let q = sb.from('vw_maquinas').select('id, hostname, ativo, numero_serie, tipo, modelo, setor, localizacao, responsavel, status, cd_id, ultimo_online, alertas, hw_reducao, emprestimo_atual').order('hostname').limit(5000);
-    if (S.cd) q = q.eq('cd_id', S.cd);
-    const { data: d, error } = await q;
-    if (error) throw error;
-    S.pend = d.filter((m) => (m.alertas || []).some((k) => PEND[k]));
-    idbSet(chave, S.pend);
-  } catch {
-    S.pend = (await idbGet(chave)) || [];
-  }
-}
-const listaPendencias = () => S.pend.flatMap((m) => (m.alertas || []).filter((k) => PEND[k]).map((k) => ({ k, m })));
-
-async function telaPendencias() {
-  mostrar('t-pend', { titulo: 'Pendências', sub: S.cd ? cdTxt(S.cd) : '', voltar: true });
-  const desenhar = () => {
-    const el = $('#t-pend');
-    if (!el || el.hidden) return;
-    const itens = listaPendencias();
-    const grupos = Object.entries(PEND).map(([k, p]) => ({ k, ...p, ms: itens.filter((x) => x.k === k).map((x) => x.m) })).filter((g) => g.ms.length);
-    el.innerHTML = `<p class="muted pend-intro">${navigator.onLine ? 'O que precisa de atenção nas máquinas do CD.' : 'Sem internet: mostrando a última lista salva.'} Toque numa máquina para ver o que fazer.</p>
-      ${grupos.length ? grupos.map((g) => `<details class="pend-grupo cartao" ${grupos.length <= 3 ? 'open' : ''}>
-          <summary><span class="ponto ${g.g ? 'ponto--bad' : 'ponto--warn'}"></span><b>${esc(g.l)}</b><span class="etq ${g.g ? 'etq--bad' : 'etq--lar'}">${g.ms.length}</span></summary>
-          <p class="pend-dica">${esc(g.dica)}</p>
-          <div class="lista">${g.ms.map((m) => `<button class="item" data-pm="${m.id}"><span class="item-txt"><strong>${esc(m.ativo || m.hostname)}</strong><span>${esc(m.hostname)} · ${esc(m.setor || 'sem setor')}${m.localizacao ? ' · ' + esc(m.localizacao) : ''}</span></span><span class="item-lado">›</span></button>`).join('')}</div>
-        </details>`).join('')
-        : '<div class="cartao vazio"><b>Nada pendente 🎉</b>Nenhuma máquina do CD precisa de ação agora.</div>'}`;
-    $$('[data-pm]', el).forEach((b) => (b.onclick = () => fichaMaquina(S.pend.find((x) => x.id === b.dataset.pm), { aoMudar: async () => { await carregarPendencias(); desenhar(); } })));
-  };
-  desenhar();
-  if (navigator.onLine) { await carregarPendencias(); desenhar(); }
-}
-
-/* ------------------------------------------------------------------ FICHA da máquina (folha): dados, o que fazer e fotos */
-function fichaMaquina(m, opc = {}) {
-  if (!m) return;
-  const base = S.maquinas.find((x) => x.id === m.id);
-  if (base) m = { ...m, ...base };
-  const p = S.pend.find((x) => x.id === m.id);
-  const pend = (p?.alertas || []).filter((k) => PEND[k]);
-  const emp = p?.emprestimo_atual;
-  abrirFolha(`<h2 class="mono">${esc(m.ativo || m.hostname)}</h2><p class="sub">${esc(TIPO[m.tipo] || '')} ${esc(m.modelo || '')}</p>
-    ${pend.map((k) => `<div class="pend-caixa ${PEND[k].g ? 'ruim' : ''}"><b>${esc(PEND[k].l)}</b><span>${esc(PEND[k].dica)}</span>
-      ${k === 'emprestimo_atrasado' && emp ? `<span>Com <b>${esc(emp.colaborador)}</b>${emp.previsto_devolucao ? ' · devolver até ' + dataHora(emp.previsto_devolucao) : ''}</span>` : ''}
-      ${k === 'hw_reduzido' && p.hw_reducao ? `<span>${p.hw_reducao.campo === 'memoria_gb' ? 'Memória' : 'Armazenamento'}: ${esc(p.hw_reducao.de)} → ${esc(p.hw_reducao.para)} GB</span>` : ''}
-      ${PEND[k].acao === 'verificar' ? '<button class="btn btn--pri btn--bloco" data-acao="verificar">✓ Conferi a máquina</button>' : ''}
-      ${PEND[k].acao === 'patrimonio' ? '<button class="btn btn--pri btn--bloco" data-acao="patrimonio">🏷 Cadastrar o patrimônio</button>' : ''}</div>`).join('')}
-    <dl class="dados"><div><dt>Hostname</dt><dd class="mono">${esc(m.hostname)}</dd></div><div><dt>Nº de série</dt><dd class="mono">${esc(m.numero_serie || '—')}</dd></div>
-      <div><dt>Setor</dt><dd>${esc(m.setor || '—')}</dd></div><div><dt>Localização</dt><dd>${esc(m.localizacao || '—')}</dd></div>
-      <div><dt>Responsável</dt><dd>${esc(m.responsavel || '—')}</dd></div><div><dt>Status</dt><dd>${esc(STATUS[m.status] || m.status || '—')}</dd></div>
-      <div><dt>Última coleta</dt><dd>${rel(m.ultimo_online)}</dd></div></dl>
-    <div class="sec-titulo ficha-sec"><span>Fotos</span></div>
-    <div class="fotos-campo" id="ficha-fotos"><span class="muted">Carregando…</span></div>
-    <div class="pilha" style="margin-top:14px">
-      <label class="btn btn-camera btn--bloco">📷 Tirar foto<input type="file" accept="image/*" capture="environment" id="ficha-foto-arq" hidden></label>
-      <a class="btn btn--bloco" href="../index.html#maquina/${encodeURIComponent(m.ativo || m.hostname)}">🖥 Abrir no painel</a>
-      <button class="btn btn--bloco" data-fechar>Fechar</button>
-    </div>`);
-  const f = $('#folha');
-  $('[data-acao=verificar]', f)?.addEventListener('click', async () => {
-    if (!navigator.onLine) return aviso('Sem internet. Tente de novo quando o sinal voltar.', true);
-    if (!(await confirmar('Confirma que você conferiu a máquina fisicamente (memória e disco)? O alerta some até uma nova redução.', { titulo: 'Marcar como verificado?', ok: 'Conferi' }))) return;
-    const { error } = await sb.from('maquinas').update({ hw_verificado_em: new Date().toISOString() }).eq('id', m.id);
-    if (error) return aviso(error.message, true);
-    fecharFolha(); aviso('Alerta marcado como verificado'); opc.aoMudar?.();
-  });
-  $('[data-acao=patrimonio]', f)?.addEventListener('click', () => folhaPatrimonio(m, opc));
-  $('#ficha-foto-arq').onchange = (e) => { const arq = e.target.files?.[0]; if (arq) novaFoto(arq, m, opc); };
-  fotosDaFicha(m, opc);
-}
-
-function folhaPatrimonio(m, opc) {
-  abrirFolha(`<h2>Cadastrar patrimônio</h2><p class="sub">${esc(m.hostname)} · ${esc(TIPO[m.tipo] || '')} ${esc(m.modelo || '')}</p>
-    <form id="f-pat"><label class="campo"><span>Número de patrimônio</span><input name="ativo" class="leitor-input" placeholder="Bipe ou digite" autocapitalize="characters" autocorrect="off" spellcheck="false" autocomplete="off" required enterkeyhint="done"></label>
-      ${navigator.mediaDevices?.getUserMedia ? '<button type="button" class="btn btn--bloco" id="pat-cam">📷 Ler a etiqueta com a câmera</button>' : ''}
-      <button class="btn btn--pri btn--grande btn--bloco" id="f-pat-ok">Salvar</button>
-      <p class="erro" id="f-pat-erro"></p></form>
-    <button class="btn btn--bloco" id="pat-voltar">Voltar</button>`);
-  const inp = $('#f-pat [name=ativo]');
-  $('#pat-voltar').onclick = () => fichaMaquina(m, opc);
-  $('#pat-cam')?.addEventListener('click', () => abrirCamera((v) => { fecharCamera(); inp.value = extrairCodigo(v); }));
-  $('#f-pat').onsubmit = async (e) => {
-    e.preventDefault();
-    const ativo = up(extrairCodigo(inp.value));
-    if (!ativo) return;
-    if (!navigator.onLine) return ($('#f-pat-erro').textContent = 'Sem internet. Tente de novo quando o sinal voltar.');
-    $('#f-pat-ok').disabled = true;
-    const { error } = await sb.from('maquinas').update({ ativo }).eq('id', m.id);
-    $('#f-pat-ok').disabled = false;
-    if (error) return ($('#f-pat-erro').textContent = error.code === '23505' ? `O patrimônio ${ativo} já está em outra máquina. Confira a etiqueta.` : error.message);
-    const local = S.maquinas.find((x) => x.id === m.id);
-    if (local) local.ativo = ativo;
-    fecharFolha(); aviso(`Patrimônio ${ativo} cadastrado`); opc.aoMudar?.();
-  };
-}
-
-/* ---- fotos na ficha (o painel mostra as mesmas) ---- */
-async function fotosDaFicha(m, opc) {
-  const el = $('#ficha-fotos');
-  if (!el) return;
-  if (!navigator.onLine) { el.innerHTML = '<span class="muted">Sem internet: as fotos aparecem quando o sinal voltar.</span>'; return; }
-  try {
-    const fotos = await listarFotos(sb, m.id);
-    if (!$('#ficha-fotos')) return;
-    el.innerHTML = fotos.length ? fotos.map((f) => `<button class="foto-mini" data-foto-id="${f.id}"><img data-foto="${esc(f.caminho)}" alt="${esc(f.legenda || 'Foto da máquina')}"></button>`).join('')
-      : '<span class="muted">Nenhuma foto ainda. Registre o estado do equipamento, um defeito ou a etiqueta.</span>';
-    carregarMiniaturas(sb, el);
-    $$('[data-foto-id]', el).forEach((b) => (b.onclick = () => verFoto(fotos.find((x) => String(x.id) === b.dataset.fotoId), m, opc)));
-  } catch (e) { el.innerHTML = `<span class="muted">${esc(erroFoto(e))}</span>`; }
-}
-function verFoto(f, m, opc) {
-  const pode = ehAdmin() || f.criado_por === S.user.id;
-  abrirFolha(`<h2>${esc(f.legenda || 'Foto')}</h2><p class="sub">${esc(m.ativo || m.hostname)} · ${dataHora(f.criado_em)}${f.criado_por_email ? ' · ' + esc(f.criado_por_email.split('@')[0]) : ''}</p>
-    <img class="foto-grande" data-foto="${esc(f.caminho)}" alt="${esc(f.legenda || 'Foto da máquina')}">
-    <div class="pilha" style="margin-top:14px">${pode ? '<button class="btn btn--perigo btn--bloco" id="foto-apagar">Apagar foto</button>' : ''}<button class="btn btn--bloco" id="foto-voltar">Voltar</button></div>`);
-  carregarMiniaturas(sb, $('#folha'));
-  $('#foto-voltar').onclick = () => fichaMaquina(m, opc);
-  $('#foto-apagar')?.addEventListener('click', async () => {
-    if (!(await confirmar('A foto será apagada definitivamente.', { titulo: 'Apagar foto?', ok: 'Apagar', perigo: true }))) return;
-    try { await apagarFoto(sb, f); aviso('Foto apagada'); fichaMaquina(m, opc); } catch (e) { aviso(erroFoto(e), true); }
-  });
-}
-function novaFoto(arq, m, opc) {
-  const previa = URL.createObjectURL(arq);
-  abrirFolha(`<h2>Nova foto</h2><p class="sub">${esc(m.ativo || m.hostname)}</p>
-    <img class="foto-grande" src="${previa}" alt="Prévia da foto">
-    <form id="f-foto" style="margin-top:14px"><label class="campo"><span>Legenda (opcional)</span><input name="legenda" maxlength="200" placeholder="Ex.: tela trincada, etiqueta, mesa" autocomplete="off" enterkeyhint="done"></label>
-      <button class="btn btn--pri btn--grande btn--bloco" id="f-foto-ok">Enviar foto</button></form>
-    <button class="btn btn--bloco" id="f-foto-cancelar" style="margin-top:10px">Cancelar</button>`);
-  const sair = () => { URL.revokeObjectURL(previa); fichaMaquina(m, opc); };
-  $('#f-foto-cancelar').onclick = sair;
-  $('#f-foto').onsubmit = async (e) => {
-    e.preventDefault();
-    if (!navigator.onLine) return aviso('Sem internet: a foto precisa de sinal para ser enviada.', true);
-    const b = $('#f-foto-ok'); b.disabled = true; b.textContent = 'Enviando…';
-    try { await enviarFoto(sb, m.id, arq, new FormData(e.target).get('legenda')); aviso('Foto enviada'); sair(); }
-    catch (er) { b.disabled = false; b.textContent = 'Enviar foto'; aviso(erroFoto(er), true); }
-  };
-}
-
-/* ------------------------------------------------------------------ MUDANÇA de setor/mesa em lote */
-// Escolhe o destino uma vez e vai bipando: cada máquina muda na hora (com internet) e entra no histórico.
-S.mud = null;
-function telaMudanca() {
-  mostrar('t-mudar', { titulo: 'Mudança de setor', sub: S.cd ? cdTxt(S.cd) : '', voltar: true });
-  if (S.mud) desenharMudanca(); else formMudanca();
-}
-function formMudanca() {
-  const el = $('#t-mudar');
-  const v = S.mud || {};
-  const setores = [...new Set(S.maquinas.map((m) => m.setor).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-  el.innerHTML = `<div class="cartao" style="padding:16px">
-    <p class="muted" style="margin:0 0 14px">Escolha para onde as máquinas vão. Depois é só bipar as etiquetas: cada máquina já muda no sistema na hora.</p>
-    <form id="f-mud" class="pilha">
-      <label class="campo"><span>Novo setor</span><input name="setor" list="mud-setores" value="${esc(v.setor || '')}" required autocomplete="off" enterkeyhint="next"></label>
-      <datalist id="mud-setores">${setores.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
-      <label class="campo"><span>Localização / mesa (opcional)</span><input name="localizacao" value="${esc(v.localizacao || '')}" placeholder="Ex.: sala 2, mesa 14" autocomplete="off" enterkeyhint="next"></label>
-      <label class="campo"><span>Responsável (opcional)</span><input name="responsavel" value="${esc(v.responsavel || '')}" placeholder="Nome de quem vai usar" autocomplete="off" enterkeyhint="done"></label>
-      <p class="muted" style="margin:0;font-size:15px">Campo opcional em branco não muda o que já está cadastrado.</p>
-      <button class="btn btn--pri btn--grande btn--bloco">${S.mud ? 'Continuar bipando' : 'Começar a bipar'}</button>
-    </form></div>`;
-  $('#f-mud').onsubmit = (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const txt = (k) => String(fd.get(k) || '').trim() || null;
-    S.mud = { setor: txt('setor'), localizacao: txt('localizacao'), responsavel: txt('responsavel'), movidas: S.mud?.movidas || [] };
-    desenharMudanca();
-  };
-}
-function desenharMudanca() {
-  const el = $('#t-mudar');
-  const d = S.mud;
-  el.innerHTML = `<div class="cartao mud-destino"><div><small>Movendo para</small><b>${esc(d.setor)}</b>
-      ${d.localizacao ? `<span>📍 ${esc(d.localizacao)}</span>` : ''}${d.responsavel ? `<span>👤 ${esc(d.responsavel)}</span>` : ''}</div>
-      <button class="btn" id="mud-alterar">Alterar</button></div>
-    ${leitorHTML()}
-    <div class="sec-titulo"><span id="mud-qtd"></span></div>
-    <div class="lista" id="mud-lista"></div>
-    <div class="rodape-fixo"><div><button class="btn btn--pri btn--grande" id="mud-fim">Concluir mudança</button></div></div>`;
-  ligarLeitor(moverMaquina);
-  $('#mud-alterar').onclick = formMudanca;
-  $('#mud-fim').onclick = () => {
-    const n = S.mud.movidas.length;
-    S.mud = null;
-    if (n) aviso(`${n} máquina(s) movida(s)`);
-    ir('#inicio');
-  };
-  el.onclick = (e) => { const b = e.target.closest('[data-desf-mud]'); if (b) desfazerMudanca(b.dataset.desfMud); };
-  desenharListaMud();
-}
-function desenharListaMud() {
-  const l = S.mud?.movidas || [];
-  if (!$('#mud-lista')) return;
-  $('#mud-qtd').textContent = `Movidas nesta mudança (${l.length})`;
-  $('#mud-lista').innerHTML = l.map((x) => { const m = S.maquinas.find((y) => y.id === x.id) || {};
-    return `<div class="item"><span class="ponto ponto--ok"></span><span class="item-txt"><strong>${esc(m.ativo || m.hostname)}</strong><span>${esc(m.hostname)} · antes: ${esc(x.antes.setor ?? m.setor ?? 'sem setor')}</span></span>
-      <button class="btn btn--texto" data-desf-mud="${x.id}">Desfazer</button></div>`; }).join('')
-    || '<div class="cartao vazio"><b>Nenhuma máquina ainda</b>Bipe a etiqueta de cada máquina que mudou de lugar.</div>';
-}
-async function moverMaquina(bruto) {
-  const codigo = extrairCodigo(bruto);
-  if (!codigo || !S.mud) return;
-  const m = acharMaquina(codigo);
-  if (!m) return mostrarResultado('bad', `Não cadastrada: ${esc(codigo)}`, 'Este código não existe nas máquinas deste CD.');
-  const nome = esc(m.ativo || m.hostname);
-  if (S.mud.movidas.some((x) => x.id === m.id)) return mostrarResultado('warn', `Já movida: ${nome}`, 'Esta máquina já está nesta mudança.');
-  if (!navigator.onLine) return mostrarResultado('bad', 'Sem internet', 'A mudança grava direto no sistema. Bipe de novo quando o sinal voltar.');
-  const novo = { setor: S.mud.setor };
-  if (S.mud.localizacao) novo.localizacao = S.mud.localizacao;
-  if (S.mud.responsavel) novo.responsavel = S.mud.responsavel;
-  const diff = Object.fromEntries(Object.entries(novo).filter(([k, v]) => (m[k] || null) !== v));
-  if (!Object.keys(diff).length) return mostrarResultado('warn', `${nome} já está aí`, `Já cadastrada em ${esc(m.setor)}${m.localizacao ? ' · ' + esc(m.localizacao) : ''}.`);
-  const antes = Object.fromEntries(Object.keys(diff).map((k) => [k, m[k] ?? null]));
-  const { error } = await sb.from('maquinas').update(diff).eq('id', m.id);
-  if (error) return mostrarResultado('bad', 'Não foi possível mover', esc(erroRede(error) ? 'Sem internet no momento.' : error.message));
-  Object.assign(m, diff);
-  S.mud.movidas.unshift({ id: m.id, antes });
-  mostrarResultado('ok', `✓ ${nome} → ${esc(S.mud.setor)}`, `${esc(m.hostname)} · antes: ${esc(antes.setor ?? m.setor ?? 'sem setor')}`, `<button class="btn" data-desf-mud="${m.id}">Desfazer</button>`);
-  desenharListaMud();
-}
-async function desfazerMudanca(id) {
-  const x = S.mud?.movidas.find((y) => y.id === id);
-  if (!x) return;
-  if (!navigator.onLine) return aviso('Sem internet para desfazer agora.', true);
-  const { error } = await sb.from('maquinas').update(x.antes).eq('id', id);
-  if (error) return aviso(error.message, true);
-  const m = S.maquinas.find((y) => y.id === id);
-  if (m) Object.assign(m, x.antes);
-  S.mud.movidas = S.mud.movidas.filter((y) => y.id !== id);
-  const r = $('#res'); if (r) { r.className = 'resultado'; r.innerHTML = '<span class="muted">Mudança desfeita: a máquina voltou para onde estava.</span>'; }
-  aviso('Mudança desfeita');
-  desenharListaMud();
-}
-
-/* ------------------------------------------------------------------ PROCURAR máquina (ficha e fotos) */
-function telaProcurar() {
-  mostrar('t-procurar', { titulo: 'Máquina', sub: S.cd ? cdTxt(S.cd) : '', voltar: true });
-  const el = $('#t-procurar');
-  el.innerHTML = `${leitorHTML('Bipe ou digite patrimônio, nome ou série')}<div class="lista" id="proc-lista" style="margin-top:12px"></div>`;
-  const abrir = (bruto) => {
-    const m = acharMaquina(bruto);
-    if (!m) return mostrarResultado('bad', `Não encontrada: ${esc(extrairCodigo(bruto))}`, 'Nenhuma máquina deste CD com esse patrimônio, nome ou série.');
-    fecharCamera();
-    mostrarResultado('ok', `✓ ${esc(m.ativo || m.hostname)}`, `${esc(m.hostname)} · ${esc(m.setor || 'sem setor')}`);
-    fichaMaquina(m);
-  };
-  ligarLeitor(abrir);
-  // digitando: mostra as máquinas que combinam (parte do patrimônio, nome, série, setor ou responsável)
-  $('#ler').oninput = debounce((e) => {
-    const termos = up(e.target.value).split(/\s+/).filter(Boolean);
-    const l = termos.join('').length < 2 ? [] : S.maquinas.filter((m) => termos.every((t) => up(`${m.ativo} ${m.hostname} ${m.numero_serie} ${m.setor} ${m.localizacao} ${m.responsavel}`).includes(t))).slice(0, 30);
-    $('#proc-lista').innerHTML = l.map((m) => `<button class="item" data-proc="${m.id}"><span class="item-txt"><strong>${esc(m.ativo || m.hostname)}</strong><span>${esc(m.hostname)} · ${esc(m.setor || 'sem setor')}${m.localizacao ? ' · ' + esc(m.localizacao) : ''}</span></span><span class="item-lado">›</span></button>`).join('');
-  }, 150);
-  $('#proc-lista').onclick = (e) => { const b = e.target.closest('[data-proc]'); if (b) fichaMaquina(S.maquinas.find((m) => m.id === b.dataset.proc)); };
-}
-
 /* ------------------------------------------------------------------ câmera contínua */
 let cam = null;
-// aoLer(código): o que fazer com cada etiqueta lida (conferir, mudar de setor, abrir a ficha…)
-async function abrirCamera(aoLer) {
+// impressão digital (SRI) das bibliotecas externas: o navegador recusa o arquivo se ele for alterado no CDN
+const SRI_SCRIPTS = { 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx' };
+function carregarScript(src) {
+  return new Promise((res, rej) => {
+    if ([...document.scripts].some((s) => s.src === src)) return res();
+    const s = document.createElement('script'); s.src = src; if (SRI_SCRIPTS[src]) { s.integrity = SRI_SCRIPTS[src]; s.crossOrigin = 'anonymous'; } s.onload = res; s.onerror = () => rej(new Error('falha ao carregar o leitor'));
+    document.head.append(s);
+  });
+}
+async function abrirCamera() {
   const box = $('#camera');
   box.hidden = false; $('#cam-ultimo').hidden = true;
   cam = { rodando: true, stream: null, ultimo: '', ultimoEm: 0 };
   const fechar = () => { cam.rodando = false; cam.stream?.getTracks().forEach((t) => t.stop()); box.hidden = true; $('#ler')?.focus({ preventScroll: true }); };
-  cam.fechar = fechar;
   $('#cam-fechar').onclick = fechar;
   try {
-    cam.stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO, audio: false });
+    cam.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
     const v = $('#cam-video'); v.srcObject = cam.stream; await v.play();
     const trilha = cam.stream.getVideoTracks()[0];
-    ajustarFoco(trilha);
     const capac = trilha.getCapabilities?.() || {};
     const bl = $('#cam-lanterna');
     bl.hidden = !capac.torch;
     let luz = false;
     bl.onclick = () => { luz = !luz; trilha.applyConstraints({ advanced: [{ torch: luz }] }).catch(() => {}); };
-    const detector = await criarDetector(v);
-    $('#cam-dica').textContent = detector.nativo ? 'Aponte para o QR code ou o código de barras da etiqueta' : 'Centralize o QR code da etiqueta na mira';
+    let detectar;
+    let nativo = null;
+    if ('BarcodeDetector' in window) {
+      try {
+        const fmts = await BarcodeDetector.getSupportedFormats();
+        const quero = ['qr_code', 'code_128', 'code_39', 'ean_13', 'data_matrix', 'itf'].filter((f) => fmts.includes(f));
+        if (quero.length) nativo = new BarcodeDetector({ formats: quero });
+      } catch { nativo = null; }
+    }
+    if (nativo) detectar = async () => (await nativo.detect(v))[0]?.rawValue;
+    else {
+      await carregarScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
+      $('#cam-dica').textContent = 'Aponte para o QR code da etiqueta';
+      const cv = document.createElement('canvas'); const cx = cv.getContext('2d', { willReadFrequently: true });
+      detectar = async () => {
+        if (!v.videoWidth) return null;
+        const w = 640, h = Math.round((v.videoHeight / v.videoWidth) * w);
+        cv.width = w; cv.height = h; cx.drawImage(v, 0, 0, w, h);
+        return window.jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data;
+      };
+    }
     const loop = async () => {
       if (!cam.rodando) return;
       try {
-        const val = await detector.ler();
+        const val = await detectar();
         // evita registrar a mesma etiqueta várias vezes enquanto ela continua na frente da câmera
         if (val && !(val === cam.ultimo && Date.now() - cam.ultimoEm < 3500)) {
           cam.ultimo = val; cam.ultimoEm = Date.now();
-          await aoLer(val);
+          await registrar(val);
           setTimeout(loop, 900);
           return;
         }
@@ -886,7 +604,7 @@ async function telaFinal(id) {
     <div class="cartao">
       <div class="resumo-topo">
         <div class="anel" style="--p:${k.pct}"><b>${k.pct}%</b></div>
-        <div><strong style="font-size:20px">${k.ok} de ${k.esp.length} máquinas encontradas</strong>
+        <div><strong style="font-size:18px">${k.ok} de ${k.esp.length} máquinas encontradas</strong>
         <div class="muted">${esc(c.setor || 'Todos os setores')}${S.cd ? ' · ' + esc(cdTxt(c.cd_id)) : ''}</div></div>
       </div>
       <div class="grade">
@@ -903,7 +621,7 @@ async function telaFinal(id) {
       ${k.faltando.length > 5 ? `<div class="mais">e mais ${k.faltando.length - 5}…</div>` : ''}</div>` : ''}
     <div class="cartao resumo-grupo" style="padding:14px 16px;margin-top:14px">
       <strong>1. Envie o resumo no grupo</strong>
-      <div class="muted" style="font-size:15px">Só dá para finalizar depois de copiar ou enviar o resumo. Ele fica gravado no inventário.</div>
+      <div class="muted" style="font-size:14.5px">Só dá para finalizar depois de copiar ou enviar o resumo. Ele fica gravado no inventário.</div>
       <textarea id="res-texto" readonly rows="8" style="width:100%;margin-top:8px;font-size:13px;font-family:inherit">${esc(textoResumo)}</textarea>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button class="btn" id="res-copiar">📋 Copiar</button>
@@ -912,9 +630,9 @@ async function telaFinal(id) {
       <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:15px"><input type="checkbox" id="res-colei" ${S.sess.resumoEm ? '' : 'disabled'} style="width:22px;height:22px"> Enviei o resumo no grupo</label>
     </div>
     <div class="cartao" style="padding:14px 16px;margin-top:14px">
-      ${navigator.onLine ? `<strong>Ao confirmar</strong><div class="muted" style="font-size:15px">As leituras são enviadas ao sistema e o inventário é encerrado. Depois disso, só um administrador pode reabrir.</div>`
-        : `<strong style="color:var(--warn)">Você está sem internet</strong><div class="muted" style="font-size:15px">Pode finalizar mesmo assim: tudo fica guardado no celular e é sincronizado automaticamente quando a conexão voltar. Não desinstale o app até lá.</div>`}
-      <div id="envio" hidden><div class="progresso-envio"><i id="envio-barra" style="width:0%"></i></div><div class="muted" id="envio-txt" style="font-size:15px"></div></div>
+      ${navigator.onLine ? `<strong>Ao confirmar</strong><div class="muted" style="font-size:14.5px">As leituras são enviadas ao sistema e o inventário é encerrado. Depois disso, só um administrador pode reabrir.</div>`
+        : `<strong style="color:var(--warn)">Você está sem internet</strong><div class="muted" style="font-size:14.5px">Pode finalizar mesmo assim: tudo fica guardado no celular e é sincronizado automaticamente quando a conexão voltar. Não desinstale o app até lá.</div>`}
+      <div id="envio" hidden><div class="progresso-envio"><i id="envio-barra" style="width:0%"></i></div><div class="muted" id="envio-txt" style="font-size:14px"></div></div>
     </div>
     <div class="rodape-fixo"><div>
       <button class="btn" id="voltar-conf">Voltar</button>
@@ -1102,7 +820,7 @@ window.addEventListener('appinstalled', () => { S.instalar = null; $('#instalar-
 async function instalarApp() {
   if (S.instalar) { S.instalar.prompt(); await S.instalar.userChoice; S.instalar = null; return; }
   abrirFolha(`<h2>Instalar no iPhone</h2><p class="sub">No Safari:</p>
-    <ol style="margin:0 0 16px;padding-left:20px;display:grid;gap:8px;font-size:17px">
+    <ol style="margin:0 0 16px;padding-left:20px;display:grid;gap:8px;font-size:16px">
       <li>Toque em <b>Compartilhar</b> (o quadrado com a seta ⬆️) na barra do Safari.</li>
       <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li>
       <li>Toque em <b>Adicionar</b>. O ícone “Conferência” aparece na tela inicial.</li>
@@ -1135,7 +853,7 @@ async function entrar(session) {
   if (!(await carregarPerfil())) { iniciado = false; await sb.auth.signOut(); return telaLogin('Seu usuário não tem acesso liberado. Fale com o administrador.'); }
   S.cd = ehAdmin() ? (store.get('campo-cd') && S.cds.some((c) => c.id === store.get('campo-cd')) ? store.get('campo-cd') : S.cds[0]?.id || null) : S.perfil.cd_id || null;
   $('#t-login').hidden = true; $('#app').hidden = false;
-  await Promise.all([carregarMaquinas(), carregarConfs(), carregarPendencias()]);
+  await Promise.all([carregarMaquinas(), carregarConfs()]);
   iniciarRelogios();
   window.addEventListener('hashchange', rotear);
   if (!location.hash) history.replaceState(null, '', '#inicio');
