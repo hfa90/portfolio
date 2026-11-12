@@ -23,6 +23,8 @@ if (!i) {
     $('#passos').hidden = true;
   } else {
     $('#no-pc').hidden = false;
+    $('#baixar-pc').href = APK_URL;
+    $('#ic-baixar-pc').innerHTML = ICONES.BAIXAR;
     $('#endereco').textContent = PAGINA_URL.replace(/^https:\/\//, '');
     try { $('#qr').innerHTML = `<img src="${await qrImagem(PAGINA_URL, 6)}" alt="QR code para abrir esta página no celular Android">`; }
     catch { $('#qr').hidden = true; }

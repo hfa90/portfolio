@@ -65,10 +65,13 @@ export async function cartaoAppAndroid(alvo) {
          <a class="aa-baixar" href="${APK_URL}" download="Inventario-Quallit.apk">${BAIXAR}<span>Baixar o app</span></a>
          <a class="aa-como" href="${PAGINA_URL}">Como instalar · ${versao} ›</a>
        </div>`
-    : `<a class="aa-qr" href="${PAGINA_URL}" target="_blank" rel="noopener">
-         <span class="aa-qr-img"></span>
-         <span class="aa-qr-txt"><b>Aponte a câmera</b><span>do celular Android para instalar</span><small>${versao}</small></span>
-       </a>`;
+    : `<div class="aa-acoes">
+         <a class="aa-qr" href="${PAGINA_URL}" target="_blank" rel="noopener">
+           <span class="aa-qr-img"></span>
+           <span class="aa-qr-txt"><b>Aponte a câmera</b><span>do celular Android para instalar</span><small>${versao}</small></span>
+         </a>
+         <a class="aa-baixar aa-baixar--sec" href="${APK_URL}" download="Inventario-Quallit.apk">${BAIXAR}<span>Baixar o APK</span></a>
+       </div>`;
   alvo.innerHTML = `
     <section class="aa-cartao" aria-label="App do Inventário Quallit para Android">
       <span class="aa-marca">${ROBO}</span>
