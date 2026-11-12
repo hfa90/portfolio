@@ -12,6 +12,7 @@ import { montarResumo, copiarTexto, linkWhatsApp } from '../js/resumo.js';
 import { confirmar } from '../js/dialogos.js';
 import { dicaVersao, textoVersao } from '../js/versao.js';
 import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../js/fotos.js';
+import { VIDEO, ajustarFoco, criarDetector } from '../js/leitor-qr.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -252,7 +253,7 @@ async function telaInicio() {
     </div>
     ${pendentes.length ? `<div class="cartao" style="padding:14px 16px;border-color:var(--lar);background:var(--lar-soft)">
       <strong style="color:var(--lar)">${pendentes.length} inventário(s) aguardando internet</strong>
-      <div class="muted" style="font-size:14px">Foram finalizados sem conexão e serão sincronizados automaticamente.</div>
+      <div class="muted" style="font-size:15px">Foram finalizados sem conexão e serão sincronizados automaticamente.</div>
       <button class="btn btn--lar btn--bloco" style="margin-top:10px" id="sinc-agora">Sincronizar agora</button></div>` : ''}
     <div class="sec-titulo"><span>Em andamento</span><button class="btn--texto btn" id="atualizar" style="min-height:36px">↻ Atualizar</button></div>
     ${abertos.length ? abertos.map((c) => { const p = progresso(c); return `
@@ -446,7 +447,7 @@ function mostrarResultado(cls, titulo, detalhe, acoes = '') {
     void r.offsetWidth;
   }
   const cu = $('#cam-ultimo');
-  if (!$('#camera').hidden) { cu.hidden = false; cu.className = `cam-ultimo ${cls}`; cu.innerHTML = `${titulo}<div style="font-weight:400;font-size:14px">${detalhe}</div>`; }
+  if (!$('#camera').hidden) { cu.hidden = false; cu.className = `cam-ultimo ${cls}`; cu.innerHTML = `${titulo}<div style="font-weight:400;font-size:15px">${detalhe}</div>`; }
 }
 
 async function registrar(bruto, { manual = false, maquina = null } = {}) {
@@ -717,7 +718,7 @@ function formMudanca() {
       <datalist id="mud-setores">${setores.map((s) => `<option value="${esc(s)}">`).join('')}</datalist>
       <label class="campo"><span>Localização / mesa (opcional)</span><input name="localizacao" value="${esc(v.localizacao || '')}" placeholder="Ex.: sala 2, mesa 14" autocomplete="off" enterkeyhint="next"></label>
       <label class="campo"><span>Responsável (opcional)</span><input name="responsavel" value="${esc(v.responsavel || '')}" placeholder="Nome de quem vai usar" autocomplete="off" enterkeyhint="done"></label>
-      <p class="muted" style="margin:0;font-size:14px">Campo opcional em branco não muda o que já está cadastrado.</p>
+      <p class="muted" style="margin:0;font-size:15px">Campo opcional em branco não muda o que já está cadastrado.</p>
       <button class="btn btn--pri btn--grande btn--bloco">${S.mud ? 'Continuar bipando' : 'Começar a bipar'}</button>
     </form></div>`;
   $('#f-mud').onsubmit = (e) => {
@@ -817,15 +818,6 @@ function telaProcurar() {
 
 /* ------------------------------------------------------------------ câmera contínua */
 let cam = null;
-// impressão digital (SRI) das bibliotecas externas: o navegador recusa o arquivo se ele for alterado no CDN
-const SRI_SCRIPTS = { 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx' };
-function carregarScript(src) {
-  return new Promise((res, rej) => {
-    if ([...document.scripts].some((s) => s.src === src)) return res();
-    const s = document.createElement('script'); s.src = src; if (SRI_SCRIPTS[src]) { s.integrity = SRI_SCRIPTS[src]; s.crossOrigin = 'anonymous'; } s.onload = res; s.onerror = () => rej(new Error('falha ao carregar o leitor'));
-    document.head.append(s);
-  });
-}
 // aoLer(código): o que fazer com cada etiqueta lida (conferir, mudar de setor, abrir a ficha…)
 async function abrirCamera(aoLer) {
   const box = $('#camera');
@@ -835,39 +827,21 @@ async function abrirCamera(aoLer) {
   cam.fechar = fechar;
   $('#cam-fechar').onclick = fechar;
   try {
-    cam.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+    cam.stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO, audio: false });
     const v = $('#cam-video'); v.srcObject = cam.stream; await v.play();
     const trilha = cam.stream.getVideoTracks()[0];
+    ajustarFoco(trilha);
     const capac = trilha.getCapabilities?.() || {};
     const bl = $('#cam-lanterna');
     bl.hidden = !capac.torch;
     let luz = false;
     bl.onclick = () => { luz = !luz; trilha.applyConstraints({ advanced: [{ torch: luz }] }).catch(() => {}); };
-    let detectar;
-    let nativo = null;
-    if ('BarcodeDetector' in window) {
-      try {
-        const fmts = await BarcodeDetector.getSupportedFormats();
-        const quero = ['qr_code', 'code_128', 'code_39', 'ean_13', 'data_matrix', 'itf'].filter((f) => fmts.includes(f));
-        if (quero.length) nativo = new BarcodeDetector({ formats: quero });
-      } catch { nativo = null; }
-    }
-    if (nativo) detectar = async () => (await nativo.detect(v))[0]?.rawValue;
-    else {
-      await carregarScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
-      $('#cam-dica').textContent = 'Aponte para o QR code da etiqueta';
-      const cv = document.createElement('canvas'); const cx = cv.getContext('2d', { willReadFrequently: true });
-      detectar = async () => {
-        if (!v.videoWidth) return null;
-        const w = 640, h = Math.round((v.videoHeight / v.videoWidth) * w);
-        cv.width = w; cv.height = h; cx.drawImage(v, 0, 0, w, h);
-        return window.jsQR(cx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'dontInvert' })?.data;
-      };
-    }
+    const detector = await criarDetector(v);
+    $('#cam-dica').textContent = detector.nativo ? 'Aponte para o QR code ou o código de barras da etiqueta' : 'Centralize o QR code da etiqueta na mira';
     const loop = async () => {
       if (!cam.rodando) return;
       try {
-        const val = await detectar();
+        const val = await detector.ler();
         // evita registrar a mesma etiqueta várias vezes enquanto ela continua na frente da câmera
         if (val && !(val === cam.ultimo && Date.now() - cam.ultimoEm < 3500)) {
           cam.ultimo = val; cam.ultimoEm = Date.now();
@@ -912,7 +886,7 @@ async function telaFinal(id) {
     <div class="cartao">
       <div class="resumo-topo">
         <div class="anel" style="--p:${k.pct}"><b>${k.pct}%</b></div>
-        <div><strong style="font-size:18px">${k.ok} de ${k.esp.length} máquinas encontradas</strong>
+        <div><strong style="font-size:20px">${k.ok} de ${k.esp.length} máquinas encontradas</strong>
         <div class="muted">${esc(c.setor || 'Todos os setores')}${S.cd ? ' · ' + esc(cdTxt(c.cd_id)) : ''}</div></div>
       </div>
       <div class="grade">
@@ -929,7 +903,7 @@ async function telaFinal(id) {
       ${k.faltando.length > 5 ? `<div class="mais">e mais ${k.faltando.length - 5}…</div>` : ''}</div>` : ''}
     <div class="cartao resumo-grupo" style="padding:14px 16px;margin-top:14px">
       <strong>1. Envie o resumo no grupo</strong>
-      <div class="muted" style="font-size:14.5px">Só dá para finalizar depois de copiar ou enviar o resumo. Ele fica gravado no inventário.</div>
+      <div class="muted" style="font-size:15px">Só dá para finalizar depois de copiar ou enviar o resumo. Ele fica gravado no inventário.</div>
       <textarea id="res-texto" readonly rows="8" style="width:100%;margin-top:8px;font-size:13px;font-family:inherit">${esc(textoResumo)}</textarea>
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
         <button class="btn" id="res-copiar">📋 Copiar</button>
@@ -938,9 +912,9 @@ async function telaFinal(id) {
       <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:15px"><input type="checkbox" id="res-colei" ${S.sess.resumoEm ? '' : 'disabled'} style="width:22px;height:22px"> Enviei o resumo no grupo</label>
     </div>
     <div class="cartao" style="padding:14px 16px;margin-top:14px">
-      ${navigator.onLine ? `<strong>Ao confirmar</strong><div class="muted" style="font-size:14.5px">As leituras são enviadas ao sistema e o inventário é encerrado. Depois disso, só um administrador pode reabrir.</div>`
-        : `<strong style="color:var(--warn)">Você está sem internet</strong><div class="muted" style="font-size:14.5px">Pode finalizar mesmo assim: tudo fica guardado no celular e é sincronizado automaticamente quando a conexão voltar. Não desinstale o app até lá.</div>`}
-      <div id="envio" hidden><div class="progresso-envio"><i id="envio-barra" style="width:0%"></i></div><div class="muted" id="envio-txt" style="font-size:14px"></div></div>
+      ${navigator.onLine ? `<strong>Ao confirmar</strong><div class="muted" style="font-size:15px">As leituras são enviadas ao sistema e o inventário é encerrado. Depois disso, só um administrador pode reabrir.</div>`
+        : `<strong style="color:var(--warn)">Você está sem internet</strong><div class="muted" style="font-size:15px">Pode finalizar mesmo assim: tudo fica guardado no celular e é sincronizado automaticamente quando a conexão voltar. Não desinstale o app até lá.</div>`}
+      <div id="envio" hidden><div class="progresso-envio"><i id="envio-barra" style="width:0%"></i></div><div class="muted" id="envio-txt" style="font-size:15px"></div></div>
     </div>
     <div class="rodape-fixo"><div>
       <button class="btn" id="voltar-conf">Voltar</button>
@@ -1128,7 +1102,7 @@ window.addEventListener('appinstalled', () => { S.instalar = null; $('#instalar-
 async function instalarApp() {
   if (S.instalar) { S.instalar.prompt(); await S.instalar.userChoice; S.instalar = null; return; }
   abrirFolha(`<h2>Instalar no iPhone</h2><p class="sub">No Safari:</p>
-    <ol style="margin:0 0 16px;padding-left:20px;display:grid;gap:8px;font-size:16px">
+    <ol style="margin:0 0 16px;padding-left:20px;display:grid;gap:8px;font-size:17px">
       <li>Toque em <b>Compartilhar</b> (o quadrado com a seta ⬆️) na barra do Safari.</li>
       <li>Role e toque em <b>Adicionar à Tela de Início</b>.</li>
       <li>Toque em <b>Adicionar</b>. O ícone “Conferência” aparece na tela inicial.</li>

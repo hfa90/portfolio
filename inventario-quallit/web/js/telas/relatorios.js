@@ -347,7 +347,7 @@ export function abrirRelatorio(titulo, subtitulo, corpo, janela) {
   w.document.open();
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>
     @page { size: A4; margin: 13mm 11mm; }
-    body { font: 12px/1.45 "Segoe UI", Arial, sans-serif; color: #0e1d20; margin: 0; background: #fff; }
+    body { font: 12px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", Roboto, Arial, sans-serif; color: #0e1d20; margin: 0; background: #fff; }
     .barra { position: sticky; top: 0; background: #0c2226; color: #fff; padding: 10px 18px; display: flex; gap: 10px; justify-content: space-between; align-items: center; }
     .barra button { background: #1c9ba9; color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-weight: 600; cursor: pointer; font: inherit; }
     main { max-width: 1040px; margin: 0 auto; padding: 22px 20px; }
@@ -365,7 +365,7 @@ export function abrirRelatorio(titulo, subtitulo, corpo, janela) {
     .bar { height: 7px; background: #ecf1f2; border-radius: 9px; overflow: hidden; } .bar i { display: block; height: 100%; background: #1c9ba9; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 22px; } .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 18px; }
     .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; background: #fdf1df; color: #b25f00; margin: 1px; white-space: nowrap; }
-    .tag.bad { background: #fde8e6; color: #cc2b20; } .mono { font-family: Consolas, monospace; } .muted { color: #7a8f93; }
+    .tag.bad { background: #fde8e6; color: #cc2b20; } .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; } .muted { color: #7a8f93; }
     footer { margin-top: 22px; color: #8a9b9e; font-size: 10px; border-top: 1px solid #e3eaec; padding-top: 6px; }
     @media print { .barra { display: none; } main { padding: 0; max-width: none; } h2 { break-after: avoid; } tr { break-inside: avoid; } }
   </style></head><body><div class="barra"><span>${esc(titulo)}</span><button type="button" id="btn-imprimir">Imprimir / Salvar PDF</button></div>

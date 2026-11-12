@@ -1,7 +1,7 @@
 // Inventário Quallit — tela: maquinas (gerado a partir do app.js; imports e exports conferidos automaticamente)
-import { recarregarMaquina } from '../dados.js';
+import { carregarMaquinas, recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
-import { $, $$, PROPRIEDADE, ALERTAS, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
+import { $, $$, PROPRIEDADE, ALERTAS, beep, CAMPOS_HIST, CAMPOS_HW, F_PADRAO, MQ, SIT, STATUS, TIPO, cdCod, cdNome, cdsAtivos, data, dataBR, dataHora, debounce, dot, ehAdmin, erroMsg, esc, garantiaFaixa, gb, idadeFaixa, menuMais, mostrarColCD, noCD, pill, ramFaixa, rel, sb, setores, situacao, soFamilia, soGrupo, soLabel, state, statusPill, store, tags, tipoDisco, titulo, toast, up } from '../nucleo.js';
 import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../fotos.js';
 import { criarXlsx } from '../planilha.js';
 import { rerender } from '../rotas.js';
@@ -90,6 +90,7 @@ export function renderMaquinas() {
             <button type="button" id="btn-programa">Programas instalados <small>quem tem um programa</small></button>
             <button type="button" id="btn-coleta">Importar coleta <small>planilha do COLETAR.bat</small></button>
             <button type="button" id="btn-import">Importar compras <small>notas e garantias</small></button>`)}
+          <button class="btn" id="btn-atualizar" title="Buscar no banco as máquinas novas e as alterações">↻ Atualizar</button>
           <button class="btn" id="btn-exportar" title="Planilha do Excel: o que está na tela ou o inventário completo">Exportar</button>
           <button class="btn btn--primary" id="btn-nova">+ Nova máquina</button>
         </div>
@@ -146,12 +147,40 @@ export function renderMaquinas() {
     $('#btn-exportar').onclick = () => modalExportar([{ v: 'tela', rotulo: `Só o que está na tela (${filtrar().length} máquinas)`, sub: 'com os filtros e a busca atuais, todas as colunas do painel', gerar: exportarTela }]);
     $('#btn-mais-filtros').onclick = () => { state.maisFiltros = $('#filtros-extra').hidden; mostrarFiltrosExtra(); };
     $('#btn-nova').onclick = () => modalNovaMaquina();
+    $('#btn-atualizar').onclick = atualizarLista;
+    state.maqVistas ||= new Set(state.maquinas.map((m) => m.id));
     state.maqMontada = true;
   }
   syncToolbar();
   renderTabela();
   if (matchMedia('(min-width: 821px)').matches) $('#f-q').focus();
 }
+// ↻ Atualizar: busca de novo no banco. Máquinas que surgiram desde a última vez que você atualizou
+// (coletas de qualquer CD, cadastros de outras pessoas) tocam um som e ficam destacadas na lista.
+async function atualizarLista() {
+  const b = $('#btn-atualizar');
+  if (!b || b.disabled) return;
+  const vistas = state.maqVistas || new Set(state.maquinas.map((m) => m.id));
+  b.disabled = true; b.textContent = '↻ Atualizando…';
+  try {
+    await carregarMaquinas();
+  } catch (e) {
+    toast('Não foi possível atualizar: ' + erroMsg(e), true);
+    return;
+  } finally {
+    if ($('#btn-atualizar')) { $('#btn-atualizar').disabled = false; $('#btn-atualizar').textContent = '↻ Atualizar'; }
+  }
+  if (state.cacheEm) return toast('Sem internet: mostrando a última lista salva neste aparelho', true);
+  const novas = state.maquinas.filter((m) => !vistas.has(m.id));
+  state.maqVistas = new Set(state.maquinas.map((m) => m.id));
+  novas.forEach((m) => { state.flash.add(m.id); setTimeout(() => state.flash.delete(m.id), 8000); });
+  syncToolbar(); renderTabela(); rerender();
+  if (novas.length) {
+    beep('novo');
+    toast(`${novas.length} máquina${novas.length > 1 ? 's novas' : ' nova'}: ${novas.slice(0, 3).map((m) => m.hostname).join(', ')}${novas.length > 3 ? '…' : ''}`);
+  } else toast('Lista atualizada: nenhuma máquina nova');
+}
+
 export function syncToolbar() {
   if (!state.maqMontada) return;
   const f = state.f;
