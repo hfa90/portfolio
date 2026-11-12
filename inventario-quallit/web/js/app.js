@@ -8,6 +8,7 @@ import { atualizarBadge, atualizarPendentes, sincronizar } from './sincronia.js'
 import { fecharDrawer } from './telas/maquinas.js';
 import { dicaVersao, textoVersao } from './versao.js';
 import { carregarSolicitacoes } from './telas/patrimonio.js';
+import { cartaoAppAndroid } from './app-android.js';
 
 /* =====================================================================
    App instalável (PWA) — guarda os arquivos para abrir sem internet
@@ -181,5 +182,6 @@ sb.auth.onAuthStateChange((ev, session) => {
   else {
     if (iniciado) return location.reload();
     $('#app').hidden = true; $('#login').hidden = false;
+    cartaoAppAndroid($('#app-android-login')); // aviso do app Android (QR no computador, download no Android)
   }
 });

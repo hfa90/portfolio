@@ -1,9 +1,9 @@
 // Service worker: guarda os arquivos do painel para abrir e conferir sem internet.
 // Os dados (Supabase) não passam por aqui: o app guarda no IndexedDB e sincroniza sozinho.
-const VERSAO = 'iq-v25';
+const VERSAO = 'iq-v26';
 const ESSENCIAIS = [
   './', './index.html', './manifest.webmanifest',
-  './css/style.css', './css/prazo.css', './js/prazo.js',
+  './css/style.css', './css/prazo.css', './css/app-android.css', './js/app-android.js', './js/prazo.js',
   './js/app.js', './js/config.js', './js/offline.js', './js/planilha.js', './js/assinatura.js', './js/etiquetas.js', './js/resumo.js', './js/dialogos.js',
   './js/nucleo.js', './js/versao.js', './js/fotos.js', './js/leitor-qr.js', './js/dados.js', './js/sincronia.js', './js/rotas.js',
   './js/telas/painel.js', './js/telas/maquinas.js', './js/telas/inventarios.js', './js/telas/patrimonio.js', './js/telas/emprestimos.js',
@@ -36,6 +36,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.hostname.endsWith('supabase.co')) return; // dados: sempre rede
+  if (url.pathname.includes('/downloads/')) return; // APK do app Android e a versão dele: sempre rede, sem guardar
 
   // bibliotecas de CDN: cache primeiro (versões fixas, não mudam)
   if (CDN.test(req.url)) {

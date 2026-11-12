@@ -1,9 +1,9 @@
 // Service worker do app de conferência: abre sem internet.
 // Os dados (Supabase) não passam por aqui — ficam no IndexedDB e sincronizam ao finalizar.
-const VERSAO = 'campo-v12';
+const VERSAO = 'campo-v13';
 const ESSENCIAIS = [
   './', './index.html', './campo.css', './campo.js', './manifest.webmanifest',
-  '../js/config.js', '../js/versao.js', '../js/offline.js', '../js/fotos.js', '../js/leitor-qr.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../img/logo.svg', '../img/cliente-rd.png',
+  '../js/config.js', '../js/versao.js', '../js/offline.js', '../js/fotos.js', '../js/leitor-qr.js', '../js/prazo.js', '../js/resumo.js', '../js/dialogos.js', '../css/prazo.css', '../css/app-android.css', '../js/app-android.js', '../img/logo.svg', '../img/cliente-rd.png',
   '../icons/icon-192.png', '../icons/icon-512.png', '../icons/apple-touch-icon.png',
 ];
 const CDN = /^https:\/\/(cdn\.jsdelivr\.net|fonts\.googleapis\.com|fonts\.gstatic\.com)\//;
@@ -27,6 +27,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.hostname.endsWith('supabase.co')) return;
+  if (url.pathname.includes('/downloads/')) return; // APK do app Android e a versão dele: sempre rede
   if (CDN.test(req.url)) {
     e.respondWith(caches.match(req).then((hit) => hit || fetch(req).then((res) => {
       if (res.ok || res.type === 'opaque') { const cp = res.clone(); caches.open(VERSAO).then((c) => c.put(req, cp)); }

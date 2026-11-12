@@ -13,6 +13,7 @@ import { confirmar } from '../js/dialogos.js';
 import { dicaVersao, textoVersao } from '../js/versao.js';
 import { apagarFoto, carregarMiniaturas, enviarFoto, erroFoto, listarFotos } from '../js/fotos.js';
 import { VIDEO, ajustarFoco, criarDetector } from '../js/leitor-qr.js';
+import { cartaoAppAndroid } from '../js/app-android.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -1125,6 +1126,7 @@ $('#login-form').onsubmit = async (e) => {
 function telaLogin(msg = '') {
   $('#app').hidden = true; $('#t-login').hidden = false;
   $('#login-erro').textContent = msg;
+  cartaoAppAndroid($('#app-android-login')); // aviso do app Android (some no iPhone e dentro do app)
 }
 
 let iniciado = false;
