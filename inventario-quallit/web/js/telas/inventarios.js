@@ -2,7 +2,8 @@
 import { carregarMaquinas, recarregarMaquina } from '../dados.js';
 import { confirmar } from '../dialogos.js';
 import { $, $$, STATUS, TIPO, acharMaquina, beep, cdCod, cdNome, cdsAtivos, data, dataHora, debounce, dot, ehAdmin, erroMsg, esc, extrairCodigo, gb, mostrarColCD, noCD, pill, rel, sb, soFamilia, state, store, toast, up, titulo } from '../nucleo.js';
-import { ehErroDeRede, filaAdicionar, filaListar, idbGet, idbSet } from '../offline.js';
+import { VIDEO, ajustarFoco, criarDetector } from '../leitor-qr.js';
+import { ehErroDeRede, filaAdicionar, filaListar, idAleatorio, idbGet, idbSet } from '../offline.js';
 import { DIAS_SEMANA, anelPrazo, descreverAgendamento, estadoPrazo, etiquetaPrazo, fmtDuracao, proximasExecucoes, relogioCompleto } from '../prazo.js';
 import { copiarTexto, linkWhatsApp, montarResumo } from '../resumo.js';
 import { atualizarPendentes, definirOffline } from '../sincronia.js';
@@ -552,7 +553,7 @@ export async function processarLeitura(bruto) {
     if (res.error.code === '23505') return mostrarResultado('warn', 'Já lida', esc(codigo));
     if (!ehErroDeRede(res.error)) return mostrarResultado('bad', 'Erro ao gravar', esc(erroMsg(res.error)));
     // sem internet: guarda no aparelho e envia depois
-    item = { ...novo, id: 'local-' + crypto.randomUUID(), lido_por: state.user?.email, lido_em: new Date().toISOString(), pendente: true };
+    item = { ...novo, id: 'local-' + idAleatorio(), lido_por: state.user?.email, lido_em: new Date().toISOString(), pendente: true };
     await filaAdicionar(item);
     offline = true;
     definirOffline(true);
@@ -585,16 +586,7 @@ export async function abrirCamera() {
   $('#scan-input')?.focus();
 }
 
-// Lê um código com a câmera. Usa o leitor nativo (Android/Chrome) ou jsQR como alternativa (iPhone, só QR code).
-// impressão digital (SRI) das bibliotecas externas: o navegador recusa o arquivo se ele for alterado no CDN
-const SRI_SCRIPTS = { 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js': 'sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx' };
-export function carregarScript(src) {
-  return new Promise((res, rej) => {
-    if ([...document.scripts].some((s) => s.src === src)) return res();
-    const s = document.createElement('script'); s.src = src; if (SRI_SCRIPTS[src]) { s.integrity = SRI_SCRIPTS[src]; s.crossOrigin = 'anonymous'; } s.onload = res; s.onerror = () => rej(new Error('falha ao carregar ' + src));
-    document.head.append(s);
-  });
-}
+// Lê um código com a câmera (leitor nativo no Android; jsQR no iPhone e no computador: ver leitor-qr.js).
 export function lerCamera() {
   return new Promise((resolve) => {
     let stream, rodando = true, resultado = null;
@@ -610,32 +602,14 @@ export function lerCamera() {
     dlg.addEventListener('close', () => { rodando = false; stream?.getTracks().forEach((t) => t.stop()); resolve(resultado); }, { once: true });
     (async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } });
+        stream = await navigator.mediaDevices.getUserMedia({ video: VIDEO });
         const v = $('#cam', dlg); v.srcObject = stream; await v.play();
-        let detectar;
-        let nativo = null;
-        if ('BarcodeDetector' in window) {
-          try {
-            const fmts = await BarcodeDetector.getSupportedFormats();
-            nativo = new BarcodeDetector({ formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'data_matrix', 'itf'].filter((f) => fmts.includes(f)) });
-          } catch { nativo = null; }
-        }
-        if (nativo) {
-          detectar = async () => { const r = await nativo.detect(v); return r[0]?.rawValue; };
-        } else {
-          await carregarScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js');
-          $('#cam-dica', dlg).textContent = 'Aponte para o QR code da etiqueta (neste aparelho a câmera lê só QR code).';
-          const cv = document.createElement('canvas'); const cx = cv.getContext('2d', { willReadFrequently: true });
-          detectar = async () => {
-            if (!v.videoWidth) return null;
-            const w = 640, h = Math.round((v.videoHeight / v.videoWidth) * w);
-            cv.width = w; cv.height = h; cx.drawImage(v, 0, 0, w, h);
-            return window.jsQR(cx.getImageData(0, 0, w, h).data, w, h)?.data;
-          };
-        }
+        ajustarFoco(stream.getVideoTracks()[0]);
+        const detector = await criarDetector(v);
+        if (!detector.nativo) $('#cam-dica', dlg).textContent = 'Centralize o QR code da etiqueta na mira (neste aparelho a câmera lê só QR code).';
         const loop = async () => {
           if (!rodando) return;
-          try { const val = await detectar(); if (val) { resultado = val; return dlg.close(); } } catch { /* frame inválido */ }
+          try { const val = await detector.ler(); if (val) { resultado = val; return dlg.close(); } } catch { /* frame inválido */ }
           setTimeout(loop, 200);
         };
         loop();

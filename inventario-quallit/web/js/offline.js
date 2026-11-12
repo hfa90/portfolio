@@ -1,4 +1,9 @@
 // Armazenamento local (IndexedDB) para funcionar sem internet: cache de dados e fila de leituras pendentes.
+
+// identificador único (crypto.randomUUID não existe no iOS antes do 15.4 nem em página sem https)
+export const idAleatorio = () => crypto.randomUUID?.()
+  || [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
 const DB = 'inventario-quallit';
 const STORE = 'kv';
 let dbp;
