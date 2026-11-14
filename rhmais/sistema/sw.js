@@ -2,7 +2,7 @@
    - Arquivos do app (inclui ../config.js, ../icons e ../supabase/.../nucleo.js): rede primeiro, cache como reserva offline.
    - Bibliotecas do CDN (URLs com versão fixa): cache primeiro.
    - Supabase (dados, login, funções) nunca passa pelo cache. */
-const VERSAO = "rhmais-sistema-v3";
+const VERSAO = "rhmais-sistema-v4";
 const SHELL = ["./", "./index.html", "./app.js", "./js/base.js", "./js/curriculos.js", "./js/admin.js", "./js/vagas.js", "./style.css", "./manifest.webmanifest",
   "../config.js", "../instalar.js", "../fonts/inter-var.woff2", "../supabase/functions/_shared/nucleo.js", "../icons/icon-192.png", "../icons/apple-touch-icon.png"];
 // pasta do site como um todo (/rhmais/): o sistema usa arquivos de fora do próprio escopo
@@ -30,7 +30,8 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (url.origin !== location.origin || !url.pathname.startsWith(RAIZ)) return;
-  e.respondWith(fetch(req).then((resp) => {
+  // revalida no servidor (resposta 304 é leve): evita misturar arquivos novos com antigos do cache HTTP
+  e.respondWith(fetch(req, { cache: "no-cache" }).then((resp) => {
     if (resp.ok) { const copia = resp.clone(); caches.open(VERSAO).then((c) => c.put(req, copia)); }
     return resp;
   }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || caches.match("./index.html"))));

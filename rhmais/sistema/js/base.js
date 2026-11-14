@@ -147,11 +147,25 @@ export function atualizarBarraTopo() {
   barra.firstElementChild.textContent = h1 ? h1.textContent.replace(/\s*👋\s*$/, "") : "";
   verificarRolagem();
 }
+// observa o título em vez de medir a cada evento de rolagem (rolagem mais leve)
+let obsTitulo = null;
 function verificarRolagem() {
   const h1 = $("main .topo h1");
-  document.body.classList.toggle("rolou", !!h1 && h1.getBoundingClientRect().bottom < 40);
+  obsTitulo?.disconnect();
+  document.body.classList.remove("rolou");
+  if (!h1 || !("IntersectionObserver" in window)) return;
+  obsTitulo = new IntersectionObserver(([e]) => document.body.classList.toggle("rolou", !e.isIntersecting && e.boundingClientRect.top < 0),
+    { rootMargin: "-50px 0px 0px 0px" });
+  obsTitulo.observe(h1);
 }
-addEventListener("scroll", verificarRolagem, { passive: true });
+// iOS ignora user-scalable=no: bloqueia a pinça e o duplo toque, como num app nativo
+["gesturestart", "gesturechange"].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+let ultimoToque = 0;
+document.addEventListener("touchend", (e) => {
+  const agora = Date.now();
+  if (agora - ultimoToque < 300 && !e.target.closest?.("input, textarea, select, a, button, label")) e.preventDefault();
+  ultimoToque = agora;
+}, { passive: false });
 $("#barraTopo")?.addEventListener("click", () => scrollTo({ top: 0, behavior: "smooth" }));   // toque no topo volta ao início, como no iOS
 
 /* ------------------------------------------------------------- teclado aberto: esconde a barra de abas (Android sobe elementos fixos) */
@@ -161,7 +175,7 @@ addEventListener("focusout", () => setTimeout(() => { if (!ehCampo(document.acti
 
 /* ------------------------------------------------------------- puxar para atualizar (só no app instalado, onde não há o do navegador) */
 export function ligarPuxarAtualizar(atualizar) {
-  if (!instalado() || !matchMedia("(pointer: coarse)").matches) return;
+  if (!matchMedia("(pointer: coarse)").matches) return;   // o "puxar" do navegador fica desligado (overscroll-behavior: none), então usamos o nosso
   const ind = document.createElement("div"); ind.id = "ptr"; document.body.appendChild(ind);
   let y0 = null, dist = 0, ocupado = false;
   addEventListener("touchstart", (e) => {

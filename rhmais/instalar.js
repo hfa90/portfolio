@@ -57,7 +57,9 @@
     ".rhi-bt{border:0;border-radius:999px;min-height:36px;padding:0 18px;font-family:inherit;font-weight:600;font-size:15px;line-height:1;cursor:pointer;background:#5856D6;color:#fff;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}",
     ".rhi-bt:active{transform:scale(.96)}.rhi-x{border:0;background:none;color:#8E8E93;font-family:inherit;font-weight:500;font-size:12.5px;cursor:pointer;padding:4px}",
     "body.sheet-on .rhi-card,body.filtros-on .rhi-card{display:none}",
-    "@media(max-width:767px){.rhi-card{left:12px;right:12px;width:auto;bottom:calc(98px + env(safe-area-inset-bottom))}body.sem-sessao .rhi-card,.rhi-pagina .rhi-card{bottom:calc(12px + env(safe-area-inset-bottom))}}",
+    "@media(max-width:767px){.rhi-card{left:12px;right:12px;width:auto;bottom:calc(86px + env(safe-area-inset-bottom));padding:8px 8px 8px 10px;gap:10px;border-radius:22px;transition:transform .3s,opacity .3s}",
+    ".rhi-card img{width:38px;height:38px;border-radius:10px}.rhi-txt{font-size:0}.rhi-txt b{font-size:14.5px;margin:0}.rhi-bts{flex-direction:row;align-items:center}.rhi-x{font-size:0;width:30px;height:30px;border-radius:50%;background:rgba(118,118,128,.14)}.rhi-x::before{content:'✕';font-size:13px;color:#8E8E93}",
+    "body.sem-sessao .rhi-card,.rhi-pagina .rhi-card{bottom:calc(12px + env(safe-area-inset-bottom))}.rhi-card.rhi-some{transform:translateY(140%);opacity:0;pointer-events:none}}",
     ".rhi-dlg{border:0;padding:0;border-radius:30px;width:min(420px,92vw);color:#0B0B0F;background:#fff;box-shadow:0 30px 80px rgba(0,0,0,.3);font:16px/1.45 -apple-system,BlinkMacSystemFont,'SF Pro Text','Inter RH',Inter,'Segoe UI',Roboto,sans-serif}",
     "[data-theme=dark] .rhi-dlg{background:#1C1C1E;color:#F5F5F7}.rhi-dlg::backdrop{background:rgba(0,0,0,.35)}",
     ".rhi-dlg>div{padding:24px 22px 20px}.rhi-dlg h3{margin:0 0 4px;font-size:21px;letter-spacing:-.01em}.rhi-dlg p{margin:0 0 12px;color:#6C6C72;font-size:14.5px}",
@@ -144,12 +146,20 @@
     else if (android) { titulo = "App RH+ Match para Android"; texto = "Mais rápido, em tela cheia e com acesso direto pelo ícone."; botao = "Baixar"; }
     else if (ios) { titulo = "Instale no seu " + (/iPad/.test(ua) || navigator.maxTouchPoints > 1 && !/iPhone/.test(ua) ? "iPad" : "iPhone"); texto = "Abra em tela cheia, direto da Tela de Início."; botao = "Instalar"; }
     else { titulo = "Instale o RH+ Match"; texto = macSafari ? "Use como app, com janela própria no Dock." : "Um clique e ele fica na sua área de trabalho, como um app."; botao = "Instalar"; }
-    cartao = document.createElement("div"); cartao.className = "rhi-card"; cartao.setAttribute("role", "dialog"); cartao.setAttribute("aria-label", titulo);
+    cartao = document.createElement("div"); cartao.className = "rhi-card"; cartao.setAttribute("role", "dialog"); cartao.setAttribute("aria-label", titulo); cartao.title = texto;
     cartao.innerHTML = '<img src="' + ICONE + '" alt=""><div class="rhi-txt"><b>' + titulo + "</b>" + texto + '</div><div class="rhi-bts"><button class="rhi-bt" type="button">' + botao + '</button><button class="rhi-x" type="button">Agora não</button></div>';
     cartao.querySelector(".rhi-bt").onclick = function () { acao(); if (!android) fecharCartao(false); };
     cartao.querySelector(".rhi-x").onclick = function () { fecharCartao(true); };
     if (!document.querySelector(".sidebar")) document.body.classList.add("rhi-pagina");
     document.body.appendChild(cartao);
+    // no celular o convite sai do caminho enquanto a pessoa rola a tela
+    var yAnt = scrollY;
+    addEventListener("scroll", function () {
+      if (!cartao) return;
+      cartao.classList.toggle("rhi-some", scrollY > yAnt + 4 && scrollY > 80);
+      if (scrollY < yAnt - 4) cartao.classList.remove("rhi-some");
+      yAnt = scrollY;
+    }, { passive: true });
   }
 
   addEventListener("beforeinstallprompt", function (e) {
