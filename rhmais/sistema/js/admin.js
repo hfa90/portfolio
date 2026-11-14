@@ -1,7 +1,7 @@
 /* RH+ Match — telas de administração: Ajustes (admin/master), chaves da plataforma e Usuários (master). */
 import { FONTES } from "../../supabase/functions/_shared/nucleo.js";
 import {
-  $, $$, CFG_PADRAO, cartaoConta, ctx, dataHora, ehMaster, esc, estado, falha, fonteDisponivel, ligarCartaoConta,
+  $, $$, CFG_PADRAO, cartaoConta, confirmar, ctx, dataHora, ehMaster, esc, estado, falha, fonteDisponivel, ligarCartaoConta,
   ligarSegmentados, main, q, sb, segmentado, toast, topo,
 } from "./base.js";
 
@@ -74,12 +74,12 @@ export async function pgConfig() {
       for (const i of $$("[data-chave]")) if (i.value.trim()) chaves[i.dataset.chave] = i.value.trim();
       if (!Object.keys(chaves).length) return ($("#kMsg").textContent = "Nada para salvar: cole ao menos uma chave.");
       const invalidas = Object.entries(chaves).filter(([k, v]) => FORMATOS[k] && !FORMATOS[k][0].test(v)).map(([k]) => FORMATOS[k][1]);
-      if (invalidas.length && !confirm("Atenção, o formato parece errado:\n\n• " + invalidas.join("\n• ") + "\n\nSalvar mesmo assim?")) return;
+      if (invalidas.length && !(await confirmar("• " + invalidas.join("\n• "), { titulo: "O formato parece errado", ok: "Salvar mesmo assim" }))) return;
       await salvarChaves(chaves, "Chaves de API salvas.");
     };
     $("#kMostrar").onchange = (e) => $$(".campo-chave").forEach((i) => i.classList.toggle("visivel", e.target.checked));
     $$("[data-remover]").forEach((a) => (a.onclick = async () => {
-      if (!confirm("Remover esta chave? O canal deixa de funcionar até uma nova chave ser salva.")) return;
+      if (!(await confirmar("O canal deixa de funcionar até uma nova chave ser salva.", { titulo: "Remover esta chave?", ok: "Remover", perigo: true }))) return;
       await salvarChaves({ [a.dataset.remover]: "" }, "Chave removida.");
     }));
     const salvarChaves = async (chaves, msg) => {
@@ -146,14 +146,14 @@ export async function pgUsuarios() {
   $("#uLista").addEventListener("change", async (e) => {
     const sel = e.target.closest("select[data-papel]"); if (!sel) return;
     const tr = sel.closest("tr"); const u = usuarios.find((x) => x.id === tr.dataset.id);
-    if (!confirm(`Alterar ${u.email} para ${ROTULO_PAPEL[sel.value]}?`)) { sel.value = u.papel; return; }
+    if (!(await confirmar(u.email, { titulo: `Alterar para ${ROTULO_PAPEL[sel.value]}?`, ok: "Alterar" }))) { sel.value = u.papel; return; }
     try { await q(sb.rpc("definir_papel", { p_usuario: u.id, p_papel: sel.value })); u.papel = sel.value; toast("Papel atualizado."); }
     catch (err) { sel.value = u.papel; falha(err); }
   });
   $("#uSolic").onclick = async (e) => {
     const b = e.target.closest("[data-dec]"); if (!b) return;
     const id = +b.closest("[data-id]").dataset.id, aprovar = b.dataset.dec === "1";
-    if (!confirm(aprovar ? "Aprovar este pedido? A conta passa a ser administradora." : "Recusar este pedido?")) return;
+    if (!(await confirmar(aprovar ? "A conta passa a ser administradora." : "", { titulo: aprovar ? "Aprovar este pedido?" : "Recusar este pedido?", ok: aprovar ? "Aprovar" : "Recusar", perigo: !aprovar }))) return;
     try { await q(sb.rpc("decidir_solicitacao", { p_id: id, p_aprovar: aprovar })); toast(aprovar ? "Acesso de administrador aprovado." : "Pedido recusado."); await carregar(); }
     catch (err) { falha(err); }
   };

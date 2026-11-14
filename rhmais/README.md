@@ -62,6 +62,11 @@ Arquitetura:
    - A chave fica só no servidor (nunca no site). Modelo: `claude-opus-5-5`. As regras da IA estão em `supabase/functions/adaptar-curriculo/adaptar.js`: mantém empresas, cargos e datas; só acrescenta o que o currículo comprova; marca os acréscimos em verde; lista à parte os requisitos da vaga que o candidato não comprova.
 5. (Opcional) Authentication → Sign In / Providers → desative *Allow new users to sign up* depois de criar as contas da equipe, se o sistema não deve aceitar cadastros abertos.
 
+### Celular, app Android e instalação
+- **Visual iOS em todas as plataformas:** San Francisco nos aparelhos Apple e Inter (`fonts/inter-var.woff2`, a fonte aberta mais próxima da SF Pro) em Android, Windows e Linux; barra de abas flutuante, títulos grandes, listas agrupadas, folhas e alertas no padrão do iOS 26.
+- **`instalar.js`** (usado na página inicial e no sistema) detecta a plataforma: no **Android** recomenda o app (`download/rhmais.apk`) ou oferece "Abrir no app" se ele já estiver instalado; no **computador** instala o app web com um clique (Chrome/Edge) ou mostra o caminho no Safari; no **iPhone/iPad** mostra como adicionar à Tela de Início. Dentro do app nada aparece.
+- **App Android:** veja `android/LEIA-ME.md` (inclui o passo obrigatório do `assetlinks.json` e a chave de assinatura).
+
 Para trocar de projeto Supabase, edite `config.js` (URL + chave *anon/publishable*, que é pública por natureza; a proteção vem do login + RLS).
 
 > ⚠️ `dados/` e `exportacoes/` contêm dados pessoais de candidatos e estão no `.gitignore`. Não envie esses arquivos para o GitHub.

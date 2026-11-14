@@ -1,7 +1,7 @@
 /* RH+ Match — currículos: modelos de layout, adaptação por vaga com IA (salva por vaga), currículo base e padrão. */
 import { localVaga } from "../../supabase/functions/_shared/nucleo.js";
 import {
-  $, baixarBlob, ctx, dataHora, ehAdmin, erroFuncao, esc, estado, falha, ligarSegmentados, lerCurriculo,
+  $, baixarBlob, confirmar, ctx, dataHora, ehAdmin, erroFuncao, esc, estado, falha, ligarSegmentados, lerCurriculo,
   main, modal, q, sb, segmentado, slugArq, toast, topo, traduzErro,
 } from "./base.js";
 
@@ -282,7 +282,7 @@ export async function pgCurriculos({ meuPerfil } = {}) {
       const reg = lista.find((x) => x.id === +card.dataset.id);
       if (b.dataset.acao === "abrir") mostrarCurriculo(reg, () => carregar().catch(falha));
       if (b.dataset.acao === "excluir") {
-        if (!confirm("Excluir este currículo? Não é possível desfazer.")) return;
+        if (!(await confirmar("Não é possível desfazer.", { titulo: "Excluir este currículo?", ok: "Excluir", perigo: true }))) return;
         try { await q(sb.from("curriculos").delete().eq("id", reg.id)); toast("Currículo excluído."); await carregar(); } catch (err) { falha(err); }
       }
     };

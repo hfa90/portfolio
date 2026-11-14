@@ -5,7 +5,8 @@ import {
   extrairSkills, extrairValorSalario, linksBusca, localVaga, normalizar, regiaoDe, termosDoCandidato,
 } from "../supabase/functions/_shared/nucleo.js";
 import {
-  $, $$, CFG_PADRAO, RETORNO, ROTULO_PARCIAL, abrirSheet, alternarTema, atualizarCorBarra, barras, baixarBlob,
+  $, $$, CFG_PADRAO, RETORNO, ROTULO_PARCIAL, abrirSheet, alternarTema, atualizarBarraTopo, atualizarCorBarra, barras, baixarBlob, confirmar,
+  ligarPuxarAtualizar, sairDaConta,
   cabecalhoPlanilha, carimbo, cartaoConta, corParcial, ctx, dataCurta, dataHora, ehAdmin, ehMaster, erroFuncao, esc,
   estado, falha, fecharSheet, fonteDisponivel, lerCurriculo, ligarCartaoConta, main, modal, novaPlanilha, q,
   salvarPlanilha, sb, temSheet, toast, topo, traduzErro, voltarSheet,
@@ -29,6 +30,9 @@ const ICONES = {
   mais: '<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>',
   vagas: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/>',
   candidaturas: '<path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+  tema: '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor"/>',
+  sair: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4"/><path d="M10 16l-4-4 4-4M6 12h10"/>',
+  instalar: '<rect x="6" y="2.5" width="12" height="19" rx="3"/><path d="M12 7v7m-3-3 3 3 3-3"/>',
 };
 const MENUS = {
   candidato: [["painel", "Início"], ["busca", "Buscar vagas"], ["candidaturas", "Candidaturas"], ["curriculos", "Currículos"], ["perfil", "Meu perfil"]],
@@ -42,18 +46,30 @@ function montarMenu() {
   const itens = MENUS[ctx.papel] || MENUS.candidato;
   const extras = itens.length > 5;   // no celular cabem 5 abas: as demais vão para "Mais"
   $("nav").innerHTML = itens.map(([id, rot], i) => `<a href="#/${id}" data-page="${id}" class="${extras && i >= 4 ? "extra" : ""}">${svg(id)}<span>${rot}</span></a>`).join("")
-    + (extras ? `<a href="#" class="mais" id="navMais">${svg("mais")}<span>Mais</span></a>` : "");
-  $("#navMais")?.addEventListener("click", (e) => {
-    e.preventDefault();
-    modal(`<h3 style="margin:0 0 10px">Mais opções</h3><div class="links">${itens.slice(4).map(([id, rot]) =>
-      `<a href="#/${id}" data-fechar>${rot}</a>`).join("")}</div>`);
-  });
+    + (extras ? `<a href="#/mais" class="mais" id="navMais" data-page="mais">${svg("mais")}<span>Mais</span></a>` : "");
+  $("#navMais")?.addEventListener("click", (e) => { e.preventDefault(); abrirMais(); });
+}
+/** Folha "Mais" do celular: páginas que não cabem na barra de abas, conta, tema e sair (o que no desktop fica na barra lateral). */
+function abrirMais() {
+  const itens = (MENUS[ctx.papel] || MENUS.candidato).slice(4);
+  const papel = { master: "Master", admin: "Administrador", candidato: "Candidato" }[ctx.papel];
+  const nome = ctx.perfil?.nome || ctx.cfg.empresa_nome || ctx.usuario?.email || "";
+  const rotInst = window.RHInstalar?.rotulo?.();
+  modal(`<div class="mais-conta"><span class="logo">${esc((nome.trim()[0] || "R").toUpperCase())}</span><div style="min-width:0"><b>${esc(nome)}</b><small>${esc(ctx.usuario?.email || "")} · ${papel}</small></div></div>
+    <div class="mais-lista">${itens.map(([id, rot]) => `<a href="#/${id}" data-fechar>${svg(id)}<span>${rot}</span><i class="seta"></i></a>`).join("")}</div>
+    <div class="mais-lista">
+      ${rotInst ? `<button type="button" id="maisInstalar">${svg("instalar")}<span>${esc(rotInst)}</span></button>` : ""}
+      <button type="button" id="maisTema">${svg("tema")}<span>Tema claro / escuro</span></button>
+      <button type="button" id="maisSair" class="perigo">${svg("sair")}<span>Sair da conta</span></button></div>`);
+  $("#maisTema").onclick = alternarTema;
+  $("#maisSair").onclick = () => { $("#modal").close(); sairDaConta(); };
+  $("#maisInstalar")?.addEventListener("click", () => { $("#modal").close(); window.RHInstalar.acao(); });
 }
 const paginaPermitida = (p) => (MENUS[ctx.papel] || MENUS.candidato).some(([id]) => id === p) || (EXTRAS[ctx.papel] || []).includes(p);
 
 /* ============================================================= autenticação */
 $("#btnTema").onclick = alternarTema;
-$("#btnSair").onclick = async () => { await sb.auth.signOut(); };
+$("#btnSair").onclick = sairDaConta;
 const urlApp = () => location.origin + location.pathname;
 const TIPOS_ORG = ["Empresa", "RH interno", "Headhunter", "Consultoria de RH", "Agência de empregos"];
 
@@ -142,9 +158,11 @@ async function iniciarApp() {
   } catch (e) { ctx.perfil = { papel: "candidato" }; ctx.papel = "candidato"; ctx.cfg = { ...CFG_PADRAO }; falha(e); }
   estado.filtros.score = ctx.cfg.score_minimo_padrao;
   montarMenu();
+  if (!appIniciado && !puxarLigado) { puxarLigado = true; ligarPuxarAtualizar(() => rotear()); }
   appIniciado = true;
   rotear();
 }
+let puxarLigado = false;
 
 function limparUrl() { history.replaceState(null, "", location.pathname + "#/painel"); }
 function telaConfirmada() {
@@ -201,17 +219,19 @@ const PAGINAS = {
   vaga: () => pgVagaPublica(+vagaDaUrl(), { logado: true, meuPerfil }),
 };
 async function rotear() {
-  fecharSheet(); atualizarCorBarra();
+  fecharSheet(); atualizarCorBarra(); document.body.classList.remove("filtros-on");
   if (!ctx.usuario || !appIniciado) return;
   let destino = null; try { destino = sessionStorage.getItem("rh_destino"); sessionStorage.removeItem("rh_destino"); } catch { /* ok */ }
   if (destino && destino !== location.hash) { location.hash = destino; return; }   // volta para a vaga que a pessoa abriu antes de entrar
   const [, nome = "painel"] = location.hash.split("?")[0].split("/");
+  if (nome === "mais") { history.replaceState(null, "", "#/painel"); abrirMais(); }
   const pg = PAGINAS[nome] && paginaPermitida(nome) ? nome : "painel";
   if (pg !== nome && nome && nome !== "painel" && PAGINAS[nome]) toast("Esta área é restrita a administradores.");
   const realce = !ehAdmin() && pg === "pipeline" ? "candidaturas" : pg;
   $$("nav a").forEach((a) => a.classList.toggle("ativo", a.dataset.page === realce));
   try { await PAGINAS[pg](); } catch (e) { main.innerHTML = `<div class="card vazio">⚠ ${esc(traduzErro(e))}</div>`; }
   window.scrollTo(0, 0);
+  atualizarBarraTopo();
 }
 window.addEventListener("hashchange", rotear);
 
@@ -310,7 +330,7 @@ async function pgCandidatos() {
       <button class="btn" id="btnNovo">+ Novo candidato</button>
       <input type="file" id="arqCv" accept=".pdf,.docx,.txt" hidden>`) + `
     <div class="split-cand">
-      <div class="card"><input type="search" id="qCand" placeholder="🔍 Buscar por nome, cargo, skill ou cidade" style="margin-bottom:12px">
+      <div class="card"><input type="search" id="qCand" placeholder="Buscar por nome, cargo, skill ou cidade" style="margin-bottom:12px">
         <div class="tabela-wrap" style="max-height:calc(100vh - 230px)"><table><thead><tr><th>NOME</th><th>CARGO DESEJADO</th><th>LOCAL</th></tr></thead>
         <tbody id="listaCand"></tbody></table></div></div>
       <div class="card" id="formCand"></div>
@@ -446,7 +466,7 @@ function formCandidato(c, recarregar, { importado = false, proprio = false } = {
   };
   if (!novo) {
     $("#btnExcluir")?.addEventListener("click", async () => {
-      if (!confirm(`Excluir ${c.nome}? O pipeline desse candidato também será removido. Não é possível desfazer.`)) return;
+      if (!(await confirmar(`O pipeline desse candidato também será removido. Não é possível desfazer.`, { titulo: `Excluir ${c.nome}?`, ok: "Excluir", perigo: true }))) return;
       try { await q(sb.from("candidatos").delete().eq("id", c.id)); estado.candSel = null; toast("Candidato excluído."); await recarregar(); formCandidato({}, recarregar); if (temSheet()) voltarSheet(); }
       catch (e) { falha(e); }
     });
@@ -469,7 +489,8 @@ async function pgBusca() {
   if (!estado.candidatoBusca || !cands.some((c) => c.id === estado.candidatoBusca)) estado.candidatoBusca = cands[0]?.id ?? null;
   const buscando = estado.busca?.estado === "buscando";
   main.innerHTML = topo("Buscar vagas", ehAdmin() ? "Varre os canais de vagas do Brasil e ranqueia pela aderência ao perfil" : "Varre os canais de vagas do Brasil e ranqueia pela aderência ao seu perfil") + `
-    <div class="card" style="margin-bottom:14px">
+    <div class="card card-busca ${estado.busca && mqCelular() ? "recolhida" : ""}" style="margin-bottom:14px">
+      <div class="resumo-busca"><div><b id="rbTermos"></b><small id="rbLocal"></small></div><button class="btn sec peq" id="rbEditar">Editar busca</button></div>
       <div class="barra-busca ${ehAdmin() ? "" : "sem-cand"}">
         ${ehAdmin() ? `<label class="campo">Candidato<select id="selCand">${cands.length ? cands.map((c) => `<option value="${c.id}" ${c.id === estado.candidatoBusca ? "selected" : ""}>${esc(c.nome)} · ${esc(c.cargo_desejado)}</option>`).join("") : `<option value="">Cadastre um candidato primeiro</option>`}</select></label>`
           : `<input type="hidden" id="selCand" value="${cands[0].id}">`}
@@ -492,7 +513,8 @@ async function pgBusca() {
           <select id="fOrdem" title="Ordenar"><option value="score">Mais compatíveis</option><option value="data">Mais recentes</option><option value="salario">Maior salário</option></select>
           <input type="search" id="fTexto" placeholder="Filtrar por palavra, empresa…" value="${esc(estado.filtros.texto)}">
         </div>
-        <div class="painel-filtros" id="fPainel" ${estado.filtrosAbertos ? "" : "hidden"}>
+        <div class="painel-filtros" id="fPainel" ${estado.filtrosAbertos && !mqCelular() ? "" : "hidden"}>
+          <div class="cab-filtros"><b>Filtros</b><button class="btn peq" id="fOk" type="button">Ver resultados</button></div>
           <label class="campo">Cidade<input type="text" id="fCidade" list="fCidades" placeholder="Qualquer" value="${esc(estado.filtros.cidade)}"><datalist id="fCidades"></datalist></label>
           <label class="campo">Estado<select id="fUf"><option value="">Todos</option>${UFS.map((u) => `<option ${estado.filtros.uf === u ? "selected" : ""}>${u}</option>`).join("")}</select></label>
           <label class="campo">Região<select id="fRegiao"><option value="">Todas</option>${Object.keys(REGIOES).map((r) => `<option ${estado.filtros.regiao === r ? "selected" : ""}>${r}</option>`).join("")}</select></label>
@@ -530,17 +552,26 @@ async function pgBusca() {
   $("#btnPortais").onclick = () => abrirPortais(cands);
   $("#fMod").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; estado.filtros.mod = b.dataset.v; $$("#fMod button").forEach((x) => x.classList.toggle("on", x === b)); renderVagas(); };
   $("#fOrdem").value = estado.filtros.ordem;
-  $("#fMais").onclick = () => { estado.filtrosAbertos = !estado.filtrosAbertos; $("#fPainel").hidden = !estado.filtrosAbertos; };
+  const mostrarFiltros = (abrir) => {
+    estado.filtrosAbertos = abrir; $("#fPainel").hidden = !abrir;
+    document.body.classList.toggle("filtros-on", abrir && mqCelular());
+  };
+  $("#fMais").onclick = () => mostrarFiltros(!estado.filtrosAbertos);
+  $("#fOk").onclick = () => mostrarFiltros(false);
+  $("#rbEditar").onclick = () => { $(".card-busca").classList.remove("recolhida"); $("#termos").focus({ preventScroll: true }); };
+  $("#statusFontes").onclick = (e) => { const c = e.target.closest("[data-erro]"); if (c) toast(`${c.dataset.nome}: ${c.dataset.erro || "canal indisponível no momento"}`); };
   const ligar = (id, chave, ev = "change", conv = (v) => v) => { $(id).addEventListener(ev, (e) => { estado.filtros[chave] = conv(e.target.type === "checkbox" ? e.target.checked : e.target.value); renderVagas(); }); };
   ligar("#fTexto", "texto", "input"); ligar("#fOrdem", "ordem"); ligar("#fCidade", "cidade", "input"); ligar("#fUf", "uf"); ligar("#fRegiao", "regiao");
   ligar("#fRegime", "regime"); ligar("#fSen", "senioridade"); ligar("#fSal", "salMin", "input"); ligar("#fDias", "dias"); ligar("#fCanal", "canal"); ligar("#fPlat", "soPlataforma");
   $("#fScore").oninput = (e) => { estado.filtros.score = +e.target.value; $("#lblScore").textContent = e.target.value; renderVagas(); };
-  $("#fLimpar").onclick = () => { Object.assign(estado.filtros, FILTROS_VAZIOS, { score: ctx.cfg.score_minimo_padrao }); pgBusca(); };
+  $("#fLimpar").onclick = () => { Object.assign(estado.filtros, FILTROS_VAZIOS, { score: ctx.cfg.score_minimo_padrao }); document.body.classList.remove("filtros-on"); estado.filtrosAbertos = false; pgBusca(); };
   $("#fChips").onclick = (e) => {
     const b = e.target.closest("[data-limpa]"); if (!b) return;
     const k = b.dataset.limpa; estado.filtros[k] = k === "mod" ? "Todas" : k === "soPlataforma" ? false : k === "score" ? 0 : "";
     pgBusca();
   };
+  document.body.classList.remove("filtros-on");
+  atualizarResumoBusca();
   $("#tbVagas").onclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) { estado.vagaSel = +tr.dataset.idx; marcarSel(); detalharVaga(); abrirSheet($("#detVaga"), "Vaga"); } };
   $("#tbVagas").ondblclick = (e) => { const tr = e.target.closest("tr[data-idx]"); if (tr) window.open(estado.busca.vagas[+tr.dataset.idx].url, "_blank", "noopener"); };
   $("#btnExcel").onclick = () => exportarExcel(vagasVisiveis(), estado.busca?.candidato).catch(falha);
@@ -548,6 +579,13 @@ async function pgBusca() {
   renderStatus(); renderVagas();
 }
 
+const mqCelular = () => matchMedia("(max-width: 767px)").matches;
+function atualizarResumoBusca() {
+  const b = estado.busca; if (!$("#rbTermos")) return;
+  $("#rbTermos").textContent = b ? b.termos.join(", ") : "";
+  $("#rbLocal").textContent = b ? [ehAdmin() ? b.candidato.nome : "", [b.local.cidade, b.local.uf].filter(Boolean).join("/") || "Todo o Brasil"].filter(Boolean).join(" · ") : "";
+  if (!b) $(".card-busca")?.classList.remove("recolhida");
+}
 const FILTROS_VAZIOS = { mod: "Todas", texto: "", cidade: "", uf: "", regiao: "", regime: "", senioridade: "", salMin: "", dias: "", canal: "", soPlataforma: false, ordem: "score" };
 const diasDesde = (iso) => (iso ? (Date.now() - new Date(iso + "T12:00").getTime()) / 864e5 : Infinity);
 const vagasVisiveis = () => {
@@ -636,7 +674,7 @@ function renderStatus() {
   if (!b) { el.innerHTML = ""; $("#prog").hidden = true; return; }
   const ent = Object.entries(b.progresso);
   el.innerHTML = ent.map(([nome, p]) => p.status === "ok" ? `<span class="chip ok">✓ ${esc(nome)} · ${p.qtd}</span>`
-    : p.status === "erro" ? `<span class="chip erro" title="${esc(p.erro || "")}">✕ ${esc(nome)}</span>`
+    : p.status === "erro" ? `<button type="button" class="chip erro" data-nome="${esc(nome)}" data-erro="${esc(p.erro || "")}" title="${esc(p.erro || "")}">✕ ${esc(nome)} ⓘ</button>`
     : `<span class="chip prim">◌ ${esc(nome)}…</span>`).join("");
   const feitas = ent.filter(([, p]) => p.status !== "buscando").length;
   $("#prog").hidden = b.estado !== "buscando";
@@ -660,6 +698,12 @@ async function iniciarBusca(cands) {
   fontes.forEach((f) => (b.progresso[f.nome] = { status: "buscando", qtd: 0 }));
   estado.busca = b; estado.vagaSel = null;
   btn.textContent = "■ Cancelar";
+  atualizarResumoBusca();
+  if (mqCelular()) {   // no celular o formulário recolhe e a tela desce até os resultados
+    $(".card-busca")?.classList.add("recolhida");
+    document.activeElement?.blur?.();
+    setTimeout(() => $(".card-busca")?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+  }
   renderStatus(); renderVagas();
   const skills = String(candidato.skills || "").split(",").map((s) => s.trim()).filter(Boolean);
   const tarefaPlataforma = plataforma ? (async () => {
@@ -851,7 +895,7 @@ async function pgPipeline() {
         toast("Atualizado."); await carregar(); } catch (e) { falha(e); }
     };
     $("#pRem").onclick = async () => {
-      if (!confirm("Remover esta vaga da lista? Não é possível desfazer.")) return;
+      if (!(await confirmar("Não é possível desfazer.", { titulo: "Remover esta vaga da lista?", ok: "Remover", perigo: true }))) return;
       try { await q(sb.from("pipeline").delete().eq("id", it.id)); estado.pipeSel = null; toast("Removida."); await carregar(); } catch (e) { falha(e); }
     };
   };

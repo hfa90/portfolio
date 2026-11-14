@@ -84,7 +84,26 @@ export async function erroFuncao(r, nome) {
 export function modal(html, largo = false) {
   $("#modal").classList.toggle("largo", largo);
   $("#modalCorpo").innerHTML = html;
+  $("#modalCorpo").scrollTop = 0;
   if (!$("#modal").open) { $("#modal").showModal(); history.pushState({ ...(history.state || {}), modal: true }, ""); }
+}
+
+/** Alerta de confirmação no estilo iOS (substitui o confirm() do navegador). Resolve true/false. */
+export function confirmar(mensagem, { titulo = "", ok = "Confirmar", cancelar = "Cancelar", perigo = false } = {}) {
+  return new Promise((resolver) => {
+    const d = $("#alerta");
+    if (!d?.showModal) return resolver(window.confirm([titulo, mensagem].filter(Boolean).join("\n\n")));
+    if (!titulo) { const [p, ...r] = String(mensagem).split(/\n\n/); if (r.length || p.length < 70) { titulo = p; mensagem = r.join("\n\n"); } }
+    const longos = ok.length + cancelar.length > 22;
+    d.innerHTML = `<div class="al-corpo">${titulo ? `<h3>${esc(titulo)}</h3>` : ""}${mensagem ? `<p>${esc(mensagem)}</p>` : ""}</div>
+      <div class="al-botoes ${longos ? "empilhado" : ""}"><button class="btn neutro" value="0">${esc(cancelar)}</button>
+      <button class="btn ${perigo ? "perigo" : ""}" value="1" autofocus>${esc(ok)}</button></div>`;
+    let resposta = false;
+    d.onclick = (e) => { const b = e.target.closest("button[value]"); if (b) { resposta = b.value === "1"; d.close(); } };
+    d.onclose = () => { d.onclose = null; resolver(resposta); };
+    d.showModal();
+    if (navigator.vibrate && perigo) try { navigator.vibrate(12); } catch { /* ok */ }
+  });
 }
 // fechar o diálogo (botão, Esc ou toque fora) também desfaz a entrada no histórico, para o "voltar" do Android funcionar
 $("#modal").addEventListener("close", () => { if (history.state?.modal) history.back(); });
@@ -118,10 +137,50 @@ mqCompacto.addEventListener("change", () => { if (!mqCompacto.matches) fecharShe
 /* ------------------------------------------------------------- tema e barra de status */
 export function atualizarCorBarra() {
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) return;
-  const escuro = document.documentElement.dataset.theme === "dark";
-  meta.content = matchMedia("(max-width: 767px)").matches && !document.body.classList.contains("sem-sessao")
-    ? (escuro ? "#0E1220" : "#F4F6FB") : (escuro ? "#0A0D1A" : "#111633");
+  if (meta) meta.content = document.documentElement.dataset.theme === "dark" ? "#000000" : "#F2F2F7";
+}
+
+/* ------------------------------------------------------------- título compacto ao rolar (padrão iOS) */
+export function atualizarBarraTopo() {
+  const h1 = $("main .topo h1"), barra = $("#barraTopo");
+  if (!barra) return;
+  barra.firstElementChild.textContent = h1 ? h1.textContent.replace(/\s*👋\s*$/, "") : "";
+  verificarRolagem();
+}
+function verificarRolagem() {
+  const h1 = $("main .topo h1");
+  document.body.classList.toggle("rolou", !!h1 && h1.getBoundingClientRect().bottom < 40);
+}
+addEventListener("scroll", verificarRolagem, { passive: true });
+$("#barraTopo")?.addEventListener("click", () => scrollTo({ top: 0, behavior: "smooth" }));   // toque no topo volta ao início, como no iOS
+
+/* ------------------------------------------------------------- teclado aberto: esconde a barra de abas (Android sobe elementos fixos) */
+const ehCampo = (el) => el?.matches?.("input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), textarea, select");
+addEventListener("focusin", (e) => { if (ehCampo(e.target)) document.body.classList.add("teclado"); });
+addEventListener("focusout", () => setTimeout(() => { if (!ehCampo(document.activeElement)) document.body.classList.remove("teclado"); }, 80));
+
+/* ------------------------------------------------------------- puxar para atualizar (só no app instalado, onde não há o do navegador) */
+export function ligarPuxarAtualizar(atualizar) {
+  if (!instalado() || !matchMedia("(pointer: coarse)").matches) return;
+  const ind = document.createElement("div"); ind.id = "ptr"; document.body.appendChild(ind);
+  let y0 = null, dist = 0, ocupado = false;
+  addEventListener("touchstart", (e) => {
+    y0 = !ocupado && scrollY <= 0 && !document.body.classList.contains("sheet-on") && !document.querySelector("dialog[open]") ? e.touches[0].clientY : null;
+  }, { passive: true });
+  addEventListener("touchmove", (e) => {
+    if (y0 === null) return;
+    dist = Math.max(0, e.touches[0].clientY - y0);
+    const p = Math.min(1, dist / 90);
+    ind.style.opacity = p; ind.style.transform = `translateY(${Math.min(dist, 110) * .55 - 50}px) rotate(${dist * 3}deg)`;
+  }, { passive: true });
+  addEventListener("touchend", async () => {
+    if (y0 === null) return;
+    y0 = null;
+    if (dist < 90) { ind.style.opacity = 0; ind.style.transform = ""; dist = 0; return; }
+    ocupado = true; ind.classList.add("girando"); ind.style.transform = "translateY(8px)";
+    if (navigator.vibrate) try { navigator.vibrate(8); } catch { /* ok */ }
+    try { await atualizar(); } finally { ocupado = false; dist = 0; ind.classList.remove("girando"); ind.style.opacity = 0; ind.style.transform = ""; }
+  }, { passive: true });
 }
 export function aplicarTema(t) {
   document.documentElement.dataset.theme = t;
@@ -131,38 +190,31 @@ export function aplicarTema(t) {
 export const alternarTema = () => aplicarTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 matchMedia("(max-width: 767px)").addEventListener("change", atualizarCorBarra);
 
-/* ------------------------------------------------------------- instalação (PWA) */
-export const pwa = { pedido: null };
-addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pwa.pedido = e; $("#cInstalar")?.removeAttribute("hidden"); });
-addEventListener("appinstalled", () => { pwa.pedido = null; toast("RH+ Match instalado. Abra pelo ícone na tela inicial."); });
-export const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+/* ------------------------------------------------------------- instalação: app Android (APK) ou PWA, via ../instalar.js */
+export const instalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true || window.RHInstalar?.noApp?.();
 export const ehIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+export const sairDaConta = async () => { if (await confirmar("Sair da sua conta neste aparelho?", { ok: "Sair", perigo: true })) sb.auth.signOut(); };
 
 /** Cartão "Conta e aplicativo" (usado em Meu perfil e em Ajustes). */
 export function cartaoConta() {
   const papel = { master: "Master", admin: "Administrador", candidato: "Candidato" }[ctx.papel];
+  const inst = window.RHInstalar;
+  const rotulo = inst?.rotulo?.();
   return `<div class="card" style="margin-bottom:14px"><h3>Conta e aplicativo</h3>
     <p class="muted" style="margin:-4px 0 12px">Conectado como <b>${esc(ctx.usuario?.email || "")}</b> · <span class="chip prim">${papel}</span></p>
     <div class="acoes">
-      <button class="btn sec" id="cInstalar" ${pwa.pedido || (ehIOS() && !instalado()) ? "" : "hidden"}>📲 Instalar no aparelho</button>
+      <button class="btn sec" id="cInstalar" ${rotulo ? "" : "hidden"}>📲 ${esc(rotulo || "Instalar")}</button>
       <button class="btn neutro" id="cTema">◐ Tema claro/escuro</button>
       <button class="btn perigo" id="cSair">Sair da conta</button>
     </div>
-    ${instalado() ? `<p class="muted" style="margin:10px 0 0;font-size:13px">✓ Você está usando o app instalado.</p>` : ""}
+    ${instalado() ? `<p class="muted" style="margin:10px 0 0;font-size:13px">✓ Você está usando o app instalado${inst?.noApp?.() ? " para Android" : ""}.</p>` : ""}
   </div>`;
 }
 export function ligarCartaoConta() {
   $("#cTema").onclick = alternarTema;
-  $("#cSair").onclick = () => { if (confirm("Sair da sua conta neste aparelho?")) sb.auth.signOut(); };
-  $("#cInstalar").onclick = async () => {
-    if (pwa.pedido) { pwa.pedido.prompt(); await pwa.pedido.userChoice; pwa.pedido = null; $("#cInstalar").hidden = true; return; }
-    modal(`<h3 style="margin:0 0 8px">Instalar no iPhone / iPad</h3>
-      <ol style="margin:0 0 14px;padding-left:20px;line-height:1.8">
-        <li>No Safari, toque em <b>Compartilhar</b> (o quadrado com a seta para cima).</li>
-        <li>Escolha <b>Adicionar à Tela de Início</b>.</li>
-        <li>Toque em <b>Adicionar</b>. O RH+ Match passa a abrir em tela cheia, como um app.</li></ol>
-      <div class="rodape"><span></span><button class="btn" data-fechar>Entendi</button></div>`);
-  };
+  $("#cSair").onclick = sairDaConta;
+  $("#cInstalar").onclick = () => window.RHInstalar?.acao();
+  addEventListener("rhinstalar", () => { const b = $("#cInstalar"), r = window.RHInstalar?.rotulo?.(); if (b) { b.hidden = !r; if (r) b.textContent = "📲 " + r; } });
 }
 
 /* ------------------------------------------------------------- pequenos componentes */

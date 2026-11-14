@@ -1,7 +1,7 @@
 /* RH+ Match — vagas publicadas na plataforma, candidaturas, mensagens e página pública da vaga. */
 import { AREAS, MODALIDADES, REGIMES, SENIORIDADES, UFS, avaliar, classificar, localVaga } from "../../supabase/functions/_shared/nucleo.js";
 import {
-  $, $$, abrirSheet, ctx, dataHora, ehAdmin, esc, falha, main, modal, q, sb, toast, topo,
+  $, $$, abrirSheet, confirmar, ctx, dataHora, ehAdmin, esc, falha, main, modal, q, sb, toast, topo,
 } from "./base.js";
 import { abrirAdaptador, mostrarCurriculo } from "./curriculos.js";
 
@@ -149,10 +149,10 @@ export async function pgVagas() {
       case "editar": return formVaga(v, () => pgVagas());
       case "link": try { await navigator.clipboard.writeText(linkPublico(v.id)); toast("Link da vaga copiado. Divulgue onde quiser!"); } catch { modal(`<p>Link da vaga:</p><input type="text" value="${esc(linkPublico(v.id))}" readonly onclick="this.select()"><div class="rodape"><span></span><button class="btn" data-fechar>OK</button></div>`); } return;
       case "pausar": return mudar("pausada", "Vaga pausada: ela some das buscas até você reabrir.");
-      case "encerrar": if (confirm("Encerrar esta vaga? Ela sai das buscas; as candidaturas continuam guardadas.")) return mudar("encerrada", "Vaga encerrada."); return;
+      case "encerrar": if (await confirmar("Ela sai das buscas; as candidaturas continuam guardadas.", { titulo: "Encerrar esta vaga?", ok: "Encerrar", perigo: true })) return mudar("encerrada", "Vaga encerrada."); return;
       case "abrir": return mudar("aberta", "Vaga reaberta.");
       case "excluir":
-        if (!confirm(`Excluir a vaga “${v.titulo}” e TODAS as candidaturas e mensagens dela? Não é possível desfazer.`)) return;
+        if (!(await confirmar(`A vaga “${v.titulo}” e TODAS as candidaturas e mensagens dela serão apagadas. Não é possível desfazer.`, { titulo: "Excluir vaga?", ok: "Excluir", perigo: true }))) return;
         try { await q(sb.from("vagas_publicadas").delete().eq("id", v.id)); toast("Vaga excluída."); pgVagas(); } catch (err) { falha(err); }
     }
   };
@@ -299,7 +299,7 @@ export async function pgCandidaturas() {
       <h4>Conversa com a empresa</h4><div id="mcConversa"></div></div>`;
     $("#mcCv")?.addEventListener("click", () => mostrarCurriculo({ conteudo: c.curriculo, modelo: c.curriculo_modelo, tipo: "adaptado", vaga_titulo: v.titulo, vaga_empresa: v.organizacao }));
     $("#mcDesistir")?.addEventListener("click", async () => {
-      if (!confirm("Desistir desta candidatura? A empresa será informada.")) return;
+      if (!(await confirmar("A empresa será informada.", { titulo: "Desistir desta candidatura?", ok: "Desistir", perigo: true }))) return;
       try { await q(sb.rpc("mudar_status_candidatura", { p_id: c.id, p_status: "desistiu", p_motivo: "" })); toast("Candidatura retirada."); await carregar(); } catch (e) { falha(e); }
     });
     conversa($("#mcConversa"), c).catch(falha);
