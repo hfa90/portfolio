@@ -1,7 +1,7 @@
 /* RH+ Match — vagas publicadas na plataforma, candidaturas, mensagens e página pública da vaga. */
 import { AREAS, MODALIDADES, REGIMES, SENIORIDADES, UFS, avaliar, classificar, localVaga } from "../../supabase/functions/_shared/nucleo.js";
 import {
-  $, $$, abrirSheet, confirmar, ctx, dataHora, ehAdmin, esc, falha, main, modal, q, sb, toast, topo,
+  $, $$, abrirSheet, confirmar, ctx, erroFuncao, dataHora, ehAdmin, esc, falha, main, modal, q, sb, toast, topo,
 } from "./base.js";
 import { abrirAdaptador, mostrarCurriculo } from "./curriculos.js";
 
@@ -70,14 +70,10 @@ export async function candidatar(vaga, candidato) {
     const cv = cvs.find((c) => c.id === +($("input[name=cvEscolha]:checked")?.value || 0));
     const btn = $("#cEnviar"); btn.disabled = true; btn.textContent = "Enviando…";
     try {
-      const pont = avaliar(candidato, vaga);
-      const perfil = { nome: candidato.nome, email: candidato.email || ctx.usuario.email, telefone: candidato.telefone, cidade: candidato.cidade, uf: candidato.uf,
-        cargo_desejado: candidato.cargo_desejado, skills: candidato.skills, senioridade: candidato.senioridade, pretensao_salarial: candidato.pretensao_salarial,
-        modalidades: candidato.modalidades, aceita_mudanca: candidato.aceita_mudanca, resumo: candidato.resumo };
-      const nova = await q(sb.from("candidaturas").insert({
-        vaga_id: vaga.plataforma_id, candidato: ctx.usuario.id, perfil, curriculo: cv?.conteudo || null, curriculo_modelo: cv?.modelo || "classico",
-        mensagem: $("#cMsg").value.trim(), score: pont.score, detalhes: pont.detalhes_score,
-      }).select("id").single());
+      // a nota de compatibilidade é calculada no servidor (função "candidatar"), não no navegador
+      const r = await sb.functions.invoke("candidatar", { body: { vaga_id: vaga.plataforma_id, curriculo_id: cv?.id ?? null, mensagem: $("#cMsg").value.trim() } });
+      if (r.error) throw new Error(await erroFuncao(r, "candidatar"));
+      const nova = r.data;
       $("#modal").close(); toast("Candidatura enviada! Acompanhe em “Candidaturas”.");
       notificar("nova_candidatura", nova.id);
     } catch (e) { btn.disabled = false; btn.textContent = "Enviar candidatura"; falha(e); }
