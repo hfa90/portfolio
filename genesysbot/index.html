@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bot Genesys: grave uma tarefa no computador e deixe o robô repetir</title>
+<meta name="description" content="O Bot Genesys grava seus cliques e o que você digita no Chrome, no Excel e em programas do Windows, e repete sozinho. Abra chamados em lote, monte relatórios e agende execuções. Download para Windows.">
+<meta property="og:title" content="Bot Genesys: faça uma vez, o robô faz as próximas">
+<meta property="og:description" content="Automação para Windows que grava e repete tarefas no Chrome, no Excel e em outros programas. Calcule quanto tempo você recupera e baixe.">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="pt_BR">
+<link rel="icon" href="favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --papel: #F4F6F9;
+    --branco: #FFFFFF;
+    --tinta: #111A2C;
+    --tinta-2: #1B2740;
+    --suave: #566176;
+    --linha: #D6DCE6;
+    --grav: #E23D3D;      /* gravando */
+    --exec: #2A62F0;      /* executando */
+    --ok: #17875B;        /* concluído */
+    --ok-claro: #4FD6A0;
+    --pausa: #B97A00;
+    --titulo: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --texto: "Public Sans", "Segoe UI", system-ui, sans-serif;
+    --largura: 1120px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--papel); color: var(--tinta);
+    font-family: var(--texto); font-size: 1.0625rem; line-height: 1.6;
+  }
+  h1, h2, h3 { font-family: var(--titulo); line-height: 1.05; margin: 0; letter-spacing: -0.02em; }
+  h2 { font-size: clamp(2rem, 4.4vw, 3.25rem); font-weight: 800; max-width: 18ch; }
+  h3 { font-size: 1.35rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
+  p { margin: 0; }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--exec); outline-offset: 3px; border-radius: 4px; }
+  .miolo { width: min(100% - 2.5rem, var(--largura)); margin-inline: auto; }
+  .intro { color: var(--suave); max-width: 58ch; margin-top: 1rem; font-size: 1.125rem; }
+
+  /* ---------- topo ---------- */
+  .topo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 0; }
+  .marca { display: flex; align-items: center; gap: .6rem; font-family: var(--titulo); font-weight: 800; font-size: 1.25rem; text-decoration: none; letter-spacing: -0.02em; }
+  .marca i { width: .8rem; height: .8rem; border-radius: 50%; background: var(--grav); display: block; }
+  .topo nav { display: flex; gap: 1.5rem; align-items: center; }
+  .topo nav a { text-decoration: none; font-weight: 500; font-size: .975rem; }
+  .topo nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
+  .topo nav a.so-largo { display: none; }
+  @media (min-width: 760px) { .topo nav a.so-largo { display: inline; } }
+
+  .botao {
+    display: inline-block; font: 600 1.0625rem/1 var(--texto); text-decoration: none; cursor: pointer;
+    padding: 1.05rem 1.5rem; border-radius: 10px; border: 2px solid var(--tinta);
+    background: var(--tinta); color: #fff; transition: transform .12s ease, background .12s ease;
+  }
+  .botao:hover { background: var(--exec); border-color: var(--exec); }
+  .botao:active { transform: translateY(1px); }
+  .botao.vazado { background: transparent; color: var(--tinta); }
+  .botao.vazado:hover { background: var(--tinta); color: #fff; border-color: var(--tinta); }
+  .botao.pequeno { padding: .7rem 1rem; font-size: .95rem; }
+
+  /* ---------- abertura ---------- */
+  .abertura { padding: clamp(2rem, 6vw, 4.5rem) 0 clamp(3.5rem, 8vw, 6rem); }
+  .abertura .miolo { display: grid; gap: 3rem; align-items: center; }
+  @media (min-width: 960px) { .abertura .miolo { grid-template-columns: 1.05fr .95fr; gap: 4rem; } }
+  h1 { font-size: clamp(2.9rem, 8.2vw, 5.6rem); font-weight: 800; letter-spacing: -0.035em; line-height: .96; }
+  h1 span { display: block; }
+  .abertura p.intro { font-size: 1.2rem; max-width: 46ch; margin-top: 1.5rem; }
+  .acoes { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 2rem; }
+  .abertura small { display: block; margin-top: 1rem; color: var(--suave); font-size: .925rem; }
+
+  /* janela do roteiro (a única animação da página) */
+  .janela {
+    background: var(--tinta); color: #E8ECF4; border-radius: 16px; overflow: hidden;
+    box-shadow: 0 30px 60px -30px rgba(17, 26, 44, .55), 0 0 0 1px rgba(17, 26, 44, .9);
+  }
+  .janela header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .95rem 1.15rem; background: var(--tinta-2); }
+  .janela header b { font-family: var(--titulo); font-weight: 600; font-size: 1rem; letter-spacing: -0.01em; }
+  .selo { font-size: .75rem; font-weight: 700; letter-spacing: .04em; padding: .35rem .65rem; border-radius: 6px; background: var(--exec); color: #fff; white-space: nowrap; }
+  .selo.ok { background: var(--ok); }
+  .janela ol { list-style: none; margin: 0; padding: .5rem; }
+  .janela li { display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .75rem; align-items: baseline; padding: .62rem .7rem; border-radius: 8px; font-size: .96rem; color: #9FABBF; }
+  .janela li .n { font-variant-numeric: tabular-nums; font-size: .85rem; opacity: .7; }
+  .janela li .t strong { color: inherit; font-weight: 600; }
+  .janela li .m { font-size: .85rem; width: 1rem; text-align: right; color: var(--ok-claro); opacity: 0; }
+  .janela li.feito { color: #C9D2E0; }
+  .janela li.feito .m { opacity: 1; }
+  .janela li.agora { background: rgba(42, 98, 240, .28); color: #fff; box-shadow: inset 3px 0 0 #6E97FF; }
+  .janela footer { padding: .9rem 1.15rem 1.1rem; border-top: 1px solid rgba(255, 255, 255, .08); }
+  .janela .linha-info { display: flex; justify-content: space-between; gap: 1rem; font-size: .875rem; color: #B5BFD0; }
+  .janela .linha-info b { color: #fff; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .trilho { height: 6px; background: rgba(255, 255, 255, .12); border-radius: 3px; margin-top: .6rem; overflow: hidden; }
+  .trilho i { display: block; height: 100%; width: 0; background: var(--ok-claro); border-radius: 3px; transition: width .5s ease; }
+  .legenda { font-size: .875rem; color: var(--suave); margin-top: .85rem; }
+
+  /* ---------- seções ---------- */
+  section { padding: clamp(3.5rem, 8vw, 6.5rem) 0; }
+  .faixa-branca { background: var(--branco); border-block: 1px solid var(--linha); }
+
+  /* como usar: é uma sequência de verdade, por isso os números */
+  .passos { list-style: none; counter-reset: passo; margin: 3rem 0 0; padding: 0; display: grid; gap: 0; }
+  .passos li { counter-increment: passo; display: grid; grid-template-columns: 4.5rem 1fr; gap: 1rem; padding: 1.75rem 0; border-top: 1px solid var(--linha); }
+  .passos li::before { content: counter(passo); font: 800 3.25rem/.9 var(--titulo); letter-spacing: -0.04em; color: var(--tinta); }
+  .passos li:nth-child(1)::before { color: var(--grav); }
+  .passos li:nth-child(3)::before { color: var(--exec); }
+  .passos li:nth-child(4)::before { color: var(--ok); }
+  .passos p { color: var(--suave); margin-top: .4rem; max-width: 62ch; }
+  @media (min-width: 860px) { .passos li { grid-template-columns: 7rem 18rem 1fr; align-items: baseline; } .passos p { margin-top: 0; } }
+  kbd { font: 600 .85em var(--texto); background: var(--papel); border: 1px solid var(--linha); border-bottom-width: 2px; border-radius: 5px; padding: .08em .42em; white-space: nowrap; }
+
+  /* o que ele faz */
+  .recursos { margin: 3rem 0 0; display: grid; gap: 0; }
+  .recursos div { display: grid; gap: .35rem; padding: 1.4rem 0; border-top: 1px solid var(--linha); }
+  .recursos dt { font: 600 1.35rem/1.2 var(--titulo); letter-spacing: -0.01em; }
+  .recursos dd { margin: 0; color: var(--suave); max-width: 66ch; }
+  @media (min-width: 860px) { .recursos div { grid-template-columns: 17rem 1fr; gap: 2rem; align-items: baseline; } }
+  .nota-total { margin-top: 2rem; font-weight: 500; }
+
+  /* pra quem */
+  .perfis { margin-top: 3rem; display: grid; gap: 2.5rem 3rem; }
+  @media (min-width: 760px) { .perfis { grid-template-columns: 1fr 1fr; } }
+  .perfis article { border-left: 4px solid var(--tinta); padding-left: 1.25rem; }
+  .perfis article:nth-child(1) { border-color: var(--grav); }
+  .perfis article:nth-child(2) { border-color: var(--ok); }
+  .perfis article:nth-child(3) { border-color: var(--pausa); }
+  .perfis article:nth-child(4) { border-color: var(--exec); }
+  .perfis p { color: var(--suave); margin-top: .5rem; }
+
+  /* economia */
+  .economia { background: var(--tinta); color: #E8ECF4; }
+  .economia h2 { color: #fff; }
+  .economia .intro { color: #B5BFD0; }
+  .calc { margin-top: 3rem; display: grid; gap: 2.5rem; }
+  @media (min-width: 900px) { .calc { grid-template-columns: 1fr 1.1fr; gap: 4rem; align-items: start; } }
+  .campos { display: grid; gap: 1.25rem; }
+  .campo label { display: block; font-weight: 600; margin-bottom: .4rem; }
+  .campo span.dica { display: block; font-size: .875rem; color: #9FABBF; margin-top: .35rem; }
+  .campo input {
+    width: 100%; font: 600 1.25rem var(--texto); color: #fff; background: var(--tinta-2);
+    border: 2px solid #33415E; border-radius: 10px; padding: .8rem 1rem; font-variant-numeric: tabular-nums;
+  }
+  .campo input:focus { outline: none; border-color: #6E97FF; }
+  .dupla { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .resultado { background: var(--tinta-2); border-radius: 16px; padding: clamp(1.5rem, 4vw, 2.5rem); }
+  .resultado .principal { font: 800 clamp(3rem, 9vw, 5.25rem)/.95 var(--titulo); letter-spacing: -0.04em; color: var(--ok-claro); font-variant-numeric: tabular-nums; }
+  .resultado .rotulo { font-size: 1.0625rem; color: #C9D2E0; margin-top: .5rem; }
+  .resultado dl { margin: 2rem 0 0; display: grid; gap: 0; }
+  .resultado dl div { display: flex; justify-content: space-between; gap: 1.5rem; padding: .9rem 0; border-top: 1px solid rgba(255, 255, 255, .12); align-items: baseline; }
+  .resultado dt { color: #B5BFD0; }
+  .resultado dd { margin: 0; font: 600 1.35rem var(--titulo); color: #fff; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .resultado .ressalva { font-size: .875rem; color: #9FABBF; margin-top: 1.25rem; }
+
+  /* bom saber */
+  .saber { margin-top: 2.5rem; padding: 0; list-style: none; display: grid; gap: 1.25rem 3rem; }
+  @media (min-width: 760px) { .saber { grid-template-columns: 1fr 1fr; } }
+  .saber li { padding-left: 1.5rem; position: relative; color: var(--suave); }
+  .saber li::before { content: ""; position: absolute; left: 0; top: .6em; width: .6rem; height: .6rem; border-radius: 50%; background: var(--tinta); }
+  .saber li b { color: var(--tinta); font-weight: 600; }
+
+  /* baixar */
+  .baixar .miolo { display: grid; gap: 3rem; }
+  @media (min-width: 900px) { .baixar .miolo { grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start; } }
+  .caixa-baixar { margin-top: 2rem; }
+  .caixa-baixar .botao { font-size: 1.2rem; padding: 1.3rem 1.9rem; background: var(--ok); border-color: var(--ok); }
+  .caixa-baixar .botao:hover { background: var(--tinta); border-color: var(--tinta); }
+  .ficha { margin-top: 1rem; color: var(--suave); font-size: .95rem; }
+  .instalar { list-style: none; counter-reset: i; padding: 0; margin: 0; }
+  .instalar li { counter-increment: i; display: grid; grid-template-columns: 2.25rem 1fr; gap: .75rem; padding: 1.1rem 0; border-top: 1px solid var(--linha); }
+  .instalar li:last-child { border-bottom: 1px solid var(--linha); }
+  .instalar li::before { content: counter(i); font: 800 1.5rem/1.2 var(--titulo); }
+  .instalar b { font-weight: 600; }
+  .instalar span { color: var(--suave); display: block; }
+  .requisitos { margin-top: 1.5rem; color: var(--suave); font-size: .95rem; }
+
+  footer.rodape { padding: 2.5rem 0 3rem; color: var(--suave); font-size: .925rem; border-top: 1px solid var(--linha); }
+  footer.rodape .miolo { display: grid; gap: .5rem; }
+  footer.rodape a { font-weight: 600; color: var(--tinta); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .trilho i, .botao { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="miolo topo">
+  <a class="marca" href="#inicio" aria-label="Bot Genesys, início"><i></i>Bot Genesys</a>
+  <nav aria-label="Seções">
+    <a class="so-largo" href="#como-usar">Como usar</a>
+    <a class="so-largo" href="#recursos">O que faz</a>
+    <a class="so-largo" href="#economia">Economia</a>
+    <a class="botao pequeno" href="#baixar">Baixar</a>
+  </nav>
+</div>
+
+<main id="inicio">
+
+  <div class="abertura">
+    <div class="miolo">
+      <div>
+        <h1><span>Faça uma vez.</span><span>O robô faz as próximas.</span></h1>
+        <p class="intro">O Bot Genesys grava seus cliques e o que você digita no Chrome, no Excel e em outros programas do Windows. Depois repete tudo sozinho, quantas vezes precisar e na hora que você agendar.</p>
+        <div class="acoes">
+          <a class="botao" href="#baixar">Baixar para Windows</a>
+          <a class="botao vazado" href="#economia">Calcular minha economia</a>
+        </div>
+        <small>Não precisa saber programar. Funciona no Windows 10 e 11.</small>
+      </div>
+
+      <div>
+        <div class="janela" role="img" aria-label="Ilustração: o roteiro de abrir chamados sendo executado passo a passo pelo robô">
+          <header>
+            <b>abrir_chamado.json</b>
+            <span class="selo" id="selo">EXECUTANDO</span>
+          </header>
+          <ol id="roteiro">
+            <li><span class="n">1</span><span class="t"><strong>Abrir Chrome</strong> no sistema de chamados</span><span class="m">✓</span></li>
+            <li><span class="n">2</span><span class="t"><strong>Clique</strong> em "Novo chamado"</span><span class="m">✓</span></li>
+            <li><span class="n">3</span><span class="t"><strong>Digitar</strong> {Título} da planilha</span><span class="m">✓</span></li>
+            <li><span class="n">4</span><span class="t"><strong>Digitar</strong> {Descrição}</span><span class="m">✓</span></li>
+            <li><span class="n">5</span><span class="t"><strong>Clique</strong> em "Salvar"</span><span class="m">✓</span></li>
+            <li><span class="n">6</span><span class="t"><strong>Ler da página</strong> o número do chamado</span><span class="m">✓</span></li>
+            <li><span class="n">7</span><span class="t"><strong>Excel</strong>: anotar "OK" na linha</span><span class="m">✓</span></li>
+          </ol>
+          <footer>
+            <div class="linha-info"><span>Chamado <b id="feitos">12</b> de <b>40</b></span><span>você: <b>tomando um café</b></span></div>
+            <div class="trilho"><i id="barra"></i></div>
+          </footer>
+        </div>
+        <p class="legenda">Ilustração de um roteiro em execução: cada linha da planilha vira um chamado.</p>
+      </div>
+    </div>
+  </div>
+
+  <section class="faixa-branca" id="como-usar">
+    <div class="miolo">
+      <h2>Como usar, em quatro passos</h2>
+      <p class="intro">Você mostra o processo uma vez. O programa transforma o que você fez numa lista de passos que dá para ler, corrigir e rodar de novo.</p>
+      <ol class="passos">
+        <li><h3>Grave</h3><p>Aperte <kbd>F4</kbd> e faça a tarefa normalmente. Cliques, textos, teclas e rolagem viram passos sozinhos. Aperte <kbd>F4</kbd> de novo para parar.</p></li>
+        <li><h3>Ajuste</h3><p>Revise a lista de passos. Troque um texto fixo por uma coluna da planilha, como <kbd>{Título}</kbd>, e o mesmo roteiro passa a servir para todas as linhas.</p></li>
+        <li><h3>Execute</h3><p>Aperte <kbd>F5</kbd>. O robô faz uma linha da planilha por vez e anota "OK" ou o erro na própria linha. <kbd>F2</kbd> pausa e <kbd>ESC</kbd> para na hora.</p></li>
+        <li><h3>Agende</h3><p>Escolha quando roda: uma vez, todos os dias, só em dias úteis ou a cada tantos minutos. Pelo próprio programa ou pelo Agendador de Tarefas do Windows.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="recursos">
+    <div class="miolo">
+      <h2>O que ele faz por você</h2>
+      <p class="intro">Tudo o que uma pessoa faz repetindo cliques e copiando dados de um lugar para outro.</p>
+      <dl class="recursos">
+        <div><dt>Sites no Chrome</dt><dd>Clica pelo elemento da página, não só pela posição, então continua acertando quando o site muda de lugar. Espera a página carregar, lê valores da tela, anexa arquivos e responde avisos e pop-ups.</dd></div>
+        <div><dt>Excel sem mouse</dt><dd>Abre a planilha, lê e escreve células, preenche fórmulas em português, monta tabela dinâmica e gráfico, roda macro e salva em PDF. Pode trabalhar com o Excel escondido.</dd></div>
+        <div><dt>Qualquer programa do Windows</dt><dd>Sistemas desktop, janelas e menus: clica pelo botão ou campo, pela imagem ou pelo texto que aparece na tela.</dd></div>
+        <div><dt>Arquivos e pastas</dt><dd>Copia, move, renomeia, compacta, espera o download terminar e organiza tudo em pastas.</dd></div>
+        <div><dt>E-mail e avisos</dt><dd>Envia e-mail pelo Outlook ou SMTP com anexo, lê e-mails que chegam e avisa você no Windows, Telegram, Teams, Slack ou Discord quando termina ou quando dá erro.</dd></div>
+        <div><dt>Decisões no caminho</dt><dd>Se apareceu tal texto, faça isto, senão aquilo. Repita para cada item. Tente de novo se falhar. Pause e espere você fazer o login.</dd></div>
+        <div><dt>Segundo plano</dt><dd>Em tarefas no Chrome, o robô trabalha numa janela própria atrás das suas, sem usar seu mouse nem seu teclado. Você continua usando o computador.</dd></div>
+        <div><dt>IA opcional</dt><dd>Descreva em português o que quer e a IA monta o roteiro. Se uma execução falhar, ela lê o erro e propõe a correção.</dd></div>
+      </dl>
+      <p class="nota-total">São 61 tipos de passo prontos para combinar. Quem programa pode exportar o roteiro como um arquivo Python.</p>
+    </div>
+  </section>
+
+  <section class="faixa-branca" id="para-quem">
+    <div class="miolo">
+      <h2>Para quem é útil</h2>
+      <p class="intro">Para quem abre o mesmo sistema, preenche os mesmos campos e copia os mesmos dados várias vezes por dia.</p>
+      <div class="perfis">
+        <article><h3>Suporte e service desk</h3><p>Abrir, atualizar ou encerrar dezenas de chamados a partir de uma planilha, cada um com seu título, descrição e categoria.</p></article>
+        <article><h3>Financeiro e administrativo</h3><p>Lançar dados num sistema web, baixar relatórios, montar a planilha do dia com tabela e gráfico e enviar por e-mail.</p></article>
+        <article><h3>RH e departamento pessoal</h3><p>Cadastros repetidos em portais, conferência de listas e organização de documentos recebidos em pastas.</p></article>
+        <article><h3>TI e analistas</h3><p>Rotinas agendadas que rodam cedo, com log de cada execução, print do momento do erro e roteiro exportável em Python.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="economia" id="economia">
+    <div class="miolo">
+      <h2>Quanto tempo e dinheiro você recupera</h2>
+      <p class="intro">Coloque os números da sua rotina. A conta é feita aqui na página, na hora, e nada é enviado para lugar nenhum.</p>
+      <div class="calc">
+        <form class="campos" id="calc" onsubmit="return false">
+          <div class="campo">
+            <label for="c-qtd">Quantas vezes por dia você faz a tarefa</label>
+            <input id="c-qtd" type="number" inputmode="numeric" min="0" step="1" value="40">
+            <span class="dica">Exemplo: chamados abertos, cadastros, lançamentos.</span>
+          </div>
+          <div class="dupla">
+            <div class="campo">
+              <label for="c-min">Minutos em cada uma</label>
+              <input id="c-min" type="number" inputmode="decimal" min="0" step="0.5" value="3">
+            </div>
+            <div class="campo">
+              <label for="c-dias">Dias úteis no mês</label>
+              <input id="c-dias" type="number" inputmode="numeric" min="0" max="31" step="1" value="22">
+            </div>
+          </div>
+          <div class="dupla">
+            <div class="campo">
+              <label for="c-custo">Custo da hora (R$)</label>
+              <input id="c-custo" type="number" inputmode="decimal" min="0" step="1" value="25">
+            </div>
+            <div class="campo">
+              <label for="c-parte">Parte que o robô assume (%)</label>
+              <input id="c-parte" type="number" inputmode="numeric" min="0" max="100" step="5" value="80">
+            </div>
+          </div>
+          <span class="dica" style="color:#9FABBF;font-size:.875rem">Custo da hora: salário mais encargos, dividido pelas horas trabalhadas no mês.</span>
+        </form>
+
+        <div class="resultado" aria-live="polite">
+          <div class="principal" id="r-horas">35 h</div>
+          <p class="rotulo">de trabalho repetitivo a menos por mês</p>
+          <dl>
+            <div><dt>Economia por mês</dt><dd id="r-mes">R$ 880</dd></div>
+            <div><dt>Economia por ano</dt><dd id="r-ano">R$ 10.560</dd></div>
+            <div><dt>Dias de trabalho devolvidos por ano</dt><dd id="r-diasano">53 dias</dd></div>
+          </dl>
+          <p class="ressalva">Estimativa feita só com os números que você informou. O resultado real depende do processo, e o tempo de gravar e ajustar o roteiro não entra nesta conta.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="bom-saber">
+    <div class="miolo">
+      <h2>Bom saber antes de instalar</h2>
+      <ul class="saber">
+        <li><b>Roda no seu computador.</b> Roteiros, planilhas e logs ficam na sua máquina. Não há servidor nem cadastro.</li>
+        <li><b>Senhas protegidas.</b> Senhas e tokens dos roteiros são criptografados pelo próprio Windows e só abrem no seu usuário.</li>
+        <li><b>Modo na tela usa mouse e teclado.</b> Nesse modo o computador precisa estar ligado e desbloqueado, e você não usa a máquina enquanto ele trabalha.</li>
+        <li><b>Segundo plano é só no Chrome.</b> Tarefas em outros programas rodam no modo na tela.</li>
+        <li><b>A IA é opcional e tem custo à parte.</b> Ela usa a API da Anthropic com a sua própria chave. O resto do programa funciona sem ela.</li>
+        <li><b>Você sempre pode parar.</b> <kbd>ESC</kbd> interrompe, <kbd>F2</kbd> pausa, e levar o mouse ao canto superior esquerdo da tela é a parada de emergência.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="faixa-branca baixar" id="baixar">
+    <div class="miolo">
+      <div>
+        <h2>Baixe e comece hoje</h2>
+        <p class="intro">O pacote traz o programa, o instalador e roteiros de exemplo para Excel, e-mail e organização de arquivos.</p>
+        <div class="caixa-baixar">
+          <a class="botao" href="BotGenesys_1.20.0.zip" download>Baixar o Bot Genesys 1.20.0</a>
+          <p class="ficha">Arquivo .zip de 443 KB. Versão 1.20.0, de 16/11/2026.</p>
+        </div>
+        <p class="requisitos">Precisa de Windows 10 ou 11 e do Google Chrome. O Excel é necessário só para os passos de planilha. O instalador baixa o Python e as bibliotecas se faltarem, por isso pede internet na primeira vez.</p>
+      </div>
+      <div>
+        <h3 style="margin-bottom:1rem">Para instalar</h3>
+        <ol class="instalar">
+          <li><div><b>Extraia o .zip</b><span>Numa pasta sua, por exemplo Documentos\BotGenesys.</span></div></li>
+          <li><div><b>Abra o instalar.bat</b><span>Dois cliques. O Windows pode pedir confirmação por ser um arquivo baixado da internet.</span></div></li>
+          <li><div><b>Abra pelo atalho "Bot Genesys"</b><span>Ele aparece na Área de Trabalho. Aperte F4 e grave sua primeira tarefa.</span></div></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="rodape">
+  <div class="miolo">
+    <p>Feito por <a href="/">Hayden Fernandes</a>.</p>
+    <p>Bot Genesys é um projeto independente, sem vínculo com a Genesys Cloud Services ou com outras empresas de nome parecido.</p>
+  </div>
+</footer>
+
+<script>
+(function () {
+  /* ---- roteiro em execução (ilustração) ---- */
+  var itens = Array.prototype.slice.call(document.querySelectorAll('#roteiro li'));
+  var feitos = document.getElementById('feitos'), barra = document.getElementById('barra'), selo = document.getElementById('selo');
+  var TOTAL = 40, chamado = 12, passo = 0;
+
+  function pintar() {
+    itens.forEach(function (li, i) {
+      li.classList.toggle('feito', i < passo);
+      li.classList.toggle('agora', i === passo);
+    });
+    feitos.textContent = chamado;
+    barra.style.width = ((chamado - 1 + passo / itens.length) / TOTAL * 100) + '%';
+  }
+  function avancar() {
+    passo++;
+    if (passo >= itens.length) {
+      passo = 0;
+      chamado++;
+      if (chamado > TOTAL) {
+        selo.textContent = 'CONCLUÍDO'; selo.classList.add('ok');
+        itens.forEach(function (li) { li.classList.add('feito'); li.classList.remove('agora'); });
+        feitos.textContent = TOTAL; barra.style.width = '100%';
+        setTimeout(function () { chamado = 1; selo.textContent = 'EXECUTANDO'; selo.classList.remove('ok'); pintar(); setTimeout(avancar, 900); }, 4000);
+        return;
+      }
+    }
+    pintar();
+    setTimeout(avancar, passo === 0 ? 1100 : 850);
+  }
+  var semMovimento = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (semMovimento) { passo = 4; pintar(); }
+  else { pintar(); setTimeout(avancar, 1200); }
+
+  /* ---- calculadora ---- */
+  var real = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+  var num = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
+  function v(id, max) {
+    var n = parseFloat(String(document.getElementById(id).value).replace(',', '.'));
+    if (!isFinite(n) || n < 0) n = 0;
+    return max ? Math.min(n, max) : n;
+  }
+  function calcular() {
+    var horasMes = v('c-qtd') * v('c-min') * v('c-dias', 31) * (v('c-parte', 100) / 100) / 60;
+    var porMes = horasMes * v('c-custo');
+    var diasAno = horasMes * 12 / 8;
+    document.getElementById('r-horas').textContent = (horasMes < 10 ? horasMes.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : num.format(horasMes)) + ' h';
+    document.getElementById('r-mes').textContent = real.format(porMes);
+    document.getElementById('r-ano').textContent = real.format(porMes * 12);
+    document.getElementById('r-diasano').textContent = num.format(diasAno) + (Math.round(diasAno) === 1 ? ' dia' : ' dias');
+  }
+  document.getElementById('calc').addEventListener('input', calcular);
+  calcular();
+})();
+</script>
+</body>
+</html>
