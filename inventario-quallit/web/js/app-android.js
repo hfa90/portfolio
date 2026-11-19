@@ -25,8 +25,8 @@ export const codigoDoApp = dentroDoApp ? Number(ua.match(/InventarioQuallitAndro
 
 // Dentro do app, um link do próprio site abriria na tela do app (que não baixa arquivos). Um endereço de
 // outro site o app abre no navegador do celular, que baixa o APK: é a cópia pública do mesmo arquivo
-// no repositório do site (hfa90/portfolio, gravada a cada publicação).
-export const APK_EXTERNO = 'https://raw.githubusercontent.com/hfa90/portfolio/main/inventario-quallit/web/downloads/inventario-quallit.apk';
+// pelo endereço com www (o app só abre haydenfernandes.tech sem www; o www vai para o navegador).
+export const APK_EXTERNO = 'https://www.haydenfernandes.tech/inventario/downloads/inventario-quallit.apk';
 
 let info = null;
 export async function infoApk() {

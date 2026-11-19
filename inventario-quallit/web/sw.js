@@ -63,7 +63,7 @@ self.addEventListener('fetch', (e) => {
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch { d = { titulo: 'Inventário Quallit', corpo: e.data?.text() || '' }; }
-  const icone = new URL('/inventario-quallit/web/icons/icon-192.png', self.location.origin).href;
+  const icone = new URL('icons/icon-192.png', self.registration.scope).href;
   e.waitUntil((async () => {
     if (navigator.setAppBadge && typeof d.naoLidas === 'number') navigator.setAppBadge(d.naoLidas).catch(() => {});
     await self.registration.showNotification(d.titulo || 'Inventário Quallit', {

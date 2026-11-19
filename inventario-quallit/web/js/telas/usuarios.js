@@ -24,10 +24,12 @@ export async function chamarAdmin(body) {
 }
 export function gerarSenha() {
   const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
-  const v = crypto.getRandomValues(new Uint32Array(10));
-  let s = [...v].map((n) => abc[n % abc.length]).join('');
-  if (!/\d/.test(s)) s = s.slice(0, 9) + '7';
-  return s;
+  // sorteia até ter minúscula, maiúscula e número (regra de senha do Supabase Auth)
+  for (;;) {
+    const v = crypto.getRandomValues(new Uint32Array(10));
+    const s = [...v].map((n) => abc[n % abc.length]).join('');
+    if (/[a-z]/.test(s) && /[A-Z]/.test(s) && /\d/.test(s)) return s;
+  }
 }
 export const PAPEL = { admin: 'Administrador', field: 'Field' };
 export const urlPainel = () => baseIndex();
