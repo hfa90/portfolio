@@ -5,7 +5,7 @@
 // - Dados do Supabase: NUNCA ficam guardados aqui (sempre ao vivo).
 // Ao publicar uma versão nova, mude VERSAO.
 // =========================================================
-const VERSAO = 'marmita-v2.2';
+const VERSAO = 'marmita-v2.3';
 const ARQUIVOS = [
   './', 'index.html', 'style.css', 'mobile.css', 'config.js', 'manifest.webmanifest',
   'app.js', 'app-vendas.js', 'app-fiado.js', 'app-clientes.js', 'app-produtos.js', 'app-financeiro.js', 'app-mobile.js',

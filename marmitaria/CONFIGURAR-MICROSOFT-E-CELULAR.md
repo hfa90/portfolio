@@ -1,38 +1,43 @@
-# Login com Microsoft e app no celular
+# Código do Microsoft Authenticator e app no celular
 
-## 1. Registrar o app na Microsoft (uma vez)
-1. Entre em https://portal.azure.com com a sua conta Microsoft → **Microsoft Entra ID** → **Registros de aplicativo** → **Novo registro**.
-2. Nome: `Marmita Control`.
-3. Tipos de conta: **Contas em qualquer diretório organizacional e contas pessoais da Microsoft** (permite Outlook/Hotmail).
-4. URI de redirecionamento: tipo **Web**, endereço:
-   `https://ckfiknmdcoiihlifourc.supabase.co/auth/v1/callback`
-5. Clique em **Registrar** e copie o **ID do aplicativo (cliente)**.
-6. **Certificados e segredos** → **Novo segredo do cliente** → copie o **Valor** (não o "ID do segredo"). Ele só aparece uma vez.
-7. **Configuração de token** → **Adicionar declaração opcional** → tipo **ID** → marque **email** → Adicionar (aceite a permissão do Microsoft Graph se perguntar).
+A entrada no painel agora tem duas etapas:
+1. e-mail e senha;
+2. o código de 6 números do app **Microsoft Authenticator** (muda a cada 30 segundos).
 
-## 2. Ligar a Microsoft no Supabase
-Projeto no Supabase → **Authentication**:
-1. **Sign In / Providers** → **Azure** → ative, cole o **Client ID** e o **Secret** (Valor do passo 6). Deixe *Azure Tenant URL* em branco. Salve.
-2. Ainda em **Sign In / Providers**, nas configurações gerais de usuários:
-   - **Allow new users to sign up: DESLIGADO.** Importante: com isso ligado, qualquer pessoa com conta Microsoft conseguiria criar um acesso ao painel. A loja online não usa contas, então não é afetada.
-   - **Allow manual linking: LIGADO** (necessário para conectar sua conta Microsoft à sua conta do painel).
-3. **URL Configuration**:
-   - **Site URL**: o endereço do painel publicado (ex.: `https://hfa90.github.io/portfolio/marmitaria/`).
-   - **Redirect URLs**: o mesmo endereço terminado em `**` (ex.: `https://hfa90.github.io/portfolio/marmitaria/**`).
+Não é preciso ter conta Microsoft nem configurar nada no Azure.
 
-## 3. Conectar sua conta (no painel)
-1. Entre com e-mail e senha.
-2. **Ajustes → Sua conta → Conectar conta Microsoft** e entre na Microsoft.
-3. Pronto: a partir daí use **Entrar com a Microsoft** no login.
+## Ligar (uma vez)
+1. No celular, instale o **Microsoft Authenticator** (App Store / Google Play).
+2. Entre no painel com e-mail e senha → **Ajustes → Sua conta → Ativar com o Microsoft Authenticator**.
+3. No Authenticator: **+** → **Outra conta (Google, Facebook etc.)**.
+   - Painel aberto no computador: aponte a câmera para o QR code.
+   - Painel aberto no mesmo celular: toque em **Copiar chave** no painel; no Authenticator escolha
+     **Ou insira o código manualmente**, nome da conta `Marmita Control` e cole a chave.
+4. Digite no painel o código de 6 números que apareceu. Pronto: a partir daí toda entrada pede o código.
+
+No Supabase isso já vem ligado. Se aparecer "verificação desligada no Supabase", confira em
+**Authentication → Multi-Factor → TOTP: Enabled**.
 
 ## Trocar a senha
-**Ajustes → Sua conta → Verificar com a Microsoft e trocar senha.** Depois de entrar na Microsoft você tem 5 minutos para escolher a nova senha. Não pede a senha atual.
-O "Esqueci minha senha" por e-mail continua existindo como plano B.
+**Ajustes → Sua conta → Trocar senha**: digite o código do Authenticator (não pede a senha atual)
+e escolha a nova senha em até 5 minutos.
+
+## Esqueci minha senha
+O link que chega por e-mail abre a tela de nova senha, que também pede o código do Authenticator.
+Assim, quem tiver acesso só ao seu e-mail não consegue trocar a senha.
+
+## Se perder o celular
+Sem o Authenticator não dá para entrar. Para liberar, no Supabase:
+**Authentication → Users → seu usuário → MFA factors → apagar o fator**. A entrada volta a pedir só e-mail e senha;
+depois ative de novo com o celular novo.
+Dica: no Authenticator, ligue o **backup na nuvem** (Configurações → Backup) para recuperar as contas num celular novo.
+
+## Se você chegou a configurar o login com conta Microsoft
+Não é mais usado. Pode desligar em Supabase → **Authentication → Sign In / Providers → Azure** (opcional).
 
 ## Instalar no celular (PWA)
 - **iPhone:** abra o painel no **Safari** → **Compartilhar** → **Adicionar à Tela de Início**.
 - **Android:** abra no **Chrome** → menu ⋮ → **Instalar app**.
 
-Instalado, abre em tela cheia, sem barra do navegador e com o ícone da marmita.
-No celular: puxe a tela para baixo para atualizar; arraste as janelas para baixo para fechar.
-Os dados vêm sempre ao vivo do Supabase (precisa de internet); o app em si abre mesmo sem sinal.
+Instalado, abre em tela cheia com o ícone da marmita. Puxe a tela para baixo para atualizar;
+arraste as janelas para baixo para fechar. Os dados vêm sempre ao vivo (precisa de internet).

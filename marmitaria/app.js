@@ -190,19 +190,63 @@ let modoRecuperacao = hashInicial.get('type') === 'recovery' || queryInicial.get
 
 function urlDoPainel() { return location.origin + location.pathname; }
 
-function mostrarLoginMsg(html, erro) {
-  const el = $('loginMsg');
+function mostrarLoginMsg(html, erro, id = 'loginMsg') {
+  const el = $(id);
   el.innerHTML = html;
   el.classList.toggle('aviso-forte', !!erro);
   el.classList.remove('hidden');
 }
+function esconderMsg(id) { $(id).classList.add('hidden'); }
 
-function mostrarTelaNovaSenha() {
+// qual cartão da tela de entrada aparece: 'login' | 'codigo' | 'novaSenha'
+function telaEntrada(qual) {
   $('app').classList.add('hidden');
   $('loginScreen').classList.remove('hidden');
-  $('formLogin').classList.add('hidden');
-  $('formNovaSenha').classList.remove('hidden');
-  setTimeout(() => $('novaSenha1').focus(), 100);
+  $('formLogin').classList.toggle('hidden', qual !== 'login');
+  $('formCodigo').classList.toggle('hidden', qual !== 'codigo');
+  $('formNovaSenha').classList.toggle('hidden', qual !== 'novaSenha');
+  const foco = { login: 'loginEmail', codigo: 'codigoLogin', novaSenha: 'novaSenha1' }[qual];
+  setTimeout(() => $(foco)?.focus(), 120);
+}
+
+// ---------------------------------------------------------
+// Verificação em duas etapas (TOTP) — Microsoft Authenticator
+// O Supabase marca a sessão como "aal2" só depois do código certo.
+// ---------------------------------------------------------
+async function fatorAutenticador() {
+  const { data, error } = await supabaseClient.auth.mfa.listFactors();
+  if (error) return null;
+  return (data?.totp || []).find(f => f.status === 'verified') || null;
+}
+async function precisaCodigo() {
+  const { data, error } = await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (error || !data) return false;
+  return data.nextLevel === 'aal2' && data.currentLevel !== 'aal2';
+}
+const soCodigo = (v) => (v || '').replace(/\D/g, '').slice(0, 6);
+async function verificarCodigo(codigo, factorId) {
+  const id = factorId || (await fatorAutenticador())?.id;
+  if (!id) throw new Error('Nenhum autenticador ativado nesta conta.');
+  const { error } = await supabaseClient.auth.mfa.challengeAndVerify({ factorId: id, code: soCodigo(codigo) });
+  if (error) throw error;
+}
+function msgErroCodigo(err) {
+  const m = err?.message || '';
+  if (/invalid|incorrect|expired|verification/i.test(m)) return 'Código errado ou vencido. Digite o código que está aparecendo agora no Authenticator.';
+  if (/rate|too many|limit/i.test(m)) return 'Muitas tentativas seguidas. Espere 1 minuto e tente de novo.';
+  if (/disabled|not enabled/i.test(m)) return 'A verificação em duas etapas está desligada no Supabase (Authentication → Multi-Factor → TOTP).';
+  return 'Não foi possível verificar: ' + esc(m);
+}
+
+// Depois de ter sessão, decide o que mostrar
+async function aposSessao() {
+  if (modoRecuperacao) {
+    telaEntrada('novaSenha');
+    $('novaSenhaCodigoWrap').classList.toggle('hidden', !(await precisaCodigo()));
+    return;
+  }
+  if (await precisaCodigo()) { telaEntrada('codigo'); return; }
+  await mostrarApp();
 }
 
 async function boot() {
@@ -212,39 +256,61 @@ async function boot() {
   // link vencido, já usado ou aberto antes pelo antivírus do e-mail
   const erroLink = hashInicial.get('error_code') || hashInicial.get('error') || queryInicial.get('error_code') || queryInicial.get('error');
   if (erroLink) {
-    const desc = hashInicial.get('error_description') || queryInicial.get('error_description') || '';
-    retornoMicrosoft.erro = mensagemErroAuth(erroLink, desc, !!fluxoMs);
+    mostrarLoginMsg('O link de redefinição venceu ou já foi usado. Digite seu e-mail e toque em <strong>Esqueci minha senha</strong> para receber outro.', true);
     history.replaceState(null, '', urlDoPainel());
   }
 
-  supabaseClient.auth.onAuthStateChange((evento, s) => {
-    if (evento === 'PASSWORD_RECOVERY') { modoRecuperacao = true; mostrarTelaNovaSenha(); return; }
-    if (modoRecuperacao) return;
-    if (s) mostrarApp();
-    else { $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); }
+  supabaseClient.auth.onAuthStateChange((evento) => {
+    // fora do callback, para não travar o cliente do Supabase
+    setTimeout(() => {
+      if (evento === 'PASSWORD_RECOVERY') { modoRecuperacao = true; aposSessao(); }
+      else if (evento === 'SIGNED_OUT') {
+        if (appJaIniciado) location.replace(urlDoPainel());   // limpa os dados da memória
+        else telaEntrada('login');
+      }
+    }, 0);
   });
 
   const { data: { session } } = await supabaseClient.auth.getSession();
-  if (modoRecuperacao && session) mostrarTelaNovaSenha();
-  else if (session) await mostrarApp();
-  else {
-    $('loginScreen').classList.remove('hidden');
-    if (retornoMicrosoft.erro) { mostrarLoginMsg(retornoMicrosoft.erro, true); retornoMicrosoft.erro = null; }
-    limparFluxoMs();
-  }
+  if (session) await aposSessao();
+  else telaEntrada('login');
 }
 
 function setupLogin() {
   $('formLogin').addEventListener('submit', async (e) => {
     e.preventDefault();
+    esconderMsg('loginMsg');
     const btn = $('btnLogin');
     btn.disabled = true; btn.textContent = 'Entrando...';
     const { error } = await supabaseClient.auth.signInWithPassword({ email: $('loginEmail').value.trim(), password: $('loginSenha').value });
     btn.disabled = false; btn.textContent = 'Entrar';
-    if (error) mostrarLoginMsg(/confirm/i.test(error.message) ? 'Este e-mail ainda não foi confirmado.' : 'E-mail ou senha incorretos.', true);
+    if (error) return mostrarLoginMsg(/confirm/i.test(error.message) ? 'Este e-mail ainda não foi confirmado.' : 'E-mail ou senha incorretos.', true);
+    $('loginSenha').value = '';
+    await aposSessao();
   });
 
-  $('btnEntrarMicrosoft').addEventListener('click', () => iniciarMicrosoft('login'));
+  // código do Authenticator na entrada: confirma sozinho ao completar 6 dígitos
+  const campo = $('codigoLogin');
+  campo.addEventListener('input', () => {
+    campo.value = soCodigo(campo.value);
+    if (campo.value.length === 6) $('formCodigo').requestSubmit();
+  });
+  $('formCodigo').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (soCodigo(campo.value).length !== 6) return mostrarLoginMsg('Digite os 6 números do Authenticator.', true, 'codigoMsg');
+    const btn = $('btnConfirmarCodigo');
+    btn.disabled = true; btn.textContent = 'Verificando...';
+    try {
+      await verificarCodigo(campo.value);
+      campo.value = ''; esconderMsg('codigoMsg');
+      await mostrarApp();
+    } catch (err) {
+      campo.value = '';
+      mostrarLoginMsg(msgErroCodigo(err), true, 'codigoMsg');
+      campo.focus();
+    } finally { btn.disabled = false; btn.textContent = 'Confirmar'; }
+  });
+  $('btnCodigoSair').addEventListener('click', () => supabaseClient.auth.signOut());
 
   $('btnEsqueci').addEventListener('click', async () => {
     const email = $('loginEmail').value.trim();
@@ -266,143 +332,191 @@ function setupLogin() {
     mostrarLoginMsg(`Se <strong>${esc(email)}</strong> tiver acesso ao painel, chega um e-mail em instantes. Abra o link <strong>neste mesmo aparelho</strong>, em até 1 hora.`);
   });
 
+  // nova senha pelo link do e-mail: se a conta tem Authenticator, pede o código também
+  $('novaSenhaCodigo').addEventListener('input', () => { $('novaSenhaCodigo').value = soCodigo($('novaSenhaCodigo').value); });
   $('formNovaSenha').addEventListener('submit', async (e) => {
     e.preventDefault();
     const s1 = $('novaSenha1').value, s2 = $('novaSenha2').value;
-    const msg = $('novaSenhaMsg');
-    const falha = (t) => { msg.innerHTML = t; msg.classList.add('aviso-forte'); msg.classList.remove('hidden'); };
+    const falha = (t) => mostrarLoginMsg(t, true, 'novaSenhaMsg');
     if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
     if (s1 !== s2) return falha('As duas senhas não são iguais.');
+    const pedeCodigo = !$('novaSenhaCodigoWrap').classList.contains('hidden');
+    if (pedeCodigo && soCodigo($('novaSenhaCodigo').value).length !== 6) return falha('Digite os 6 números do Authenticator.');
     const btn = $('btnSalvarNovaSenha');
     btn.disabled = true; btn.textContent = 'Salvando...';
-    const { error } = await supabaseClient.auth.updateUser({ password: s1 });
-    btn.disabled = false; btn.textContent = 'Salvar nova senha';
-    if (error) {
-      return falha(/session|jwt|expired/i.test(error.message)
-        ? 'O link venceu. Volte ao login e peça outro em <strong>Esqueci minha senha</strong>.'
-        : /different|same/i.test(error.message) ? 'A nova senha precisa ser diferente da anterior.'
-          : 'Não foi possível salvar: ' + esc(error.message));
-    }
-    modoRecuperacao = false;
-    history.replaceState(null, '', urlDoPainel());
-    $('formNovaSenha').classList.add('hidden');
-    $('formLogin').classList.remove('hidden');
-    toast('Senha alterada ✓');
-    await mostrarApp();
+    try {
+      if (pedeCodigo) {
+        try { await verificarCodigo($('novaSenhaCodigo').value); }
+        catch (err) { $('novaSenhaCodigo').value = ''; return falha(msgErroCodigo(err)); }
+      }
+      const { error } = await supabaseClient.auth.updateUser({ password: s1 });
+      if (error) {
+        return falha(/session|jwt|expired/i.test(error.message)
+          ? 'O link venceu. Volte ao login e peça outro em <strong>Esqueci minha senha</strong>.'
+          : /different|same/i.test(error.message) ? 'A nova senha precisa ser diferente da anterior.'
+            : /aal2|assurance/i.test(error.message) ? 'Confirme o código do Authenticator para trocar a senha.'
+              : 'Não foi possível salvar: ' + esc(error.message));
+      }
+      modoRecuperacao = false;
+      history.replaceState(null, '', urlDoPainel());
+      $('novaSenha1').value = ''; $('novaSenha2').value = ''; $('novaSenhaCodigo').value = '';
+      toast('Senha alterada ✓');
+      await aposSessao();
+    } finally { btn.disabled = false; btn.textContent = 'Salvar nova senha'; }
   });
 
   $('btnLogout').addEventListener('click', () => supabaseClient.auth.signOut());
 }
 
 // ---------------------------------------------------------
-// Microsoft (provedor "azure" do Supabase)
-// O fluxo sai do site e volta; o que estava sendo feito fica
-// guardado em sessionStorage até a volta.
+// Ajustes → Sua conta: ativar o Authenticator e trocar a senha
 // ---------------------------------------------------------
-const CHAVE_FLUXO_MS = 'marmita_fluxo_ms';
-const SENHA_JANELA_MIN = 5;       // minutos para trocar a senha depois de verificar
-let fluxoMs = (() => { try { return JSON.parse(sessionStorage.getItem(CHAVE_FLUXO_MS) || 'null'); } catch (e) { return null; } })();
-const retornoMicrosoft = { erro: null };
+const SENHA_JANELA_MIN = 5;   // minutos para trocar a senha depois do código
 let senhaLiberadaAte = 0;
+let cadastroPendente = null;  // { id, secret } enquanto o QR está na tela
 
-function guardarFluxoMs(acao, userId) {
-  try { sessionStorage.setItem(CHAVE_FLUXO_MS, JSON.stringify({ acao, userId: userId || null, t: Date.now() })); } catch (e) { /* sem storage */ }
-}
-function limparFluxoMs() { try { sessionStorage.removeItem(CHAVE_FLUXO_MS); } catch (e) { /* */ } fluxoMs = null; }
-
-function mensagemErroAuth(codigo, desc, veioDaMicrosoft) {
-  const t = `${codigo} ${desc}`;
-  if (/signup|sign.?ups? not allowed/i.test(t))
-    return 'Esta conta Microsoft ainda não está ligada ao painel. Entre com e-mail e senha e toque em <strong>Conectar conta Microsoft</strong> em Ajustes.';
-  if (/already.*linked|identity_already_exists|already exists/i.test(t))
-    return 'Essa conta Microsoft já está ligada a outro usuário do painel.';
-  if (/manual.?linking/i.test(t))
-    return 'A ligação de contas está desligada no Supabase. Ative "Allow manual linking" em Authentication.';
-  if (/email/i.test(t) && /provider|external/i.test(t))
-    return 'A Microsoft não enviou o e-mail da conta. Confira a configuração do app no Azure (permissão "email").';
-  if (/provider is not enabled|unsupported provider/i.test(t))
-    return 'O login com Microsoft ainda não foi ativado no Supabase.';
-  if (veioDaMicrosoft && /access_denied|cancel/i.test(t)) return 'Entrada com a Microsoft cancelada.';
-  if (/expired|otp/i.test(t) || /access_denied/i.test(codigo))
-    return 'O link de redefinição venceu ou já foi usado. Digite seu e-mail e toque em <strong>Esqueci minha senha</strong> para receber outro.';
-  return 'Não foi possível entrar: ' + esc(desc || codigo);
-}
-
-async function iniciarMicrosoft(acao) {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  guardarFluxoMs(acao, session?.user?.id);
-  const opcoes = { redirectTo: urlDoPainel(), scopes: 'openid email profile' };
-  const { error } = acao === 'vincular'
-    ? await supabaseClient.auth.linkIdentity({ provider: 'azure', options: opcoes })
-    : await supabaseClient.auth.signInWithOAuth({ provider: 'azure', options: opcoes });
-  if (error) {
-    limparFluxoMs();
-    const msg = mensagemErroAuth(error.code || error.name || '', error.message, true);
-    if (session) toast(msg.replace(/<[^>]+>/g, ''), true); else mostrarLoginMsg(msg, true);
-  }
-}
-
-// método e horário da última autenticação, lidos do token (claim "amr")
-function ultimaAutenticacao(session) {
-  try {
-    const payload = JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
-    return (payload.amr || []).slice().sort((a, b) => b.timestamp - a.timestamp)[0] || null;
-  } catch (e) { return null; }
-}
-
-// Roda uma vez, quando o painel abre depois de voltar da Microsoft
-async function processarRetornoMicrosoft() {
-  if (retornoMicrosoft.erro) { toast(retornoMicrosoft.erro.replace(/<[^>]+>/g, ''), true); retornoMicrosoft.erro = null; }
-  const fluxo = fluxoMs;
-  limparFluxoMs();
-  if (location.hash.includes('access_token')) history.replaceState(null, '', urlDoPainel());
-  if (!fluxo || Date.now() - fluxo.t > 15 * 60 * 1000) return;
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (!session) return;
-
-  if (fluxo.acao === 'vincular') {
-    await renderContaMicrosoft();
-    switchView('ajustes');
-    if (await temMicrosoftVinculada()) toast('Conta Microsoft conectada ✓');
-  } else if (fluxo.acao === 'senha') {
-    switchView('ajustes');
-    const ultima = ultimaAutenticacao(session);
-    const recente = ultima && ultima.method === 'oauth' && (Date.now() / 1000 - ultima.timestamp) < 10 * 60;
-    if (fluxo.userId && fluxo.userId !== session.user.id) {
-      await supabaseClient.auth.signOut();
-      toast('Essa conta Microsoft é de outro usuário. Entre de novo.', true);
-      return;
-    }
-    if (!recente) return toast('Não deu para confirmar a verificação. Tente de novo.', true);
-    liberarTrocaSenha();
-  }
-}
-
-async function identidadesUsuario() {
-  try { const { data } = await supabaseClient.auth.getUserIdentities(); return data?.identities || []; }
-  catch (e) { return []; }
-}
-async function temMicrosoftVinculada() {
-  return (await identidadesUsuario()).some(i => i.provider === 'azure');
-}
-
-async function renderContaMicrosoft() {
+async function renderContaSeguranca() {
   const { data } = await supabaseClient.auth.getUser();
   if (data?.user?.email) $('contaEmail').textContent = 'Entrando como ' + data.user.email;
-  const ms = (await identidadesUsuario()).find(i => i.provider === 'azure');
-  const box = $('contaMicrosoft');
-  if (ms) {
-    const email = ms.identity_data?.email || ms.identity_data?.preferred_username || '';
-    box.innerHTML = `<span class="ms-ok">✓ Conta Microsoft conectada${email ? ': <strong>' + esc(email) + '</strong>' : ''}</span>`;
-    $('btnVerificarMicrosoft').disabled = false;
+  const box = $('mfaBox');
+  const fator = await fatorAutenticador();
+  $('senhaSemMfa').classList.toggle('hidden', !!fator);
+  $('senhaBloqueada').classList.toggle('hidden', !fator || Date.now() < senhaLiberadaAte);
+
+  if (cadastroPendente) return;   // o QR em andamento já está desenhado
+  if (fator) {
+    box.innerHTML = `
+      <div class="mfa-status ok">
+        <span class="mfa-ico" aria-hidden="true">✓</span>
+        <div><strong>Verificação em duas etapas ligada</strong>
+        <small>Toda entrada pede o código do Microsoft Authenticator${fator.friendly_name ? ' (' + esc(fator.friendly_name) + ')' : ''}.</small></div>
+      </div>
+      <details class="mfa-desligar">
+        <summary>Desligar a verificação</summary>
+        <p class="hint">Sem ela, só a senha protege o painel. Digite o código atual para confirmar.</p>
+        <div class="codigo-row">
+          <input type="text" class="input-codigo input-codigo-sm" id="codigoDesligar" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="Código do Authenticator">
+          <button class="btn btn-ghost danger-txt" id="btnDesligarMfa">Desligar</button>
+        </div>
+      </details>`;
+    $('codigoDesligar').oninput = (e) => { e.target.value = soCodigo(e.target.value); };
+    $('btnDesligarMfa').onclick = () => desligarAutenticador(fator.id);
   } else {
-    box.innerHTML = `<p class="hint">Conecte sua conta Microsoft para entrar com ela e para trocar a senha sem precisar da senha atual.</p>
-      <button class="btn btn-ms" id="btnConectarMicrosoft">
-        <svg class="ms-logo" viewBox="0 0 21 21" aria-hidden="true"><path fill="#F25022" d="M1 1h9v9H1z"/><path fill="#7FBA00" d="M11 1h9v9h-9z"/><path fill="#00A4EF" d="M1 11h9v9H1z"/><path fill="#FFB900" d="M11 11h9v9h-9z"/></svg>
-        Conectar conta Microsoft</button>`;
-    $('btnConectarMicrosoft').onclick = () => iniciarMicrosoft('vincular');
-    $('btnVerificarMicrosoft').disabled = true;
+    box.innerHTML = `
+      <div class="mfa-status off">
+        <span class="mfa-ico" aria-hidden="true">!</span>
+        <div><strong>Verificação em duas etapas desligada</strong>
+        <small>Ligue para o painel pedir o código do Microsoft Authenticator a cada entrada.</small></div>
+      </div>
+      <button class="btn btn-primary" id="btnAtivarMfa">Ativar com o Microsoft Authenticator</button>`;
+    $('btnAtivarMfa').onclick = iniciarCadastroAutenticador;
   }
+}
+
+async function iniciarCadastroAutenticador() {
+  const btn = $('btnAtivarMfa');
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando QR code...'; }
+  // limpa tentativas antigas que não foram confirmadas
+  const { data: lista } = await supabaseClient.auth.mfa.listFactors();
+  for (const f of (lista?.all || [])) {
+    if (f.factor_type === 'totp' && f.status !== 'verified') await supabaseClient.auth.mfa.unenroll({ factorId: f.id });
+  }
+  const { data, error } = await supabaseClient.auth.mfa.enroll({
+    factorType: 'totp', friendlyName: 'Microsoft Authenticator', issuer: 'Marmita Control',
+  });
+  if (error) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Ativar com o Microsoft Authenticator'; }
+    return toast(msgErroCodigo(error).replace(/<[^>]+>/g, ''), true);
+  }
+  cadastroPendente = { id: data.id, secret: data.totp.secret };
+  // o QR vem como SVG (às vezes já com prefixo data:); recodifica para o '#' das cores não cortar a imagem
+  const bruto = data.totp.qr_code || '';
+  const i = bruto.search(/<\?xml|<svg/i);
+  let svg = i >= 0 ? bruto.slice(i) : bruto;
+  if (i < 0 && /^data:/i.test(bruto)) { try { svg = decodeURIComponent(bruto.slice(bruto.indexOf(',') + 1)); } catch (e) { svg = ''; } }
+  const qr = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  const chave = data.totp.secret.replace(/(.{4})/g, '$1 ').trim();
+  $('mfaBox').innerHTML = `
+    <ol class="mfa-passos">
+      <li>Instale o <strong>Microsoft Authenticator</strong> (App Store ou Google Play) e abra.</li>
+      <li>Toque em <strong>+</strong> → <strong>Outra conta (Google, Facebook etc.)</strong>.</li>
+      <li class="so-desktop">Aponte a câmera para o QR code:</li>
+      <li class="so-celular">Se estiver neste mesmo celular, toque em <strong>Ou insira o código manualmente</strong> e cole a chave abaixo (nome da conta: Marmita Control).</li>
+    </ol>
+    <div class="mfa-qr"><img src="${esc(qr)}" alt="QR code para o Microsoft Authenticator" width="180" height="180"></div>
+    <div class="mfa-chave">
+      <span class="hint">Chave para digitar à mão</span>
+      <code id="mfaChave">${esc(chave)}</code>
+      <button class="btn btn-ghost btn-sm" id="btnCopiarChave" type="button">Copiar chave</button>
+    </div>
+    <div class="field">
+      <label for="codigoCadastro">4. Digite o código de 6 números que apareceu no app</label>
+      <input type="text" class="input-codigo" id="codigoCadastro" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn btn-ghost btn-block" id="btnCancelarMfa" type="button">Cancelar</button>
+      <button class="btn btn-primary btn-block" id="btnConfirmarMfa" type="button">Ativar</button>
+    </div>`;
+  $('btnCopiarChave').onclick = async () => {
+    try { await navigator.clipboard.writeText(cadastroPendente.secret); toast('Chave copiada ✓'); }
+    catch (e) { toast('Segure o dedo sobre a chave para copiar', true); }
+  };
+  const campo = $('codigoCadastro');
+  campo.oninput = () => { campo.value = soCodigo(campo.value); if (campo.value.length === 6) confirmarCadastroAutenticador(); };
+  $('btnConfirmarMfa').onclick = confirmarCadastroAutenticador;
+  $('btnCancelarMfa').onclick = async () => {
+    const id = cadastroPendente?.id; cadastroPendente = null;
+    if (id) await supabaseClient.auth.mfa.unenroll({ factorId: id });
+    renderContaSeguranca();
+  };
+}
+
+let _confirmando = false;
+async function confirmarCadastroAutenticador() {
+  if (_confirmando || !cadastroPendente) return;
+  const campo = $('codigoCadastro');
+  if (soCodigo(campo.value).length !== 6) return toast('Digite os 6 números do app', true);
+  _confirmando = true; $('btnConfirmarMfa').disabled = true;
+  try {
+    await verificarCodigo(campo.value, cadastroPendente.id);
+    cadastroPendente = null;
+    toast('Verificação em duas etapas ligada ✓');
+    await renderContaSeguranca();
+  } catch (err) {
+    campo.value = '';
+    toast(msgErroCodigo(err).replace(/<[^>]+>/g, ''), true);
+  } finally {
+    _confirmando = false;
+    const b = $('btnConfirmarMfa'); if (b) b.disabled = false;
+  }
+}
+
+async function desligarAutenticador(factorId) {
+  const codigo = $('codigoDesligar').value;
+  if (soCodigo(codigo).length !== 6) return toast('Digite o código atual do Authenticator', true);
+  if (!confirm('Desligar a verificação em duas etapas? A entrada passa a pedir só e-mail e senha.')) return;
+  try {
+    await verificarCodigo(codigo, factorId);
+    const { error } = await supabaseClient.auth.mfa.unenroll({ factorId });
+    if (error) throw error;
+    toast('Verificação em duas etapas desligada');
+    await renderContaSeguranca();
+  } catch (err) { toast(msgErroCodigo(err).replace(/<[^>]+>/g, ''), true); }
+}
+
+// troca de senha: o código do Authenticator substitui a senha atual
+async function liberarTrocaSenhaComCodigo() {
+  const campo = $('codigoSenha');
+  if (soCodigo(campo.value).length !== 6) return toast('Digite os 6 números do Authenticator', true);
+  const btn = $('btnLiberarSenha'); btn.disabled = true;
+  try {
+    await verificarCodigo(campo.value);
+    campo.value = '';
+    liberarTrocaSenha();
+  } catch (err) {
+    campo.value = '';
+    toast(msgErroCodigo(err).replace(/<[^>]+>/g, ''), true);
+  } finally { btn.disabled = false; }
 }
 
 let _timerSenha = null;
@@ -413,7 +527,7 @@ function liberarTrocaSenha() {
   const tick = () => {
     const resta = Math.max(0, Math.round((senhaLiberadaAte - Date.now()) / 1000));
     if (resta <= 0) { bloquearTrocaSenha(); return; }
-    $('senhaLiberadaTxt').innerHTML = `Verificado com a Microsoft ✓ Escolha a nova senha em até <strong>${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, '0')}</strong>.`;
+    $('senhaLiberadaTxt').innerHTML = `Código confirmado ✓ Escolha a nova senha em até <strong>${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, '0')}</strong>.`;
   };
   tick();
   clearInterval(_timerSenha);
@@ -425,11 +539,11 @@ function bloquearTrocaSenha() {
   senhaLiberadaAte = 0;
   $('trocaSenha1').value = ''; $('trocaSenha2').value = '';
   $('senhaLiberada').classList.add('hidden');
-  $('senhaBloqueada').classList.remove('hidden');
+  renderContaSeguranca();
 }
 
 async function trocarSenhaLogado() {
-  if (Date.now() > senhaLiberadaAte) { bloquearTrocaSenha(); return toast('Verifique com a Microsoft de novo', true); }
+  if (Date.now() > senhaLiberadaAte) { bloquearTrocaSenha(); return toast('Digite o código do Authenticator de novo', true); }
   const s1 = $('trocaSenha1').value, s2 = $('trocaSenha2').value;
   if (s1.length < 6) return toast('A senha precisa ter pelo menos 6 caracteres', true);
   if (s1 !== s2) return toast('As duas senhas não são iguais', true);
@@ -472,7 +586,17 @@ async function init() {
   switchView('dashboard');
   const telaPedida = typeof telaInicialPedida === 'function' ? telaInicialPedida() : null;
   if (telaPedida) switchView(telaPedida);
-  await processarRetornoMicrosoft();
+  avisoAtivarVerificacao();
+}
+
+// lembrete no Painel enquanto a verificação em duas etapas estiver desligada
+async function avisoAtivarVerificacao() {
+  if (await fatorAutenticador()) return;
+  const el = document.createElement('button');
+  el.className = 'alerta alerta-acao';
+  el.innerHTML = '<strong>Proteja o painel:</strong> ative o código do Microsoft Authenticator na entrada. Toque para configurar.';
+  el.onclick = () => { el.remove(); switchView('ajustes'); };
+  $('view-dashboard').prepend(el);
 }
 
 function updateClock() {
@@ -735,8 +859,12 @@ function setupAjustes() {
 
   $('btnBackup').addEventListener('click', baixarBackup);
   $('btnTrocarSenha').addEventListener('click', trocarSenhaLogado);
-  $('btnVerificarMicrosoft').addEventListener('click', () => iniciarMicrosoft('senha'));
-  renderContaMicrosoft();
+  $('btnLiberarSenha').addEventListener('click', liberarTrocaSenhaComCodigo);
+  $('codigoSenha').addEventListener('input', (e) => {
+    e.target.value = soCodigo(e.target.value);
+    if (e.target.value.length === 6) liberarTrocaSenhaComCodigo();
+  });
+  renderContaSeguranca();
 }
 
 function renderRecursosStatus() {
