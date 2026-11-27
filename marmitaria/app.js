@@ -181,17 +181,57 @@ function salvarLocal(chave, valor) {
 // ---------------------------------------------------------
 document.addEventListener('DOMContentLoaded', boot);
 
+// O link do e-mail "Redefina sua senha" volta para o painel com
+// #access_token=...&type=recovery (ou #error=... se expirou).
+// Lido ANTES do Supabase limpar o endereço.
+const hashInicial = new URLSearchParams(location.hash.replace(/^#/, ''));
+const queryInicial = new URLSearchParams(location.search);
+let modoRecuperacao = hashInicial.get('type') === 'recovery' || queryInicial.get('type') === 'recovery';
+
+function urlDoPainel() { return location.origin + location.pathname; }
+
+function mostrarLoginMsg(html, erro) {
+  const el = $('loginMsg');
+  el.innerHTML = html;
+  el.classList.toggle('aviso-forte', !!erro);
+  el.classList.remove('hidden');
+}
+
+function mostrarTelaNovaSenha() {
+  $('app').classList.add('hidden');
+  $('loginScreen').classList.remove('hidden');
+  $('formLogin').classList.add('hidden');
+  $('formNovaSenha').classList.remove('hidden');
+  setTimeout(() => $('novaSenha1').focus(), 100);
+}
+
 async function boot() {
   if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes('COLE_AQUI')) $('configWarning').classList.remove('hidden');
   setupLogin();
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session) await mostrarApp();
-  else $('loginScreen').classList.remove('hidden');
 
-  supabaseClient.auth.onAuthStateChange((_e, s) => {
+  // link vencido, já usado ou aberto antes pelo antivírus do e-mail
+  const erroLink = hashInicial.get('error_code') || hashInicial.get('error') || queryInicial.get('error_code') || queryInicial.get('error');
+  if (erroLink) {
+    const desc = hashInicial.get('error_description') || queryInicial.get('error_description') || '';
+    retornoMicrosoft.erro = mensagemErroAuth(erroLink, desc, !!fluxoMs);
+    history.replaceState(null, '', urlDoPainel());
+  }
+
+  supabaseClient.auth.onAuthStateChange((evento, s) => {
+    if (evento === 'PASSWORD_RECOVERY') { modoRecuperacao = true; mostrarTelaNovaSenha(); return; }
+    if (modoRecuperacao) return;
     if (s) mostrarApp();
     else { $('app').classList.add('hidden'); $('loginScreen').classList.remove('hidden'); }
   });
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (modoRecuperacao && session) mostrarTelaNovaSenha();
+  else if (session) await mostrarApp();
+  else {
+    $('loginScreen').classList.remove('hidden');
+    if (retornoMicrosoft.erro) { mostrarLoginMsg(retornoMicrosoft.erro, true); retornoMicrosoft.erro = null; }
+    limparFluxoMs();
+  }
 }
 
 function setupLogin() {
@@ -201,9 +241,204 @@ function setupLogin() {
     btn.disabled = true; btn.textContent = 'Entrando...';
     const { error } = await supabaseClient.auth.signInWithPassword({ email: $('loginEmail').value.trim(), password: $('loginSenha').value });
     btn.disabled = false; btn.textContent = 'Entrar';
-    if (error) toast('E-mail ou senha incorretos', true);
+    if (error) mostrarLoginMsg(/confirm/i.test(error.message) ? 'Este e-mail ainda não foi confirmado.' : 'E-mail ou senha incorretos.', true);
   });
+
+  $('btnEntrarMicrosoft').addEventListener('click', () => iniciarMicrosoft('login'));
+
+  $('btnEsqueci').addEventListener('click', async () => {
+    const email = $('loginEmail').value.trim();
+    if (!email || !$('loginEmail').checkValidity()) {
+      mostrarLoginMsg('Digite seu e-mail no campo acima e toque de novo em <strong>Esqueci minha senha</strong>.', true);
+      $('loginEmail').focus();
+      return;
+    }
+    const btn = $('btnEsqueci');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: urlDoPainel() });
+    btn.disabled = false; btn.textContent = 'Esqueci minha senha';
+    if (error) {
+      mostrarLoginMsg(/rate|seconds|limit/i.test(error.message)
+        ? 'Muitos pedidos seguidos. Espere 1 minuto e tente de novo.'
+        : 'Não foi possível enviar: ' + esc(error.message), true);
+      return;
+    }
+    mostrarLoginMsg(`Se <strong>${esc(email)}</strong> tiver acesso ao painel, chega um e-mail em instantes. Abra o link <strong>neste mesmo aparelho</strong>, em até 1 hora.`);
+  });
+
+  $('formNovaSenha').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const s1 = $('novaSenha1').value, s2 = $('novaSenha2').value;
+    const msg = $('novaSenhaMsg');
+    const falha = (t) => { msg.innerHTML = t; msg.classList.add('aviso-forte'); msg.classList.remove('hidden'); };
+    if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
+    if (s1 !== s2) return falha('As duas senhas não são iguais.');
+    const btn = $('btnSalvarNovaSenha');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+    const { error } = await supabaseClient.auth.updateUser({ password: s1 });
+    btn.disabled = false; btn.textContent = 'Salvar nova senha';
+    if (error) {
+      return falha(/session|jwt|expired/i.test(error.message)
+        ? 'O link venceu. Volte ao login e peça outro em <strong>Esqueci minha senha</strong>.'
+        : /different|same/i.test(error.message) ? 'A nova senha precisa ser diferente da anterior.'
+          : 'Não foi possível salvar: ' + esc(error.message));
+    }
+    modoRecuperacao = false;
+    history.replaceState(null, '', urlDoPainel());
+    $('formNovaSenha').classList.add('hidden');
+    $('formLogin').classList.remove('hidden');
+    toast('Senha alterada ✓');
+    await mostrarApp();
+  });
+
   $('btnLogout').addEventListener('click', () => supabaseClient.auth.signOut());
+}
+
+// ---------------------------------------------------------
+// Microsoft (provedor "azure" do Supabase)
+// O fluxo sai do site e volta; o que estava sendo feito fica
+// guardado em sessionStorage até a volta.
+// ---------------------------------------------------------
+const CHAVE_FLUXO_MS = 'marmita_fluxo_ms';
+const SENHA_JANELA_MIN = 5;       // minutos para trocar a senha depois de verificar
+let fluxoMs = (() => { try { return JSON.parse(sessionStorage.getItem(CHAVE_FLUXO_MS) || 'null'); } catch (e) { return null; } })();
+const retornoMicrosoft = { erro: null };
+let senhaLiberadaAte = 0;
+
+function guardarFluxoMs(acao, userId) {
+  try { sessionStorage.setItem(CHAVE_FLUXO_MS, JSON.stringify({ acao, userId: userId || null, t: Date.now() })); } catch (e) { /* sem storage */ }
+}
+function limparFluxoMs() { try { sessionStorage.removeItem(CHAVE_FLUXO_MS); } catch (e) { /* */ } fluxoMs = null; }
+
+function mensagemErroAuth(codigo, desc, veioDaMicrosoft) {
+  const t = `${codigo} ${desc}`;
+  if (/signup|sign.?ups? not allowed/i.test(t))
+    return 'Esta conta Microsoft ainda não está ligada ao painel. Entre com e-mail e senha e toque em <strong>Conectar conta Microsoft</strong> em Ajustes.';
+  if (/already.*linked|identity_already_exists|already exists/i.test(t))
+    return 'Essa conta Microsoft já está ligada a outro usuário do painel.';
+  if (/manual.?linking/i.test(t))
+    return 'A ligação de contas está desligada no Supabase. Ative "Allow manual linking" em Authentication.';
+  if (/email/i.test(t) && /provider|external/i.test(t))
+    return 'A Microsoft não enviou o e-mail da conta. Confira a configuração do app no Azure (permissão "email").';
+  if (/provider is not enabled|unsupported provider/i.test(t))
+    return 'O login com Microsoft ainda não foi ativado no Supabase.';
+  if (veioDaMicrosoft && /access_denied|cancel/i.test(t)) return 'Entrada com a Microsoft cancelada.';
+  if (/expired|otp/i.test(t) || /access_denied/i.test(codigo))
+    return 'O link de redefinição venceu ou já foi usado. Digite seu e-mail e toque em <strong>Esqueci minha senha</strong> para receber outro.';
+  return 'Não foi possível entrar: ' + esc(desc || codigo);
+}
+
+async function iniciarMicrosoft(acao) {
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  guardarFluxoMs(acao, session?.user?.id);
+  const opcoes = { redirectTo: urlDoPainel(), scopes: 'openid email profile' };
+  const { error } = acao === 'vincular'
+    ? await supabaseClient.auth.linkIdentity({ provider: 'azure', options: opcoes })
+    : await supabaseClient.auth.signInWithOAuth({ provider: 'azure', options: opcoes });
+  if (error) {
+    limparFluxoMs();
+    const msg = mensagemErroAuth(error.code || error.name || '', error.message, true);
+    if (session) toast(msg.replace(/<[^>]+>/g, ''), true); else mostrarLoginMsg(msg, true);
+  }
+}
+
+// método e horário da última autenticação, lidos do token (claim "amr")
+function ultimaAutenticacao(session) {
+  try {
+    const payload = JSON.parse(atob(session.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    return (payload.amr || []).slice().sort((a, b) => b.timestamp - a.timestamp)[0] || null;
+  } catch (e) { return null; }
+}
+
+// Roda uma vez, quando o painel abre depois de voltar da Microsoft
+async function processarRetornoMicrosoft() {
+  if (retornoMicrosoft.erro) { toast(retornoMicrosoft.erro.replace(/<[^>]+>/g, ''), true); retornoMicrosoft.erro = null; }
+  const fluxo = fluxoMs;
+  limparFluxoMs();
+  if (location.hash.includes('access_token')) history.replaceState(null, '', urlDoPainel());
+  if (!fluxo || Date.now() - fluxo.t > 15 * 60 * 1000) return;
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  if (!session) return;
+
+  if (fluxo.acao === 'vincular') {
+    await renderContaMicrosoft();
+    switchView('ajustes');
+    if (await temMicrosoftVinculada()) toast('Conta Microsoft conectada ✓');
+  } else if (fluxo.acao === 'senha') {
+    switchView('ajustes');
+    const ultima = ultimaAutenticacao(session);
+    const recente = ultima && ultima.method === 'oauth' && (Date.now() / 1000 - ultima.timestamp) < 10 * 60;
+    if (fluxo.userId && fluxo.userId !== session.user.id) {
+      await supabaseClient.auth.signOut();
+      toast('Essa conta Microsoft é de outro usuário. Entre de novo.', true);
+      return;
+    }
+    if (!recente) return toast('Não deu para confirmar a verificação. Tente de novo.', true);
+    liberarTrocaSenha();
+  }
+}
+
+async function identidadesUsuario() {
+  try { const { data } = await supabaseClient.auth.getUserIdentities(); return data?.identities || []; }
+  catch (e) { return []; }
+}
+async function temMicrosoftVinculada() {
+  return (await identidadesUsuario()).some(i => i.provider === 'azure');
+}
+
+async function renderContaMicrosoft() {
+  const { data } = await supabaseClient.auth.getUser();
+  if (data?.user?.email) $('contaEmail').textContent = 'Entrando como ' + data.user.email;
+  const ms = (await identidadesUsuario()).find(i => i.provider === 'azure');
+  const box = $('contaMicrosoft');
+  if (ms) {
+    const email = ms.identity_data?.email || ms.identity_data?.preferred_username || '';
+    box.innerHTML = `<span class="ms-ok">✓ Conta Microsoft conectada${email ? ': <strong>' + esc(email) + '</strong>' : ''}</span>`;
+    $('btnVerificarMicrosoft').disabled = false;
+  } else {
+    box.innerHTML = `<p class="hint">Conecte sua conta Microsoft para entrar com ela e para trocar a senha sem precisar da senha atual.</p>
+      <button class="btn btn-ms" id="btnConectarMicrosoft">
+        <svg class="ms-logo" viewBox="0 0 21 21" aria-hidden="true"><path fill="#F25022" d="M1 1h9v9H1z"/><path fill="#7FBA00" d="M11 1h9v9h-9z"/><path fill="#00A4EF" d="M1 11h9v9H1z"/><path fill="#FFB900" d="M11 11h9v9h-9z"/></svg>
+        Conectar conta Microsoft</button>`;
+    $('btnConectarMicrosoft').onclick = () => iniciarMicrosoft('vincular');
+    $('btnVerificarMicrosoft').disabled = true;
+  }
+}
+
+let _timerSenha = null;
+function liberarTrocaSenha() {
+  senhaLiberadaAte = Date.now() + SENHA_JANELA_MIN * 60 * 1000;
+  $('senhaBloqueada').classList.add('hidden');
+  $('senhaLiberada').classList.remove('hidden');
+  const tick = () => {
+    const resta = Math.max(0, Math.round((senhaLiberadaAte - Date.now()) / 1000));
+    if (resta <= 0) { bloquearTrocaSenha(); return; }
+    $('senhaLiberadaTxt').innerHTML = `Verificado com a Microsoft ✓ Escolha a nova senha em até <strong>${Math.floor(resta / 60)}:${String(resta % 60).padStart(2, '0')}</strong>.`;
+  };
+  tick();
+  clearInterval(_timerSenha);
+  _timerSenha = setInterval(tick, 1000);
+  setTimeout(() => $('trocaSenha1').focus(), 200);
+}
+function bloquearTrocaSenha() {
+  clearInterval(_timerSenha);
+  senhaLiberadaAte = 0;
+  $('trocaSenha1').value = ''; $('trocaSenha2').value = '';
+  $('senhaLiberada').classList.add('hidden');
+  $('senhaBloqueada').classList.remove('hidden');
+}
+
+async function trocarSenhaLogado() {
+  if (Date.now() > senhaLiberadaAte) { bloquearTrocaSenha(); return toast('Verifique com a Microsoft de novo', true); }
+  const s1 = $('trocaSenha1').value, s2 = $('trocaSenha2').value;
+  if (s1.length < 6) return toast('A senha precisa ter pelo menos 6 caracteres', true);
+  if (s1 !== s2) return toast('As duas senhas não são iguais', true);
+  const btn = $('btnTrocarSenha'); btn.disabled = true;
+  const { error } = await supabaseClient.auth.updateUser({ password: s1 });
+  btn.disabled = false;
+  if (error) return toast(/different|same/i.test(error.message) ? 'A nova senha precisa ser diferente da atual' : 'Erro: ' + error.message, true);
+  bloquearTrocaSenha();
+  toast('Senha alterada ✓');
 }
 
 let appJaIniciado = false;
@@ -235,6 +470,9 @@ async function init() {
   await detectarRecursos();
   await refreshAll();
   switchView('dashboard');
+  const telaPedida = typeof telaInicialPedida === 'function' ? telaInicialPedida() : null;
+  if (telaPedida) switchView(telaPedida);
+  await processarRetornoMicrosoft();
 }
 
 function updateClock() {
@@ -496,6 +734,9 @@ function setupAjustes() {
   d1.addEventListener('change', aplicar); d2.addEventListener('change', aplicar);
 
   $('btnBackup').addEventListener('click', baixarBackup);
+  $('btnTrocarSenha').addEventListener('click', trocarSenhaLogado);
+  $('btnVerificarMicrosoft').addEventListener('click', () => iniciarMicrosoft('senha'));
+  renderContaMicrosoft();
 }
 
 function renderRecursosStatus() {

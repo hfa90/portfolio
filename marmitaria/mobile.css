@@ -1,0 +1,210 @@
+/* =========================================================
+   MARMITA CONTROL — camada exclusiva do celular (≤ 900px)
+   Carregada só no celular (media no <link>). Deixa o site com
+   comportamento de app nativo de iPhone:
+   - fonte do sistema (San Francisco no iPhone / Roboto no Android)
+   - sem zoom ao tocar em botões e campos, sem pinça
+   - a tela não se mexe para os lados ao arrastar o dedo
+   - barra de abas translúcida, título grande que encolhe,
+     folhas que fecham arrastando para baixo, puxar para atualizar
+   ========================================================= */
+:root {
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --tabbar-h: 54px;
+  --sep: .5px;
+}
+
+/* ---------- trava de zoom e de arrasto lateral ---------- */
+html {
+  overflow-x: hidden;
+  overscroll-behavior: none;          /* sem "elástico" que arrasta a página */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: pan-y;                /* só rolagem vertical: sem pinça, sem arrasto lateral */
+  background: var(--paper);
+}
+body {
+  overflow-x: clip;                   /* corta sobras sem virar uma segunda rolagem */
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+  width: 100%;
+  min-height: 100dvh;
+  font-size: 17px;
+  line-height: 1.35;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;                  /* como app: toque não seleciona texto */
+  -webkit-touch-callout: none;
+}
+.app, .main, .view-scroll { max-width: 100vw; }
+.view-scroll { overflow-x: clip; }
+
+/* áreas que rolam de lado continuam rolando, mas só elas */
+.periodo-scroll, .mensal-chart, .rec-lista, .suggestions, .menu-pop {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.periodo-scroll::-webkit-scrollbar, .mensal-chart::-webkit-scrollbar { display: none; }
+.periodo-scroll, .mensal-chart { scrollbar-width: none; }
+
+/* campos: 17px impede o iPhone de dar zoom ao focar */
+input, textarea, select {
+  font-size: 17px !important;
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: 10px;
+  min-height: 44px;
+}
+input[type=checkbox], input[type=radio] { -webkit-appearance: auto; appearance: auto; min-height: 0; }
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%237C877F' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px !important;
+}
+input[type=date] { display: block; min-width: 0; text-align: left; }
+input::-webkit-date-and-time-value { text-align: left; }
+.input-sm { min-height: 38px !important; }
+
+/* toque: sem atraso de duplo toque, sem menu de "copiar" */
+button, a, summary, label, .chip, .row-item, [role=button] {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+
+/* ---------- tipografia estilo iOS ---------- */
+small { font-size: 13px; }
+.hint { font-size: 15px; }
+.kpi-label, .highlight-label { font-size: 13px; font-weight: 500; }
+.kpi-value { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.section-head { margin: 28px 4px 8px; }
+.section-head h2 { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+.row-title { font-weight: 600; font-size: 17px; }
+.row-sub { font-size: 14px; }
+.ticket-cliente { font-weight: 600; font-size: 17px; }
+.ticket-total, .fiado-valor, .resumo-total-row, .cupom-valor, .fiado-total-valor { letter-spacing: -.02em; }
+.greeting h2 { font-size: 22px; }
+
+/* ---------- barra de título: grande, encolhe ao rolar ---------- */
+.topbar {
+  padding: calc(env(safe-area-inset-top) + 8px) 16px 8px;
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: var(--sep) solid transparent;
+  transition: border-color .2s;
+  min-height: calc(env(safe-area-inset-top) + 56px);
+}
+.topbar h1 { font-size: 32px; font-weight: 700; letter-spacing: -.025em; transition: font-size .18s ease; }
+body.rolou .topbar { border-bottom-color: var(--line); }
+body.rolou .topbar h1 { font-size: 17px; font-weight: 600; letter-spacing: -.01em; text-align: center; }
+.topbar .btn { min-height: 34px; padding: 6px 12px; }
+.topbar-back { width: 34px; height: 34px; border: 0; background: var(--surface-2); color: var(--basil); font-size: 26px; }
+#btnRecarregar { display: none; }      /* no celular: puxar para baixo atualiza */
+
+.view-scroll { padding: 4px 16px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 28px); }
+.view.active { animation: none; }
+
+/* ---------- barra de abas inferior (iOS) ---------- */
+.bottom-nav {
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  padding: 0 4px env(safe-area-inset-bottom);
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  border-top: var(--sep) solid var(--line);
+  align-items: stretch;
+  -webkit-user-select: none; user-select: none;
+}
+.bn-item { color: var(--muted); font-size: 10.5px; font-weight: 500; gap: 3px; padding: 6px 0 0; justify-content: flex-start; }
+.bn-item .bn-ico { width: 26px; height: 26px; }
+.bn-item.active { color: var(--basil); }
+.bn-fab { justify-content: center; padding: 0; }
+.bn-fab .bn-ico { width: 44px; height: 44px; margin: 0; padding: 11px; box-shadow: none; background: var(--basil); color: #fff; }
+.bn-fab.active .bn-ico { background: var(--ink); }
+.nav-badge { font-size: 11px; }
+
+/* ---------- botões ---------- */
+.btn { min-height: 44px; border-radius: 12px; font-size: 16px; font-weight: 600; transition: opacity .1s; }
+.btn-sm { min-height: 36px; font-size: 15px; padding: 7px 12px; border-radius: 10px; }
+.btn-lg { min-height: 52px; font-size: 17px; }
+.btn:not(:disabled):active, .chip:active, .row-item:active, .cliente-card:active, .periodo-card:active,
+.mais-item:active, .bn-item:active, .qty-btn:active, .produto-add:active, .menu-pop button:active {
+  transform: none; opacity: .55;
+}
+.chip { min-height: 34px; font-size: 15px; padding: 6px 14px; }
+.qty-btn { width: 40px; height: 40px; font-size: 22px; }
+.link-btn { font-size: 15px; min-height: 36px; }
+
+/* sem "hover grudado" depois do toque */
+@media (hover: none) {
+  .btn-ghost:hover { background: var(--surface); }
+  .row-item[data-ficha]:hover, .menu-pop button:hover, .suggestion-item:hover { background: none; }
+  .cliente-card:hover, button.kpi:hover { border-color: var(--line); }
+  button.row-main:hover .row-title, .ticket-cliente:hover, .fiado-nome:hover strong { text-decoration: none; }
+  .btn-primary:hover, .btn-yolk:hover { filter: none; }
+}
+
+/* ---------- listas agrupadas (iOS) ---------- */
+.card, .kpi, .ticket, .fiado-card, .cliente-card, .faixa { border-width: var(--sep); }
+.simple-list { padding: 0 0 0 14px; }
+.row-item { padding: 11px 14px 11px 0; border-bottom-width: var(--sep); min-height: 52px; }
+.produto-row { border-bottom-width: var(--sep); }
+.kpi-grid, .kpi-grid-6 { gap: 8px; }
+.ticket { border-left-width: 4px; }
+.cliente-grid, .fiado-list, .ticket-list { gap: 8px; }
+
+/* ---------- folhas (sheets) ---------- */
+.sheet, .sheet-lg {
+  border-radius: 14px 14px 0 0;
+  max-height: calc(100dvh - env(safe-area-inset-top) - 24px);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  transition: transform .28s cubic-bezier(.32, .72, 0, 1);
+  will-change: transform;
+}
+.sheet.arrastando { transition: none; }
+.sheet-grabber { width: 36px; height: 5px; margin: -6px auto 14px; background: var(--line); }
+.sheet-title { font-size: 20px; font-weight: 700; letter-spacing: -.02em; }
+.sheet-overlay { background: rgba(0, 0, 0, .35); }
+.sheet-actions { position: sticky; bottom: calc(-18px - env(safe-area-inset-bottom)); background: var(--paper);
+  padding: 10px 0 4px; margin-bottom: -4px; }
+.mais-item { font-size: 17px; font-weight: 500; min-height: 52px; }
+
+/* toast acima da barra de abas */
+.toast { bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px); border-radius: 14px; font-weight: 500; }
+
+/* login em tela cheia */
+.login-screen { padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px); align-items: center; }
+.login-box { max-width: 420px; border-radius: 18px; }
+
+/* puxar para atualizar */
+.ptr {
+  position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 60px); z-index: 40;
+  width: 34px; height: 34px; margin-left: -17px; border-radius: 50%;
+  background: var(--surface); border: var(--sep) solid var(--line);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .12);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transform: translateY(-40px) scale(.7); pointer-events: none;
+}
+.ptr svg { width: 18px; height: 18px; color: var(--basil); }
+.ptr.pronto svg { color: var(--ink); }
+.ptr.girando svg { animation: gira .8s linear infinite; }
+@keyframes gira { to { transform: rotate(360deg); } }
+
+/* produtos do novo pedido: botão inteiro grande */
+.produto-add { padding: 10px 10px 2px; min-height: 64px; }
+.produtos-grid { gap: 8px; }
+
+/* menus "•••" com alvos de toque maiores */
+.menu-pop { min-width: 220px; border-radius: 14px; }
+.menu-pop button { padding: 12px 14px; font-size: 16px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar h1, .sheet { transition: none; }
+}
+
+/* ficha do cliente: o nome já está no título da barra */
+#view-cliente .ficha-nome { display: none; }
