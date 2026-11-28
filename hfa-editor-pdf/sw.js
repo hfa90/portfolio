@@ -1,11 +1,13 @@
 // Service worker: deixa o editor funcionando offline.
 // Troque VERSION a cada publicação para os navegadores baixarem a versão nova.
-const VERSION = 'hfa-v2.0.0';
+const VERSION = 'hfa-v2.1.0';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',
   'src/main.js', 'src/util.js', 'src/state.js', 'src/history.js', 'src/pdf.js', 'src/render.js', 'src/elements.js',
   'src/select.js', 'src/textedit.js', 'src/panel.js', 'src/media.js', 'src/export.js', 'src/autosave.js',
+  'src/convert/ui.js', 'src/convert/libs.js', 'src/convert/pdfread.js', 'src/convert/layout.js', 'src/convert/fontfit.js',
+  'src/convert/docxwriter.js', 'src/convert/pdf2docx.js', 'src/convert/docx2pdf.js', 'src/convert/docxlayout.js',
   'vendor/pdfjs/pdf.min.mjs', 'vendor/pdfjs/pdf.worker.min.mjs', 'vendor/pdf-lib/pdf-lib.esm.min.js',
   'vendor/fonts/fonts.css',
   'vendor/fonts/inter-latin-wght-normal.woff2', 'vendor/fonts/inter-latin-ext-wght-normal.woff2',

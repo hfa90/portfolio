@@ -58,11 +58,17 @@
       <div id="drop" class="drop">
         <div class="drop-ic" data-icon="filepdf" aria-hidden="true"></div>
         <button class="btn btn-primary btn-lg" id="pickBtn" type="button">Selecionar arquivo PDF</button>
-        <p class="drop-hint">ou arraste e solte o PDF aqui</p>
+        <p class="drop-hint">ou arraste e solte o PDF aqui (um .docx do Word também abre)</p>
         <div class="drop-or"><span>ou</span></div>
         <button class="btn btn-ghost" id="blankBtn" type="button" data-icon="plus">Começar com uma página em branco</button>
       </div>
-      <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple hidden>
+      <input type="file" id="fileIn" accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
+
+      <div class="conv-cta" role="group" aria-label="Converter arquivos">
+        <span class="conv-lbl" data-icon="convert">Converter</span>
+        <button class="btn btn-ghost" type="button" data-open-conv="p2w" data-icon="fileword">PDF para Word</button>
+        <button class="btn btn-ghost" type="button" data-open-conv="w2p" data-icon="filepdf">Word para PDF</button>
+      </div>
 
       <ul class="trust">
         <li data-icon="check">Seu arquivo nunca sai do seu computador</li>
@@ -86,6 +92,7 @@
         <article class="feat"><div class="fi" data-icon="undo"></div><h3>Desfazer e rascunho automático</h3><p>Ctrl+Z e Ctrl+Y em qualquer alteração. Se a aba fechar, o trabalho é recuperado na próxima visita.</p></article>
         <article class="feat"><div class="fi" data-icon="pointer"></div><h3>Edição precisa</h3><p>Seleção múltipla, copiar e colar entre páginas, guias de alinhamento, girar elementos e zoom por pinça no celular.</p></article>
         <article class="feat"><div class="fi" data-icon="filepdf"></div><h3>Formulários preservados</h3><p>Ao editar um PDF sem reorganizar as páginas, campos de formulário, marcadores e links continuam funcionando.</p></article>
+        <article class="feat"><div class="fi" data-icon="convert"></div><h3>PDF ⇄ Word com precisão</h3><p>PDF vira .docx editável (parágrafos, tabelas, listas, links e imagens no lugar) ou com o layout idêntico. Word vira PDF com quebras de página, numeração e tabulações como no Word.</p></article>
         <article class="feat"><div class="fi" data-icon="shield"></div><h3>Privado por padrão</h3><p>Sem upload, sem conta e sem banco de dados. O PDF é montado no seu dispositivo.</p></article>
       </div>
     </section>
@@ -128,6 +135,7 @@
       <details><summary>Existe limite de páginas ou de tamanho?</summary><p>Não há limite imposto pelo site. O que manda é a memória do seu dispositivo; arquivos com centenas de páginas funcionam, porque as páginas são desenhadas sob demanda.</p></details>
       <details><summary>Funciona no celular?</summary><p>Sim. A interface se adapta a telas pequenas e as ferramentas funcionam com toque.</p></details>
       <details><summary>Quais PDFs não são suportados?</summary><p>PDFs protegidos por senha ou criptografados precisam ser desbloqueados antes. Textos adicionados usam Helvetica, Times ou Courier; caracteres fora delas (símbolos, grego, cirílico) são gravados com a fonte DejaVu. Alfabetos asiáticos e parte dos emojis ainda não são suportados e viram “?”, com aviso (os emojis que a DejaVu tem saem em preto e branco).</p></details>
+      <details><summary>Como funciona a conversão entre PDF e Word?</summary><p>Também acontece só no seu navegador. <b>PDF para Word</b> tem dois modos: <b>Editável</b>, que remonta parágrafos, tabelas (a partir das linhas do PDF), listas, sublinhados, links e imagens, calculando o espaçamento para cada linha cair no mesmo lugar; e <b>Layout idêntico</b>, que mantém o fundo da página (imagens e desenhos) e põe o texto em caixas na posição exata. Páginas tipo cartaz saem automaticamente no layout idêntico. <b>Word para PDF</b> usa fontes com as mesmas medidas das fontes do Office (Calibri, Cambria, Arial, Times New Roman, Courier New) para as linhas quebrarem nos mesmos pontos, e refaz a paginação, a numeração de listas, as tabulações, as caixas de texto e os números de página. Limitações: PDFs digitalizados sem texto (sem OCR) entram como imagem; arquivos .doc antigos precisam ser salvos como .docx; gráficos nativos do Word e imagens EMF/WMF não são desenhados; o texto não contorna imagens flutuantes.</p></details>
       <details><summary>Funciona sem internet?</summary><p>Sim. Depois do primeiro acesso o site fica guardado no navegador e funciona offline. No Chrome e no Edge dá para instalá-lo como aplicativo e abrir PDFs direto pelo “Abrir com…”.</p></details>
     </section>
   </main>
@@ -156,6 +164,7 @@
     </div>
     <button class="icon-btn hide-sm" type="button" id="keysBtn" data-icon="keyboard" title="Atalhos de teclado" aria-label="Atalhos de teclado"></button>
     <button class="icon-btn" type="button" data-act="theme" data-icon="moon" title="Alternar tema" aria-label="Alternar tema claro/escuro"></button>
+    <button class="btn btn-ghost" id="wordBtn" type="button" data-icon="fileword" title="Exportar para Word (.docx)"><span class="hide-sm">Word</span></button>
     <button class="btn btn-primary" id="dlBtn" type="button" data-icon="download"><span class="hide-sm">Baixar PDF</span></button>
   </header>
 
@@ -309,6 +318,44 @@
     </div>
   </div>
 </dialog>
+
+<!-- Conversão PDF <-> Word -->
+<dialog id="convDlg" class="dlg" aria-labelledby="convTitle">
+  <div class="dlg-h">
+    <h2 id="convTitle">Converter PDF ⇄ Word</h2>
+    <button class="icon-btn" type="button" data-close data-icon="x" aria-label="Fechar"></button>
+  </div>
+  <div class="tabs conv-tabs" role="tablist">
+    <button role="tab" type="button" data-conv="p2w" aria-selected="true">PDF para Word</button>
+    <button role="tab" type="button" data-conv="w2p" aria-selected="false">Word para PDF</button>
+  </div>
+  <div class="tabpane">
+    <div class="conv-file" id="convDrop">
+      <button type="button" class="btn btn-ghost" id="convPick" data-icon="fileplus">Escolher arquivo</button>
+      <span id="convName" class="muted small">Nenhum arquivo escolhido</span>
+    </div>
+    <fieldset class="conv-opts" data-for="p2w">
+      <legend>Como montar o Word</legend>
+      <label class="conv-opt"><input type="radio" name="convMode" value="flow" checked><span><b>Editável (recomendado)</b><small>Parágrafos que se reorganizam ao editar, tabelas do Word, listas, links e imagens na posição original.</small></span></label>
+      <label class="conv-opt"><input type="radio" name="convMode" value="exact"><span><b>Layout idêntico</b><small>Cada página igual ao PDF: fundo com imagens e desenhos e o texto em caixas na posição exata. Ideal para formulários, cartazes e documentos complexos.</small></span></label>
+    </fieldset>
+    <fieldset class="conv-opts" data-for="w2p" hidden>
+      <legend>Fontes</legend>
+      <p class="muted small">O texto usa fontes com as mesmas medidas das fontes do Office (Calibri, Cambria, Arial, Times New Roman, Courier New): as linhas e as páginas quebram nos mesmos pontos do Word.</p>
+      <label class="chk" id="convLocalWrap"><input type="checkbox" id="convLocal"> Usar as fontes instaladas no computador quando existirem (o navegador pede permissão)</label>
+    </fieldset>
+    <div class="conv-prog" id="convProg" hidden><progress id="convBar" max="100"></progress><span id="convStatus" class="small"></span></div>
+    <div class="conv-result" id="convResult" hidden></div>
+  </div>
+  <div class="dlg-f">
+    <span class="muted small" data-icon="shield">Processado no seu dispositivo</span>
+    <div class="row">
+      <button type="button" class="btn btn-ghost" data-close>Fechar</button>
+      <button type="button" class="btn btn-primary" id="convGo" disabled>Converter para Word</button>
+    </div>
+  </div>
+</dialog>
+<input type="file" id="convIn" accept="application/pdf,.pdf" hidden>
 
 <!-- Atalhos -->
 <dialog id="keysDlg" class="dlg" aria-labelledby="keysTitle">

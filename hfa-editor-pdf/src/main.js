@@ -11,6 +11,7 @@ import { bindProps, syncProps, renderLayers, bindLayers, closePanels, togglePane
 import { insertImageFile, openSig, bindSig } from './media.js';
 import { exportPdf, buildPdf, exportMode } from './export.js';
 import { scheduleSave, flushSave, peekSession, loadSession, clearSession } from './autosave.js';
+import { bindConverter, openConverter, isDocx, wordToPdfBytes } from './convert/ui.js';
 
 // ---------- tema ----------
 function applyTheme(t) {
@@ -60,17 +61,23 @@ async function pagesOf(doc) {
 const blankPage = (w = 595.28, h = 841.89) => ({ id: uid('p'), docId: null, index: 0, x0: 0, y0: 0, w, h, baseRot: 0, rot: 0, els: [] });
 
 async function openFiles(files, append = false) {
-  const pdfs = Array.from(files).filter(isPdf);
-  if (!pdfs.length) return toast('Selecione um arquivo PDF.', 'error');
-  busy(pdfs.length > 1 ? `Abrindo ${pdfs.length} PDFs…` : 'Abrindo PDF…');
+  const pdfs = Array.from(files).filter((f) => isPdf(f) || isDocx(f));
+  if (!pdfs.length) return toast('Selecione um arquivo PDF (ou um .docx do Word).', 'error');
+  busy(pdfs.length > 1 ? `Abrindo ${pdfs.length} arquivos…` : 'Abrindo…');
   const added = [];
   try {
     for (const f of pdfs) {
       let doc;
-      try { doc = await loadDoc(new Uint8Array(await f.arrayBuffer()), f.name); }
-      catch (e) {
+      try {
+        if (isDocx(f)) {
+          // documento do Word: convertido para PDF no próprio navegador e aberto no editor
+          busy(`Convertendo “${f.name}” para PDF…`);
+          const { bytes } = await wordToPdfBytes(f, { onProgress: (s, i, n) => busy(n ? `${s} ${i + 1}/${n}` : s) });
+          doc = await loadDoc(bytes, f.name.replace(/\.docx$/i, '.pdf'));
+        } else doc = await loadDoc(new Uint8Array(await f.arrayBuffer()), f.name);
+      } catch (e) {
         console.error(e);
-        toast(e.message === 'ENCRYPTED' ? `“${f.name}” é protegido por senha ou criptografado. Desbloqueie-o antes de editar.` : `Não foi possível abrir “${f.name}”. O arquivo pode estar corrompido.`, 'error');
+        toast(e.message === 'ENCRYPTED' ? `“${f.name}” é protegido por senha ou criptografado. Desbloqueie-o antes de editar.` : e.message === 'NOT_DOCX' ? `“${f.name}” não é um .docx válido.` : `Não foi possível abrir “${f.name}”. O arquivo pode estar corrompido.`, 'error');
         continue;
       }
       added.push({ doc, pages: await pagesOf(doc) });
@@ -222,7 +229,7 @@ function bind() {
       const page = slot && pageById(slot.dataset.page);
       return insertImageFile(img, page ? { page, at: pagePoint(e, page) } : {});
     }
-    if (files.some(isPdf)) openFiles(files, true);
+    if (files.some((f) => isPdf(f) || isDocx(f))) openFiles(files, true);
   });
 
   // barra superior
@@ -233,6 +240,12 @@ function bind() {
   $('#zoomOut').addEventListener('click', () => setZoom(S.zoom / 1.2));
   $('#zoomLbl').addEventListener('click', fitWidth);
   $('#dlBtn').addEventListener('click', () => { finishEdit(); exportPdf(); });
+  // exporta o documento como está no editor (com as edições) para .docx
+  $('#wordBtn').addEventListener('click', () => {
+    finishEdit();
+    openConverter({ dir: 'p2w', source: { name: S.fileName, getBytes: async () => (await buildPdf()).bytes } });
+  });
+  bindConverter({ onOpenPdf: (file) => openFiles([file]) });
   $('#keysBtn').addEventListener('click', () => $('#keysDlg').showModal());
 
   // ferramentas

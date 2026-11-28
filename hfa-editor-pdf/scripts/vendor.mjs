@@ -1,6 +1,8 @@
 // Copia as bibliotecas de node_modules para vendor/, para o site funcionar
 // sem CDN (privacidade, CSP 'self' e uso offline). Rode: npm install && npm run vendor
 import { cpSync, mkdirSync, rmSync, readdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +31,30 @@ const dj = ['DejaVuSans', 'DejaVuSans-Bold', 'DejaVuSans-Oblique', 'DejaVuSans-B
   'DejaVuSansMono', 'DejaVuSansMono-Bold', 'DejaVuSansMono-Oblique', 'DejaVuSansMono-BoldOblique'];
 dj.forEach((f) => copy(`dejavu-fonts-ttf/ttf/${f}.ttf`, `dejavu/${f}.ttf`));
 copy('dejavu-fonts-ttf/LICENSE', 'dejavu/LICENSE');
+
+// conversão Word <-> PDF: leitura/escrita de .docx e renderização do Word
+copy('jszip/dist/jszip.min.js', 'jszip/jszip.min.js');
+copy('jszip/LICENSE.markdown', 'jszip/LICENSE.markdown');
+copy('docx-preview/dist/docx-preview.min.js', 'docx-preview/docx-preview.min.js');
+copy('docx-preview/LICENSE', 'docx-preview/LICENSE');
+
+// fontes com as mesmas medidas das fontes do Office (Calibri, Cambria, Arial,
+// Times New Roman, Courier New): o texto quebra nos mesmos pontos que no Word
+const METRIC = { carlito: 'Carlito', caladea: 'Caladea', arimo: 'Arimo', tinos: 'Tinos', cousine: 'Cousine' };
+const FACES = ['400Regular', '700Bold', '400Regular_Italic', '700Bold_Italic'];
+const raw = join(tmpdir(), 'hfa-docfonts-raw');
+rmSync(raw, { recursive: true, force: true }); mkdirSync(raw, { recursive: true });
+for (const [pkg, fam] of Object.entries(METRIC)) {
+  for (const f of FACES) cpSync(nm(`@expo-google-fonts/${pkg}/${f}/${fam}_${f}.ttf`), join(raw, `${fam}_${f}.ttf`));
+  copy(`@expo-google-fonts/${pkg}/LICENSE_FONT`, `docfonts/LICENSE-${fam}.txt`);
+}
+// o fontkit do pdf-lib só embute estas fontes depois de regravadas pelo fontTools
+try {
+  execFileSync(process.env.PYTHON || 'python', [join(root, 'scripts', 'docfonts.py'), raw, out('docfonts')], { stdio: 'inherit' });
+} catch (e) {
+  console.error('Falhou ao preparar vendor/docfonts: instale Python 3 e "pip install fonttools" e rode de novo.');
+  process.exit(1);
+}
 
 // fontes da interface (Inter) e das assinaturas, servidas localmente
 const RANGES = {

@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.0 — 27/11/2026
+
+### Conversão PDF ⇄ Word (100% no navegador)
+- **PDF para Word, modo editável**: parágrafos reais (alinhamento, recuos, espaçamento calculado para cada linha cair na mesma altura), listas com tabulação, tabelas do Word a partir das réguas do PDF (células mescladas e sombreadas), sublinhado/tachado, cores, links, imagens e desenhos na posição original, texto girado em caixas giradas, rodapés fixos na página. Páginas tipo cartaz caem automaticamente no modo idêntico.
+- **PDF para Word, layout idêntico**: fundo da página sem o texto + texto em caixas de texto na posição exata.
+- **Word para PDF**: fontes de mesmas medidas das do Office, espaçamento entre linhas e parágrafos como no Word, numeração de listas, tabulações, campos de página, paginação refeita, imagens/formas/caixas de texto flutuantes, espaçamento e escala de caracteres, links. Um .docx arrastado para a tela inicial abre direto no editor.
+- **Exportar para Word** no editor (botão “Word”), com as edições.
+- Calibrado contra o Microsoft Word: posição da linha de base em linhas “exatas” (0,8 × altura), altura natural das fontes (hhea), compressão de espaços em texto justificado e altura das linhas de tabela.
+- Tratamento de casos difíceis: texto Type3, camada de OCR invisível, sombras de texto (cópia deslocada), marcadores das fontes Symbol/Wingdings, texto dentro de grupos de transparência, fontes web que não existem no Word.
+- O subset de fontes do fontkit do pdf-lib corrompe as fontes Carlito/Arimo/Tinos/Cousine: elas são preparadas com o fontTools (`scripts/docfonts.py`) e, no PDF, os glifos não usados são removidos por `ttfhollow.js` (PDF de 2 páginas: 838 KB → 78 KB).
+- 5 testes novos (22 no total): PDF→Word editável, ida e volta PDF→Word idêntico→PDF (desvio ≤ 2 pt), Word→PDF com paginação/numeração/tabulação/rodapé e o fluxo pela interface.
+
 ## 2.0.0 — 27/11/2026
 
 Revisão completa do código, com as correções e melhorias levantadas na análise do projeto.

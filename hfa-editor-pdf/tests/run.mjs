@@ -1,7 +1,7 @@
 // Testes de ponta a ponta (Playwright + Chromium).
 // Uso: npm test        (CHROME=/caminho/do/chrome para usar um Chrome já instalado)
 import { chromium } from 'playwright';
-import { PDFDocument, StandardFonts, rgb, PDFRawStream, PDFName } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, PDFRawStream, PDFName, PDFString } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import pako from 'pako';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
@@ -323,6 +323,179 @@ await test('página em branco, assinatura digitada e corretivo virando tarja', a
   ok(o.mode === 'copy' && o.burned === 0, 'página em branco não precisa ser rasterizada');
   const d = await PDFDocument.load(o.bytes);
   ok(d.getPageCount() === 1, 'uma página');
+});
+
+// ---------- conversão PDF <-> Word ----------
+async function makeConvPdf() {
+  const d = await PDFDocument.create();
+  const f = await d.embedFont(StandardFonts.Helvetica), fb = await d.embedFont(StandardFonts.HelveticaBold);
+  const p = d.addPage([595, 842]);
+  p.drawText('Relatório de Conversão', { x: 72, y: 770, size: 20, font: fb });
+  const words = ('A conversão precisa manter a aparência original com fidelidade, quebrando as linhas nos mesmos pontos e mantendo o espaçamento entre parágrafos. ').repeat(4).trim().split(' ');
+  let line = '', y = 735;
+  const lines = [];
+  for (const w of words) { const t = line ? line + ' ' + w : w; if (f.widthOfTextAtSize(t, 11) > 451) { lines.push(line); line = w; } else line = t; }
+  lines.push(line);
+  for (const l of lines) { p.drawText(l, { x: 72, y, size: 11, font: f }); y -= 14; }
+  y -= 10;
+  p.drawText('Texto com', { x: 72, y, size: 11, font: f });
+  const ux = 72 + f.widthOfTextAtSize('Texto com ', 11);
+  p.drawText('sublinhado', { x: ux, y, size: 11, font: f });
+  p.drawLine({ start: { x: ux, y: y - 1.5 }, end: { x: ux + f.widthOfTextAtSize('sublinhado', 11), y: y - 1.5 }, thickness: 0.6 });
+  const rx = ux + f.widthOfTextAtSize('sublinhado ', 11);
+  p.drawText('vermelho', { x: rx, y, size: 11, font: f, color: rgb(0.86, 0.1, 0.1) });
+  const lx = rx + f.widthOfTextAtSize('vermelho ', 11);
+  p.drawText('example.com', { x: lx, y, size: 11, font: f, color: rgb(0, 0.3, 0.8) });
+  const link = d.context.obj({ Type: 'Annot', Subtype: 'Link', Rect: [lx, y - 2, lx + f.widthOfTextAtSize('example.com', 11), y + 9], Border: [0, 0, 0], A: { Type: 'Action', S: 'URI', URI: PDFString.of('https://example.com/') } });
+  p.node.set(PDFName.of('Annots'), d.context.obj([d.context.register(link)]));
+  // tabela 3x3 com réguas
+  const top = y - 30, rows = 3, cols = [72, 222, 372, 522], rh = 22;
+  for (let r = 0; r <= rows; r++) p.drawLine({ start: { x: cols[0], y: top - r * rh }, end: { x: cols[3], y: top - r * rh }, thickness: 0.75 });
+  for (const x of cols) p.drawLine({ start: { x, y: top }, end: { x, y: top - rows * rh }, thickness: 0.75 });
+  const cells = [['Produto', 'Qtd', 'Valor'], ['Parafuso', '1200', '360,00'], ['Porca', '850', '212,50']];
+  cells.forEach((row, r) => row.forEach((t, c) => p.drawText(t, { x: cols[c] + 4, y: top - r * rh - 15, size: 11, font: r ? f : fb })));
+  const p2 = d.addPage([595, 842]);
+  p2.drawText('Segunda página do documento', { x: 72, y: 770, size: 14, font: f });
+  return d.save();
+}
+
+/** .docx feito à mão: lista numerada, tabulação à direita, tabela, rodapé com PAGE/NUMPAGES e 3+ páginas. */
+async function makeConvDocx() {
+  const JSZip = (await import('jszip')).default;
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const run = (t, rpr = '') => `<w:r>${rpr ? `<w:rPr>${rpr}</w:rPr>` : ''}<w:t xml:space="preserve">${t}</w:t></w:r>`;
+  const para = (inner, ppr = '') => `<w:p>${ppr ? `<w:pPr>${ppr}</w:pPr>` : ''}${inner}</w:p>`;
+  let body = para(run('Documento de Teste', '<w:b/><w:sz w:val="36"/>'));
+  for (const t of ['Primeiro item', 'Segundo item', 'Terceiro item']) body += para(run(t), '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr><w:ind w:left="720" w:hanging="360"/>');
+  body += para(run('Nome') + '<w:r><w:tab/></w:r>' + run('Valor'), '<w:tabs><w:tab w:val="right" w:pos="8000"/></w:tabs>');
+  body += '<w:tbl><w:tblPr><w:tblW w:w="6000" w:type="dxa"/><w:tblBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/><w:insideH w:val="single" w:sz="4"/><w:insideV w:val="single" w:sz="4"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>'
+    + ['A1|B1', 'A2|B2'].map((r) => `<w:tr>${r.split('|').map((c) => `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${para(run('Celula ' + c))}</w:tc>`).join('')}</w:tr>`).join('') + '</w:tbl>';
+  for (let i = 1; i <= 70; i++) body += para(run(`Parágrafo ${i}: texto de preenchimento para ocupar várias páginas e testar a paginação refeita no navegador.`));
+  body += '<w:sectPr><w:footerReference w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+  const fld = (instr, cache) => `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> ${instr} </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>${run(cache)}<w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+  const footer = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${W}>${para(run('Página ') + fld('PAGE', '1') + run(' de ') + fld('NUMPAGES', '1'))}</w:ftr>`;
+  const z = new JSZip();
+  z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
+  z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  z.file('word/_rels/document.xml.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdN" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/><Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
+  z.file('word/numbering.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="720" w:hanging="360"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`);
+  z.file('word/footer1.xml', footer);
+  z.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${body}</w:body></w:document>`);
+  return z.generateAsync({ type: 'nodebuffer' });
+}
+async function pdfItems(bytes) {
+  const doc = await pdfjs.getDocument({ data: new Uint8Array(bytes), isEvalSupported: false, verbosity: 0, standardFontDataUrl: join(root, 'node_modules/pdfjs-dist/standard_fonts/') }).promise;
+  const pages = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const pg = await doc.getPage(i), vp = pg.getViewport({ scale: 1 });
+    pages.push({ w: vp.width, h: vp.height, items: (await pg.getTextContent()).items.filter((it) => it.str.trim()).map((it) => ({ s: it.str, x: it.transform[4], y: vp.height - it.transform[5], w: it.width })) });
+  }
+  await doc.destroy();
+  return pages;
+}
+const toB64 = (b) => Buffer.from(b).toString('base64');
+const p2d = (pg, b64, mode) => pg.evaluate(async ([b64, mode]) => {
+  const { pdfToDocx } = await import('./src/convert/pdf2docx.js');
+  const { blob, stats } = await pdfToDocx(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), { mode });
+  const z = await window.JSZip.loadAsync(blob);
+  const xml = await z.file('word/document.xml').async('string');
+  const rels = await z.file('word/_rels/document.xml.rels').async('string');
+  const bad = ['word/document.xml', 'word/styles.xml', 'word/settings.xml', '[Content_Types].xml'].filter(() => false);
+  for (const n of Object.keys(z.files)) if (/\.(xml|rels)$/.test(n)) { const t = await z.file(n).async('string'); if (new DOMParser().parseFromString(t, 'application/xml').getElementsByTagName('parsererror').length) bad.push(n); }
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let s = ''; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  return { xml, rels, bad, stats, media: Object.keys(z.files).filter((n) => n.startsWith('word/media/') && !n.endsWith('/')).length, b64: btoa(s) };
+}, [b64, mode]);
+const d2p = (pg, b64) => pg.evaluate(async (b64) => {
+  const { docxToPdf } = await import('./src/convert/docx2pdf.js');
+  const { bytes, stats } = await docxToPdf(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+  let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { b64: btoa(s), stats };
+}, b64);
+
+const convPdf = await makeConvPdf(); writeFileSync(join(tmp, 'conversao.pdf'), convPdf);
+const convDocx = await makeConvDocx(); writeFileSync(join(tmp, 'teste.docx'), convDocx);
+const cp = await newPage(ctx);
+await cp.evaluate(async () => { const { loadJSZip } = await import('./src/convert/libs.js'); await loadJSZip(); });
+
+await test('PDF → Word editável: parágrafos, tabela, sublinhado, cor e link', async () => {
+  const r = await p2d(cp, toB64(convPdf), 'flow');
+  ok(!r.bad.length, 'XML inválido em: ' + r.bad.join(', '));
+  ok(r.stats.pages === 2 && (r.xml.match(/<w:sectPr>/g) || []).length === 2, 'uma seção por página');
+  const plain = r.xml.replace(/<w:tab\/>/g, '\t').replace(/<[^>]+>/g, '');
+  for (const w of ['Relatório de Conversão', 'sublinhado', 'vermelho', 'example.com', 'Parafuso', '212,50', 'Segunda página do documento']) ok(plain.includes(w), 'faltou o texto: ' + w);
+  ok(/A conversão precisa manter a aparência original com fidelidade, quebrando as linhas nos mesmos pontos/.test(plain), 'linhas de um parágrafo deveriam ser unidas');
+  ok((r.xml.match(/<w:tbl>/g) || []).length === 1 && (r.xml.match(/<w:tr>/g) || []).length === 3, 'deveria haver uma tabela 3x3');
+  ok(/<w:u w:val="single"\/><\/w:rPr><w:t xml:space="preserve">sublinhado/.test(r.xml), 'sublinhado deveria virar formatação');
+  ok(/<w:color w:val="DB1A1A"\/>/.test(r.xml), 'cor do texto deveria ser mantida');
+  ok(/<w:b\/>[\s\S]{0,200}Relatório de Conversão/.test(r.xml), 'título deveria ficar em negrito');
+  ok(r.rels.includes('https://example.com/') && r.xml.includes('<w:hyperlink'), 'link deveria ser preservado');
+  ok(r.stats.tables === 1, 'estatística de tabelas');
+});
+
+await test('PDF → Word idêntico → PDF: o texto volta na mesma posição (±2 pt)', async () => {
+  const r = await p2d(cp, toB64(convPdf), 'exact');
+  ok(!r.bad.length, 'XML inválido em: ' + r.bad.join(', '));
+  ok((r.xml.match(/<wps:txbx>/g) || []).length >= 5, 'texto deveria ir para caixas de texto');
+  ok(r.media >= 1, 'fundo da página com os desenhos deveria virar imagem');
+  const back = await d2p(cp, r.b64);
+  const A = await pdfItems(convPdf), B = await pdfItems(Buffer.from(back.b64, 'base64'));
+  ok(A.length === B.length, `páginas: ${A.length} -> ${B.length}`);
+  let n = 0, worst = 0;
+  A.forEach((pa, i) => {
+    for (const it of pa.items) {
+      const m = B[i].items.find((q) => q.s.includes(it.s.trim().split(' ')[0]) && Math.abs(q.y - it.y) < 6);
+      ok(m, `“${it.s}” sumiu da página ${i + 1}`);
+      const dy = Math.abs(m.y - it.y); worst = Math.max(worst, dy); n++;
+    }
+  });
+  ok(worst <= 2, `linha de base desviou ${worst.toFixed(2)} pt`);
+  ok(n > 10, 'poucos textos comparados');
+});
+
+await test('Word → PDF: paginação, numeração, tabulação, tabela e número de página', async () => {
+  const r = await d2p(cp, toB64(convDocx));
+  const pages = await pdfItems(Buffer.from(r.b64, 'base64'));
+  const N = pages.length;
+  ok(N >= 3, `deveria ter 3+ páginas (tem ${N})`);
+  pages.forEach((pg, i) => {
+    const t = pg.items.map((q) => q.s).join(' ');
+    ok(t.includes(`Página ${i + 1} de ${N}`), `rodapé da página ${i + 1}: ${t.slice(-60)}`);
+    for (const q of pg.items) ok(q.x >= 0 && q.x + q.w <= pg.w + 1 && q.y > 0 && q.y <= pg.h, `texto fora da página ${i + 1}: ${q.s}`);
+  });
+  const all = pages.flatMap((pg) => pg.items.map((q) => q.s)).join(' ');
+  for (const m of ['1.', '2.', '3.']) ok(all.includes(m), 'numeração da lista: ' + m);
+  let last = 0;
+  for (let i = 1; i <= 70; i++) { const k = all.indexOf(`Parágrafo ${i}:`); ok(k > last, `parágrafo ${i} fora de ordem ou faltando`); last = k; }
+  const valor = pages[0].items.find((q) => q.s.includes('Valor'));
+  ok(valor && Math.abs(valor.x + valor.w - (72 + 400)) < 2, `tabulação à direita em 472 pt (ficou em ${valor && (valor.x + valor.w).toFixed(1)})`);
+  ok(all.includes('Celula A1') && all.includes('Celula B2'), 'tabela');
+  ok(r.stats.lostChars === 0 && r.stats.lostImages === 0, 'nada deveria se perder');
+});
+
+await test('abrir um .docx na tela inicial converte e abre no editor', async () => {
+  const p = await newPage(ctx);
+  await p.setInputFiles('#fileIn', join(tmp, 'teste.docx'));
+  await p.waitForSelector('#editor:not([hidden]) .slot', { timeout: 30000 });
+  ok(await p.evaluate(() => HFA.S.pages.length) >= 3, 'deveria abrir as páginas convertidas');
+  ok((await p.textContent('#fname')).endsWith('.pdf'), 'nome do arquivo .pdf');
+  await p.close();
+});
+
+await test('diálogo de conversão: escolher arquivo, converter e baixar', async () => {
+  const p = await newPage(ctx);
+  await p.click('[data-open-conv="p2w"]');
+  await p.setInputFiles('#convIn', join(tmp, 'conversao.pdf'));
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#convGo')]);
+  ok(dl.suggestedFilename() === 'conversao.docx', 'nome do arquivo: ' + dl.suggestedFilename());
+  await p.waitForSelector('#convResult .ok');
+  await p.click('#convDlg [data-conv="w2p"]');
+  await p.setInputFiles('#convIn', join(tmp, 'teste.docx'));
+  const [dl2] = await Promise.all([p.waitForEvent('download', { timeout: 30000 }), p.click('#convGo')]);
+  ok(dl2.suggestedFilename() === 'teste.pdf', 'nome do PDF: ' + dl2.suggestedFilename());
+  await p.click('#convResult .btn-primary'); // Abrir no editor
+  await p.waitForSelector('#editor:not([hidden]) .slot');
+  await p.close();
 });
 
 await ctx.close();
